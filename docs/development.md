@@ -23,6 +23,7 @@ nix develop
 The initial shell includes:
 
 - `git`;
+- `go`;
 - `incus`;
 - `jq`;
 - `just`;
@@ -30,7 +31,32 @@ The initial shell includes:
 - `shellcheck`;
 - `shfmt`.
 
-The flake follows the stable `nixos-26.05` Nixpkgs branch. The generated `flake.lock` records the exact revision used by the repository.
+The flake follows the stable `nixos-26.05` Nixpkgs branch. A committed `flake.lock` should record the exact revision used by the repository.
+
+## CLI development
+
+The initial `aginctus` CLI is written in Go and currently has no third-party Go dependencies.
+
+Run it directly with:
+
+```sh
+go run ./cmd/aginctus help
+go run ./cmd/aginctus doctor
+```
+
+The `doctor` command checks that the Incus client is available and can communicate with the configured daemon. It does not create or modify Incus resources.
+
+Common development commands are available through `just`:
+
+```sh
+just build
+just test
+just vet
+just check
+just fmt
+```
+
+`just fmt` formats both Go and Nix sources.
 
 ## direnv
 
@@ -41,16 +67,6 @@ direnv allow
 ```
 
 The generated `.direnv/` directory is ignored by Git.
-
-## Formatting Nix files
-
-The flake exports `nixfmt` as its formatter:
-
-```sh
-nix fmt
-```
-
-As implementation code is introduced, language-specific formatters, linters, test commands, and developer dependencies should be added to this environment rather than relying on undocumented host tooling.
 
 ## Incus development
 
