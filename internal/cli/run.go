@@ -9,8 +9,7 @@ import (
 const Version = "0.0.0-dev"
 
 type IncusClient interface {
-	Version(context.Context) (string, error)
-	CheckDaemon(context.Context) error
+	ServerVersion(context.Context) (string, error)
 }
 
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer, incusClient IncusClient) int {
@@ -36,19 +35,13 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, incusClie
 }
 
 func runDoctor(ctx context.Context, stdout, stderr io.Writer, incusClient IncusClient) int {
-	version, err := incusClient.Version(ctx)
+	version, err := incusClient.ServerVersion(ctx)
 	if err != nil {
-		fmt.Fprintf(stderr, "incus client: unavailable: %v\n", err)
-		return 1
-	}
-	fmt.Fprintf(stdout, "incus client: %s\n", version)
-
-	if err := incusClient.CheckDaemon(ctx); err != nil {
 		fmt.Fprintf(stderr, "incus daemon: unreachable: %v\n", err)
 		return 1
 	}
-	fmt.Fprintln(stdout, "incus daemon: reachable")
 
+	fmt.Fprintf(stdout, "incus daemon: reachable (%s)\n", version)
 	return 0
 }
 
@@ -56,7 +49,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, `Usage: aginctus <command>
 
 Commands:
-  doctor   Check local Incus client and daemon connectivity
+  doctor   Check local Incus daemon connectivity
   version  Print the Aginctus CLI version
   help     Show this help`)
 }
