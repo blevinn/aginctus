@@ -86,6 +86,7 @@ func (c *Client) EnsureManagementNetwork(ctx context.Context) (bool, error) {
 			Config: api.ConfigMap{
 				"ipv4.address":  "auto",
 				"ipv4.nat":      "false",
+				"ipv4.routing":  "false",
 				"ipv6.address":  "none",
 				ownerKey:        ownerValue,
 				resourceKey:     resourceValue,
