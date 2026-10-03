@@ -24,7 +24,9 @@ The initial direction is:
 
 ### API-first control plane
 
-The Aginctus API is intended to be the canonical interface to the environment. The dashboard, future TUI, automation, and external integrations should consume the same API rather than relying on privileged shell access or directly coupling to Incus internals.
+The Aginctus API is intended to become the canonical interface to the environment. The dashboard, future TUI, automation, and external integrations should consume the same domain operations rather than relying on privileged shell access or directly coupling to Incus internals.
+
+The first implementation will be CLI-first so the orchestration model can be proven before an HTTP API or daemon is selected.
 
 ### Workload portability
 
@@ -42,34 +44,40 @@ Incus is the platform substrate, but higher-level integrations should sit behind
 
 ### Observable by default
 
-The system should expose enough desired state, runtime state, health, events, and policy information to make deployments understandable and debuggable through the API and dashboard.
+The system should expose enough desired state, runtime state, health, events, and policy information to make deployments understandable and debuggable through its control surfaces.
 
 ## Initial architecture
 
 Aginctus is expected to develop around several cooperating layers:
 
-1. **Control plane** — desired state, lifecycle management, status, events, and the public Aginctus API.
-2. **Incus adapter** — provisioning and management of containers, VMs, networks, storage, profiles, and related Incus resources.
-3. **Workload model** — a portable definition for agent runtime, isolation mode, guest image, resources, workspace, and lifecycle.
-4. **Policy plane** — model gateway policy, MCP policy, network policy, secrets, and capability grants.
-5. **Agent adapters** — runtime-specific integration for systems such as OpenCode and Hermes.
-6. **User interfaces** — the native dashboard, external frontends such as Herdr, and future clients such as a TUI.
+1. **Control surface** — initially the `aginctus` CLI, later joined by the public Aginctus API.
+2. **Orchestration core** — desired state, lifecycle management, endpoint discovery, status, and errors.
+3. **Incus adapter** — provisioning and management of containers, VMs, networks, storage, profiles, and related Incus resources.
+4. **Workload model** — a portable definition for agent runtime, isolation mode, guest image, resources, workspace, access, and lifecycle.
+5. **Policy plane** — model gateway policy, MCP policy, network policy, secrets, and capability grants as those features are introduced.
+6. **Agent and service adapters** — runtime-specific integration for systems such as Herdr, OpenCode, and Hermes.
+7. **User interfaces** — external frontends such as Herdr plus a future native dashboard and TUI.
 
-This structure is intentionally provisional. Early design work should preserve these boundaries without prematurely fixing implementation language, persistence technology, or frontend framework.
+This structure is intentionally provisional. Early work should preserve these boundaries without prematurely fixing implementation language, persistence technology, or frontend framework.
 
 ## Initial scope
 
-The first milestones should focus on proving a small end-to-end path:
+The first milestone is a small end-to-end environment: run a Herdr client on the Incus host and attach it over SSH to a Herdr server running inside an Aginctus-managed Incus instance.
 
-- connect the control plane to Incus;
-- describe an agent workload declaratively;
-- provision and destroy an isolated workload;
-- run one supported agent runtime through the configured model gateway;
-- report lifecycle and status through the API;
-- exercise both container and VM execution without creating separate product models for each;
-- establish a clean NixOS path while retaining support for other Linux guests.
+That milestone should prove:
 
-Network policy, MCP policy, additional runtimes, richer observability, dashboard functionality, and Herdr integration can then grow as focused increments.
+- instance creation and lifecycle;
+- a portable workload model with container and VM execution choices;
+- a first-class NixOS guest bootstrap path;
+- host-to-workload networking and endpoint discovery;
+- SSH authentication and host verification;
+- Herdr installation and remote attach;
+- resource ownership and cleanup;
+- enough status reporting to diagnose the environment.
+
+See [Milestone 1: remote Herdr on Incus](milestones/0001-remote-herdr.md) for the detailed success criteria.
+
+Model gateways, MCP policy, richer network policy, OpenCode and Hermes orchestration, the HTTP API, dashboard functionality, and multi-host operation can grow from the boundaries established by that vertical slice.
 
 ## Non-goals for the initial phase
 
