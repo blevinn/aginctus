@@ -5,13 +5,12 @@ This directory contains project documentation that is too detailed or long-lived
 ## Current documentation
 
 - [Project overview](project-overview.md) — vision, design principles, broad scope, and non-goals.
-- [Architecture](architecture.md) — initial component boundaries, networking model, workload model, and deferred decisions.
-- [Milestone 1: remote Herdr on Incus](milestones/0001-remote-herdr.md) — the first usable vertical slice and its success criteria.
+- [Architecture](architecture.md) — initial component boundaries, control endpoint model, workload model, and deferred decisions.
+- [Milestone 1: local Herdr on Incus](milestones/0001-remote-herdr.md) — the first usable vertical slice and its success criteria.
 
 ## Architecture decision records
 
-- [ADR 0001: Start with a CLI-first control surface](adr/0001-cli-first-control-surface.md)
-- [ADR 0002: Use SSH for the first host-to-workload access path](adr/0002-host-to-workload-access.md)
+- [ADR 0002: Use a shared local socket for the first host-to-workload control path](adr/0002-host-to-workload-access.md)
 
 ## Documentation structure
 
