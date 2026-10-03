@@ -86,6 +86,9 @@ func TestEnsureManagementNetworkCreatesMissingNetwork(t *testing.T) {
 	if server.created.Config["ipv4.nat"] != "false" {
 		t.Fatalf("ipv4.nat = %q, want false", server.created.Config["ipv4.nat"])
 	}
+	if server.created.Config["ipv4.routing"] != "false" {
+		t.Fatalf("ipv4.routing = %q, want false", server.created.Config["ipv4.routing"])
+	}
 }
 
 func TestEnsureManagementNetworkAcceptsOwnedNetwork(t *testing.T) {
