@@ -51,7 +51,7 @@ The system should expose enough desired state, runtime state, health, events, an
 Aginctus is expected to develop around several cooperating layers:
 
 1. **Control surface** — initially the `aginctus` CLI, later joined by the public Aginctus API.
-2. **Orchestration core** — desired state, lifecycle management, endpoint discovery, status, and errors.
+2. **Orchestration core** — desired state, lifecycle management, control-endpoint discovery, status, and errors.
 3. **Incus adapter** — provisioning and management of containers, VMs, networks, storage, profiles, and related Incus resources.
 4. **Workload model** — a portable definition for agent runtime, isolation mode, guest image, resources, workspace, access, and lifecycle.
 5. **Policy plane** — model gateway policy, MCP policy, network policy, secrets, and capability grants as those features are introduced.
@@ -62,20 +62,22 @@ This structure is intentionally provisional. Early work should preserve these bo
 
 ## Initial scope
 
-The first milestone is a small end-to-end environment: run a Herdr client on the Incus host and attach it over SSH to a Herdr server running inside an Aginctus-managed Incus instance.
+The first milestone is a small end-to-end environment: run Herdr inside an Aginctus-managed Incus container and make its local Unix-domain socket available to host-side tooling through an Aginctus-managed shared runtime directory.
 
 That milestone should prove:
 
 - instance creation and lifecycle;
-- a portable workload model with container and VM execution choices;
+- a portable workload model;
 - a first-class NixOS guest bootstrap path;
-- host-to-workload networking and endpoint discovery;
-- SSH authentication and host verification;
-- Herdr installation and remote attach;
+- safe host/container filesystem sharing;
+- local socket discovery, ownership, and permissions;
+- Herdr installation and host-side control;
 - resource ownership and cleanup;
 - enough status reporting to diagnose the environment.
 
-See [Milestone 1: remote Herdr on Incus](milestones/0001-remote-herdr.md) for the detailed success criteria.
+See [Milestone 1: local Herdr on Incus](milestones/0001-remote-herdr.md) for the detailed success criteria.
+
+VM execution remains a platform goal, but its control transport is deferred because a VM cannot use the same shared-kernel Unix-socket path. SSH is one likely extension for VMs and remote hosts.
 
 Model gateways, MCP policy, richer network policy, OpenCode and Hermes orchestration, the HTTP API, dashboard functionality, and multi-host operation can grow from the boundaries established by that vertical slice.
 
