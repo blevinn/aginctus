@@ -3,46 +3,47 @@ package incus
 import (
 	"context"
 	"fmt"
-	"os/exec"
-	"strings"
+
+	incusclient "github.com/lxc/incus/v7/client"
+	"github.com/lxc/incus/v7/shared/api"
 )
 
-type Runner interface {
-	Run(context.Context, string, ...string) ([]byte, error)
+type Server interface {
+	GetServer() (*api.Server, string, error)
 }
 
-type execRunner struct{}
-
-func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
-}
+type Connector func(context.Context) (Server, error)
 
 type Client struct {
-	runner Runner
+	connect Connector
 }
 
 func NewClient() *Client {
-	return &Client{runner: execRunner{}}
+	return &Client{
+		connect: func(ctx context.Context) (Server, error) {
+			return incusclient.ConnectIncusUnixWithContext(
+				ctx,
+				"",
+				&incusclient.ConnectionArgs{SkipGetServer: true},
+			)
+		},
+	}
 }
 
-func NewClientWithRunner(runner Runner) *Client {
-	return &Client{runner: runner}
+func NewClientWithConnector(connect Connector) *Client {
+	return &Client{connect: connect}
 }
 
-func (c *Client) Version(ctx context.Context) (string, error) {
-	output, err := c.runner.Run(ctx, "incus", "version")
+func (c *Client) ServerVersion(ctx context.Context) (string, error) {
+	server, err := c.connect(ctx)
 	if err != nil {
-		return "", fmt.Errorf("run incus version: %w: %s", err, strings.TrimSpace(string(output)))
+		return "", fmt.Errorf("connect to local Incus daemon: %w", err)
 	}
 
-	return strings.TrimSpace(string(output)), nil
-}
-
-func (c *Client) CheckDaemon(ctx context.Context) error {
-	output, err := c.runner.Run(ctx, "incus", "info")
+	status, _, err := server.GetServer()
 	if err != nil {
-		return fmt.Errorf("run incus info: %w: %s", err, strings.TrimSpace(string(output)))
+		return "", fmt.Errorf("get Incus server information: %w", err)
 	}
 
-	return nil
+	return status.Environment.ServerVersion, nil
 }
