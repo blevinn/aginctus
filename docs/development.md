@@ -30,7 +30,7 @@ The initial shell includes:
 - `shellcheck`;
 - `shfmt`.
 
-The Nixpkgs input is pinned to a NixOS 26.05 revision so developers resolve the same tool set.
+The flake follows the stable `nixos-26.05` Nixpkgs branch. The generated `flake.lock` records the exact revision used by the repository.
 
 ## direnv
 
