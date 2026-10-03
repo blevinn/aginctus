@@ -35,7 +35,7 @@ The flake follows the stable `nixos-26.05` Nixpkgs branch. A committed `flake.lo
 
 ## CLI development
 
-The initial `aginctus` CLI is written in Go and currently has no third-party Go dependencies.
+The initial `aginctus` CLI is written in Go. It uses the official Incus Go client to communicate directly with the local daemon API.
 
 Run it directly with:
 
@@ -44,7 +44,7 @@ go run ./cmd/aginctus help
 go run ./cmd/aginctus doctor
 ```
 
-The `doctor` command checks that the Incus client is available and can communicate with the configured daemon. It does not create or modify Incus resources.
+The `doctor` command connects directly to the local Incus daemon through the Incus Go client and reports the server version. It does not create or modify Incus resources.
 
 Common development commands are available through `just`:
 
