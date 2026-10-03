@@ -2,8 +2,8 @@
   description = "Aginctus development environment";
 
   inputs = {
-    # NixOS 26.05 / Nixpkgs stable, pinned for reproducible development shells.
-    nixpkgs.url = "github:NixOS/nixpkgs/628137d7e2452c8919456a800e87f73a3296095220b52e7971d867b691baa627";
+    # Stable NixOS 26.05. The generated flake.lock pins the exact revision.
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   };
 
   outputs = { nixpkgs, ... }:
