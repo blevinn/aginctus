@@ -5,46 +5,63 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/lxc/incus/v7/shared/api"
 )
 
-type fakeRunner struct {
-	output []byte
+type fakeServer struct {
+	server *api.Server
 	err    error
-	name   string
-	args   []string
 }
 
-func (r *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
-	r.name = name
-	r.args = append([]string(nil), args...)
-	return r.output, r.err
+func (s fakeServer) GetServer() (*api.Server, string, error) {
+	return s.server, "", s.err
 }
 
-func TestVersion(t *testing.T) {
-	runner := &fakeRunner{output: []byte("6.0.0\n")}
-	client := NewClientWithRunner(runner)
+func TestServerVersion(t *testing.T) {
+	client := NewClientWithConnector(func(context.Context) (Server, error) {
+		return fakeServer{
+			server: &api.Server{
+				Environment: api.ServerEnvironment{
+					ServerVersion: "7.0.1",
+				},
+			},
+		}, nil
+	})
 
-	version, err := client.Version(context.Background())
+	version, err := client.ServerVersion(context.Background())
 	if err != nil {
-		t.Fatalf("Version() error = %v", err)
+		t.Fatalf("ServerVersion() error = %v", err)
 	}
-	if version != "6.0.0" {
-		t.Fatalf("Version() = %q, want %q", version, "6.0.0")
-	}
-	if runner.name != "incus" || len(runner.args) != 1 || runner.args[0] != "version" {
-		t.Fatalf("runner called with %q %v", runner.name, runner.args)
+	if version != "7.0.1" {
+		t.Fatalf("ServerVersion() = %q, want %q", version, "7.0.1")
 	}
 }
 
-func TestCheckDaemonWrapsError(t *testing.T) {
-	runner := &fakeRunner{output: []byte("connection refused"), err: errors.New("exit status 1")}
-	client := NewClientWithRunner(runner)
+func TestServerVersionConnectionFailure(t *testing.T) {
+	client := NewClientWithConnector(func(context.Context) (Server, error) {
+		return nil, errors.New("permission denied")
+	})
 
-	err := client.CheckDaemon(context.Background())
+	_, err := client.ServerVersion(context.Background())
 	if err == nil {
-		t.Fatal("CheckDaemon() error = nil, want error")
+		t.Fatal("ServerVersion() error = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "connection refused") {
-		t.Fatalf("CheckDaemon() error = %q, want command output", err)
+	if !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("ServerVersion() error = %q", err)
+	}
+}
+
+func TestServerVersionGetServerFailure(t *testing.T) {
+	client := NewClientWithConnector(func(context.Context) (Server, error) {
+		return fakeServer{err: errors.New("connection closed")}, nil
+	})
+
+	_, err := client.ServerVersion(context.Background())
+	if err == nil {
+		t.Fatal("ServerVersion() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "connection closed") {
+		t.Fatalf("ServerVersion() error = %q", err)
 	}
 }
