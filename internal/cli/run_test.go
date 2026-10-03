@@ -9,36 +9,30 @@ import (
 )
 
 type fakeIncusClient struct {
-	version    string
-	versionErr error
-	daemonErr  error
+	version string
+	err     error
 }
 
-func (c fakeIncusClient) Version(context.Context) (string, error) {
-	return c.version, c.versionErr
-}
-
-func (c fakeIncusClient) CheckDaemon(context.Context) error {
-	return c.daemonErr
+func (c fakeIncusClient) ServerVersion(context.Context) (string, error) {
+	return c.version, c.err
 }
 
 func TestDoctorSuccess(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run(context.Background(), []string{"doctor"}, &stdout, &stderr, fakeIncusClient{version: "6.0.0"})
+	code := Run(context.Background(), []string{"doctor"}, &stdout, &stderr, fakeIncusClient{version: "7.0.1"})
 
 	if code != 0 {
 		t.Fatalf("Run() code = %d, want 0; stderr = %q", code, stderr.String())
 	}
-	if got := stdout.String(); !strings.Contains(got, "incus client: 6.0.0") || !strings.Contains(got, "incus daemon: reachable") {
+	if got := stdout.String(); !strings.Contains(got, "incus daemon: reachable (7.0.1)") {
 		t.Fatalf("stdout = %q", got)
 	}
 }
 
-func TestDoctorDaemonFailure(t *testing.T) {
+func TestDoctorFailure(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run(context.Background(), []string{"doctor"}, &stdout, &stderr, fakeIncusClient{
-		version:   "6.0.0",
-		daemonErr: errors.New("connection refused"),
+		err: errors.New("permission denied"),
 	})
 
 	if code != 1 {
