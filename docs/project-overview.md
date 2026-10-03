@@ -17,7 +17,7 @@ The initial direction is:
 - make network and MCP access explicit, configurable policy surfaces;
 - expose workload and infrastructure state through an API;
 - provide a dashboard UI over that API;
-- support a frontend for interacting with deployed agentic systems, potentially using Herdr;
+- support a frontend for interacting with deployed agentic systems, initially using Herdr;
 - keep the API suitable for future clients, including a TUI.
 
 ## Design principles
@@ -51,35 +51,38 @@ The system should expose enough desired state, runtime state, health, events, an
 Aginctus is expected to develop around several cooperating layers:
 
 1. **Control surface** — initially the `aginctus` CLI, later joined by the public Aginctus API.
-2. **Orchestration core** — desired state, lifecycle management, control-endpoint discovery, status, and errors.
+2. **Orchestration core** — desired state, lifecycle management, discovery, generated configuration, status, and errors.
 3. **Incus adapter** — provisioning and management of containers, VMs, networks, storage, profiles, and related Incus resources.
-4. **Workload model** — a portable definition for agent runtime, isolation mode, guest image, resources, workspace, access, and lifecycle.
-5. **Policy plane** — model gateway policy, MCP policy, network policy, secrets, and capability grants as those features are introduced.
-6. **Agent and service adapters** — runtime-specific integration for systems such as Herdr, OpenCode, and Hermes.
-7. **User interfaces** — external frontends such as Herdr plus a future native dashboard and TUI.
+4. **Infrastructure workloads** — Aginctus-managed services such as the Herdr client environment.
+5. **Agent workloads** — isolated containers or VMs that host agent runtimes and their local Herdr servers.
+6. **Policy plane** — model gateway policy, MCP policy, network policy, secrets, and capability grants as those features are introduced.
+7. **User interfaces** — Herdr initially, plus a future native dashboard and TUI.
 
 This structure is intentionally provisional. Early work should preserve these boundaries without prematurely fixing implementation language, persistence technology, or frontend framework.
 
 ## Initial scope
 
-The first milestone is a small end-to-end environment: run Herdr inside an Aginctus-managed Incus container and make its local Unix-domain socket available to host-side tooling through an Aginctus-managed shared runtime directory.
+The first milestone is a small end-to-end environment: run a dedicated Herdr client in an Aginctus-managed infrastructure container and use it to connect over SSH to Herdr servers running inside one or more Aginctus-managed agent workloads.
+
+The Incus host enters the Herdr client container through `incus exec`; it does not need direct SSH access to every agent workload.
 
 That milestone should prove:
 
 - instance creation and lifecycle;
-- a portable workload model;
+- infrastructure and agent workload roles;
 - a first-class NixOS guest bootstrap path;
-- safe host/container filesystem sharing;
-- local socket discovery, ownership, and permissions;
-- Herdr installation and host-side control;
+- an internal management network;
+- SSH identity, target authorization, and host verification;
+- workload address discovery;
+- generated Herdr machine configuration;
+- Herdr servers colocated with agent workloads;
+- a common connection model for container and VM targets;
 - resource ownership and cleanup;
 - enough status reporting to diagnose the environment.
 
-See [Milestone 1: local Herdr on Incus](milestones/0001-remote-herdr.md) for the detailed success criteria.
+See [Milestone 1: Herdr console over managed workloads](milestones/0001-herdr-console.md) for the detailed success criteria.
 
-VM execution remains a platform goal, but its control transport is deferred because a VM cannot use the same shared-kernel Unix-socket path. SSH is one likely extension for VMs and remote hosts.
-
-Model gateways, MCP policy, richer network policy, OpenCode and Hermes orchestration, the HTTP API, dashboard functionality, and multi-host operation can grow from the boundaries established by that vertical slice.
+Model gateways, MCP policy, richer network policy, the HTTP API, dashboard functionality, and multi-host operation can grow from the boundaries established by that vertical slice.
 
 ## Non-goals for the initial phase
 
