@@ -1,30 +1,38 @@
-# ADR 0002: Use SSH for the first host-to-workload access path
+# ADR 0002: Use a shared local socket for the first host-to-workload control path
 
 - Status: Accepted
 - Date: 2026-10-03
 
 ## Context
 
-The first Aginctus milestone is a Herdr client running on the Incus host and a Herdr server running inside an Incus-managed workload.
+The first Aginctus milestone is a Herdr client or host-side control process interacting with a Herdr server running inside an Incus-managed container.
 
-Herdr's supported remote attach workflow uses SSH. The remote host owns the Herdr server and running panes while the local Herdr client renders the interface.
+Herdr exposes a local socket API. On Unix, that API is served over a Unix-domain socket, and the socket path can be overridden with `HERDR_SOCKET_PATH`.
 
-Aginctus needs a networking model that enables this path without prematurely defining general public ingress.
+Because an Incus system container shares the host kernel, a Unix-domain socket created inside a host-mounted directory can be visible to both the host and the container. That allows Aginctus to reach Herdr without introducing network exposure solely for orchestration.
 
 ## Decision
 
-The first host-to-workload endpoint will be SSH from the Incus host to the managed instance.
+The first host-to-workload control endpoint will be a Unix-domain socket stored in an Aginctus-managed runtime directory shared between the Incus host and the container.
 
-Aginctus will treat this as an explicit access path and will be responsible for enough endpoint discovery and client configuration that users do not need to manually inspect Incus-assigned addresses.
+Aginctus will:
 
-The initial implementation should prefer direct host-to-instance reachability on an Incus-managed network. Public forwarding is not required.
+- create a workload-scoped host runtime directory;
+- mount that directory into the container;
+- configure Herdr to place its socket there;
+- expose the realized socket path to host-side tooling;
+- apply restrictive ownership and permissions;
+- clean up the runtime directory with the workload.
 
-SSH host verification remains enabled. Aginctus must not solve bootstrap convenience by globally disabling host-key checks.
+The socket path is an implementation of a higher-level control-endpoint abstraction, not a requirement that all workloads or isolation modes use Unix sockets.
+
+SSH remains a future transport option for VMs, remote Incus hosts, and environments where shared local IPC is unavailable.
 
 ## Consequences
 
-- No Herdr-specific application port needs to be published.
-- The first networking implementation focuses on host-to-instance reachability, SSH identity, host verification, and endpoint discovery.
-- The workload model should express access intent without encoding an Incus IP address.
-- Later endpoint implementations may use Incus proxy devices, HTTP ingress, or other transports without redefining the workload itself.
-- General guest egress and workload-to-workload networking remain separate policy concerns.
+- The first usable Herdr environment does not require an SSH server, SSH keys, host-key management, or a host-to-guest network path.
+- No Herdr application port needs to be exposed.
+- Access to the socket confers control over the Herdr session, so its directory and permissions are security-sensitive.
+- The initial implementation can focus on container orchestration and shared runtime state before introducing VM-specific transport.
+- VM support requires another transport because the guest does not share the host kernel.
+- The workload model should express control access independently from the concrete transport so SSH, vsock, HTTP, or other mechanisms can be added later.
