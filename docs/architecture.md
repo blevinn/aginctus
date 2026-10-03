@@ -8,20 +8,24 @@ The architecture should be driven by a small usable vertical slice before expand
 
 The first target is intentionally narrow:
 
-> Run a Herdr client on the Incus host and attach it to a Herdr server running inside an Aginctus-managed Incus instance.
+> Run a Herdr client on the Incus host and connect it to a Herdr server running inside an Aginctus-managed Incus container through a shared local socket.
 
-Herdr remote attach uses SSH as its transport. The remote machine owns the Herdr server, panes, and agent processes; the local client renders the UI. Aginctus therefore does not need to expose a Herdr-specific TCP service for this milestone.
+Herdr exposes a local socket API. On Unix, the server listens on a Unix-domain socket, and the socket path can be overridden with `HERDR_SOCKET_PATH`.
+
+For the first milestone, Aginctus can place that socket in an Aginctus-managed directory that is shared between the Incus host and the container. The Herdr server runs inside the container; the client or host-side tooling connects to the socket from the host.
 
 This target forces the project to solve useful platform concerns early:
 
 - instance creation and lifecycle;
 - guest bootstrap;
-- host-to-instance networking;
-- SSH authentication and host verification;
-- endpoint discovery;
+- host/container filesystem sharing;
+- socket ownership and permissions;
 - configuration generation;
+- discovery of workload control endpoints;
 - ownership and cleanup of Incus resources;
 - separation between portable workload intent and Incus-specific implementation.
+
+It deliberately avoids making network reachability or SSH a prerequisite for the first usable environment.
 
 ## Initial component boundaries
 
@@ -43,7 +47,7 @@ Its responsibilities include:
 - creating or reconciling Incus resources;
 - bootstrapping guests;
 - discovering runtime state;
-- resolving host-accessible endpoints;
+- resolving host-accessible control endpoints;
 - reporting status and errors;
 - destroying resources owned by Aginctus.
 
@@ -57,8 +61,9 @@ The adapter is responsible for operations such as:
 
 - creating, starting, stopping, and deleting instances;
 - selecting container or VM execution;
-- attaching networks and storage;
-- reading instance state and addresses;
+- attaching storage and shared directories;
+- attaching networks when a workload needs them;
+- reading instance state;
 - applying Aginctus ownership metadata;
 - performing Incus-specific discovery.
 
@@ -74,10 +79,10 @@ NixOS is the first-class initial guest path, but the bootstrap contract should a
 
 For the first Herdr milestone, a guest must at minimum provide:
 
-- a usable SSH server;
-- an Aginctus-managed login path;
-- Herdr installed and available to the remote session;
-- enough runtime dependencies for the chosen agent workloads.
+- Herdr installed;
+- a writable runtime directory for the Herdr socket;
+- the expected runtime dependencies for the chosen agent workloads;
+- a service or launch mechanism that starts Herdr with the Aginctus-provided socket path.
 
 ### Workload model
 
@@ -96,53 +101,67 @@ The initial model should be able to express:
 
 Herdr is the first workload we will exercise, but Herdr-specific concepts should not become generic platform concepts without a clear need.
 
-### Endpoint model
+### Control endpoint model
 
-An endpoint describes a supported way to reach a workload from an authorized client.
+A control endpoint describes a supported way for host-side Aginctus tooling to interact with a workload.
 
-For the first milestone, the important endpoint type is SSH from the Incus host to the workload.
+For the first milestone, the endpoint is a Unix-domain socket shared between the Incus host and a container.
 
 An endpoint should describe intent such as:
 
 - transport;
 - target workload;
-- target port or service;
-- authorized source scope;
-- identity or authentication reference.
+- host visibility;
+- ownership and permissions;
+- lifecycle relationship to the workload.
 
-It should not require callers to know how Incus assigned an address or implemented the network.
+It should not require callers to know the underlying Incus mount implementation.
 
-Future endpoint types may include HTTP APIs, model gateways, MCP gateways, or explicitly forwarded services.
+Future endpoint transports may include SSH, HTTP, vsock, forwarded TCP, or other mechanisms suitable for VMs and remote hosts.
+
+## Local socket model
+
+The first milestone should use the simplest transport that preserves isolation while avoiding unnecessary networking:
+
+1. Aginctus creates a host-side runtime directory owned by the workload.
+2. That directory is mounted into the container at a deterministic guest path.
+3. Herdr is started with `HERDR_SOCKET_PATH` pointing inside that shared directory.
+4. The Unix-domain socket is therefore visible from both the container and the host.
+5. Host-side Aginctus tooling connects to that socket directly.
+6. The shared directory is scoped to the workload and receives restrictive permissions.
+7. No public port or host-to-guest network path is required for Herdr control.
+
+Because containers and the host share the same kernel, a Unix-domain socket located on a shared filesystem can serve as a local IPC boundary.
+
+This mechanism does not naturally extend to virtual machines, which have a separate kernel. VM support should use the same higher-level endpoint abstraction with a different transport.
 
 ## Networking model
 
-The first milestone should use the simplest topology that preserves the intended trust boundary:
+Networking remains an explicit workload concern, but it is not required for the initial Herdr control path.
 
-1. the Incus host can reach the managed instance;
-2. the managed instance does not gain broad access to host services merely because the host can reach it;
-3. no Herdr-specific port is exposed publicly;
-4. SSH access is explicitly provisioned for the host-to-instance path;
-5. external or inter-workload connectivity is not implicitly granted by the workload model.
+The platform should preserve these principles:
 
-A managed Incus bridge is a natural initial implementation because the host can communicate with instances on that network. Aginctus should discover the realized instance address rather than requiring it to be hard-coded.
+- workloads do not gain broad host access merely because they are managed by Aginctus;
+- internet egress, workload-to-workload connectivity, and host-reachable services are explicit policy choices;
+- no service should be publicly exposed merely to support host-side orchestration;
+- network details should remain below the workload abstraction where possible.
 
-Where later deployments need forwarding rather than direct host-to-instance reachability, the endpoint abstraction should allow an Incus proxy device or another implementation without changing the workload's higher-level intent.
+SSH remains a useful future endpoint transport, especially for VMs, remote Incus hosts, and workflows where filesystem-backed local IPC is unavailable.
 
-## SSH and trust
+## Socket security
 
-Herdr remote attach depends on normal SSH connectivity, so SSH is part of the first platform contract rather than an incidental setup step.
-
-Aginctus should not weaken SSH host verification for convenience.
+The shared socket directory is a security boundary.
 
 The implementation should be designed around:
 
-- a dedicated Aginctus-managed guest identity or explicit user-provided identity;
-- deterministic authorized-key provisioning;
-- host-key verification;
-- Aginctus-owned SSH client state rather than silent mutation of the user's global SSH configuration where practical;
-- clear rotation and cleanup behavior.
+- one Aginctus-managed runtime directory per workload;
+- restrictive host and guest permissions;
+- no socket sharing between unrelated workloads;
+- predictable ownership and cleanup;
+- avoiding broad writable host mounts;
+- treating possession of socket access as authority to control the Herdr session.
 
-The exact key-management mechanism can be finalized during implementation, but insecure defaults such as disabling `StrictHostKeyChecking` are outside the intended design.
+The exact UID/GID mapping and Incus mount options can be finalized during implementation.
 
 ## Resource ownership
 
@@ -161,7 +180,7 @@ The exact naming and metadata schema can be defined alongside the CLI implementa
 
 Configuration describes desired state. Incus and the guest provide runtime state.
 
-Aginctus should not require its own persistent database for the first milestone unless implementation experience demonstrates a need for one. Configuration plus discoverable Incus metadata should be sufficient to bootstrap the initial CLI.
+Aginctus should not require its own persistent database for the first milestone unless implementation experience demonstrates a need for one. Configuration plus discoverable Incus metadata and runtime directories should be sufficient to bootstrap the initial CLI.
 
 This keeps the first implementation small while preserving a path toward a daemon or API-backed control plane later.
 
@@ -179,13 +198,12 @@ workloads:
       distribution: nixos
     runtime:
       type: herdr
-    access:
-      - name: ssh
-        transport: ssh
-        from: host
+    control:
+      transport: local-socket
+      from: host
 ```
 
-A VM variant should require only a change to the execution choice:
+A future VM variant should preserve the same conceptual control endpoint while selecting a VM-capable transport:
 
 ```yaml
 workloads:
@@ -195,10 +213,9 @@ workloads:
       distribution: nixos
     runtime:
       type: herdr
-    access:
-      - name: ssh
-        transport: ssh
-        from: host
+    control:
+      transport: ssh
+      from: host
 ```
 
 These examples are illustrative contracts, not a committed schema.
@@ -214,6 +231,7 @@ The first architectural slice does not need to settle:
 - full model-gateway design;
 - full MCP policy model;
 - general internet-egress policy;
+- VM control transport;
 - multi-host scheduling;
 - cluster management;
 - a stable public configuration schema.
