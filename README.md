@@ -29,6 +29,12 @@ Project documentation lives in [docs/](docs/README.md).
 
 ## Development
 
-> Placeholder: local development, testing, contribution, and repository workflow instructions will be added as the implementation takes shape.
+Enter the reproducible development environment with:
+
+```sh
+nix develop
+```
+
+See the [development guide](docs/development.md) for prerequisites, direnv setup, formatting, and Incus development notes.
 
 Automated coding agents must also follow [AGENTS.md](AGENTS.md).
