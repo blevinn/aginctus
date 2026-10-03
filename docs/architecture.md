@@ -30,7 +30,7 @@ This target forces the project to solve useful platform concerns early:
 
 ### Aginctus CLI
 
-The first user-facing control surface will be an `aginctus` CLI running on the Incus host.
+The first user-facing control surface will be an `aginctus` CLI running on the Incus host. The initial CLI implementation is written in Go.
 
 Initially, the CLI may be a thin orchestration layer over Incus. It should not merely proxy arbitrary `incus` commands: Aginctus commands should operate on Aginctus concepts and preserve Aginctus invariants.
 
@@ -225,7 +225,6 @@ These examples are illustrative contracts, not a committed schema.
 
 The first architectural slice does not need to settle:
 
-- implementation language;
 - persistence database;
 - daemon or API framework;
 - dashboard technology;
