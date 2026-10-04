@@ -1,6 +1,6 @@
 # AI gateway design
 
-Status: agreed design direction; configuration and commands below are proposed contracts, not implemented interfaces.
+Status: agreed design direction; initial configuration validation and Compose rendering are implemented, while lifecycle, authentication, credentials, MCP policy, and backup/restore remain follow-up work.
 
 ## Scope
 
@@ -11,6 +11,19 @@ Initial inference upstreams are OpenAI through ChatGPT/Codex OAuth and OpenCode 
 The MVP includes workload identities, explicit model and MCP permissions, inference usage accounting, audit records, health checks, and backup/restore. Spending limits are not enforced. Budget enforcement is a high-priority next milestone.
 
 Multi-tenancy, multiple gateways, federation, a central control plane, high availability, local MCP subprocess execution, and an approval UI are outside this MVP. This gateway slice does not change the scope of the [first Herdr milestone](milestones/0001-herdr-console.md).
+
+## Initial implementation slice
+
+The first implementation exposes:
+
+```text
+aginctus gateway validate
+aginctus gateway render
+```
+
+The effective configuration currently provides a stable gateway ID, Compose project name, management network, and pinned LiteLLM/PostgreSQL images. `gateway render` emits a deterministic Compose model for LiteLLM plus PostgreSQL and references runtime secrets through environment variables rather than embedding credentials.
+
+This slice deliberately does not mutate Incus. Deployment will be wired through the declarative orchestration/Compose integration so the gateway does not introduce another bespoke reconciliation path.
 
 ## Deployment and ownership
 
