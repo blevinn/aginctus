@@ -14,18 +14,18 @@ import (
 type fakeIncusClient struct {
 	version        string
 	err            error
-	networkCreated bool
-	networkErr     error
-	networkSpec    incus.ManagementNetworkSpec
+	networkResult incus.EnsureResult
+	networkErr    error
+	networkSpec   incus.ManagementNetworkSpec
 }
 
 func (c *fakeIncusClient) ServerVersion(context.Context) (string, error) {
 	return c.version, c.err
 }
 
-func (c *fakeIncusClient) EnsureManagementNetwork(_ context.Context, spec incus.ManagementNetworkSpec) (bool, error) {
+func (c *fakeIncusClient) EnsureManagementNetwork(_ context.Context, spec incus.ManagementNetworkSpec) (incus.EnsureResult, error) {
 	c.networkSpec = spec
-	return c.networkCreated, c.networkErr
+	return c.networkResult, c.networkErr
 }
 
 type fakeConfigLoader struct {
@@ -109,7 +109,7 @@ func TestNetworkEnsureUsesEffectiveConfiguration(t *testing.T) {
 	loader.SystemPath = ""
 	loader.UserPath = ""
 	loader.Environment = nil
-	client := &fakeIncusClient{networkCreated: true}
+	client := &fakeIncusClient{networkResult: incus.EnsureResult{Created: true}}
 
 	code := Run(
 		context.Background(),
