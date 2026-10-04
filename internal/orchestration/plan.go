@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 )
 
 const (
@@ -35,8 +36,12 @@ func ParsePlan(data []byte) (Plan, error) {
 	if err := decoder.Decode(&plan); err != nil {
 		return Plan{}, fmt.Errorf("decode orchestration plan: %w", err)
 	}
-	if decoder.More() {
-		return Plan{}, fmt.Errorf("decode orchestration plan: unexpected trailing JSON")
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return Plan{}, fmt.Errorf("decode orchestration plan: unexpected trailing JSON")
+		}
+		return Plan{}, fmt.Errorf("decode orchestration plan trailing data: %w", err)
 	}
 	if err := plan.Validate(); err != nil {
 		return Plan{}, err
