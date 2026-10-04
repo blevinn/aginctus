@@ -1,7 +1,6 @@
 package incus
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -58,8 +57,6 @@ type Server interface {
 	UpdateInstance(string, api.InstancePut, string) (operation, error)
 	DeleteInstance(string) (operation, error)
 	UpdateInstanceState(string, api.InstanceStatePut, string) (operation, error)
-	CreateInstanceFile(string, string, incusclient.InstanceFileArgs) error
-	ExecInstance(string, api.InstanceExecPost, *incusclient.InstanceExecArgs) (operation, error)
 }
 
 type realServer struct {
@@ -241,8 +238,6 @@ func applyManagementNetworkConfig(config api.ConfigMap, spec ManagementNetworkSp
 
 type HerdrClientSpec struct {
 	Name              string
-	ImageServer       string
-	ImageProtocol     string
 	ImageAlias        string
 	StoragePool       string
 	ManagementNetwork string
@@ -310,10 +305,8 @@ func (c *Client) EnsureHerdrClient(ctx context.Context, spec HerdrClientSpec, op
 		Type:  api.InstanceTypeContainer,
 		Start: true,
 		Source: api.InstanceSource{
-			Type:     "image",
-			Server:   spec.ImageServer,
-			Protocol: spec.ImageProtocol,
-			Alias:    spec.ImageAlias,
+			Type:  "image",
+			Alias: spec.ImageAlias,
 		},
 		InstancePut: api.InstancePut{
 			Description: "Aginctus Herdr client infrastructure",
@@ -465,49 +458,3 @@ func boolString(value bool) string {
 }
 
 
-func (c *Client) InstanceArchitecture(ctx context.Context, name string) (string, error) {
-	server, err := c.connect(ctx)
-	if err != nil {
-		return "", fmt.Errorf("connect to local Incus daemon: %w", err)
-	}
-	instance, _, err := server.GetInstance(name)
-	if err != nil {
-		return "", fmt.Errorf("get instance %q: %w", name, err)
-	}
-	return instance.Architecture, nil
-}
-
-func (c *Client) WriteInstanceFile(ctx context.Context, name, path string, content []byte, mode int) error {
-	server, err := c.connect(ctx)
-	if err != nil {
-		return fmt.Errorf("connect to local Incus daemon: %w", err)
-	}
-	return server.CreateInstanceFile(name, path, incusclient.InstanceFileArgs{
-		Content: bytes.NewReader(content),
-		UID: 0,
-		GID: 0,
-		Mode: mode,
-		Type: "file",
-		WriteMode: "overwrite",
-	})
-}
-
-func (c *Client) ExecInstance(ctx context.Context, name string, command []string) (string, error) {
-	server, err := c.connect(ctx)
-	if err != nil {
-		return "", fmt.Errorf("connect to local Incus daemon: %w", err)
-	}
-	var stdout, stderr bytes.Buffer
-	op, err := server.ExecInstance(name, api.InstanceExecPost{
-		Command: command,
-		WaitForWS: true,
-		Interactive: false,
-	}, &incusclient.InstanceExecArgs{Stdout: &stdout, Stderr: &stderr})
-	if err != nil {
-		return "", fmt.Errorf("exec in %q: %w", name, err)
-	}
-	if err := op.Wait(); err != nil {
-		return "", fmt.Errorf("exec in %q failed: %w: %s", name, err, stderr.String())
-	}
-	return stdout.String(), nil
-}
