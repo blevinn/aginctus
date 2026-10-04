@@ -34,6 +34,7 @@ type fakeServer struct {
 	createdInstance *api.InstancesPost
 	updatedInstance *api.InstancePut
 	deletedInstance string
+	stateChange     *api.InstanceStatePut
 }
 
 func (s *fakeServer) GetServer() (*api.Server, string, error) {
@@ -77,6 +78,11 @@ func (s *fakeServer) UpdateInstance(_ string, instance api.InstancePut, _ string
 
 func (s *fakeServer) DeleteInstance(name string) (operation, error) {
 	s.deletedInstance = name
+	return fakeOperation{}, nil
+}
+
+func (s *fakeServer) UpdateInstanceState(_ string, state api.InstanceStatePut, _ string) (operation, error) {
+	s.stateChange = &state
 	return fakeOperation{}, nil
 }
 
@@ -434,5 +440,8 @@ func TestTeardownHerdrClientDeletesOwnedContainer(t *testing.T) {
 	}
 	if !result.Deleted || server.deletedInstance != "aginctus-herdr" {
 		t.Fatalf("result = %#v deleted = %q", result, server.deletedInstance)
+	}
+	if server.stateChange == nil || server.stateChange.Action != "stop" {
+		t.Fatalf("state change = %#v", server.stateChange)
 	}
 }
