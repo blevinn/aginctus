@@ -19,8 +19,9 @@ const (
 )
 
 type Config struct {
-	Project string          `json:"project"`
-	Compose json.RawMessage `json:"compose"`
+	Project            string          `json:"project"`
+	Compose            json.RawMessage `json:"compose"`
+	ProcessEnvironment bool            `json:"processEnvironment,omitempty"`
 }
 
 type Driver struct {
@@ -73,7 +74,7 @@ func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
 	}
 	defer cleanup()
 
-	_, err = loadProject(ctx, cfg.Project, path)
+	_, err = loadProject(ctx, cfg.Project, path, cfg.ProcessEnvironment)
 	if err != nil {
 		return Config{}, fmt.Errorf("validate compose project %q: %w", cfg.Project, err)
 	}
@@ -87,7 +88,7 @@ func executeCompose(ctx context.Context, cfg Config) error {
 	}
 	defer cleanup()
 
-	p, err := loadProject(ctx, cfg.Project, path)
+	p, err := loadProject(ctx, cfg.Project, path, cfg.ProcessEnvironment)
 	if err != nil {
 		return fmt.Errorf("load compose project %q: %w", cfg.Project, err)
 	}
@@ -137,9 +138,8 @@ func executeCompose(ctx context.Context, cfg Config) error {
 	return nil
 }
 
-func loadProject(ctx context.Context, name, path string) (*composeproject.Project, error) {
-	return composeproject.New().Load(
-		ctx,
+func loadProject(ctx context.Context, name, path string, processEnvironment bool) (*composeproject.Project, error) {
+	options := []composeproject.LoadOption{
 		composeproject.LoadFiles([]string{path}),
 		composeproject.LoadName(name),
 		composeproject.LoadInstanceMarks(map[string]string{
@@ -150,7 +150,11 @@ func loadProject(ctx context.Context, name, path string) (*composeproject.Projec
 			ownershipManagedKey:  "true",
 			ownershipResourceKey: "compose-project",
 		}),
-	)
+	}
+	if processEnvironment {
+		options = append(options, composeproject.LoadOsEnv())
+	}
+	return composeproject.New().Load(ctx, options...)
 }
 
 func writeCompose(contents []byte) (string, func(), error) {
