@@ -12,8 +12,8 @@ import (
 )
 
 type fakeIncusClient struct {
-	version        string
-	err            error
+	version         string
+	err             error
 	networkResult   incus.EnsureResult
 	networkErr      error
 	networkSpec     incus.ManagementNetworkSpec
@@ -22,6 +22,12 @@ type fakeIncusClient struct {
 	teardownErr     error
 	teardownName    string
 	teardownOptions incus.MutationOptions
+	herdrResult     incus.EnsureResult
+	herdrErr        error
+	herdrSpec       incus.HerdrClientSpec
+	herdrOptions    incus.MutationOptions
+	herdrTeardown   incus.TeardownResult
+	herdrName       string
 }
 
 func (c *fakeIncusClient) ServerVersion(context.Context) (string, error) {
@@ -38,6 +44,18 @@ func (c *fakeIncusClient) TeardownManagementNetwork(_ context.Context, name stri
 	c.teardownName = name
 	c.teardownOptions = options
 	return c.teardownResult, c.teardownErr
+}
+
+func (c *fakeIncusClient) EnsureHerdrClient(_ context.Context, spec incus.HerdrClientSpec, options incus.MutationOptions) (incus.EnsureResult, error) {
+	c.herdrSpec = spec
+	c.herdrOptions = options
+	return c.herdrResult, c.herdrErr
+}
+
+func (c *fakeIncusClient) TeardownHerdrClient(_ context.Context, name string, options incus.MutationOptions) (incus.TeardownResult, error) {
+	c.herdrName = name
+	c.herdrOptions = options
+	return c.herdrTeardown, c.herdrErr
 }
 
 type fakeConfigLoader struct {
@@ -201,7 +219,6 @@ func TestUnknownCommand(t *testing.T) {
 	}
 }
 
-
 func TestNetworkEnsureDryRunOutput(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	loader := config.NewLoader()
@@ -288,5 +305,90 @@ func TestNetworkRejectsUnknownOption(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "unknown option") {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestHerdrClientEnsureUsesEffectiveConfiguration(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{herdrResult: incus.EnsureResult{Created: true, DryRun: true}}
+
+	code := Run(
+		context.Background(),
+		[]string{
+			"--config=infrastructure.herdr.name=lab-herdr",
+			"--config=infrastructure.herdr.image.alias=lab-herdr-image",
+			"--config=infrastructure.herdr.storage.pool=fast",
+			"--config=incus.management.network.name=lab-mgmt",
+			"herdr", "client", "ensure", "--dry-run",
+		},
+		&stdout, &stderr, client, loader,
+	)
+
+	if code != 0 {
+		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
+	}
+	if client.networkSpec.Name != "lab-mgmt" || !client.networkOptions.DryRun {
+		t.Fatalf("network dependency = %#v options = %#v", client.networkSpec, client.networkOptions)
+	}
+	if client.herdrSpec.Name != "lab-herdr" || client.herdrSpec.ImageAlias != "lab-herdr-image" || client.herdrSpec.StoragePool != "fast" || client.herdrSpec.ManagementNetwork != "lab-mgmt" {
+		t.Fatalf("Herdr spec = %#v", client.herdrSpec)
+	}
+	if !client.herdrOptions.DryRun {
+		t.Fatalf("Herdr options = %#v", client.herdrOptions)
+	}
+	if !strings.Contains(stdout.String(), "would create") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestHerdrClientTeardownUsesConfiguredName(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{herdrTeardown: incus.TeardownResult{Deleted: true}}
+
+	code := Run(
+		context.Background(),
+		[]string{"--config=infrastructure.herdr.name=lab-herdr", "herdr", "client", "teardown", "--force"},
+		&stdout, &stderr, client, loader,
+	)
+
+	if code != 0 {
+		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
+	}
+	if client.herdrName != "lab-herdr" || !client.herdrOptions.Force {
+		t.Fatalf("name = %q options = %#v", client.herdrName, client.herdrOptions)
+	}
+}
+
+
+func TestHerdrClientEnsureStopsWhenManagementNetworkEnsureFails(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{networkErr: errors.New("network failed")}
+
+	code := Run(
+		context.Background(),
+		[]string{"herdr", "client", "ensure"},
+		&stdout, &stderr, client, loader,
+	)
+
+	if code != 1 {
+		t.Fatalf("Run() code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "network failed") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+	if client.herdrSpec.Name != "" {
+		t.Fatalf("Herdr ensure called after network failure: %#v", client.herdrSpec)
 	}
 }

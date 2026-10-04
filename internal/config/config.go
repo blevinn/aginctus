@@ -47,7 +47,6 @@ func (c *Config) Get(path string) (any, bool) {
 	return current, true
 }
 
-
 func (c *Config) String(path string) (string, error) {
 	value, ok := c.Get(path)
 	if !ok {
@@ -118,6 +117,17 @@ func (l *Loader) Load(options Options) (*Config, error) {
 }
 
 var defaults = map[string]any{
+	"infrastructure": map[string]any{
+		"herdr": map[string]any{
+			"name": "aginctus-herdr",
+			"image": map[string]any{
+				"alias": "aginctus-herdr-client",
+			},
+			"storage": map[string]any{
+				"pool": "default",
+			},
+		},
+	},
 	"incus": map[string]any{
 		"management": map[string]any{
 			"network": map[string]any{

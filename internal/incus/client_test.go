@@ -9,17 +9,33 @@ import (
 	"github.com/lxc/incus/v7/shared/api"
 )
 
+type fakeOperation struct {
+	err error
+}
+
+func (o fakeOperation) Wait() error {
+	return o.err
+}
+
 type fakeServer struct {
-	server       *api.Server
-	serverErr    error
-	network      *api.Network
-	networkErr   error
-	etag         string
-	created      *api.NetworksPost
-	updatedName  string
-	updatedPut   *api.NetworkPut
-	updateETag   string
-	deletedName  string
+	server          *api.Server
+	serverErr       error
+	network         *api.Network
+	networkErr      error
+	etag            string
+	created         *api.NetworksPost
+	updatedName     string
+	updatedPut      *api.NetworkPut
+	updateETag      string
+	deletedName     string
+	instance        *api.Instance
+	instanceErr     error
+	instanceETag    string
+	createdInstance *api.InstancesPost
+	createdImageAlias string
+	updatedInstance *api.InstancePut
+	deletedInstance string
+	stateChange     *api.InstanceStatePut
 }
 
 func (s *fakeServer) GetServer() (*api.Server, string, error) {
@@ -45,6 +61,31 @@ func (s *fakeServer) UpdateNetwork(name string, network api.NetworkPut, etag str
 func (s *fakeServer) DeleteNetwork(name string) error {
 	s.deletedName = name
 	return nil
+}
+
+func (s *fakeServer) GetInstance(string) (*api.Instance, string, error) {
+	return s.instance, s.instanceETag, s.instanceErr
+}
+
+func (s *fakeServer) CreateInstanceFromLocalImage(alias string, instance api.InstancesPost) (operation, error) {
+	s.createdImageAlias = alias
+	s.createdInstance = &instance
+	return fakeOperation{}, nil
+}
+
+func (s *fakeServer) UpdateInstance(_ string, instance api.InstancePut, _ string) (operation, error) {
+	s.updatedInstance = &instance
+	return fakeOperation{}, nil
+}
+
+func (s *fakeServer) DeleteInstance(name string) (operation, error) {
+	s.deletedInstance = name
+	return fakeOperation{}, nil
+}
+
+func (s *fakeServer) UpdateInstanceState(_ string, state api.InstanceStatePut, _ string) (operation, error) {
+	s.stateChange = &state
+	return fakeOperation{}, nil
 }
 
 func TestServerVersion(t *testing.T) {
@@ -76,9 +117,9 @@ func TestEnsureManagementNetworkCreatesConfiguredNetwork(t *testing.T) {
 	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
 
 	spec := ManagementNetworkSpec{
-		Name: "lab-mgmt",
+		Name:        "lab-mgmt",
 		IPv4Address: "10.42.0.1/24",
-		IPv4NAT: true,
+		IPv4NAT:     true,
 		IPv4Routing: false,
 		IPv6Address: "none",
 	}
@@ -103,23 +144,23 @@ func TestEnsureManagementNetworkCreatesConfiguredNetwork(t *testing.T) {
 
 func TestEnsureManagementNetworkLeavesMatchingOwnedNetworkUnchanged(t *testing.T) {
 	spec := ManagementNetworkSpec{
-		Name: "lab-mgmt",
+		Name:        "lab-mgmt",
 		IPv4Address: "10.42.0.1/24",
-		IPv4NAT: false,
+		IPv4NAT:     false,
 		IPv4Routing: false,
 		IPv6Address: "none",
 	}
 	server := &fakeServer{network: &api.Network{
-		Name: "lab-mgmt",
-		Type: "bridge",
+		Name:    "lab-mgmt",
+		Type:    "bridge",
 		Managed: true,
 		NetworkPut: api.NetworkPut{Config: api.ConfigMap{
 			"ipv4.address": "10.42.0.1/24",
-			"ipv4.nat": "false",
+			"ipv4.nat":     "false",
 			"ipv4.routing": "false",
 			"ipv6.address": "none",
-			ownerKey: ownerValue,
-			resourceKey: resourceValue,
+			ownerKey:       ownerValue,
+			resourceKey:    resourceValue,
 		}},
 	}}
 	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
@@ -140,25 +181,25 @@ func TestEnsureManagementNetworkUpdatesOwnedNetwork(t *testing.T) {
 	server := &fakeServer{
 		etag: "etag-1",
 		network: &api.Network{
-			Name: "lab-mgmt",
-			Type: "bridge",
+			Name:    "lab-mgmt",
+			Type:    "bridge",
 			Managed: true,
 			NetworkPut: api.NetworkPut{Config: api.ConfigMap{
 				"ipv4.address": "10.42.0.1/24",
-				"ipv4.nat": "false",
+				"ipv4.nat":     "false",
 				"ipv4.routing": "false",
 				"ipv6.address": "none",
-				ownerKey: ownerValue,
-				resourceKey: resourceValue,
+				ownerKey:       ownerValue,
+				resourceKey:    resourceValue,
 			}},
 		},
 	}
 	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
 
 	result, err := client.EnsureManagementNetwork(context.Background(), ManagementNetworkSpec{
-		Name: "lab-mgmt",
+		Name:        "lab-mgmt",
 		IPv4Address: "10.42.0.1/24",
-		IPv4NAT: true,
+		IPv4NAT:     true,
 		IPv4Routing: false,
 		IPv6Address: "none",
 	}, MutationOptions{})
@@ -178,9 +219,9 @@ func TestEnsureManagementNetworkUpdatesOwnedNetwork(t *testing.T) {
 
 func TestEnsureManagementNetworkRejectsUnownedCollision(t *testing.T) {
 	server := &fakeServer{network: &api.Network{
-		Name: "lab-mgmt",
-		Type: "bridge",
-		Managed: true,
+		Name:       "lab-mgmt",
+		Type:       "bridge",
+		Managed:    true,
 		NetworkPut: api.NetworkPut{Config: api.ConfigMap{}},
 	}}
 	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
@@ -190,7 +231,6 @@ func TestEnsureManagementNetworkRejectsUnownedCollision(t *testing.T) {
 		t.Fatalf("EnsureManagementNetwork() error = %v", err)
 	}
 }
-
 
 func TestEnsureManagementNetworkDryRunDoesNotCreate(t *testing.T) {
 	server := &fakeServer{networkErr: api.StatusErrorf(404, "not found")}
@@ -210,9 +250,9 @@ func TestEnsureManagementNetworkDryRunDoesNotCreate(t *testing.T) {
 
 func TestEnsureManagementNetworkForceAdoptsUnownedBridge(t *testing.T) {
 	server := &fakeServer{network: &api.Network{
-		Name: "lab-mgmt",
-		Type: "bridge",
-		Managed: true,
+		Name:       "lab-mgmt",
+		Type:       "bridge",
+		Managed:    true,
 		NetworkPut: api.NetworkPut{Config: api.ConfigMap{}},
 	}}
 	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
@@ -235,11 +275,11 @@ func TestEnsureManagementNetworkForceAdoptsUnownedBridge(t *testing.T) {
 
 func TestTeardownManagementNetworkDeletesOwnedNetwork(t *testing.T) {
 	server := &fakeServer{network: &api.Network{
-		Name: "lab-mgmt",
-		Type: "bridge",
+		Name:    "lab-mgmt",
+		Type:    "bridge",
 		Managed: true,
 		NetworkPut: api.NetworkPut{Config: api.ConfigMap{
-			ownerKey: ownerValue,
+			ownerKey:    ownerValue,
 			resourceKey: resourceValue,
 		}},
 	}}
@@ -259,11 +299,11 @@ func TestTeardownManagementNetworkDeletesOwnedNetwork(t *testing.T) {
 
 func TestTeardownManagementNetworkDryRunDoesNotDelete(t *testing.T) {
 	server := &fakeServer{network: &api.Network{
-		Name: "lab-mgmt",
-		Type: "bridge",
+		Name:    "lab-mgmt",
+		Type:    "bridge",
 		Managed: true,
 		NetworkPut: api.NetworkPut{Config: api.ConfigMap{
-			ownerKey: ownerValue,
+			ownerKey:    ownerValue,
 			resourceKey: resourceValue,
 		}},
 	}}
@@ -283,9 +323,9 @@ func TestTeardownManagementNetworkDryRunDoesNotDelete(t *testing.T) {
 
 func TestTeardownManagementNetworkForceDeletesUnownedBridge(t *testing.T) {
 	server := &fakeServer{network: &api.Network{
-		Name: "lab-mgmt",
-		Type: "bridge",
-		Managed: true,
+		Name:       "lab-mgmt",
+		Type:       "bridge",
+		Managed:    true,
 		NetworkPut: api.NetworkPut{Config: api.ConfigMap{}},
 	}}
 	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
@@ -301,9 +341,9 @@ func TestTeardownManagementNetworkForceDeletesUnownedBridge(t *testing.T) {
 
 func TestTeardownManagementNetworkRejectsUnownedWithoutForce(t *testing.T) {
 	server := &fakeServer{network: &api.Network{
-		Name: "lab-mgmt",
-		Type: "bridge",
-		Managed: true,
+		Name:       "lab-mgmt",
+		Type:       "bridge",
+		Managed:    true,
 		NetworkPut: api.NetworkPut{Config: api.ConfigMap{}},
 	}}
 	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
@@ -311,5 +351,94 @@ func TestTeardownManagementNetworkRejectsUnownedWithoutForce(t *testing.T) {
 	_, err := client.TeardownManagementNetwork(context.Background(), "lab-mgmt", MutationOptions{})
 	if err == nil || !strings.Contains(err.Error(), "use --force") {
 		t.Fatalf("TeardownManagementNetwork() error = %v", err)
+	}
+}
+
+func TestEnsureHerdrClientCreatesContainer(t *testing.T) {
+	server := &fakeServer{instanceErr: api.StatusErrorf(404, "not found")}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	spec := HerdrClientSpec{
+		Name:              "aginctus-herdr",
+		ImageAlias:        "aginctus-herdr-client",
+		StoragePool:       "default",
+		ManagementNetwork: "aginctus-mgmt",
+	}
+
+	result, err := client.EnsureHerdrClient(context.Background(), spec, MutationOptions{})
+	if err != nil {
+		t.Fatalf("EnsureHerdrClient() error = %v", err)
+	}
+	if !result.Created || server.createdInstance == nil {
+		t.Fatalf("result = %#v request = %#v", result, server.createdInstance)
+	}
+	if server.createdInstance.Type != api.InstanceTypeContainer {
+		t.Fatalf("type = %q", server.createdInstance.Type)
+	}
+	if server.createdImageAlias != "aginctus-herdr-client" {
+		t.Fatalf("image alias = %q", server.createdImageAlias)
+	}
+	if got := server.createdInstance.Devices["management"]["network"]; got != "aginctus-mgmt" {
+		t.Fatalf("management network = %q", got)
+	}
+	if got := server.createdInstance.Devices["root"]["pool"]; got != "default" {
+		t.Fatalf("storage pool = %q", got)
+	}
+		if len(server.createdInstance.Profiles) != 0 {
+		t.Fatalf("profiles = %#v, want none", server.createdInstance.Profiles)
+	}
+}
+
+func TestEnsureHerdrClientDryRunDoesNotCreate(t *testing.T) {
+	server := &fakeServer{instanceErr: api.StatusErrorf(404, "not found")}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	result, err := client.EnsureHerdrClient(context.Background(), HerdrClientSpec{Name: "aginctus-herdr"}, MutationOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("EnsureHerdrClient() error = %v", err)
+	}
+	if !result.Created || !result.DryRun {
+		t.Fatalf("result = %#v", result)
+	}
+	if server.createdInstance != nil {
+		t.Fatal("CreateInstance() called during dry run")
+	}
+}
+
+func TestEnsureHerdrClientRejectsUnownedContainer(t *testing.T) {
+	server := &fakeServer{instance: &api.Instance{
+		Name:        "aginctus-herdr",
+		Type:        string(api.InstanceTypeContainer),
+		InstancePut: api.InstancePut{Config: api.ConfigMap{}},
+	}}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	_, err := client.EnsureHerdrClient(context.Background(), HerdrClientSpec{Name: "aginctus-herdr"}, MutationOptions{})
+	if err == nil || !strings.Contains(err.Error(), "use --force") {
+		t.Fatalf("EnsureHerdrClient() error = %v", err)
+	}
+}
+
+func TestTeardownHerdrClientDeletesOwnedContainer(t *testing.T) {
+	server := &fakeServer{instance: &api.Instance{
+		Name: "aginctus-herdr",
+		Type: string(api.InstanceTypeContainer),
+		InstancePut: api.InstancePut{Config: api.ConfigMap{
+			ownerKey:    ownerValue,
+			resourceKey: "infrastructure",
+			roleKey:     herdrRoleValue,
+		}},
+	}}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	result, err := client.TeardownHerdrClient(context.Background(), "aginctus-herdr", MutationOptions{})
+	if err != nil {
+		t.Fatalf("TeardownHerdrClient() error = %v", err)
+	}
+	if !result.Deleted || server.deletedInstance != "aginctus-herdr" {
+		t.Fatalf("result = %#v deleted = %q", result, server.deletedInstance)
+	}
+	if server.stateChange == nil || server.stateChange.Action != "stop" {
+		t.Fatalf("state change = %#v", server.stateChange)
 	}
 }

@@ -4,9 +4,17 @@
   inputs = {
     # Stable NixOS 26.05. The generated flake.lock pins the exact revision.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+
+    # Herdr's published flake is pinned through Aginctus's flake.lock.
+    herdr.url = "github:herdrdev/herdr";
   };
 
-  outputs = { nixpkgs, ... }:
+  outputs =
+    {
+      nixpkgs,
+      herdr,
+      ...
+    }:
     let
       systems = [
         "x86_64-linux"
@@ -16,6 +24,65 @@
       forAllSystems = nixpkgs.lib.genAttrs systems;
     in
     {
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+          herdrPackage = herdr.packages.${system}.herdr;
+
+          herdrClientSystem = nixpkgs.lib.nixosSystem {
+            inherit system;
+            modules = [
+              "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
+              (
+                { ... }:
+                {
+                  system.stateVersion = "26.05";
+
+                  environment.systemPackages = [ herdrPackage ];
+                  environment.variables = {
+                    XDG_CONFIG_HOME = "/var/lib/herdr/config";
+                    XDG_RUNTIME_DIR = "/run/herdr";
+                    XDG_STATE_HOME = "/var/lib/herdr";
+                  };
+
+                  systemd.services.herdr = {
+                    description = "Herdr headless server";
+                    wantedBy = [ "multi-user.target" ];
+                    after = [ "network-online.target" ];
+                    wants = [ "network-online.target" ];
+
+                    serviceConfig = {
+                      Environment = [
+                        "HOME=/root"
+                        "XDG_CONFIG_HOME=/var/lib/herdr/config"
+                        "XDG_RUNTIME_DIR=/run/herdr"
+                        "XDG_STATE_HOME=/var/lib/herdr"
+                      ];
+                      ExecStart = "${herdrPackage}/bin/herdr server";
+                      Restart = "on-failure";
+                      RestartSec = "2s";
+                      RuntimeDirectory = "herdr";
+                      StateDirectory = "herdr";
+                    };
+                  };
+                }
+              )
+            ];
+          };
+
+          rootfs = herdrClientSystem.config.system.build.squashfs;
+          metadata = herdrClientSystem.config.system.build.metadata;
+        in
+        {
+          herdr-client = pkgs.runCommand "aginctus-herdr-client-image" { } ''
+            mkdir -p "$out"
+            ln -s ${rootfs} "$out/rootfs"
+            ln -s ${metadata} "$out/metadata"
+          '';
+        }
+      );
+
       devShells = forAllSystems (
         system:
         let
@@ -46,7 +113,7 @@
         let
           pkgs = import nixpkgs { inherit system; };
         in
-        pkgs.nixfmt
+        pkgs.nixfmt-tree
       );
     };
 }

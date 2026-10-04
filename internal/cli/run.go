@@ -17,6 +17,8 @@ type IncusClient interface {
 	ServerVersion(context.Context) (string, error)
 	EnsureManagementNetwork(context.Context, incus.ManagementNetworkSpec, incus.MutationOptions) (incus.EnsureResult, error)
 	TeardownManagementNetwork(context.Context, string, incus.MutationOptions) (incus.TeardownResult, error)
+	EnsureHerdrClient(context.Context, incus.HerdrClientSpec, incus.MutationOptions) (incus.EnsureResult, error)
+	TeardownHerdrClient(context.Context, string, incus.MutationOptions) (incus.TeardownResult, error)
 }
 
 type ConfigLoader interface {
@@ -66,6 +68,8 @@ func Run(
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
 	case "network":
 		return runNetwork(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
+	case "herdr":
+		return runHerdr(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", commandArgs[0])
 		printUsage(stderr)
@@ -278,6 +282,127 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network teardown [--dry-run] [--force]")
 }
 
+func runHerdr(
+	ctx context.Context,
+	args []string,
+	stdout, stderr io.Writer,
+	incusClient IncusClient,
+	effective *config.Config,
+) int {
+	if len(args) == 0 || args[0] != "client" {
+		printHerdrClientUsage(stderr)
+		return 2
+	}
+	args = args[1:]
+	if len(args) == 0 {
+		printHerdrClientUsage(stderr)
+		return 2
+	}
+
+	options, err := parseNetworkOptions(args[1:])
+	if err != nil {
+		fmt.Fprintf(stderr, "herdr-client options: %v\n", err)
+		return 2
+	}
+
+	switch args[0] {
+	case "ensure":
+		networkSpec, err := managementNetworkSpec(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
+			return 1
+		}
+		if _, err := incusClient.EnsureManagementNetwork(ctx, networkSpec, options); err != nil {
+			fmt.Fprintf(stderr, "management network: %v\n", err)
+			return 1
+		}
+
+		spec, err := herdrClientSpec(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
+			return 1
+		}
+		result, err := incusClient.EnsureHerdrClient(ctx, spec, options)
+		if err != nil {
+			fmt.Fprintf(stderr, "Herdr client: %v\n", err)
+			return 1
+		}
+
+		switch {
+		case result.DryRun && result.Created:
+			fmt.Fprintf(stdout, "Herdr client %q: would create\n", spec.Name)
+		case result.DryRun && result.Updated:
+			fmt.Fprintf(stdout, "Herdr client %q: would update\n", spec.Name)
+		case result.Created:
+			fmt.Fprintf(stdout, "Herdr client %q: created\n", spec.Name)
+		case result.Updated:
+			fmt.Fprintf(stdout, "Herdr client %q: updated\n", spec.Name)
+		default:
+			fmt.Fprintf(stdout, "Herdr client %q: ready\n", spec.Name)
+		}
+		return 0
+
+	case "teardown":
+		name, err := effective.String("infrastructure.herdr.name")
+		if err != nil {
+			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
+			return 1
+		}
+		result, err := incusClient.TeardownHerdrClient(ctx, name, options)
+		if err != nil {
+			fmt.Fprintf(stderr, "Herdr client: %v\n", err)
+			return 1
+		}
+		switch {
+		case result.DryRun && result.Deleted:
+			fmt.Fprintf(stdout, "Herdr client %q: would delete\n", name)
+		case result.Deleted:
+			fmt.Fprintf(stdout, "Herdr client %q: deleted\n", name)
+		default:
+			fmt.Fprintf(stdout, "Herdr client %q: absent\n", name)
+		}
+		return 0
+
+	default:
+		printHerdrClientUsage(stderr)
+		return 2
+	}
+}
+
+func herdrClientSpec(effective *config.Config) (incus.HerdrClientSpec, error) {
+	name, err := effective.String("infrastructure.herdr.name")
+	if err != nil {
+		return incus.HerdrClientSpec{}, err
+	}
+	alias, err := effective.String("infrastructure.herdr.image.alias")
+	if err != nil {
+		return incus.HerdrClientSpec{}, err
+	}
+	pool, err := effective.String("infrastructure.herdr.storage.pool")
+	if err != nil {
+		return incus.HerdrClientSpec{}, err
+	}
+	network, err := effective.String("incus.management.network.name")
+	if err != nil {
+		return incus.HerdrClientSpec{}, err
+	}
+	if name == "" || alias == "" || pool == "" || network == "" {
+		return incus.HerdrClientSpec{}, fmt.Errorf("Herdr client name, image alias, storage pool, and management network must not be empty")
+	}
+
+	return incus.HerdrClientSpec{
+		Name:              name,
+		ImageAlias:        alias,
+		StoragePool:       pool,
+		ManagementNetwork: network,
+	}, nil
+}
+
+func printHerdrClientUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: aginctus [global options] herdr client ensure [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] herdr client teardown [--dry-run] [--force]")
+}
+
 func managementNetworkSpec(effective *config.Config) (incus.ManagementNetworkSpec, error) {
 	name, err := effective.String("incus.management.network.name")
 	if err != nil {
@@ -305,9 +430,9 @@ func managementNetworkSpec(effective *config.Config) (incus.ManagementNetworkSpe
 	}
 
 	return incus.ManagementNetworkSpec{
-		Name: name,
+		Name:        name,
 		IPv4Address: ipv4Address,
-		IPv4NAT: ipv4NAT,
+		IPv4NAT:     ipv4NAT,
 		IPv4Routing: ipv4Routing,
 		IPv6Address: ipv6Address,
 	}, nil
@@ -325,6 +450,8 @@ Commands:
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   doctor            Check local Incus daemon connectivity
+  herdr client ensure    Create, reconcile, and bootstrap the Herdr client
+  herdr client teardown  Delete the Herdr client container
   network ensure    Create or reconcile the configured management network
   network teardown  Delete the configured management network
   version           Print the Aginctus CLI version

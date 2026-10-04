@@ -158,3 +158,39 @@ The initial defaults reserve configuration for the management network that will 
 These are defaults rather than hard-coded orchestration constants. `aginctus network ensure` consumes these effective values when creating or reconciling the management bridge, and `aginctus network teardown` uses the effective network name when removing it, so higher-precedence sources apply consistently to both lifecycle operations.
 
 Both network lifecycle commands support `--dry-run` and `--force`. Dry-run reports the intended mutation without applying it. Force only relaxes the Aginctus ownership check for a same-named Incus-managed bridge; it does not bypass network type checks or Incus API errors.
+
+
+## Herdr client container defaults
+
+The Herdr client uses a locally imported Incus image built by the repository flake:
+
+```json
+{
+  "infrastructure": {
+    "herdr": {
+      "name": "aginctus-herdr",
+      "image": {
+        "alias": "aginctus-herdr-client"
+      },
+      "storage": {
+        "pool": "default"
+      }
+    }
+  }
+}
+```
+
+`aginctus herdr client ensure` combines these values with
+`incus.management.network.name`. The container is created without inheriting
+Incus profiles: it receives an explicit root disk on the configured storage pool
+and an explicit NIC on the configured management network.
+
+The default image alias is produced by `nix build .#herdr-client` and imported
+locally with `just herdr-client-image-update`. The image is NixOS 26.05 and
+consumes Herdr from the published Herdr flake, with the exact revision pinned by
+Aginctus's `flake.lock`. A systemd service starts `herdr server` in headless mode
+when the container boots.
+
+The image alias remains configurable through the normal Aginctus precedence
+rules, allowing a separately built or promoted image to be selected without
+changing orchestration code.
