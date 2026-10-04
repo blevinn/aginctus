@@ -4,17 +4,10 @@
   inputs = {
     # Stable NixOS 26.05. The generated flake.lock pins the exact revision.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
-
-    # Herdr is pinned to the release used in the generated client image.
-    herdr.url = "github:herdrdev/herdr/v0.9.1";
   };
 
   outputs =
-    {
-      nixpkgs,
-      herdr,
-      ...
-    }:
+    { nixpkgs, ... }:
     let
       systems = [
         "x86_64-linux"
@@ -28,7 +21,28 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
-          herdrPackage = herdr.packages.${system}.herdr;
+
+          herdrSource =
+            if system == "x86_64-linux" then
+              pkgs.fetchurl {
+                url = "https://github.com/herdrdev/herdr/releases/download/v0.9.1/herdr-linux-x86_64";
+                hash = "sha256-KgL+0WvrZR7wBuHUPwSPZSyk3FitBTzS1ERQVj1cVLc=";
+              }
+            else
+              pkgs.fetchurl {
+                url = "https://github.com/herdrdev/herdr/releases/download/v0.9.1/herdr-linux-aarch64";
+                hash = "sha256-9Mz03nRfLLmjmpg+m6NwPa1Q7CpY3qgwJs6rchu9jZ4=";
+              };
+
+          herdrPackage = pkgs.stdenvNoCC.mkDerivation {
+            pname = "herdr";
+            version = "0.9.1";
+            dontUnpack = true;
+            installPhase = ''
+              mkdir -p "$out/bin"
+              install -m 0755 ${herdrSource} "$out/bin/herdr"
+            '';
+          };
 
           herdrClientSystem = nixpkgs.lib.nixosSystem {
             inherit system;
@@ -48,6 +62,7 @@
                     wants = [ "network-online.target" ];
 
                     serviceConfig = {
+                      Environment = "HOME=/root";
                       ExecStart = "${herdrPackage}/bin/herdr server";
                       Restart = "on-failure";
                       RestartSec = "2s";
