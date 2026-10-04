@@ -46,6 +46,14 @@ go run ./cmd/aginctus doctor
 
 The `doctor` command connects directly to the local Incus daemon through the Incus Go client and reports the server version. It does not create or modify Incus resources.
 
+The first mutating command is:
+
+```sh
+go run ./cmd/aginctus network ensure
+```
+
+It creates or verifies the configured management bridge. Network name, addressing, NAT, routing, and IPv6 behavior come from the effective configuration; Aginctus ownership metadata remains an internal safety invariant.
+
 Common development commands are available through `just`:
 
 ```sh
