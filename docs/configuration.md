@@ -186,9 +186,10 @@ Incus profiles: it receives an explicit root disk on the configured storage pool
 and an explicit NIC on the configured management network.
 
 The default image alias is produced by `nix build .#herdr-client` and imported
-locally with `just herdr-client-image-update`. The image is NixOS 26.05 with
-Herdr 0.9.3 included in the system closure. A systemd service starts
-`herdr server` in headless mode when the container boots.
+locally with `just herdr-client-image-update`. The image is NixOS 26.05 and
+consumes Herdr from the published Herdr flake, with the exact revision pinned by
+Aginctus's `flake.lock`. A systemd service starts `herdr server` in headless mode
+when the container boots.
 
 The image alias remains configurable through the normal Aginctus precedence
 rules, allowing a separately built or promoted image to be selected without
