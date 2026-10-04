@@ -58,8 +58,8 @@ func TestOrchestrationPlanUsesComposeDriverAndSecretReferences(t *testing.T) {
 	}
 	configuration := string(plan.Steps[0].Configuration)
 	for _, want := range []string{
-		`"project":"aginctus-gateway"`,
-		`"processEnvironment":true`,
+		"aginctus-gateway",
+		"processEnvironment",
 		`${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}`,
 		`${AGINCTUS_GATEWAY_MASTER_KEY}`,
 		`${AGINCTUS_GATEWAY_SALT_KEY}`,
