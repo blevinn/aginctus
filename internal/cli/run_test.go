@@ -322,6 +322,7 @@ func TestHerdrClientEnsureUsesEffectiveConfiguration(t *testing.T) {
 		context.Background(),
 		[]string{
 			"--config=infrastructure.herdr.name=lab-herdr",
+			"--config=infrastructure.herdr.image.alias=lab-herdr-image",
 			"--config=infrastructure.herdr.storage.pool=fast",
 			"--config=incus.management.network.name=lab-mgmt",
 			"herdr", "client", "ensure", "--dry-run",
@@ -332,7 +333,7 @@ func TestHerdrClientEnsureUsesEffectiveConfiguration(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
 	}
-	if client.herdrSpec.Name != "lab-herdr" || client.herdrSpec.StoragePool != "fast" || client.herdrSpec.ManagementNetwork != "lab-mgmt" {
+	if client.herdrSpec.Name != "lab-herdr" || client.herdrSpec.ImageAlias != "lab-herdr-image" || client.herdrSpec.StoragePool != "fast" || client.herdrSpec.ManagementNetwork != "lab-mgmt" {
 		t.Fatalf("Herdr spec = %#v", client.herdrSpec)
 	}
 	if !client.herdrOptions.DryRun {
