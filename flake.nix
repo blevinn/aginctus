@@ -113,7 +113,7 @@
         let
           pkgs = import nixpkgs { inherit system; };
         in
-        pkgs.nixfmt
+        pkgs.nixfmt-tree
       );
     };
 }
