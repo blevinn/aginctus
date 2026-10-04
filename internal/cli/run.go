@@ -8,12 +8,14 @@ import (
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/incus"
 )
 
 const Version = "0.0.0-dev"
 
 type IncusClient interface {
 	ServerVersion(context.Context) (string, error)
+	EnsureManagementNetwork(context.Context, incus.ManagementNetworkSpec) (bool, error)
 }
 
 type ConfigLoader interface {
@@ -61,6 +63,8 @@ func Run(
 		return runDoctor(ctx, stdout, stderr, incusClient)
 	case "config":
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
+	case "network":
+		return runNetwork(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", commandArgs[0])
 		printUsage(stderr)
@@ -78,6 +82,21 @@ func parseGlobalOptions(args []string) (config.Options, []string, error) {
 		}
 
 		switch {
+		case strings.HasPrefix(arg, "--config="):
+			value := strings.TrimPrefix(arg, "--config=")
+			if value == "" {
+				return options, nil, fmt.Errorf("--config requires path=value")
+			}
+			options.Overrides = append(options.Overrides, value)
+			args = args[1:]
+
+		case arg == "--config":
+			if len(args) < 2 {
+				return options, nil, fmt.Errorf("--config requires path=value")
+			}
+			options.Overrides = append(options.Overrides, args[1])
+			args = args[2:]
+
 		case strings.HasPrefix(arg, "--configure="):
 			value := strings.TrimPrefix(arg, "--configure=")
 			if value == "" {
@@ -158,17 +177,86 @@ func runConfig(args []string, stdout, stderr io.Writer, effective *config.Config
 	return 2
 }
 
+func runNetwork(
+	ctx context.Context,
+	args []string,
+	stdout, stderr io.Writer,
+	incusClient IncusClient,
+	effective *config.Config,
+) int {
+	if len(args) != 1 || args[0] != "ensure" {
+		fmt.Fprintln(stderr, "Usage: aginctus [global options] network ensure")
+		return 2
+	}
+
+	spec, err := managementNetworkSpec(effective)
+	if err != nil {
+		fmt.Fprintf(stderr, "management network configuration: %v\n", err)
+		return 1
+	}
+
+	created, err := incusClient.EnsureManagementNetwork(ctx, spec)
+	if err != nil {
+		fmt.Fprintf(stderr, "management network: %v\n", err)
+		return 1
+	}
+
+	if created {
+		fmt.Fprintf(stdout, "management network %q: created\n", spec.Name)
+	} else {
+		fmt.Fprintf(stdout, "management network %q: ready\n", spec.Name)
+	}
+	return 0
+}
+
+func managementNetworkSpec(effective *config.Config) (incus.ManagementNetworkSpec, error) {
+	name, err := effective.String("incus.management.network.name")
+	if err != nil {
+		return incus.ManagementNetworkSpec{}, err
+	}
+	ipv4Address, err := effective.String("incus.management.network.ipv4.address")
+	if err != nil {
+		return incus.ManagementNetworkSpec{}, err
+	}
+	ipv4NAT, err := effective.Bool("incus.management.network.ipv4.nat")
+	if err != nil {
+		return incus.ManagementNetworkSpec{}, err
+	}
+	ipv4Routing, err := effective.Bool("incus.management.network.ipv4.routing")
+	if err != nil {
+		return incus.ManagementNetworkSpec{}, err
+	}
+	ipv6Address, err := effective.String("incus.management.network.ipv6.address")
+	if err != nil {
+		return incus.ManagementNetworkSpec{}, err
+	}
+
+	if name == "" {
+		return incus.ManagementNetworkSpec{}, fmt.Errorf("configuration key %q must not be empty", "incus.management.network.name")
+	}
+
+	return incus.ManagementNetworkSpec{
+		Name: name,
+		IPv4Address: ipv4Address,
+		IPv4NAT: ipv4NAT,
+		IPv4Routing: ipv4Routing,
+		IPv6Address: ipv6Address,
+	}, nil
+}
+
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, `Usage: aginctus [global options] <command>
 
 Global options:
-  --configure=path=value       Override one configuration value; may be repeated
+  --config=path=value          Override one configuration value; may be repeated
+  --configure=path=value       Alias for --config
   --configuration-file=path    Load an explicit JSON configuration file
 
 Commands:
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   doctor            Check local Incus daemon connectivity
+  network ensure    Create or verify the configured management network
   version           Print the Aginctus CLI version
   help              Show this help`)
 }
