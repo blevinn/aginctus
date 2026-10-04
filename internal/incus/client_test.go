@@ -387,8 +387,7 @@ func TestEnsureHerdrClientCreatesContainer(t *testing.T) {
 		ImageAlias:        "nixos/26.05",
 		StoragePool:       "default",
 		ManagementNetwork: "aginctus-mgmt",
-		Start:             true,
-	}
+		}
 
 	result, err := client.EnsureHerdrClient(context.Background(), spec, MutationOptions{})
 	if err != nil {
