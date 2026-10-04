@@ -53,7 +53,7 @@ type Server interface {
 	UpdateNetwork(string, api.NetworkPut, string) error
 	DeleteNetwork(string) error
 	GetInstance(string) (*api.Instance, string, error)
-	CreateInstance(api.InstancesPost) (operation, error)
+	CreateInstanceFromLocalImage(string, api.InstancesPost) (operation, error)
 	UpdateInstance(string, api.InstancePut, string) (operation, error)
 	DeleteInstance(string) (operation, error)
 	UpdateInstanceState(string, api.InstanceStatePut, string) (operation, error)
@@ -63,8 +63,18 @@ type realServer struct {
 	incusclient.InstanceServer
 }
 
-func (s realServer) CreateInstance(instance api.InstancesPost) (operation, error) {
-	return s.InstanceServer.CreateInstance(instance)
+func (s realServer) CreateInstanceFromLocalImage(alias string, instance api.InstancesPost) (operation, error) {
+	imageAlias, _, err := s.InstanceServer.GetImageAlias(alias)
+	if err != nil {
+		return nil, fmt.Errorf("get local image alias %q: %w", alias, err)
+	}
+
+	image, _, err := s.InstanceServer.GetImage(imageAlias.Target)
+	if err != nil {
+		return nil, fmt.Errorf("get local image %q: %w", imageAlias.Target, err)
+	}
+
+	return s.InstanceServer.CreateInstanceFromImage(s.InstanceServer, *image, instance)
 }
 
 func (s realServer) UpdateInstance(name string, instance api.InstancePut, etag string) (operation, error) {
@@ -302,10 +312,7 @@ func (c *Client) EnsureHerdrClient(ctx context.Context, spec HerdrClientSpec, op
 		Name:  spec.Name,
 		Type:  api.InstanceTypeContainer,
 		Start: true,
-		Source: api.InstanceSource{
-			Type:  "image",
-			Alias: spec.ImageAlias,
-		},
+
 		InstancePut: api.InstancePut{
 			Description: "Aginctus Herdr client infrastructure",
 			Profiles:    []string{},
@@ -329,9 +336,9 @@ func (c *Client) EnsureHerdrClient(ctx context.Context, spec HerdrClientSpec, op
 		},
 	}
 
-	op, err := server.CreateInstance(request)
+	op, err := server.CreateInstanceFromLocalImage(spec.ImageAlias, request)
 	if err != nil {
-		return EnsureResult{}, fmt.Errorf("create Herdr client %q: %w", spec.Name, err)
+		return EnsureResult{}, fmt.Errorf("create Herdr client %q from image %q: %w", spec.Name, spec.ImageAlias, err)
 	}
 	if err := op.Wait(); err != nil {
 		return EnsureResult{}, fmt.Errorf("wait for Herdr client %q creation: %w", spec.Name, err)
