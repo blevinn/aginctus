@@ -71,14 +71,78 @@
             ];
           };
 
-          rootfs = herdrClientSystem.config.system.build.squashfs;
-          metadata = herdrClientSystem.config.system.build.metadata;
+          opencodeWorkloadSystem = nixpkgs.lib.nixosSystem {
+            inherit system;
+            modules = [
+              "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
+              (
+                { ... }:
+                {
+                  system.stateVersion = "26.05";
+
+                  users.users.agent = {
+                    isNormalUser = true;
+                    home = "/home/agent";
+                    createHome = true;
+                  };
+
+                  environment.systemPackages = [
+                    herdrPackage
+                    pkgs.git
+                    pkgs.opencode
+                  ];
+
+                  services.openssh = {
+                    enable = true;
+                    settings = {
+                      PasswordAuthentication = false;
+                      KbdInteractiveAuthentication = false;
+                      PermitRootLogin = "no";
+                    };
+                  };
+
+                  systemd.services.herdr = {
+                    description = "Herdr headless server";
+                    wantedBy = [ "multi-user.target" ];
+                    after = [ "network-online.target" ];
+                    wants = [ "network-online.target" ];
+
+                    serviceConfig = {
+                      User = "agent";
+                      Environment = [
+                        "HOME=/home/agent"
+                        "XDG_CONFIG_HOME=/var/lib/herdr/config"
+                        "XDG_RUNTIME_DIR=/run/herdr"
+                        "XDG_STATE_HOME=/var/lib/herdr"
+                      ];
+                      ExecStart = "${herdrPackage}/bin/herdr server";
+                      Restart = "on-failure";
+                      RestartSec = "2s";
+                      RuntimeDirectory = "herdr";
+                      StateDirectory = "herdr";
+                    };
+                  };
+                }
+              )
+            ];
+          };
+
+          herdrClientRootfs = herdrClientSystem.config.system.build.squashfs;
+          herdrClientMetadata = herdrClientSystem.config.system.build.metadata;
+          opencodeWorkloadRootfs = opencodeWorkloadSystem.config.system.build.squashfs;
+          opencodeWorkloadMetadata = opencodeWorkloadSystem.config.system.build.metadata;
         in
         {
           herdr-client = pkgs.runCommand "aginctus-herdr-client-image" { } ''
             mkdir -p "$out"
-            ln -s ${rootfs} "$out/rootfs"
-            ln -s ${metadata} "$out/metadata"
+            ln -s ${herdrClientRootfs} "$out/rootfs"
+            ln -s ${herdrClientMetadata} "$out/metadata"
+          '';
+
+          opencode-workload = pkgs.runCommand "aginctus-opencode-workload-image" { } ''
+            mkdir -p "$out"
+            ln -s ${opencodeWorkloadRootfs} "$out/rootfs"
+            ln -s ${opencodeWorkloadMetadata} "$out/metadata"
           '';
         }
       );
