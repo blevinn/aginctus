@@ -1,10 +1,11 @@
 module github.com/blevinn/aginctus
 
-go 1.25.11
+go 1.26.7
 
 require (
 	github.com/google/go-jsonnet v0.22.0
-	github.com/lxc/incus/v7 v7.0.1
+	github.com/lxc/incus-compose v1.3.4
+	github.com/lxc/incus/v7 v7.3.0
 )
 
 require (
