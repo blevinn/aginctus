@@ -15,6 +15,9 @@ check: test vet
 build:
     go build ./cmd/aginctus
 
+herdr-flake-update:
+    nix flake update herdr
+
 herdr-client-image-build:
     nix build .#herdr-client --out-link result-herdr-client
 
