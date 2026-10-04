@@ -158,3 +158,35 @@ The initial defaults reserve configuration for the management network that will 
 These are defaults rather than hard-coded orchestration constants. `aginctus network ensure` consumes these effective values when creating or reconciling the management bridge, and `aginctus network teardown` uses the effective network name when removing it, so higher-precedence sources apply consistently to both lifecycle operations.
 
 Both network lifecycle commands support `--dry-run` and `--force`. Dry-run reports the intended mutation without applying it. Force only relaxes the Aginctus ownership check for a same-named Incus-managed bridge; it does not bypass network type checks or Incus API errors.
+
+
+## Herdr client container defaults
+
+The first infrastructure workload uses the following defaults:
+
+```json
+{
+  "infrastructure": {
+    "herdr": {
+      "name": "aginctus-herdr",
+      "image": {
+        "server": "https://images.linuxcontainers.org",
+        "protocol": "simplestreams",
+        "alias": "nixos/26.05"
+      },
+      "storage": {
+        "pool": "default"
+      },
+      "start": true
+    }
+  }
+}
+```
+
+`aginctus herdr-client ensure` combines these values with
+`incus.management.network.name`. The container is created without inheriting
+Incus profiles: it receives an explicit root disk on the configured storage pool
+and an explicit NIC on the configured management network.
+
+The image defaults target the public Incus image server and NixOS 26.05. They can
+be overridden through any normal Aginctus configuration source.
