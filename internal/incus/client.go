@@ -24,9 +24,20 @@ type ManagementNetworkSpec struct {
 	IPv6Address string
 }
 
+type MutationOptions struct {
+	DryRun bool
+	Force  bool
+}
+
 type EnsureResult struct {
 	Created bool
 	Updated bool
+	DryRun  bool
+}
+
+type TeardownResult struct {
+	Deleted bool
+	DryRun  bool
 }
 
 type Server interface {
@@ -34,6 +45,7 @@ type Server interface {
 	GetNetwork(string) (*api.Network, string, error)
 	CreateNetwork(api.NetworksPost) error
 	UpdateNetwork(string, api.NetworkPut, string) error
+	DeleteNetwork(string) error
 }
 
 type Connector func(context.Context) (Server, error)
@@ -66,7 +78,7 @@ func (c *Client) ServerVersion(ctx context.Context) (string, error) {
 	return status.Environment.ServerVersion, nil
 }
 
-func (c *Client) EnsureManagementNetwork(ctx context.Context, spec ManagementNetworkSpec) (EnsureResult, error) {
+func (c *Client) EnsureManagementNetwork(ctx context.Context, spec ManagementNetworkSpec, options MutationOptions) (EnsureResult, error) {
 	server, err := c.connect(ctx)
 	if err != nil {
 		return EnsureResult{}, fmt.Errorf("connect to local Incus daemon: %w", err)
@@ -74,7 +86,7 @@ func (c *Client) EnsureManagementNetwork(ctx context.Context, spec ManagementNet
 
 	network, etag, err := server.GetNetwork(spec.Name)
 	if err == nil {
-		if err := validateManagementNetwork(network, spec.Name); err != nil {
+		if err := validateManagementNetwork(network, spec.Name, options.Force); err != nil {
 			return EnsureResult{}, err
 		}
 
@@ -86,6 +98,9 @@ func (c *Client) EnsureManagementNetwork(ctx context.Context, spec ManagementNet
 		if !changed {
 			return EnsureResult{}, nil
 		}
+		if options.DryRun {
+			return EnsureResult{Updated: true, DryRun: true}, nil
+		}
 		if err := server.UpdateNetwork(spec.Name, update, etag); err != nil {
 			return EnsureResult{}, fmt.Errorf("update management network %q: %w", spec.Name, err)
 		}
@@ -93,6 +108,10 @@ func (c *Client) EnsureManagementNetwork(ctx context.Context, spec ManagementNet
 	}
 	if !api.StatusErrorCheck(err, http.StatusNotFound) {
 		return EnsureResult{}, fmt.Errorf("get management network %q: %w", spec.Name, err)
+	}
+
+	if options.DryRun {
+		return EnsureResult{Created: true, DryRun: true}, nil
 	}
 
 	err = server.CreateNetwork(api.NetworksPost{
@@ -117,7 +136,35 @@ func (c *Client) EnsureManagementNetwork(ctx context.Context, spec ManagementNet
 	return EnsureResult{Created: true}, nil
 }
 
-func validateManagementNetwork(network *api.Network, name string) error {
+
+func (c *Client) TeardownManagementNetwork(ctx context.Context, name string, options MutationOptions) (TeardownResult, error) {
+	server, err := c.connect(ctx)
+	if err != nil {
+		return TeardownResult{}, fmt.Errorf("connect to local Incus daemon: %w", err)
+	}
+
+	network, _, err := server.GetNetwork(name)
+	if api.StatusErrorCheck(err, http.StatusNotFound) {
+		return TeardownResult{}, nil
+	}
+	if err != nil {
+		return TeardownResult{}, fmt.Errorf("get management network %q: %w", name, err)
+	}
+	if err := validateManagementNetwork(network, name, options.Force); err != nil {
+		return TeardownResult{}, err
+	}
+
+	if options.DryRun {
+		return TeardownResult{Deleted: true, DryRun: true}, nil
+	}
+	if err := server.DeleteNetwork(name); err != nil {
+		return TeardownResult{}, fmt.Errorf("delete management network %q: %w", name, err)
+	}
+
+	return TeardownResult{Deleted: true}, nil
+}
+
+func validateManagementNetwork(network *api.Network, name string, force bool) error {
 	if !network.Managed {
 		return fmt.Errorf("network %q already exists but is not Incus-managed", name)
 	}
@@ -125,7 +172,10 @@ func validateManagementNetwork(network *api.Network, name string) error {
 		return fmt.Errorf("network %q already exists with type %q, want bridge", name, network.Type)
 	}
 	if network.Config[ownerKey] != ownerValue || network.Config[resourceKey] != resourceValue {
-		return fmt.Errorf("network %q already exists but is not owned by Aginctus", name)
+		if force {
+			return nil
+		}
+		return fmt.Errorf("network %q already exists but is not owned by Aginctus; use --force to adopt it", name)
 	}
 	return nil
 }
