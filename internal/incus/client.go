@@ -246,7 +246,6 @@ type HerdrClientSpec struct {
 	ImageAlias        string
 	StoragePool       string
 	ManagementNetwork string
-	Start             bool
 }
 
 func (c *Client) EnsureHerdrClient(ctx context.Context, spec HerdrClientSpec, options MutationOptions) (EnsureResult, error) {
@@ -270,19 +269,31 @@ func (c *Client) EnsureHerdrClient(ctx context.Context, spec HerdrClientSpec, op
 		}
 
 		changed := applyHerdrClientConfig(&update, spec)
-		if !changed {
+		needsStart := instance.Status != "Running"
+		if !changed && !needsStart {
 			return EnsureResult{}, nil
 		}
 		if options.DryRun {
 			return EnsureResult{Updated: true, DryRun: true}, nil
 		}
 
-		op, err := server.UpdateInstance(spec.Name, update, etag)
-		if err != nil {
-			return EnsureResult{}, fmt.Errorf("update Herdr client %q: %w", spec.Name, err)
+		if changed {
+			op, err := server.UpdateInstance(spec.Name, update, etag)
+			if err != nil {
+				return EnsureResult{}, fmt.Errorf("update Herdr client %q: %w", spec.Name, err)
+			}
+			if err := op.Wait(); err != nil {
+				return EnsureResult{}, fmt.Errorf("wait for Herdr client %q update: %w", spec.Name, err)
+			}
 		}
-		if err := op.Wait(); err != nil {
-			return EnsureResult{}, fmt.Errorf("wait for Herdr client %q update: %w", spec.Name, err)
+		if needsStart {
+			op, err := server.UpdateInstanceState(spec.Name, api.InstanceStatePut{Action: "start", Timeout: -1}, "")
+			if err != nil {
+				return EnsureResult{}, fmt.Errorf("start Herdr client %q: %w", spec.Name, err)
+			}
+			if err := op.Wait(); err != nil {
+				return EnsureResult{}, fmt.Errorf("wait for Herdr client %q start: %w", spec.Name, err)
+			}
 		}
 		return EnsureResult{Updated: true}, nil
 	}
@@ -297,7 +308,7 @@ func (c *Client) EnsureHerdrClient(ctx context.Context, spec HerdrClientSpec, op
 	request := api.InstancesPost{
 		Name:  spec.Name,
 		Type:  api.InstanceTypeContainer,
-		Start: spec.Start,
+		Start: true,
 		Source: api.InstanceSource{
 			Type:     "image",
 			Server:   spec.ImageServer,
