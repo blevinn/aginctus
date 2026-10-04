@@ -28,12 +28,12 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
-          herdrPackage = herdr.packages.\${system}.herdr;
+          herdrPackage = herdr.packages.${system}.herdr;
 
           herdrClientSystem = nixpkgs.lib.nixosSystem {
             inherit system;
             modules = [
-              "\${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
+              "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
               (
                 { ... }:
                 {
@@ -48,7 +48,7 @@
                     wants = [ "network-online.target" ];
 
                     serviceConfig = {
-                      ExecStart = "\${herdrPackage}/bin/herdr server";
+                      ExecStart = "${herdrPackage}/bin/herdr server";
                       Restart = "on-failure";
                       RestartSec = "2s";
                     };
@@ -64,8 +64,8 @@
         {
           herdr-client = pkgs.runCommand "aginctus-herdr-client-image" { } ''
             mkdir -p "$out"
-            ln -s \${rootfs} "$out/rootfs"
-            ln -s \${metadata} "$out/metadata"
+            ln -s ${rootfs} "$out/rootfs"
+            ln -s ${metadata} "$out/metadata"
           '';
         }
       );
