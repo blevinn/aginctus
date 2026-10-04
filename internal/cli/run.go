@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/herdr"
 	"github.com/blevinn/aginctus/internal/incus"
 )
 
@@ -19,6 +20,9 @@ type IncusClient interface {
 	TeardownManagementNetwork(context.Context, string, incus.MutationOptions) (incus.TeardownResult, error)
 	EnsureHerdrClient(context.Context, incus.HerdrClientSpec, incus.MutationOptions) (incus.EnsureResult, error)
 	TeardownHerdrClient(context.Context, string, incus.MutationOptions) (incus.TeardownResult, error)
+	InstanceArchitecture(context.Context, string) (string, error)
+	WriteInstanceFile(context.Context, string, string, []byte, int) error
+	ExecInstance(context.Context, string, []string) (string, error)
 }
 
 type ConfigLoader interface {
@@ -68,8 +72,8 @@ func Run(
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
 	case "network":
 		return runNetwork(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
-	case "herdr-client":
-		return runHerdrClient(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
+	case "herdr":
+		return runHerdr(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", commandArgs[0])
 		printUsage(stderr)
@@ -283,13 +287,18 @@ func printNetworkUsage(w io.Writer) {
 }
 
 
-func runHerdrClient(
+func runHerdr(
 	ctx context.Context,
 	args []string,
 	stdout, stderr io.Writer,
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 0 || args[0] != "client" {
+		printHerdrClientUsage(stderr)
+		return 2
+	}
+	args = args[1:]
 	if len(args) == 0 {
 		printHerdrClientUsage(stderr)
 		return 2
@@ -313,6 +322,19 @@ func runHerdrClient(
 			fmt.Fprintf(stderr, "Herdr client: %v\n", err)
 			return 1
 		}
+
+		if !options.DryRun {
+			release, err := herdrRelease(effective)
+			if err != nil {
+				fmt.Fprintf(stderr, "Herdr release configuration: %v\n", err)
+				return 1
+			}
+			if err := herdr.NewInstaller().Ensure(ctx, incusClient, spec.Name, release); err != nil {
+				fmt.Fprintf(stderr, "Herdr client bootstrap: %v\n", err)
+				return 1
+			}
+		}
+
 		switch {
 		case result.DryRun && result.Created:
 			fmt.Fprintf(stdout, "Herdr client %q: would create\n", spec.Name)
@@ -398,9 +420,34 @@ func herdrClientSpec(effective *config.Config) (incus.HerdrClientSpec, error) {
 	}, nil
 }
 
+func herdrRelease(effective *config.Config) (herdr.Release, error) {
+	repository, err := effective.String("infrastructure.herdr.release.repository")
+	if err != nil {
+		return herdr.Release{}, err
+	}
+	version, err := effective.String("infrastructure.herdr.release.version")
+	if err != nil {
+		return herdr.Release{}, err
+	}
+	x86, err := effective.String("infrastructure.herdr.release.sha256.x86_64")
+	if err != nil {
+		return herdr.Release{}, err
+	}
+	arm, err := effective.String("infrastructure.herdr.release.sha256.aarch64")
+	if err != nil {
+		return herdr.Release{}, err
+	}
+	return herdr.Release{
+		Repository: repository,
+		Version: version,
+		SHA256X8664: x86,
+		SHA256AArch64: arm,
+	}, nil
+}
+
 func printHerdrClientUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] herdr-client ensure [--dry-run] [--force]")
-	fmt.Fprintln(w, "       aginctus [global options] herdr-client teardown [--dry-run] [--force]")
+	fmt.Fprintln(w, "Usage: aginctus [global options] herdr client ensure [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] herdr client teardown [--dry-run] [--force]")
 }
 
 func managementNetworkSpec(effective *config.Config) (incus.ManagementNetworkSpec, error) {
@@ -450,8 +497,8 @@ Commands:
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   doctor            Check local Incus daemon connectivity
-  herdr-client ensure    Create or reconcile the Herdr client container
-  herdr-client teardown  Delete the Herdr client container
+  herdr client ensure    Create, reconcile, and bootstrap the Herdr client
+  herdr client teardown  Delete the Herdr client container
   network ensure    Create or reconcile the configured management network
   network teardown  Delete the configured management network
   version           Print the Aginctus CLI version
