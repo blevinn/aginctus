@@ -118,6 +118,20 @@ func (l *Loader) Load(options Options) (*Config, error) {
 }
 
 var defaults = map[string]any{
+	"infrastructure": map[string]any{
+		"herdr": map[string]any{
+			"name": "aginctus-herdr",
+			"image": map[string]any{
+				"server":   "https://images.linuxcontainers.org",
+				"protocol": "simplestreams",
+				"alias":    "nixos/26.05",
+			},
+			"storage": map[string]any{
+				"pool": "default",
+			},
+			"start": true,
+		},
+	},
 	"incus": map[string]any{
 		"management": map[string]any{
 			"network": map[string]any{
