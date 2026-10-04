@@ -3,9 +3,11 @@ package incus
 import (
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
+	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 )
 
@@ -35,6 +37,9 @@ type fakeServer struct {
 	updatedInstance *api.InstancePut
 	deletedInstance string
 	stateChange     *api.InstanceStatePut
+	writtenPath     string
+	writtenContent  []byte
+	execCommand     []string
 }
 
 func (s *fakeServer) GetServer() (*api.Server, string, error) {
@@ -83,6 +88,23 @@ func (s *fakeServer) DeleteInstance(name string) (operation, error) {
 
 func (s *fakeServer) UpdateInstanceState(_ string, state api.InstanceStatePut, _ string) (operation, error) {
 	s.stateChange = &state
+	return fakeOperation{}, nil
+}
+
+func (s *fakeServer) CreateInstanceFile(_ string, path string, args incusclient.InstanceFileArgs) error {
+	s.writtenPath = path
+	if args.Content != nil {
+		data, _ := io.ReadAll(args.Content)
+		s.writtenContent = data
+	}
+	return nil
+}
+
+func (s *fakeServer) ExecInstance(_ string, post api.InstanceExecPost, args *incusclient.InstanceExecArgs) (operation, error) {
+	s.execCommand = post.Command
+	if args != nil && args.Stdout != nil {
+		_, _ = args.Stdout.Write([]byte("herdr 0.9.1\n"))
+	}
 	return fakeOperation{}, nil
 }
 
