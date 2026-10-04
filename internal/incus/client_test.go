@@ -32,6 +32,7 @@ type fakeServer struct {
 	instanceErr     error
 	instanceETag    string
 	createdInstance *api.InstancesPost
+	createdImageAlias string
 	updatedInstance *api.InstancePut
 	deletedInstance string
 	stateChange     *api.InstanceStatePut
@@ -66,7 +67,8 @@ func (s *fakeServer) GetInstance(string) (*api.Instance, string, error) {
 	return s.instance, s.instanceETag, s.instanceErr
 }
 
-func (s *fakeServer) CreateInstance(instance api.InstancesPost) (operation, error) {
+func (s *fakeServer) CreateInstanceFromLocalImage(alias string, instance api.InstancesPost) (operation, error) {
+	s.createdImageAlias = alias
 	s.createdInstance = &instance
 	return fakeOperation{}, nil
 }
@@ -373,8 +375,8 @@ func TestEnsureHerdrClientCreatesContainer(t *testing.T) {
 	if server.createdInstance.Type != api.InstanceTypeContainer {
 		t.Fatalf("type = %q", server.createdInstance.Type)
 	}
-	if server.createdInstance.Source.Alias != "aginctus-herdr-client" {
-		t.Fatalf("source = %#v", server.createdInstance.Source)
+	if server.createdImageAlias != "aginctus-herdr-client" {
+		t.Fatalf("image alias = %q", server.createdImageAlias)
 	}
 	if got := server.createdInstance.Devices["management"]["network"]; got != "aginctus-mgmt" {
 		t.Fatalf("management network = %q", got)
@@ -382,10 +384,7 @@ func TestEnsureHerdrClientCreatesContainer(t *testing.T) {
 	if got := server.createdInstance.Devices["root"]["pool"]; got != "default" {
 		t.Fatalf("storage pool = %q", got)
 	}
-	if server.createdInstance.Source.Server != "" || server.createdInstance.Source.Protocol != "" {
-		t.Fatalf("source should be local: %#v", server.createdInstance.Source)
-	}
-	if len(server.createdInstance.Profiles) != 0 {
+		if len(server.createdInstance.Profiles) != 0 {
 		t.Fatalf("profiles = %#v, want none", server.createdInstance.Profiles)
 	}
 }
