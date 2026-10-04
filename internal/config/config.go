@@ -129,6 +129,14 @@ var defaults = map[string]any{
 			"storage": map[string]any{
 				"pool": "default",
 			},
+			"release": map[string]any{
+				"repository": "herdrdev/herdr",
+				"version":    "v0.9.1",
+				"sha256": map[string]any{
+					"x86_64": "2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7",
+					"aarch64": "f4ccf4de745f2cb9a39a983e9ba3703dad50ec2a58dea83026ceab721bbd8d9e",
+				},
+			},
 			"start": true,
 		},
 	},
