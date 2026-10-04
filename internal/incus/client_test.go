@@ -3,11 +3,9 @@ package incus
 import (
 	"context"
 	"errors"
-	"io"
 	"strings"
 	"testing"
 
-	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 )
 
@@ -37,9 +35,6 @@ type fakeServer struct {
 	updatedInstance *api.InstancePut
 	deletedInstance string
 	stateChange     *api.InstanceStatePut
-	writtenPath     string
-	writtenContent  []byte
-	execCommand     []string
 }
 
 func (s *fakeServer) GetServer() (*api.Server, string, error) {
@@ -88,23 +83,6 @@ func (s *fakeServer) DeleteInstance(name string) (operation, error) {
 
 func (s *fakeServer) UpdateInstanceState(_ string, state api.InstanceStatePut, _ string) (operation, error) {
 	s.stateChange = &state
-	return fakeOperation{}, nil
-}
-
-func (s *fakeServer) CreateInstanceFile(_ string, path string, args incusclient.InstanceFileArgs) error {
-	s.writtenPath = path
-	if args.Content != nil {
-		data, _ := io.ReadAll(args.Content)
-		s.writtenContent = data
-	}
-	return nil
-}
-
-func (s *fakeServer) ExecInstance(_ string, post api.InstanceExecPost, args *incusclient.InstanceExecArgs) (operation, error) {
-	s.execCommand = post.Command
-	if args != nil && args.Stdout != nil {
-		_, _ = args.Stdout.Write([]byte("herdr 0.9.1\n"))
-	}
 	return fakeOperation{}, nil
 }
 
@@ -382,9 +360,7 @@ func TestEnsureHerdrClientCreatesContainer(t *testing.T) {
 
 	spec := HerdrClientSpec{
 		Name:              "aginctus-herdr",
-		ImageServer:       "https://images.linuxcontainers.org",
-		ImageProtocol:     "simplestreams",
-		ImageAlias:        "nixos/26.05",
+		ImageAlias:        "aginctus-herdr-client",
 		StoragePool:       "default",
 		ManagementNetwork: "aginctus-mgmt",
 		}
@@ -399,7 +375,7 @@ func TestEnsureHerdrClientCreatesContainer(t *testing.T) {
 	if server.createdInstance.Type != api.InstanceTypeContainer {
 		t.Fatalf("type = %q", server.createdInstance.Type)
 	}
-	if server.createdInstance.Source.Alias != "nixos/26.05" {
+	if server.createdInstance.Source.Alias != "aginctus-herdr-client" {
 		t.Fatalf("source = %#v", server.createdInstance.Source)
 	}
 	if got := server.createdInstance.Devices["management"]["network"]; got != "aginctus-mgmt" {
@@ -407,6 +383,9 @@ func TestEnsureHerdrClientCreatesContainer(t *testing.T) {
 	}
 	if got := server.createdInstance.Devices["root"]["pool"]; got != "default" {
 		t.Fatalf("storage pool = %q", got)
+	}
+	if server.createdInstance.Source.Server != "" || server.createdInstance.Source.Protocol != "" {
+		t.Fatalf("source should be local: %#v", server.createdInstance.Source)
 	}
 	if len(server.createdInstance.Profiles) != 0 {
 		t.Fatalf("profiles = %#v, want none", server.createdInstance.Profiles)
