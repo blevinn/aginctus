@@ -44,8 +44,11 @@ func (i *Installer) Ensure(ctx context.Context, guest Guest, instanceName string
 		return err
 	}
 
-	if _, err := guest.ExecInstance(ctx, instanceName, []string{installPath, "--version"}); err == nil {
-		return nil
+	if output, err := guest.ExecInstance(ctx, instanceName, []string{installPath, "--version"}); err == nil {
+		want := strings.TrimPrefix(release.Version, "v")
+		if strings.Contains(output, want) {
+			return nil
+		}
 	}
 
 	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/herdr-linux-%s", release.Repository, release.Version, assetArch)
