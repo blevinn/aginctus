@@ -397,10 +397,6 @@ func herdrClientSpec(effective *config.Config) (incus.HerdrClientSpec, error) {
 	if err != nil {
 		return incus.HerdrClientSpec{}, err
 	}
-	start, err := effective.Bool("infrastructure.herdr.start")
-	if err != nil {
-		return incus.HerdrClientSpec{}, err
-	}
 	network, err := effective.String("incus.management.network.name")
 	if err != nil {
 		return incus.HerdrClientSpec{}, err
@@ -416,7 +412,6 @@ func herdrClientSpec(effective *config.Config) (incus.HerdrClientSpec, error) {
 		ImageAlias:        alias,
 		StoragePool:       pool,
 		ManagementNetwork: network,
-		Start:             start,
 	}, nil
 }
 
