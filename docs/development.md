@@ -80,7 +80,13 @@ just herdr-client-image-build
 This builds the `.#herdr-client` flake target. The result contains the Incus
 metadata tarball and squashfs root filesystem for the current host architecture.
 
-Import or replace the local development image alias with:
+Update the pinned Herdr flake input when desired with:
+
+```sh
+just herdr-flake-update
+```
+
+Commit the resulting `flake.lock` change together with the image changes. Then import or replace the local development image alias with:
 
 ```sh
 just herdr-client-image-update
@@ -89,10 +95,7 @@ just herdr-client-image-update
 The update target imports the image as `aginctus-herdr-client`, matching the
 default `infrastructure.herdr.image.alias` configuration.
 
-The image is based on NixOS 26.05. It includes the pinned Herdr 0.9.3 Linux musl
-binary in the Nix store and configures a systemd service to start
-`herdr server` in headless mode on boot. Herdr is therefore part of the
-declarative image rather than installed by Aginctus after container creation.
+The image is based on NixOS 26.05. It consumes Herdr from the published Herdr flake and the repository `flake.lock` pins the exact Herdr source revision and its transitive Nix inputs. A systemd service starts `herdr server` in headless mode on boot. Herdr is therefore part of the declarative image rather than installed by Aginctus after container creation.
 
 After updating the local image, exercise the lifecycle with:
 
