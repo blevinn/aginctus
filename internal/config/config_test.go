@@ -89,6 +89,23 @@ func TestDefaultManagementNetwork(t *testing.T) {
 	}
 }
 
+func TestDefaultHerdrClientImageAlias(t *testing.T) {
+	loader := &Loader{
+		SystemPath:  filepath.Join(t.TempDir(), "missing-system.json"),
+		UserPath:    filepath.Join(t.TempDir(), "missing-user.json"),
+		Environment: nil,
+	}
+
+	cfg, err := loader.Load(Options{})
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	got, ok := cfg.Get("infrastructure.herdr.image.alias")
+	if !ok || got != "aginctus-herdr-client" {
+		t.Fatalf("Herdr client image alias = %#v, %v", got, ok)
+	}
+}
+
 func TestEnvironmentParsesJSONValues(t *testing.T) {
 	loader := &Loader{
 		Environment: []string{
