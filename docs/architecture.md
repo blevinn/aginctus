@@ -223,6 +223,8 @@ These examples are illustrative contracts, not a committed schema.
 
 ## Deferred decisions
 
+The subsequent [AI gateway design](ai-gateway.md) defines a single-operator LiteLLM/PostgreSQL slice with CLI-managed provider authentication and workload credentials. Its illustrative interfaces do not change the first Herdr milestone or establish a stable public schema.
+
 The first architectural slice does not need to settle:
 
 - persistence database;
