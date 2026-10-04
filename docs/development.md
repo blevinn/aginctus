@@ -89,7 +89,7 @@ just herdr-client-image-update
 The update target imports the image as `aginctus-herdr-client`, matching the
 default `infrastructure.herdr.image.alias` configuration.
 
-The image is based on NixOS 26.05. It includes the pinned Herdr 0.9.1 Linux musl
+The image is based on NixOS 26.05. It includes the pinned Herdr 0.9.3 Linux musl
 binary in the Nix store and configures a systemd service to start
 `herdr server` in headless mode on boot. Herdr is therefore part of the
 declarative image rather than installed by Aginctus after container creation.
