@@ -58,6 +58,18 @@ func (c *fakeIncusClient) TeardownHerdrClient(_ context.Context, name string, op
 	return c.herdrTeardown, c.herdrErr
 }
 
+func (c *fakeIncusClient) InstanceArchitecture(context.Context, string) (string, error) {
+	return "x86_64", nil
+}
+
+func (c *fakeIncusClient) WriteInstanceFile(context.Context, string, string, []byte, int) error {
+	return nil
+}
+
+func (c *fakeIncusClient) ExecInstance(context.Context, string, []string) (string, error) {
+	return "herdr 0.9.1\n", nil
+}
+
 type fakeConfigLoader struct {
 	cfg     *config.Config
 	err     error
@@ -324,7 +336,7 @@ func TestHerdrClientEnsureUsesEffectiveConfiguration(t *testing.T) {
 			"--config=infrastructure.herdr.name=lab-herdr",
 			"--config=infrastructure.herdr.storage.pool=fast",
 			"--config=incus.management.network.name=lab-mgmt",
-			"herdr-client", "ensure", "--dry-run",
+			"herdr", "client", "ensure", "--dry-run",
 		},
 		&stdout, &stderr, client, loader,
 	)
@@ -353,7 +365,7 @@ func TestHerdrClientTeardownUsesConfiguredName(t *testing.T) {
 
 	code := Run(
 		context.Background(),
-		[]string{"--config=infrastructure.herdr.name=lab-herdr", "herdr-client", "teardown", "--force"},
+		[]string{"--config=infrastructure.herdr.name=lab-herdr", "herdr", "client", "teardown", "--force"},
 		&stdout, &stderr, client, loader,
 	)
 
