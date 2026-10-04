@@ -420,3 +420,32 @@ func TestGatewayRenderUsesEffectiveConfiguration(t *testing.T) {
 		}
 	}
 }
+
+
+func TestGatewayUpRejectsMissingRuntimeSecretsBeforeNetworkMutation(t *testing.T) {
+	for _, name := range []string{
+		"AGINCTUS_GATEWAY_POSTGRES_PASSWORD",
+		"AGINCTUS_GATEWAY_MASTER_KEY",
+		"AGINCTUS_GATEWAY_SALT_KEY",
+	} {
+		t.Setenv(name, "")
+	}
+
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	code := Run(context.Background(), []string{"gateway", "up"}, &stdout, &stderr, client, loader)
+	if code != 1 {
+		t.Fatalf("Run() code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "required gateway environment variable") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+	if client.networkSpec.Name != "" {
+		t.Fatalf("network ensure ran before secret validation: %#v", client.networkSpec)
+	}
+}
