@@ -47,6 +47,31 @@ func (c *Config) Get(path string) (any, bool) {
 	return current, true
 }
 
+
+func (c *Config) String(path string) (string, error) {
+	value, ok := c.Get(path)
+	if !ok {
+		return "", fmt.Errorf("configuration key %q is not set", path)
+	}
+	typed, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("configuration key %q must be a string, got %T", path, value)
+	}
+	return typed, nil
+}
+
+func (c *Config) Bool(path string) (bool, error) {
+	value, ok := c.Get(path)
+	if !ok {
+		return false, fmt.Errorf("configuration key %q is not set", path)
+	}
+	typed, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf("configuration key %q must be a boolean, got %T", path, value)
+	}
+	return typed, nil
+}
+
 type Loader struct {
 	SystemPath  string
 	UserPath    string
