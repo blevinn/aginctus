@@ -4,7 +4,7 @@ Aginctus configuration is assembled from multiple sources with deterministic pre
 
 From highest priority to lowest:
 
-1. command-line overrides passed with `--configure=path=value`;
+1. command-line overrides passed with `--config=path=value`;
 2. an explicit command-line configuration file passed with `--configuration-file=path`;
 3. environment variables prefixed with `AGINCTUS_`;
 4. the user configuration file;
@@ -18,19 +18,21 @@ Higher-priority sources override lower-priority sources.
 Use dotted paths:
 
 ```sh
-aginctus --configure=z.b.c=xyz config get z.b.c
+aginctus --config=z.b.c=xyz config get z.b.c
 ```
 
-The `--configure` option may be repeated:
+The `--config` option may be repeated:
 
 ```sh
 aginctus \
-  --configure=incus.management.network.name=my-management \
-  --configure=incus.management.network.ipv4.nat=false \
+  --config=incus.management.network.name=my-management \
+  --config=incus.management.network.ipv4.nat=false \
   config show
 ```
 
 Override values are parsed as JSON when possible. This means values such as `true`, `false`, `42`, arrays, and objects retain their JSON types. Values that are not valid JSON are treated as strings.
+
+`--configure` remains accepted as an alias for `--config`.
 
 ## Command-line configuration file
 
@@ -66,7 +68,7 @@ export AGINCTUS_INCUS_MANAGEMENT_NETWORK_NAME=lab-mgmt
 
 sets `incus.management.network.name`.
 
-As with `--configure`, environment values are parsed as JSON when possible and otherwise treated as strings.
+As with `--config`, environment values are parsed as JSON when possible and otherwise treated as strings.
 
 ## User configuration file
 
@@ -153,4 +155,6 @@ The initial defaults reserve configuration for the management network that will 
 }
 ```
 
-These are defaults rather than hard-coded orchestration constants. Future operational code should obtain configurable values through the configuration layer.
+These are defaults rather than hard-coded orchestration constants. `aginctus network ensure` consumes these effective values when creating or reconciling the management bridge, and `aginctus network teardown` uses the effective network name when removing it, so higher-precedence sources apply consistently to both lifecycle operations.
+
+Both network lifecycle commands support `--dry-run` and `--force`. Dry-run reports the intended mutation without applying it. Force only relaxes the Aginctus ownership check for a same-named Incus-managed bridge; it does not bypass network type checks or Incus API errors.

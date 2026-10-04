@@ -8,12 +8,15 @@ import (
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/incus"
 )
 
 const Version = "0.0.0-dev"
 
 type IncusClient interface {
 	ServerVersion(context.Context) (string, error)
+	EnsureManagementNetwork(context.Context, incus.ManagementNetworkSpec, incus.MutationOptions) (incus.EnsureResult, error)
+	TeardownManagementNetwork(context.Context, string, incus.MutationOptions) (incus.TeardownResult, error)
 }
 
 type ConfigLoader interface {
@@ -61,6 +64,8 @@ func Run(
 		return runDoctor(ctx, stdout, stderr, incusClient)
 	case "config":
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
+	case "network":
+		return runNetwork(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", commandArgs[0])
 		printUsage(stderr)
@@ -78,6 +83,21 @@ func parseGlobalOptions(args []string) (config.Options, []string, error) {
 		}
 
 		switch {
+		case strings.HasPrefix(arg, "--config="):
+			value := strings.TrimPrefix(arg, "--config=")
+			if value == "" {
+				return options, nil, fmt.Errorf("--config requires path=value")
+			}
+			options.Overrides = append(options.Overrides, value)
+			args = args[1:]
+
+		case arg == "--config":
+			if len(args) < 2 {
+				return options, nil, fmt.Errorf("--config requires path=value")
+			}
+			options.Overrides = append(options.Overrides, args[1])
+			args = args[2:]
+
 		case strings.HasPrefix(arg, "--configure="):
 			value := strings.TrimPrefix(arg, "--configure=")
 			if value == "" {
@@ -158,17 +178,155 @@ func runConfig(args []string, stdout, stderr io.Writer, effective *config.Config
 	return 2
 }
 
+func runNetwork(
+	ctx context.Context,
+	args []string,
+	stdout, stderr io.Writer,
+	incusClient IncusClient,
+	effective *config.Config,
+) int {
+	if len(args) == 0 {
+		printNetworkUsage(stderr)
+		return 2
+	}
+
+	action := args[0]
+	options, err := parseNetworkOptions(args[1:])
+	if err != nil {
+		fmt.Fprintf(stderr, "network options: %v\n", err)
+		return 2
+	}
+
+	switch action {
+	case "ensure":
+		spec, err := managementNetworkSpec(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
+			return 1
+		}
+
+		result, err := incusClient.EnsureManagementNetwork(ctx, spec, options)
+		if err != nil {
+			fmt.Fprintf(stderr, "management network: %v\n", err)
+			return 1
+		}
+
+		switch {
+		case result.DryRun && result.Created:
+			fmt.Fprintf(stdout, "management network %q: would create\n", spec.Name)
+		case result.DryRun && result.Updated:
+			fmt.Fprintf(stdout, "management network %q: would update\n", spec.Name)
+		case result.Created:
+			fmt.Fprintf(stdout, "management network %q: created\n", spec.Name)
+		case result.Updated:
+			fmt.Fprintf(stdout, "management network %q: updated\n", spec.Name)
+		default:
+			fmt.Fprintf(stdout, "management network %q: ready\n", spec.Name)
+		}
+		return 0
+
+	case "teardown":
+		name, err := effective.String("incus.management.network.name")
+		if err != nil {
+			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
+			return 1
+		}
+		if name == "" {
+			fmt.Fprintf(stderr, "management network configuration: configuration key %q must not be empty\n", "incus.management.network.name")
+			return 1
+		}
+
+		result, err := incusClient.TeardownManagementNetwork(ctx, name, options)
+		if err != nil {
+			fmt.Fprintf(stderr, "management network: %v\n", err)
+			return 1
+		}
+
+		switch {
+		case result.DryRun && result.Deleted:
+			fmt.Fprintf(stdout, "management network %q: would delete\n", name)
+		case result.Deleted:
+			fmt.Fprintf(stdout, "management network %q: deleted\n", name)
+		default:
+			fmt.Fprintf(stdout, "management network %q: absent\n", name)
+		}
+		return 0
+
+	default:
+		printNetworkUsage(stderr)
+		return 2
+	}
+}
+
+func parseNetworkOptions(args []string) (incus.MutationOptions, error) {
+	var options incus.MutationOptions
+	for _, arg := range args {
+		switch arg {
+		case "--dry-run":
+			options.DryRun = true
+		case "--force":
+			options.Force = true
+		default:
+			return incus.MutationOptions{}, fmt.Errorf("unknown option %q", arg)
+		}
+	}
+	return options, nil
+}
+
+func printNetworkUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: aginctus [global options] network ensure [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] network teardown [--dry-run] [--force]")
+}
+
+func managementNetworkSpec(effective *config.Config) (incus.ManagementNetworkSpec, error) {
+	name, err := effective.String("incus.management.network.name")
+	if err != nil {
+		return incus.ManagementNetworkSpec{}, err
+	}
+	ipv4Address, err := effective.String("incus.management.network.ipv4.address")
+	if err != nil {
+		return incus.ManagementNetworkSpec{}, err
+	}
+	ipv4NAT, err := effective.Bool("incus.management.network.ipv4.nat")
+	if err != nil {
+		return incus.ManagementNetworkSpec{}, err
+	}
+	ipv4Routing, err := effective.Bool("incus.management.network.ipv4.routing")
+	if err != nil {
+		return incus.ManagementNetworkSpec{}, err
+	}
+	ipv6Address, err := effective.String("incus.management.network.ipv6.address")
+	if err != nil {
+		return incus.ManagementNetworkSpec{}, err
+	}
+
+	if name == "" {
+		return incus.ManagementNetworkSpec{}, fmt.Errorf("configuration key %q must not be empty", "incus.management.network.name")
+	}
+
+	return incus.ManagementNetworkSpec{
+		Name: name,
+		IPv4Address: ipv4Address,
+		IPv4NAT: ipv4NAT,
+		IPv4Routing: ipv4Routing,
+		IPv6Address: ipv6Address,
+	}, nil
+}
+
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, `Usage: aginctus [global options] <command>
 
 Global options:
-  --configure=path=value       Override one configuration value; may be repeated
+  --config=path=value          Override one configuration value; may be repeated
+  --configure=path=value       Alias for --config
   --configuration-file=path    Load an explicit JSON configuration file
 
 Commands:
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   doctor            Check local Incus daemon connectivity
+  network ensure    Create or reconcile the configured management network
+  network teardown  Delete the configured management network
   version           Print the Aginctus CLI version
   help              Show this help`)
 }
