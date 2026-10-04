@@ -56,6 +56,7 @@ type Server interface {
 	CreateInstance(api.InstancesPost) (operation, error)
 	UpdateInstance(string, api.InstancePut, string) (operation, error)
 	DeleteInstance(string) (operation, error)
+	UpdateInstanceState(string, api.InstanceStatePut, string) (operation, error)
 }
 
 type realServer struct {
@@ -72,6 +73,10 @@ func (s realServer) UpdateInstance(name string, instance api.InstancePut, etag s
 
 func (s realServer) DeleteInstance(name string) (operation, error) {
 	return s.InstanceServer.DeleteInstance(name)
+}
+
+func (s realServer) UpdateInstanceState(name string, state api.InstanceStatePut, etag string) (operation, error) {
+	return s.InstanceServer.UpdateInstanceState(name, state, etag)
 }
 
 type Connector func(context.Context) (Server, error)
@@ -349,6 +354,20 @@ func (c *Client) TeardownHerdrClient(ctx context.Context, name string, options M
 
 	if options.DryRun {
 		return TeardownResult{Deleted: true, DryRun: true}, nil
+	}
+
+	if instance.Status != "Stopped" {
+		op, err := server.UpdateInstanceState(name, api.InstanceStatePut{
+			Action:  "stop",
+			Timeout: -1,
+			Force:   options.Force,
+		}, "")
+		if err != nil {
+			return TeardownResult{}, fmt.Errorf("stop Herdr client %q: %w", name, err)
+		}
+		if err := op.Wait(); err != nil {
+			return TeardownResult{}, fmt.Errorf("wait for Herdr client %q stop: %w", name, err)
+		}
 	}
 
 	op, err := server.DeleteInstance(name)
