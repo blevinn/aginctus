@@ -8,15 +8,24 @@ import (
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/incus"
 )
 
 type fakeIncusClient struct {
-	version string
-	err     error
+	version        string
+	err            error
+	networkCreated bool
+	networkErr     error
+	networkSpec    incus.ManagementNetworkSpec
 }
 
-func (c fakeIncusClient) ServerVersion(context.Context) (string, error) {
+func (c *fakeIncusClient) ServerVersion(context.Context) (string, error) {
 	return c.version, c.err
+}
+
+func (c *fakeIncusClient) EnsureManagementNetwork(_ context.Context, spec incus.ManagementNetworkSpec) (bool, error) {
+	c.networkSpec = spec
+	return c.networkCreated, c.networkErr
 }
 
 type fakeConfigLoader struct {
@@ -39,7 +48,8 @@ func (l *fakeConfigLoader) Load(options config.Options) (*config.Config, error) 
 func TestDoctorSuccess(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	loader := &fakeConfigLoader{}
-	code := Run(context.Background(), []string{"doctor"}, &stdout, &stderr, fakeIncusClient{version: "7.0.1"}, loader)
+	client := &fakeIncusClient{version: "7.0.1"}
+	code := Run(context.Background(), []string{"doctor"}, &stdout, &stderr, client, loader)
 
 	if code != 0 {
 		t.Fatalf("Run() code = %d, want 0; stderr = %q", code, stderr.String())
@@ -49,21 +59,37 @@ func TestDoctorSuccess(t *testing.T) {
 	}
 }
 
+func TestConfigAlias(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := &fakeConfigLoader{}
+	client := &fakeIncusClient{version: "7.0.1"}
+	code := Run(
+		context.Background(),
+		[]string{"--config=z.b.c=xyz", "doctor"},
+		&stdout, &stderr, client, loader,
+	)
+
+	if code != 0 {
+		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
+	}
+	if len(loader.options.Overrides) != 1 || loader.options.Overrides[0] != "z.b.c=xyz" {
+		t.Fatalf("Overrides = %#v", loader.options.Overrides)
+	}
+}
+
 func TestConfigurationOptions(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	loader := &fakeConfigLoader{}
+	client := &fakeIncusClient{version: "7.0.1"}
 	code := Run(
 		context.Background(),
 		[]string{
 			"--configuration-file=custom.json",
 			"--configure=z.b.c=xyz",
-			"--configure", "feature.enabled=true",
+			"--config", "feature.enabled=true",
 			"doctor",
 		},
-		&stdout,
-		&stderr,
-		fakeIncusClient{version: "7.0.1"},
-		loader,
+		&stdout, &stderr, client, loader,
 	)
 
 	if code != 0 {
@@ -77,34 +103,66 @@ func TestConfigurationOptions(t *testing.T) {
 	}
 }
 
-func TestConfigGetWithOverride(t *testing.T) {
+func TestNetworkEnsureUsesEffectiveConfiguration(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	loader := config.NewLoader()
 	loader.SystemPath = ""
 	loader.UserPath = ""
 	loader.Environment = nil
+	client := &fakeIncusClient{networkCreated: true}
 
 	code := Run(
 		context.Background(),
-		[]string{"--configure=z.b.c=xyz", "config", "get", "z.b.c"},
-		&stdout,
-		&stderr,
-		fakeIncusClient{},
-		loader,
+		[]string{
+			"--config=incus.management.network.name=lab-mgmt",
+			"--config=incus.management.network.ipv4.address=10.42.0.1/24",
+			"--config=incus.management.network.ipv4.nat=true",
+			"network", "ensure",
+		},
+		&stdout, &stderr, client, loader,
 	)
 
 	if code != 0 {
 		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
 	}
-	if got := strings.TrimSpace(stdout.String()); got != `"xyz"` {
-		t.Fatalf("stdout = %q, want %q", got, `"xyz"`)
+	if client.networkSpec.Name != "lab-mgmt" || client.networkSpec.IPv4Address != "10.42.0.1/24" {
+		t.Fatalf("network spec = %#v", client.networkSpec)
+	}
+	if !client.networkSpec.IPv4NAT || client.networkSpec.IPv4Routing {
+		t.Fatalf("network policy = %#v", client.networkSpec)
+	}
+	if !strings.Contains(stdout.String(), "created") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestNetworkEnsureRejectsWrongConfigurationType(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	code := Run(
+		context.Background(),
+		[]string{"--config=incus.management.network.ipv4.nat=5", "network", "ensure"},
+		&stdout, &stderr, client, loader,
+	)
+
+	if code != 1 {
+		t.Fatalf("Run() code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "must be a boolean") {
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
 
 func TestConfigurationLoadFailure(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	loader := &fakeConfigLoader{err: errors.New("bad json")}
-	code := Run(context.Background(), []string{"doctor"}, &stdout, &stderr, fakeIncusClient{}, loader)
+	client := &fakeIncusClient{}
+	code := Run(context.Background(), []string{"doctor"}, &stdout, &stderr, client, loader)
 
 	if code != 1 {
 		t.Fatalf("Run() code = %d, want 1", code)
@@ -117,7 +175,8 @@ func TestConfigurationLoadFailure(t *testing.T) {
 func TestUnknownCommand(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	loader := &fakeConfigLoader{}
-	code := Run(context.Background(), []string{"nope"}, &stdout, &stderr, fakeIncusClient{}, loader)
+	client := &fakeIncusClient{}
+	code := Run(context.Background(), []string{"nope"}, &stdout, &stderr, client, loader)
 
 	if code != 2 {
 		t.Fatalf("Run() code = %d, want 2", code)
