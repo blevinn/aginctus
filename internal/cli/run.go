@@ -15,7 +15,8 @@ const Version = "0.0.0-dev"
 
 type IncusClient interface {
 	ServerVersion(context.Context) (string, error)
-	EnsureManagementNetwork(context.Context, incus.ManagementNetworkSpec) (incus.EnsureResult, error)
+	EnsureManagementNetwork(context.Context, incus.ManagementNetworkSpec, incus.MutationOptions) (incus.EnsureResult, error)
+	TeardownManagementNetwork(context.Context, string, incus.MutationOptions) (incus.TeardownResult, error)
 }
 
 type ConfigLoader interface {
@@ -184,32 +185,97 @@ func runNetwork(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) != 1 || args[0] != "ensure" {
-		fmt.Fprintln(stderr, "Usage: aginctus [global options] network ensure")
+	if len(args) == 0 {
+		printNetworkUsage(stderr)
 		return 2
 	}
 
-	spec, err := managementNetworkSpec(effective)
+	action := args[0]
+	options, err := parseNetworkOptions(args[1:])
 	if err != nil {
-		fmt.Fprintf(stderr, "management network configuration: %v\n", err)
-		return 1
+		fmt.Fprintf(stderr, "network options: %v\n", err)
+		return 2
 	}
 
-	result, err := incusClient.EnsureManagementNetwork(ctx, spec)
-	if err != nil {
-		fmt.Fprintf(stderr, "management network: %v\n", err)
-		return 1
-	}
+	switch action {
+	case "ensure":
+		spec, err := managementNetworkSpec(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
+			return 1
+		}
 
-	switch {
-	case result.Created:
-		fmt.Fprintf(stdout, "management network %q: created\n", spec.Name)
-	case result.Updated:
-		fmt.Fprintf(stdout, "management network %q: updated\n", spec.Name)
+		result, err := incusClient.EnsureManagementNetwork(ctx, spec, options)
+		if err != nil {
+			fmt.Fprintf(stderr, "management network: %v\n", err)
+			return 1
+		}
+
+		switch {
+		case result.DryRun && result.Created:
+			fmt.Fprintf(stdout, "management network %q: would create\n", spec.Name)
+		case result.DryRun && result.Updated:
+			fmt.Fprintf(stdout, "management network %q: would update\n", spec.Name)
+		case result.Created:
+			fmt.Fprintf(stdout, "management network %q: created\n", spec.Name)
+		case result.Updated:
+			fmt.Fprintf(stdout, "management network %q: updated\n", spec.Name)
+		default:
+			fmt.Fprintf(stdout, "management network %q: ready\n", spec.Name)
+		}
+		return 0
+
+	case "teardown":
+		name, err := effective.String("incus.management.network.name")
+		if err != nil {
+			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
+			return 1
+		}
+		if name == "" {
+			fmt.Fprintf(stderr, "management network configuration: configuration key %q must not be empty\n", "incus.management.network.name")
+			return 1
+		}
+
+		result, err := incusClient.TeardownManagementNetwork(ctx, name, options)
+		if err != nil {
+			fmt.Fprintf(stderr, "management network: %v\n", err)
+			return 1
+		}
+
+		switch {
+		case result.DryRun && result.Deleted:
+			fmt.Fprintf(stdout, "management network %q: would delete\n", name)
+		case result.Deleted:
+			fmt.Fprintf(stdout, "management network %q: deleted\n", name)
+		default:
+			fmt.Fprintf(stdout, "management network %q: absent\n", name)
+		}
+		return 0
+
 	default:
-		fmt.Fprintf(stdout, "management network %q: ready\n", spec.Name)
+		printNetworkUsage(stderr)
+		return 2
 	}
-	return 0
+}
+
+func parseNetworkOptions(args []string) (incus.MutationOptions, error) {
+	var options incus.MutationOptions
+	for _, arg := range args {
+		switch arg {
+		case "--dry-run":
+			options.DryRun = true
+		case "--force":
+			options.Force = true
+		default:
+			return incus.MutationOptions{}, fmt.Errorf("unknown option %q", arg)
+		}
+	}
+	return options, nil
+}
+
+func printNetworkUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: aginctus [global options] network ensure [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] network teardown [--dry-run] [--force]")
 }
 
 func managementNetworkSpec(effective *config.Config) (incus.ManagementNetworkSpec, error) {
@@ -259,7 +325,8 @@ Commands:
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   doctor            Check local Incus daemon connectivity
-  network ensure    Create or verify the configured management network
+  network ensure    Create or reconcile the configured management network
+  network teardown  Delete the configured management network
   version           Print the Aginctus CLI version
   help              Show this help`)
 }
