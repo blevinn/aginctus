@@ -2,10 +2,14 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"os"
 	"text/template"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/orchestration"
+	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
 )
 
 type Spec struct {
@@ -108,4 +112,57 @@ func (s Spec) RenderCompose() (string, error) {
 		return "", fmt.Errorf("render gateway compose: %w", err)
 	}
 	return out.String(), nil
+}
+
+
+var requiredRuntimeEnvironment = []string{
+	"AGINCTUS_GATEWAY_POSTGRES_PASSWORD",
+	"AGINCTUS_GATEWAY_MASTER_KEY",
+	"AGINCTUS_GATEWAY_SALT_KEY",
+}
+
+func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
+	if err := s.Validate(); err != nil {
+		return orchestration.Plan{}, err
+	}
+	generator, err := orchestration.NewGenerator()
+	if err != nil {
+		return orchestration.Plan{}, err
+	}
+	return generator.Evaluate(
+		"import 'aginctus/gateway.jsonnet'",
+		map[string]any{
+			"id":            s.ID,
+			"project":       s.Project,
+			"network":       s.Network,
+			"litellmImage":  s.LiteLLMImage,
+			"postgresImage": s.PostgresImage,
+		},
+	)
+}
+
+func ValidateRuntimeEnvironment() error {
+	for _, name := range requiredRuntimeEnvironment {
+		if value, ok := os.LookupEnv(name); !ok || value == "" {
+			return fmt.Errorf("required gateway environment variable %s is not set", name)
+		}
+	}
+	return nil
+}
+
+func (s Spec) Deploy(ctx context.Context) error {
+	if err := ValidateRuntimeEnvironment(); err != nil {
+		return err
+	}
+	plan, err := s.OrchestrationPlan()
+	if err != nil {
+		return err
+	}
+	engine := orchestration.NewEngine(map[string]orchestration.Driver{
+		"compose": composedriver.New(),
+	})
+	if _, err := engine.Execute(ctx, plan, orchestration.ExecuteOptions{}); err != nil {
+		return fmt.Errorf("deploy gateway orchestration: %w", err)
+	}
+	return nil
 }
