@@ -10,10 +10,12 @@ import (
 )
 
 const (
-	ownerKey      = "user.aginctus.managed"
-	resourceKey   = "user.aginctus.resource"
-	ownerValue    = "true"
-	resourceValue = "management-network"
+	ownerKey       = "user.aginctus.managed"
+	resourceKey    = "user.aginctus.resource"
+	roleKey        = "user.aginctus.role"
+	ownerValue     = "true"
+	resourceValue  = "management-network"
+	herdrRoleValue = "herdr-client"
 )
 
 type ManagementNetworkSpec struct {
@@ -40,12 +42,36 @@ type TeardownResult struct {
 	DryRun  bool
 }
 
+type operation interface {
+	Wait() error
+}
+
 type Server interface {
 	GetServer() (*api.Server, string, error)
 	GetNetwork(string) (*api.Network, string, error)
 	CreateNetwork(api.NetworksPost) error
 	UpdateNetwork(string, api.NetworkPut, string) error
 	DeleteNetwork(string) error
+	GetInstance(string) (*api.Instance, string, error)
+	CreateInstance(api.InstancesPost) (operation, error)
+	UpdateInstance(string, api.InstancePut, string) (operation, error)
+	DeleteInstance(string) (operation, error)
+}
+
+type realServer struct {
+	incusclient.InstanceServer
+}
+
+func (s realServer) CreateInstance(instance api.InstancesPost) (operation, error) {
+	return s.InstanceServer.CreateInstance(instance)
+}
+
+func (s realServer) UpdateInstance(name string, instance api.InstancePut, etag string) (operation, error) {
+	return s.InstanceServer.UpdateInstance(name, instance, etag)
+}
+
+func (s realServer) DeleteInstance(name string) (operation, error) {
+	return s.InstanceServer.DeleteInstance(name)
 }
 
 type Connector func(context.Context) (Server, error)
@@ -56,7 +82,11 @@ type Client struct {
 
 func NewClient() *Client {
 	return &Client{connect: func(ctx context.Context) (Server, error) {
-		return incusclient.ConnectIncusUnixWithContext(ctx, "", &incusclient.ConnectionArgs{SkipGetServer: true})
+		server, err := incusclient.ConnectIncusUnixWithContext(ctx, "", &incusclient.ConnectionArgs{SkipGetServer: true})
+		if err != nil {
+			return nil, err
+		}
+		return realServer{InstanceServer: server}, nil
 	}}
 }
 
@@ -198,6 +228,200 @@ func applyManagementNetworkConfig(config api.ConfigMap, spec ManagementNetworkSp
 		}
 	}
 	return changed
+}
+
+
+type HerdrClientSpec struct {
+	Name              string
+	ImageServer       string
+	ImageProtocol     string
+	ImageAlias        string
+	StoragePool       string
+	ManagementNetwork string
+	Start             bool
+}
+
+func (c *Client) EnsureHerdrClient(ctx context.Context, spec HerdrClientSpec, options MutationOptions) (EnsureResult, error) {
+	server, err := c.connect(ctx)
+	if err != nil {
+		return EnsureResult{}, fmt.Errorf("connect to local Incus daemon: %w", err)
+	}
+
+	instance, etag, err := server.GetInstance(spec.Name)
+	if err == nil {
+		if err := validateHerdrClient(instance, spec.Name, options.Force); err != nil {
+			return EnsureResult{}, err
+		}
+
+		update := instance.Writable()
+		if update.Config == nil {
+			update.Config = api.ConfigMap{}
+		}
+		if update.Devices == nil {
+			update.Devices = api.DevicesMap{}
+		}
+
+		changed := applyHerdrClientConfig(&update, spec)
+		if !changed {
+			return EnsureResult{}, nil
+		}
+		if options.DryRun {
+			return EnsureResult{Updated: true, DryRun: true}, nil
+		}
+
+		op, err := server.UpdateInstance(spec.Name, update, etag)
+		if err != nil {
+			return EnsureResult{}, fmt.Errorf("update Herdr client %q: %w", spec.Name, err)
+		}
+		if err := op.Wait(); err != nil {
+			return EnsureResult{}, fmt.Errorf("wait for Herdr client %q update: %w", spec.Name, err)
+		}
+		return EnsureResult{Updated: true}, nil
+	}
+	if !api.StatusErrorCheck(err, http.StatusNotFound) {
+		return EnsureResult{}, fmt.Errorf("get Herdr client %q: %w", spec.Name, err)
+	}
+
+	if options.DryRun {
+		return EnsureResult{Created: true, DryRun: true}, nil
+	}
+
+	request := api.InstancesPost{
+		Name:  spec.Name,
+		Type:  api.InstanceTypeContainer,
+		Start: spec.Start,
+		Source: api.InstanceSource{
+			Type:     "image",
+			Server:   spec.ImageServer,
+			Protocol: spec.ImageProtocol,
+			Alias:    spec.ImageAlias,
+		},
+		InstancePut: api.InstancePut{
+			Description: "Aginctus Herdr client infrastructure",
+			Profiles:    []string{},
+			Config: api.ConfigMap{
+				ownerKey:    ownerValue,
+				resourceKey: "infrastructure",
+				roleKey:     herdrRoleValue,
+			},
+			Devices: api.DevicesMap{
+				"root": {
+					"type": "disk",
+					"path": "/",
+					"pool": spec.StoragePool,
+				},
+				"management": {
+					"type":    "nic",
+					"network": spec.ManagementNetwork,
+					"name":    "eth0",
+				},
+			},
+		},
+	}
+
+	op, err := server.CreateInstance(request)
+	if err != nil {
+		return EnsureResult{}, fmt.Errorf("create Herdr client %q: %w", spec.Name, err)
+	}
+	if err := op.Wait(); err != nil {
+		return EnsureResult{}, fmt.Errorf("wait for Herdr client %q creation: %w", spec.Name, err)
+	}
+
+	return EnsureResult{Created: true}, nil
+}
+
+func (c *Client) TeardownHerdrClient(ctx context.Context, name string, options MutationOptions) (TeardownResult, error) {
+	server, err := c.connect(ctx)
+	if err != nil {
+		return TeardownResult{}, fmt.Errorf("connect to local Incus daemon: %w", err)
+	}
+
+	instance, _, err := server.GetInstance(name)
+	if api.StatusErrorCheck(err, http.StatusNotFound) {
+		return TeardownResult{}, nil
+	}
+	if err != nil {
+		return TeardownResult{}, fmt.Errorf("get Herdr client %q: %w", name, err)
+	}
+	if err := validateHerdrClient(instance, name, options.Force); err != nil {
+		return TeardownResult{}, err
+	}
+
+	if options.DryRun {
+		return TeardownResult{Deleted: true, DryRun: true}, nil
+	}
+
+	op, err := server.DeleteInstance(name)
+	if err != nil {
+		return TeardownResult{}, fmt.Errorf("delete Herdr client %q: %w", name, err)
+	}
+	if err := op.Wait(); err != nil {
+		return TeardownResult{}, fmt.Errorf("wait for Herdr client %q deletion: %w", name, err)
+	}
+
+	return TeardownResult{Deleted: true}, nil
+}
+
+func validateHerdrClient(instance *api.Instance, name string, force bool) error {
+	if instance.Type != string(api.InstanceTypeContainer) {
+		return fmt.Errorf("instance %q already exists with type %q, want container", name, instance.Type)
+	}
+	if instance.Config[ownerKey] != ownerValue || instance.Config[resourceKey] != "infrastructure" || instance.Config[roleKey] != herdrRoleValue {
+		if force {
+			return nil
+		}
+		return fmt.Errorf("instance %q already exists but is not the Aginctus Herdr client; use --force to adopt it", name)
+	}
+	return nil
+}
+
+func applyHerdrClientConfig(instance *api.InstancePut, spec HerdrClientSpec) bool {
+	changed := false
+	desiredConfig := map[string]string{
+		ownerKey:    ownerValue,
+		resourceKey: "infrastructure",
+		roleKey:     herdrRoleValue,
+	}
+	for key, value := range desiredConfig {
+		if instance.Config[key] != value {
+			instance.Config[key] = value
+			changed = true
+		}
+	}
+
+	desiredDevices := api.DevicesMap{
+		"root": {
+			"type": "disk",
+			"path": "/",
+			"pool": spec.StoragePool,
+		},
+		"management": {
+			"type":    "nic",
+			"network": spec.ManagementNetwork,
+			"name":    "eth0",
+		},
+	}
+	for name, desired := range desiredDevices {
+		current, ok := instance.Devices[name]
+		if !ok || !stringMapEqual(current, desired) {
+			instance.Devices[name] = desired
+			changed = true
+		}
+	}
+
+	return changed
+}
+
+func stringMapEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for key, value := range a {
+		if b[key] != value {
+			return false
+		}
+	}
+	return true
 }
 
 func boolString(value bool) string {
