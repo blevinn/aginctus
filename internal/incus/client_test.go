@@ -9,6 +9,14 @@ import (
 	"github.com/lxc/incus/v7/shared/api"
 )
 
+type fakeOperation struct {
+	err error
+}
+
+func (o fakeOperation) Wait() error {
+	return o.err
+}
+
 type fakeServer struct {
 	server       *api.Server
 	serverErr    error
@@ -19,7 +27,13 @@ type fakeServer struct {
 	updatedName  string
 	updatedPut   *api.NetworkPut
 	updateETag   string
-	deletedName  string
+	deletedName     string
+	instance        *api.Instance
+	instanceErr     error
+	instanceETag    string
+	createdInstance *api.InstancesPost
+	updatedInstance *api.InstancePut
+	deletedInstance string
 }
 
 func (s *fakeServer) GetServer() (*api.Server, string, error) {
@@ -45,6 +59,25 @@ func (s *fakeServer) UpdateNetwork(name string, network api.NetworkPut, etag str
 func (s *fakeServer) DeleteNetwork(name string) error {
 	s.deletedName = name
 	return nil
+}
+
+func (s *fakeServer) GetInstance(string) (*api.Instance, string, error) {
+	return s.instance, s.instanceETag, s.instanceErr
+}
+
+func (s *fakeServer) CreateInstance(instance api.InstancesPost) (operation, error) {
+	s.createdInstance = &instance
+	return fakeOperation{}, nil
+}
+
+func (s *fakeServer) UpdateInstance(_ string, instance api.InstancePut, _ string) (operation, error) {
+	s.updatedInstance = &instance
+	return fakeOperation{}, nil
+}
+
+func (s *fakeServer) DeleteInstance(name string) (operation, error) {
+	s.deletedInstance = name
+	return fakeOperation{}, nil
 }
 
 func TestServerVersion(t *testing.T) {
@@ -311,5 +344,95 @@ func TestTeardownManagementNetworkRejectsUnownedWithoutForce(t *testing.T) {
 	_, err := client.TeardownManagementNetwork(context.Background(), "lab-mgmt", MutationOptions{})
 	if err == nil || !strings.Contains(err.Error(), "use --force") {
 		t.Fatalf("TeardownManagementNetwork() error = %v", err)
+	}
+}
+
+
+func TestEnsureHerdrClientCreatesContainer(t *testing.T) {
+	server := &fakeServer{instanceErr: api.StatusErrorf(404, "not found")}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	spec := HerdrClientSpec{
+		Name:              "aginctus-herdr",
+		ImageServer:       "https://images.linuxcontainers.org",
+		ImageProtocol:     "simplestreams",
+		ImageAlias:        "nixos/26.05",
+		StoragePool:       "default",
+		ManagementNetwork: "aginctus-mgmt",
+		Start:             true,
+	}
+
+	result, err := client.EnsureHerdrClient(context.Background(), spec, MutationOptions{})
+	if err != nil {
+		t.Fatalf("EnsureHerdrClient() error = %v", err)
+	}
+	if !result.Created || server.createdInstance == nil {
+		t.Fatalf("result = %#v request = %#v", result, server.createdInstance)
+	}
+	if server.createdInstance.Type != api.InstanceTypeContainer {
+		t.Fatalf("type = %q", server.createdInstance.Type)
+	}
+	if server.createdInstance.Source.Alias != "nixos/26.05" {
+		t.Fatalf("source = %#v", server.createdInstance.Source)
+	}
+	if got := server.createdInstance.Devices["management"]["network"]; got != "aginctus-mgmt" {
+		t.Fatalf("management network = %q", got)
+	}
+	if got := server.createdInstance.Devices["root"]["pool"]; got != "default" {
+		t.Fatalf("storage pool = %q", got)
+	}
+	if len(server.createdInstance.Profiles) != 0 {
+		t.Fatalf("profiles = %#v, want none", server.createdInstance.Profiles)
+	}
+}
+
+func TestEnsureHerdrClientDryRunDoesNotCreate(t *testing.T) {
+	server := &fakeServer{instanceErr: api.StatusErrorf(404, "not found")}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	result, err := client.EnsureHerdrClient(context.Background(), HerdrClientSpec{Name: "aginctus-herdr"}, MutationOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("EnsureHerdrClient() error = %v", err)
+	}
+	if !result.Created || !result.DryRun {
+		t.Fatalf("result = %#v", result)
+	}
+	if server.createdInstance != nil {
+		t.Fatal("CreateInstance() called during dry run")
+	}
+}
+
+func TestEnsureHerdrClientRejectsUnownedContainer(t *testing.T) {
+	server := &fakeServer{instance: &api.Instance{
+		Name: "aginctus-herdr",
+		Type: string(api.InstanceTypeContainer),
+		InstancePut: api.InstancePut{Config: api.ConfigMap{}},
+	}}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	_, err := client.EnsureHerdrClient(context.Background(), HerdrClientSpec{Name: "aginctus-herdr"}, MutationOptions{})
+	if err == nil || !strings.Contains(err.Error(), "use --force") {
+		t.Fatalf("EnsureHerdrClient() error = %v", err)
+	}
+}
+
+func TestTeardownHerdrClientDeletesOwnedContainer(t *testing.T) {
+	server := &fakeServer{instance: &api.Instance{
+		Name: "aginctus-herdr",
+		Type: string(api.InstanceTypeContainer),
+		InstancePut: api.InstancePut{Config: api.ConfigMap{
+			ownerKey: ownerValue,
+			resourceKey: "infrastructure",
+			roleKey: herdrRoleValue,
+		}},
+	}}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	result, err := client.TeardownHerdrClient(context.Background(), "aginctus-herdr", MutationOptions{})
+	if err != nil {
+		t.Fatalf("TeardownHerdrClient() error = %v", err)
+	}
+	if !result.Deleted || server.deletedInstance != "aginctus-herdr" {
+		t.Fatalf("result = %#v deleted = %q", result, server.deletedInstance)
 	}
 }
