@@ -12,8 +12,8 @@ vet:
 
 check: test vet
 
-build target="aginctus":
-    case "{{target}}" in       aginctus) go build ./cmd/aginctus ;;       herdr-client) nix build .#herdr-client --out-link result-herdr-client ;;       *) echo "unknown build target: {{target}}" >&2; exit 2 ;;     esac
+build target="all":
+    case "{{target}}" in       all) just build cli; just build herdr-client ;;       cli) go build ./cmd/aginctus ;;       herdr-client) nix build .#herdr-client --out-link result-herdr-client ;;       *) echo "unknown build target: {{target}}" >&2; exit 2 ;;     esac
 
 update ecosystem target:
     case "{{ecosystem}}:{{target}}" in       nix:herdr) nix flake update herdr ;;       *) echo "unknown update target: {{ecosystem}} {{target}}" >&2; exit 2 ;;     esac
