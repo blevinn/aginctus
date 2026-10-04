@@ -162,7 +162,7 @@ Both network lifecycle commands support `--dry-run` and `--force`. Dry-run repor
 
 ## Herdr client container defaults
 
-The first infrastructure workload uses the following defaults:
+The Herdr client uses a locally imported Incus image built by the repository flake:
 
 ```json
 {
@@ -170,20 +170,10 @@ The first infrastructure workload uses the following defaults:
     "herdr": {
       "name": "aginctus-herdr",
       "image": {
-        "server": "https://images.linuxcontainers.org",
-        "protocol": "simplestreams",
-        "alias": "nixos/26.05"
+        "alias": "aginctus-herdr-client"
       },
       "storage": {
         "pool": "default"
-      },
-      "release": {
-        "repository": "herdrdev/herdr",
-        "version": "v0.9.1",
-        "sha256": {
-          "x86_64": "2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7",
-          "aarch64": "f4ccf4de745f2cb9a39a983e9ba3703dad50ec2a58dea83026ceab721bbd8d9e"
-        }
       }
     }
   }
@@ -195,8 +185,11 @@ The first infrastructure workload uses the following defaults:
 Incus profiles: it receives an explicit root disk on the configured storage pool
 and an explicit NIC on the configured management network.
 
-The image defaults target the public Incus image server and NixOS 26.05. They can
-be overridden through any normal Aginctus configuration source.
+The default image alias is produced by `nix build .#herdr-client` and imported
+locally with `just herdr-client-image-update`. The image is NixOS 26.05 with
+Herdr 0.9.1 included in the system closure. A systemd service starts
+`herdr server` in headless mode when the container boots.
 
-
-The Herdr client bootstrap does not require guest internet access. Aginctus downloads the configured, pinned release on the host, verifies the configured SHA-256 digest, copies the binary into the container through the Incus API, and verifies the installed version inside the guest. The client container is kept running as part of its lifecycle invariant so subsequent `aginctus herdr` work can attach to it.
+The image alias remains configurable through the normal Aginctus precedence
+rules, allowing a separately built or promoted image to be selected without
+changing orchestration code.
