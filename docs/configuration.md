@@ -177,16 +177,26 @@ The first infrastructure workload uses the following defaults:
       "storage": {
         "pool": "default"
       },
-      "start": true
+      "release": {
+        "repository": "herdrdev/herdr",
+        "version": "v0.9.1",
+        "sha256": {
+          "x86_64": "2a02fed16beb651ef006e1d43f048f652ca4dc58ad053cd2d44450563d5c54b7",
+          "aarch64": "f4ccf4de745f2cb9a39a983e9ba3703dad50ec2a58dea83026ceab721bbd8d9e"
+        }
+      }
     }
   }
 }
 ```
 
-`aginctus herdr-client ensure` combines these values with
+`aginctus herdr client ensure` combines these values with
 `incus.management.network.name`. The container is created without inheriting
 Incus profiles: it receives an explicit root disk on the configured storage pool
 and an explicit NIC on the configured management network.
 
 The image defaults target the public Incus image server and NixOS 26.05. They can
 be overridden through any normal Aginctus configuration source.
+
+
+The Herdr client bootstrap does not require guest internet access. Aginctus downloads the configured, pinned release on the host, verifies the configured SHA-256 digest, copies the binary into the container through the Incus API, and verifies the installed version inside the guest. The client container is kept running as part of its lifecycle invariant so subsequent `aginctus herdr` work can attach to it.
