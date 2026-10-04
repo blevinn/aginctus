@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/herdr"
 	"github.com/blevinn/aginctus/internal/incus"
 )
 
@@ -20,9 +19,6 @@ type IncusClient interface {
 	TeardownManagementNetwork(context.Context, string, incus.MutationOptions) (incus.TeardownResult, error)
 	EnsureHerdrClient(context.Context, incus.HerdrClientSpec, incus.MutationOptions) (incus.EnsureResult, error)
 	TeardownHerdrClient(context.Context, string, incus.MutationOptions) (incus.TeardownResult, error)
-	InstanceArchitecture(context.Context, string) (string, error)
-	WriteInstanceFile(context.Context, string, string, []byte, int) error
-	ExecInstance(context.Context, string, []string) (string, error)
 }
 
 type ConfigLoader interface {
@@ -323,18 +319,6 @@ func runHerdr(
 			return 1
 		}
 
-		if !options.DryRun {
-			release, err := herdrRelease(effective)
-			if err != nil {
-				fmt.Fprintf(stderr, "Herdr release configuration: %v\n", err)
-				return 1
-			}
-			if err := herdr.NewInstaller().Ensure(ctx, incusClient, spec.Name, release); err != nil {
-				fmt.Fprintf(stderr, "Herdr client bootstrap: %v\n", err)
-				return 1
-			}
-		}
-
 		switch {
 		case result.DryRun && result.Created:
 			fmt.Fprintf(stdout, "Herdr client %q: would create\n", spec.Name)
@@ -381,14 +365,6 @@ func herdrClientSpec(effective *config.Config) (incus.HerdrClientSpec, error) {
 	if err != nil {
 		return incus.HerdrClientSpec{}, err
 	}
-	server, err := effective.String("infrastructure.herdr.image.server")
-	if err != nil {
-		return incus.HerdrClientSpec{}, err
-	}
-	protocol, err := effective.String("infrastructure.herdr.image.protocol")
-	if err != nil {
-		return incus.HerdrClientSpec{}, err
-	}
 	alias, err := effective.String("infrastructure.herdr.image.alias")
 	if err != nil {
 		return incus.HerdrClientSpec{}, err
@@ -401,42 +377,15 @@ func herdrClientSpec(effective *config.Config) (incus.HerdrClientSpec, error) {
 	if err != nil {
 		return incus.HerdrClientSpec{}, err
 	}
-	if name == "" || server == "" || protocol == "" || alias == "" || pool == "" || network == "" {
-		return incus.HerdrClientSpec{}, fmt.Errorf("Herdr client name, image, storage pool, and management network must not be empty")
+	if name == "" || alias == "" || pool == "" || network == "" {
+		return incus.HerdrClientSpec{}, fmt.Errorf("Herdr client name, image alias, storage pool, and management network must not be empty")
 	}
 
 	return incus.HerdrClientSpec{
 		Name:              name,
-		ImageServer:       server,
-		ImageProtocol:     protocol,
 		ImageAlias:        alias,
 		StoragePool:       pool,
 		ManagementNetwork: network,
-	}, nil
-}
-
-func herdrRelease(effective *config.Config) (herdr.Release, error) {
-	repository, err := effective.String("infrastructure.herdr.release.repository")
-	if err != nil {
-		return herdr.Release{}, err
-	}
-	version, err := effective.String("infrastructure.herdr.release.version")
-	if err != nil {
-		return herdr.Release{}, err
-	}
-	x86, err := effective.String("infrastructure.herdr.release.sha256.x86_64")
-	if err != nil {
-		return herdr.Release{}, err
-	}
-	arm, err := effective.String("infrastructure.herdr.release.sha256.aarch64")
-	if err != nil {
-		return herdr.Release{}, err
-	}
-	return herdr.Release{
-		Repository: repository,
-		Version: version,
-		SHA256X8664: x86,
-		SHA256AArch64: arm,
 	}, nil
 }
 
