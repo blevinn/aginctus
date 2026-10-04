@@ -1,6 +1,6 @@
 [default]
 [no-cd]
-all: cli herdr-client
+all: cli herdr-client opencode-workload
 
 [no-cd]
 cli:
@@ -9,3 +9,7 @@ cli:
 [no-cd]
 herdr-client:
     nix build .#herdr-client --out-link result-herdr-client
+
+[no-cd]
+opencode-workload:
+    nix build .#opencode-workload --out-link result-opencode-workload
