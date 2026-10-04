@@ -16,7 +16,7 @@ func TestValidateAcceptsComposeConfiguration(t *testing.T) {
 		"compose": {
 			"services": {
 				"web": {
-					"image": "images:alpine/edge"
+					"image": "alpine:latest"
 				}
 			}
 		}
@@ -57,7 +57,7 @@ func TestExecuteUsesValidatedConfiguration(t *testing.T) {
 		"compose": {
 			"services": {
 				"web": {
-					"image": "images:alpine/edge"
+					"image": "alpine:latest"
 				}
 			}
 		}
