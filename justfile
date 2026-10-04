@@ -2,7 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 fmt:
     gofmt -w cmd internal
-    nix fmt
+    nix fmt .
 
 test:
     go test ./...
