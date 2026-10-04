@@ -2,7 +2,10 @@ module github.com/blevinn/aginctus
 
 go 1.25.11
 
-require github.com/lxc/incus/v7 v7.0.1
+require (
+	github.com/google/go-jsonnet v0.22.0
+	github.com/lxc/incus/v7 v7.0.1
+)
 
 require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 // indirect
@@ -52,4 +55,5 @@ require (
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
+	sigs.k8s.io/yaml v1.4.0 // indirect
 )
