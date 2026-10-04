@@ -155,4 +155,4 @@ The initial defaults reserve configuration for the management network that will 
 }
 ```
 
-These are defaults rather than hard-coded orchestration constants. `aginctus network ensure` consumes these effective values when creating the management bridge, so any higher-precedence source can override them.
+These are defaults rather than hard-coded orchestration constants. `aginctus network ensure` consumes these effective values when creating or reconciling the management bridge, so any higher-precedence source can override them.
