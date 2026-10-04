@@ -1,6 +1,6 @@
 # Declarative orchestration design
 
-Status: proposed design for review before implementation.
+Status: accepted design; the typed plan, embedded/restricted Jsonnet generator, and sequential driver engine are implemented. Apply/Compose driver integrations and migration of existing lifecycle commands remain follow-up work.
 
 ## Goal
 
@@ -334,16 +334,16 @@ Key requirements:
 - sanitize driver errors before displaying data that may contain credentials;
 - pin module versions through `go.mod` and `go.sum`.
 
-## First implementation PR after this design
+## Initial engine implementation
 
-The first implementation should be deliberately small:
+The first implementation establishes the Aginctus-owned orchestration contract without replacing an existing lifecycle path:
 
-- add `go-jsonnet`;
-- define the typed orchestration plan;
-- embed `orchestration.libsonnet`;
-- implement restricted imports;
-- add sequential execution behind a driver interface;
-- include tests using in-memory fake drivers;
-- do not yet replace an existing production `ensure` path.
+- `go-jsonnet` is integrated as the embedded evaluator;
+- orchestration plans are decoded into typed Go structures with strict validation;
+- `orchestration.libsonnet` is embedded in the binary;
+- Jsonnet imports are restricted to embedded or explicitly registered in-memory resources;
+- the engine validates every step before mutation, then executes drivers sequentially and fail-fast;
+- dry-run execution is rejected when any selected driver cannot support it;
+- unit tests use in-memory fake drivers and do not require Incus.
 
-That establishes the Aginctus-owned contract before coupling it to either upstream reconciliation library.
+The next implementation step is to add the first real driver integration while preserving this boundary.
