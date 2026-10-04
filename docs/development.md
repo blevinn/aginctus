@@ -52,7 +52,22 @@ The first mutating command is:
 go run ./cmd/aginctus network ensure
 ```
 
-It creates or verifies the configured management bridge. Network name, addressing, NAT, routing, and IPv6 behavior come from the effective configuration; Aginctus ownership metadata remains an internal safety invariant.
+It creates or reconciles the configured management bridge. Network name, addressing, NAT, routing, and IPv6 behavior come from the effective configuration; Aginctus ownership metadata remains an internal safety invariant.
+
+Use `--dry-run` to inspect the action without mutating Incus:
+
+```sh
+go run ./cmd/aginctus network ensure --dry-run
+go run ./cmd/aginctus network teardown --dry-run
+```
+
+Use `network teardown` to remove the configured management bridge:
+
+```sh
+go run ./cmd/aginctus network teardown
+```
+
+Both `ensure` and `teardown` accept `--force`. Without it, Aginctus refuses to mutate a same-named bridge that lacks Aginctus ownership metadata. With `--force`, Aginctus may adopt or delete that same-named Incus-managed bridge. `--force` does not allow Aginctus to reinterpret an unmanaged network or a different network type.
 
 Common development commands are available through `just`:
 
