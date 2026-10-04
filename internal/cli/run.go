@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/incus"
 )
 
@@ -68,6 +69,8 @@ func Run(
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
 	case "network":
 		return runNetwork(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
+	case "gateway":
+		return runGateway(commandArgs[1:], stdout, stderr, effective)
 	case "herdr":
 		return runHerdr(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	default:
@@ -282,6 +285,41 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network teardown [--dry-run] [--force]")
 }
 
+func runGateway(args []string, stdout, stderr io.Writer, effective *config.Config) int {
+	if len(args) != 1 {
+		printGatewayUsage(stderr)
+		return 2
+	}
+
+	spec, err := gateway.FromConfig(effective)
+	if err != nil {
+		fmt.Fprintf(stderr, "gateway configuration: %v\n", err)
+		return 1
+	}
+
+	switch args[0] {
+	case "validate":
+		fmt.Fprintf(stdout, "gateway %q: configuration valid\n", spec.ID)
+		return 0
+	case "render":
+		rendered, err := spec.RenderCompose()
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway render: %v\n", err)
+			return 1
+		}
+		fmt.Fprint(stdout, rendered)
+		return 0
+	default:
+		printGatewayUsage(stderr)
+		return 2
+	}
+}
+
+func printGatewayUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
+	fmt.Fprintln(w, "       aginctus [global options] gateway render")
+}
+
 func runHerdr(
 	ctx context.Context,
 	args []string,
@@ -450,6 +488,8 @@ Commands:
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   doctor            Check local Incus daemon connectivity
+  gateway validate  Validate the AI gateway deployment configuration
+  gateway render    Render the AI gateway Compose model
   herdr client ensure    Create, reconcile, and bootstrap the Herdr client
   herdr client teardown  Delete the Herdr client container
   network ensure    Create or reconcile the configured management network

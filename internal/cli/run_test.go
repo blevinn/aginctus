@@ -367,7 +367,6 @@ func TestHerdrClientTeardownUsesConfiguredName(t *testing.T) {
 	}
 }
 
-
 func TestHerdrClientEnsureStopsWhenManagementNetworkEnsureFails(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	loader := config.NewLoader()
@@ -390,5 +389,34 @@ func TestHerdrClientEnsureStopsWhenManagementNetworkEnsureFails(t *testing.T) {
 	}
 	if client.herdrSpec.Name != "" {
 		t.Fatalf("Herdr ensure called after network failure: %#v", client.herdrSpec)
+	}
+}
+
+func TestGatewayRenderUsesEffectiveConfiguration(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	code := Run(
+		context.Background(),
+		[]string{
+			"--config=gateway.id=lab",
+			"--config=gateway.compose.project=lab-gateway",
+			"--config=incus.management.network.name=lab-mgmt",
+			"gateway", "render",
+		},
+		&stdout, &stderr, client, loader,
+	)
+
+	if code != 0 {
+		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
+	}
+	for _, want := range []string{"name: lab-gateway", "name: lab-mgmt"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q: %q", want, stdout.String())
+		}
 	}
 }
