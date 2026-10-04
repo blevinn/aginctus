@@ -27,6 +27,8 @@ type Driver struct {
 	execute func(context.Context, Config) error
 }
 
+var _ orchestration.Driver = (*Driver)(nil)
+
 func New() *Driver {
 	return &Driver{execute: executeCompose}
 }
