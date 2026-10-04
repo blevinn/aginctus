@@ -282,7 +282,6 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network teardown [--dry-run] [--force]")
 }
 
-
 func runHerdr(
 	ctx context.Context,
 	args []string,
@@ -421,9 +420,9 @@ func managementNetworkSpec(effective *config.Config) (incus.ManagementNetworkSpe
 	}
 
 	return incus.ManagementNetworkSpec{
-		Name: name,
+		Name:        name,
 		IPv4Address: ipv4Address,
-		IPv4NAT: ipv4NAT,
+		IPv4NAT:     ipv4NAT,
 		IPv4Routing: ipv4Routing,
 		IPv6Address: ipv6Address,
 	}, nil

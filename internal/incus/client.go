@@ -156,11 +156,11 @@ func (c *Client) EnsureManagementNetwork(ctx context.Context, spec ManagementNet
 			Description: "Aginctus management network",
 			Config: api.ConfigMap{
 				"ipv4.address": spec.IPv4Address,
-				"ipv4.nat": boolString(spec.IPv4NAT),
+				"ipv4.nat":     boolString(spec.IPv4NAT),
 				"ipv4.routing": boolString(spec.IPv4Routing),
 				"ipv6.address": spec.IPv6Address,
-				ownerKey: ownerValue,
-				resourceKey: resourceValue,
+				ownerKey:       ownerValue,
+				resourceKey:    resourceValue,
 			},
 		},
 	})
@@ -170,7 +170,6 @@ func (c *Client) EnsureManagementNetwork(ctx context.Context, spec ManagementNet
 
 	return EnsureResult{Created: true}, nil
 }
-
 
 func (c *Client) TeardownManagementNetwork(ctx context.Context, name string, options MutationOptions) (TeardownResult, error) {
 	server, err := c.connect(ctx)
@@ -217,12 +216,12 @@ func validateManagementNetwork(network *api.Network, name string, force bool) er
 
 func applyManagementNetworkConfig(config api.ConfigMap, spec ManagementNetworkSpec) bool {
 	desired := map[string]string{
-		"ipv4.address":  spec.IPv4Address,
-		"ipv4.nat":      boolString(spec.IPv4NAT),
-		"ipv4.routing":  boolString(spec.IPv4Routing),
-		"ipv6.address":  spec.IPv6Address,
-		ownerKey:        ownerValue,
-		resourceKey:     resourceValue,
+		"ipv4.address": spec.IPv4Address,
+		"ipv4.nat":     boolString(spec.IPv4NAT),
+		"ipv4.routing": boolString(spec.IPv4Routing),
+		"ipv6.address": spec.IPv6Address,
+		ownerKey:       ownerValue,
+		resourceKey:    resourceValue,
 	}
 
 	changed := false
@@ -234,7 +233,6 @@ func applyManagementNetworkConfig(config api.ConfigMap, spec ManagementNetworkSp
 	}
 	return changed
 }
-
 
 type HerdrClientSpec struct {
 	Name              string
@@ -456,5 +454,3 @@ func boolString(value bool) string {
 	}
 	return "false"
 }
-
-

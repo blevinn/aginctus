@@ -47,7 +47,6 @@ func (c *Config) Get(path string) (any, bool) {
 	return current, true
 }
 
-
 func (c *Config) String(path string) (string, error) {
 	value, ok := c.Get(path)
 	if !ok {

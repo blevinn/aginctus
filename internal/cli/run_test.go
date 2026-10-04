@@ -12,8 +12,8 @@ import (
 )
 
 type fakeIncusClient struct {
-	version        string
-	err            error
+	version         string
+	err             error
 	networkResult   incus.EnsureResult
 	networkErr      error
 	networkSpec     incus.ManagementNetworkSpec
@@ -219,7 +219,6 @@ func TestUnknownCommand(t *testing.T) {
 	}
 }
 
-
 func TestNetworkEnsureDryRunOutput(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	loader := config.NewLoader()
@@ -308,7 +307,6 @@ func TestNetworkRejectsUnknownOption(t *testing.T) {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
-
 
 func TestHerdrClientEnsureUsesEffectiveConfiguration(t *testing.T) {
 	var stdout, stderr bytes.Buffer
