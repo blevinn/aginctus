@@ -69,6 +69,25 @@ go run ./cmd/aginctus network teardown
 
 Both `ensure` and `teardown` accept `--force`. Without it, Aginctus refuses to mutate a same-named bridge that lacks Aginctus ownership metadata. With `--force`, Aginctus may adopt or delete that same-named Incus-managed bridge. `--force` does not allow Aginctus to reinterpret an unmanaged network or a different network type.
 
+The next infrastructure slice can be exercised with:
+
+```sh
+go run ./cmd/aginctus herdr-client ensure --dry-run
+go run ./cmd/aginctus herdr-client ensure
+go run ./cmd/aginctus herdr-client teardown --dry-run
+go run ./cmd/aginctus herdr-client teardown
+```
+
+The Herdr client instance is an Aginctus-owned container attached to the
+configured management network. It does not install Herdr, SSH credentials, or
+machine configuration yet; this slice establishes only the container lifecycle
+and resource ownership boundary.
+
+Both lifecycle operations accept `--dry-run` and `--force`. Teardown stops a
+running owned container before deleting it. With `--force`, the stop request is
+also forced and a same-named container may be adopted or removed despite missing
+Aginctus ownership metadata, but a same-named VM is still rejected.
+
 Common development commands are available through `just`:
 
 ```sh
