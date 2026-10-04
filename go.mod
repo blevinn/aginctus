@@ -2,7 +2,10 @@ module github.com/blevinn/aginctus
 
 go 1.25.11
 
-require github.com/lxc/incus/v7 v7.0.1
+require (
+	github.com/google/go-jsonnet v0.22.0
+	github.com/lxc/incus/v7 v7.0.1
+)
 
 require (
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 // indirect
@@ -14,10 +17,13 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/cyphar/filepath-securejoin v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/fatih/color v1.18.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/klauspost/compress v1.19.0 // indirect
@@ -34,6 +40,7 @@ require (
 	github.com/pkg/sftp v1.13.10 // indirect
 	github.com/rootless-containers/proto/go-proto v0.0.0-20260207013450-f6ee952d53d9 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
+	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/urfave/cli v1.22.17 // indirect
 	github.com/vbatts/go-mtree v0.7.0 // indirect
@@ -52,4 +59,5 @@ require (
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
+	sigs.k8s.io/yaml v1.4.0 // indirect
 )
