@@ -1,6 +1,7 @@
 package incus
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -57,6 +58,8 @@ type Server interface {
 	UpdateInstance(string, api.InstancePut, string) (operation, error)
 	DeleteInstance(string) (operation, error)
 	UpdateInstanceState(string, api.InstanceStatePut, string) (operation, error)
+	CreateInstanceFile(string, string, incusclient.InstanceFileArgs) error
+	ExecInstance(string, api.InstanceExecPost, *incusclient.InstanceExecArgs) (operation, error)
 }
 
 type realServer struct {
@@ -448,4 +451,52 @@ func boolString(value bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+
+func (c *Client) InstanceArchitecture(ctx context.Context, name string) (string, error) {
+	server, err := c.connect(ctx)
+	if err != nil {
+		return "", fmt.Errorf("connect to local Incus daemon: %w", err)
+	}
+	instance, _, err := server.GetInstance(name)
+	if err != nil {
+		return "", fmt.Errorf("get instance %q: %w", name, err)
+	}
+	return instance.Architecture, nil
+}
+
+func (c *Client) WriteInstanceFile(ctx context.Context, name, path string, content []byte, mode int) error {
+	server, err := c.connect(ctx)
+	if err != nil {
+		return fmt.Errorf("connect to local Incus daemon: %w", err)
+	}
+	return server.CreateInstanceFile(name, path, incusclient.InstanceFileArgs{
+		Content: bytes.NewReader(content),
+		UID: 0,
+		GID: 0,
+		Mode: mode,
+		Type: "file",
+		WriteMode: "overwrite",
+	})
+}
+
+func (c *Client) ExecInstance(ctx context.Context, name string, command []string) (string, error) {
+	server, err := c.connect(ctx)
+	if err != nil {
+		return "", fmt.Errorf("connect to local Incus daemon: %w", err)
+	}
+	var stdout, stderr bytes.Buffer
+	op, err := server.ExecInstance(name, api.InstanceExecPost{
+		Command: command,
+		WaitForWS: true,
+		Interactive: false,
+	}, &incusclient.InstanceExecArgs{Stdout: &stdout, Stderr: &stderr})
+	if err != nil {
+		return "", fmt.Errorf("exec in %q: %w", name, err)
+	}
+	if err := op.Wait(); err != nil {
+		return "", fmt.Errorf("exec in %q failed: %w: %s", name, err, stderr.String())
+	}
+	return stdout.String(), nil
 }
