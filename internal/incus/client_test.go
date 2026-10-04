@@ -10,11 +10,15 @@ import (
 )
 
 type fakeServer struct {
-	server     *api.Server
-	serverErr  error
-	network    *api.Network
-	networkErr error
-	created    *api.NetworksPost
+	server       *api.Server
+	serverErr    error
+	network      *api.Network
+	networkErr   error
+	etag         string
+	created      *api.NetworksPost
+	updatedName  string
+	updatedPut   *api.NetworkPut
+	updateETag   string
 }
 
 func (s *fakeServer) GetServer() (*api.Server, string, error) {
@@ -22,11 +26,18 @@ func (s *fakeServer) GetServer() (*api.Server, string, error) {
 }
 
 func (s *fakeServer) GetNetwork(string) (*api.Network, string, error) {
-	return s.network, "", s.networkErr
+	return s.network, s.etag, s.networkErr
 }
 
 func (s *fakeServer) CreateNetwork(network api.NetworksPost) error {
 	s.created = &network
+	return nil
+}
+
+func (s *fakeServer) UpdateNetwork(name string, network api.NetworkPut, etag string) error {
+	s.updatedName = name
+	s.updatedPut = &network
+	s.updateETag = etag
 	return nil
 }
 
@@ -66,12 +77,12 @@ func TestEnsureManagementNetworkCreatesConfiguredNetwork(t *testing.T) {
 		IPv6Address: "none",
 	}
 
-	created, err := client.EnsureManagementNetwork(context.Background(), spec)
+	result, err := client.EnsureManagementNetwork(context.Background(), spec)
 	if err != nil {
 		t.Fatalf("EnsureManagementNetwork() error = %v", err)
 	}
-	if !created || server.created == nil {
-		t.Fatalf("created = %v, request = %#v", created, server.created)
+	if !result.Created || result.Updated || server.created == nil {
+		t.Fatalf("result = %#v, request = %#v", result, server.created)
 	}
 	if server.created.Name != spec.Name || server.created.Config["ipv4.address"] != spec.IPv4Address {
 		t.Fatalf("created network = %#v", server.created)
@@ -84,24 +95,78 @@ func TestEnsureManagementNetworkCreatesConfiguredNetwork(t *testing.T) {
 	}
 }
 
-func TestEnsureManagementNetworkAcceptsOwnedNetwork(t *testing.T) {
+func TestEnsureManagementNetworkLeavesMatchingOwnedNetworkUnchanged(t *testing.T) {
+	spec := ManagementNetworkSpec{
+		Name: "lab-mgmt",
+		IPv4Address: "10.42.0.1/24",
+		IPv4NAT: false,
+		IPv4Routing: false,
+		IPv6Address: "none",
+	}
 	server := &fakeServer{network: &api.Network{
 		Name: "lab-mgmt",
 		Type: "bridge",
 		Managed: true,
 		NetworkPut: api.NetworkPut{Config: api.ConfigMap{
+			"ipv4.address": "10.42.0.1/24",
+			"ipv4.nat": "false",
+			"ipv4.routing": "false",
+			"ipv6.address": "none",
 			ownerKey: ownerValue,
 			resourceKey: resourceValue,
 		}},
 	}}
 	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
 
-	created, err := client.EnsureManagementNetwork(context.Background(), ManagementNetworkSpec{Name: "lab-mgmt"})
+	result, err := client.EnsureManagementNetwork(context.Background(), spec)
 	if err != nil {
 		t.Fatalf("EnsureManagementNetwork() error = %v", err)
 	}
-	if created {
-		t.Fatal("EnsureManagementNetwork() created = true, want false")
+	if result.Created || result.Updated {
+		t.Fatalf("result = %#v, want unchanged", result)
+	}
+	if server.updatedPut != nil {
+		t.Fatal("UpdateNetwork() called for matching network")
+	}
+}
+
+func TestEnsureManagementNetworkUpdatesOwnedNetwork(t *testing.T) {
+	server := &fakeServer{
+		etag: "etag-1",
+		network: &api.Network{
+			Name: "lab-mgmt",
+			Type: "bridge",
+			Managed: true,
+			NetworkPut: api.NetworkPut{Config: api.ConfigMap{
+				"ipv4.address": "10.42.0.1/24",
+				"ipv4.nat": "false",
+				"ipv4.routing": "false",
+				"ipv6.address": "none",
+				ownerKey: ownerValue,
+				resourceKey: resourceValue,
+			}},
+		},
+	}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	result, err := client.EnsureManagementNetwork(context.Background(), ManagementNetworkSpec{
+		Name: "lab-mgmt",
+		IPv4Address: "10.42.0.1/24",
+		IPv4NAT: true,
+		IPv4Routing: false,
+		IPv6Address: "none",
+	})
+	if err != nil {
+		t.Fatalf("EnsureManagementNetwork() error = %v", err)
+	}
+	if result.Created || !result.Updated {
+		t.Fatalf("result = %#v, want updated", result)
+	}
+	if server.updatedPut == nil || server.updatedPut.Config["ipv4.nat"] != "true" {
+		t.Fatalf("updated network = %#v", server.updatedPut)
+	}
+	if server.updatedName != "lab-mgmt" || server.updateETag != "etag-1" {
+		t.Fatalf("update target = %q, etag = %q", server.updatedName, server.updateETag)
 	}
 }
 
