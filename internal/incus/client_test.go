@@ -19,6 +19,7 @@ type fakeServer struct {
 	updatedName  string
 	updatedPut   *api.NetworkPut
 	updateETag   string
+	deletedName  string
 }
 
 func (s *fakeServer) GetServer() (*api.Server, string, error) {
@@ -38,6 +39,11 @@ func (s *fakeServer) UpdateNetwork(name string, network api.NetworkPut, etag str
 	s.updatedName = name
 	s.updatedPut = &network
 	s.updateETag = etag
+	return nil
+}
+
+func (s *fakeServer) DeleteNetwork(name string) error {
+	s.deletedName = name
 	return nil
 }
 
@@ -77,7 +83,7 @@ func TestEnsureManagementNetworkCreatesConfiguredNetwork(t *testing.T) {
 		IPv6Address: "none",
 	}
 
-	result, err := client.EnsureManagementNetwork(context.Background(), spec)
+	result, err := client.EnsureManagementNetwork(context.Background(), spec, MutationOptions{})
 	if err != nil {
 		t.Fatalf("EnsureManagementNetwork() error = %v", err)
 	}
@@ -118,7 +124,7 @@ func TestEnsureManagementNetworkLeavesMatchingOwnedNetworkUnchanged(t *testing.T
 	}}
 	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
 
-	result, err := client.EnsureManagementNetwork(context.Background(), spec)
+	result, err := client.EnsureManagementNetwork(context.Background(), spec, MutationOptions{})
 	if err != nil {
 		t.Fatalf("EnsureManagementNetwork() error = %v", err)
 	}
@@ -155,7 +161,7 @@ func TestEnsureManagementNetworkUpdatesOwnedNetwork(t *testing.T) {
 		IPv4NAT: true,
 		IPv4Routing: false,
 		IPv6Address: "none",
-	})
+	}, MutationOptions{})
 	if err != nil {
 		t.Fatalf("EnsureManagementNetwork() error = %v", err)
 	}
@@ -179,8 +185,131 @@ func TestEnsureManagementNetworkRejectsUnownedCollision(t *testing.T) {
 	}}
 	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
 
-	_, err := client.EnsureManagementNetwork(context.Background(), ManagementNetworkSpec{Name: "lab-mgmt"})
+	_, err := client.EnsureManagementNetwork(context.Background(), ManagementNetworkSpec{Name: "lab-mgmt"}, MutationOptions{})
 	if err == nil || !strings.Contains(err.Error(), "not owned by Aginctus") {
 		t.Fatalf("EnsureManagementNetwork() error = %v", err)
+	}
+}
+
+
+func TestEnsureManagementNetworkDryRunDoesNotCreate(t *testing.T) {
+	server := &fakeServer{networkErr: api.StatusErrorf(404, "not found")}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	result, err := client.EnsureManagementNetwork(context.Background(), ManagementNetworkSpec{Name: "lab-mgmt"}, MutationOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("EnsureManagementNetwork() error = %v", err)
+	}
+	if !result.Created || !result.DryRun {
+		t.Fatalf("result = %#v", result)
+	}
+	if server.created != nil {
+		t.Fatal("CreateNetwork() called during dry run")
+	}
+}
+
+func TestEnsureManagementNetworkForceAdoptsUnownedBridge(t *testing.T) {
+	server := &fakeServer{network: &api.Network{
+		Name: "lab-mgmt",
+		Type: "bridge",
+		Managed: true,
+		NetworkPut: api.NetworkPut{Config: api.ConfigMap{}},
+	}}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	result, err := client.EnsureManagementNetwork(
+		context.Background(),
+		ManagementNetworkSpec{Name: "lab-mgmt", IPv4Address: "auto", IPv6Address: "none"},
+		MutationOptions{Force: true},
+	)
+	if err != nil {
+		t.Fatalf("EnsureManagementNetwork() error = %v", err)
+	}
+	if !result.Updated {
+		t.Fatalf("result = %#v, want updated", result)
+	}
+	if server.updatedPut == nil || server.updatedPut.Config[ownerKey] != ownerValue {
+		t.Fatalf("updated network = %#v", server.updatedPut)
+	}
+}
+
+func TestTeardownManagementNetworkDeletesOwnedNetwork(t *testing.T) {
+	server := &fakeServer{network: &api.Network{
+		Name: "lab-mgmt",
+		Type: "bridge",
+		Managed: true,
+		NetworkPut: api.NetworkPut{Config: api.ConfigMap{
+			ownerKey: ownerValue,
+			resourceKey: resourceValue,
+		}},
+	}}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	result, err := client.TeardownManagementNetwork(context.Background(), "lab-mgmt", MutationOptions{})
+	if err != nil {
+		t.Fatalf("TeardownManagementNetwork() error = %v", err)
+	}
+	if !result.Deleted || result.DryRun {
+		t.Fatalf("result = %#v", result)
+	}
+	if server.deletedName != "lab-mgmt" {
+		t.Fatalf("deletedName = %q", server.deletedName)
+	}
+}
+
+func TestTeardownManagementNetworkDryRunDoesNotDelete(t *testing.T) {
+	server := &fakeServer{network: &api.Network{
+		Name: "lab-mgmt",
+		Type: "bridge",
+		Managed: true,
+		NetworkPut: api.NetworkPut{Config: api.ConfigMap{
+			ownerKey: ownerValue,
+			resourceKey: resourceValue,
+		}},
+	}}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	result, err := client.TeardownManagementNetwork(context.Background(), "lab-mgmt", MutationOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("TeardownManagementNetwork() error = %v", err)
+	}
+	if !result.Deleted || !result.DryRun {
+		t.Fatalf("result = %#v", result)
+	}
+	if server.deletedName != "" {
+		t.Fatalf("DeleteNetwork() called during dry run: %q", server.deletedName)
+	}
+}
+
+func TestTeardownManagementNetworkForceDeletesUnownedBridge(t *testing.T) {
+	server := &fakeServer{network: &api.Network{
+		Name: "lab-mgmt",
+		Type: "bridge",
+		Managed: true,
+		NetworkPut: api.NetworkPut{Config: api.ConfigMap{}},
+	}}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	result, err := client.TeardownManagementNetwork(context.Background(), "lab-mgmt", MutationOptions{Force: true})
+	if err != nil {
+		t.Fatalf("TeardownManagementNetwork() error = %v", err)
+	}
+	if !result.Deleted || server.deletedName != "lab-mgmt" {
+		t.Fatalf("result = %#v deletedName = %q", result, server.deletedName)
+	}
+}
+
+func TestTeardownManagementNetworkRejectsUnownedWithoutForce(t *testing.T) {
+	server := &fakeServer{network: &api.Network{
+		Name: "lab-mgmt",
+		Type: "bridge",
+		Managed: true,
+		NetworkPut: api.NetworkPut{Config: api.ConfigMap{}},
+	}}
+	client := NewClientWithConnector(func(context.Context) (Server, error) { return server, nil })
+
+	_, err := client.TeardownManagementNetwork(context.Background(), "lab-mgmt", MutationOptions{})
+	if err == nil || !strings.Contains(err.Error(), "use --force") {
+		t.Fatalf("TeardownManagementNetwork() error = %v", err)
 	}
 }
