@@ -54,6 +54,11 @@
                   system.stateVersion = "26.05";
 
                   environment.systemPackages = [ herdrPackage ];
+                  environment.variables = {
+                    XDG_CONFIG_HOME = "/var/lib/herdr/config";
+                    XDG_RUNTIME_DIR = "/run/herdr";
+                    XDG_STATE_HOME = "/var/lib/herdr";
+                  };
 
                   systemd.services.herdr = {
                     description = "Herdr headless server";
@@ -62,10 +67,17 @@
                     wants = [ "network-online.target" ];
 
                     serviceConfig = {
-                      Environment = "HOME=/root";
+                      Environment = [
+                        "HOME=/root"
+                        "XDG_CONFIG_HOME=/var/lib/herdr/config"
+                        "XDG_RUNTIME_DIR=/run/herdr"
+                        "XDG_STATE_HOME=/var/lib/herdr"
+                      ];
                       ExecStart = "${herdrPackage}/bin/herdr server";
                       Restart = "on-failure";
                       RestartSec = "2s";
+                      RuntimeDirectory = "herdr";
+                      StateDirectory = "herdr";
                     };
                   };
                 }
