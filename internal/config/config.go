@@ -137,7 +137,6 @@ var defaults = map[string]any{
 					"aarch64": "f4ccf4de745f2cb9a39a983e9ba3703dad50ec2a58dea83026ceab721bbd8d9e",
 				},
 			},
-			"start": true,
 		},
 	},
 	"incus": map[string]any{
