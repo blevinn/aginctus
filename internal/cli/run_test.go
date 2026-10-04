@@ -331,6 +331,9 @@ func TestHerdrClientEnsureUsesEffectiveConfiguration(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
 	}
+	if client.networkSpec.Name != "lab-mgmt" || !client.networkOptions.DryRun {
+		t.Fatalf("network dependency = %#v options = %#v", client.networkSpec, client.networkOptions)
+	}
 	if client.herdrSpec.Name != "lab-herdr" || client.herdrSpec.ImageAlias != "lab-herdr-image" || client.herdrSpec.StoragePool != "fast" || client.herdrSpec.ManagementNetwork != "lab-mgmt" {
 		t.Fatalf("Herdr spec = %#v", client.herdrSpec)
 	}
@@ -361,5 +364,31 @@ func TestHerdrClientTeardownUsesConfiguredName(t *testing.T) {
 	}
 	if client.herdrName != "lab-herdr" || !client.herdrOptions.Force {
 		t.Fatalf("name = %q options = %#v", client.herdrName, client.herdrOptions)
+	}
+}
+
+
+func TestHerdrClientEnsureStopsWhenManagementNetworkEnsureFails(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{networkErr: errors.New("network failed")}
+
+	code := Run(
+		context.Background(),
+		[]string{"herdr", "client", "ensure"},
+		&stdout, &stderr, client, loader,
+	)
+
+	if code != 1 {
+		t.Fatalf("Run() code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "network failed") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+	if client.herdrSpec.Name != "" {
+		t.Fatalf("Herdr ensure called after network failure: %#v", client.herdrSpec)
 	}
 }
