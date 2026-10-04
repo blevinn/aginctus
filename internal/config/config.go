@@ -94,15 +94,17 @@ func (l *Loader) Load(options Options) (*Config, error) {
 
 var defaults = map[string]any{
 	"incus": map[string]any{
-		"management_network": map[string]any{
-			"name": "aginctus-mgmt",
-			"ipv4": map[string]any{
-				"address": "auto",
-				"nat":     false,
-				"routing": false,
-			},
-			"ipv6": map[string]any{
-				"address": "none",
+		"management": map[string]any{
+			"network": map[string]any{
+				"name": "aginctus-mgmt",
+				"ipv4": map[string]any{
+					"address": "auto",
+					"nat":     false,
+					"routing": false,
+				},
+				"ipv6": map[string]any{
+					"address": "none",
+				},
 			},
 		},
 	},
