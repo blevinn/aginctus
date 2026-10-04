@@ -83,7 +83,7 @@ func TestDefaultManagementNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	got, ok := cfg.Get("incus.management_network.name")
+	got, ok := cfg.Get("incus.management.network.name")
 	if !ok || got != "aginctus-mgmt" {
 		t.Fatalf("management network name = %#v, %v", got, ok)
 	}
