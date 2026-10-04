@@ -24,10 +24,16 @@ type ManagementNetworkSpec struct {
 	IPv6Address string
 }
 
+type EnsureResult struct {
+	Created bool
+	Updated bool
+}
+
 type Server interface {
 	GetServer() (*api.Server, string, error)
 	GetNetwork(string) (*api.Network, string, error)
 	CreateNetwork(api.NetworksPost) error
+	UpdateNetwork(string, api.NetworkPut, string) error
 }
 
 type Connector func(context.Context) (Server, error)
@@ -60,21 +66,33 @@ func (c *Client) ServerVersion(ctx context.Context) (string, error) {
 	return status.Environment.ServerVersion, nil
 }
 
-func (c *Client) EnsureManagementNetwork(ctx context.Context, spec ManagementNetworkSpec) (bool, error) {
+func (c *Client) EnsureManagementNetwork(ctx context.Context, spec ManagementNetworkSpec) (EnsureResult, error) {
 	server, err := c.connect(ctx)
 	if err != nil {
-		return false, fmt.Errorf("connect to local Incus daemon: %w", err)
+		return EnsureResult{}, fmt.Errorf("connect to local Incus daemon: %w", err)
 	}
 
-	network, _, err := server.GetNetwork(spec.Name)
+	network, etag, err := server.GetNetwork(spec.Name)
 	if err == nil {
 		if err := validateManagementNetwork(network, spec.Name); err != nil {
-			return false, err
+			return EnsureResult{}, err
 		}
-		return false, nil
+
+		update := network.Writable()
+		if update.Config == nil {
+			update.Config = api.ConfigMap{}
+		}
+		changed := applyManagementNetworkConfig(update.Config, spec)
+		if !changed {
+			return EnsureResult{}, nil
+		}
+		if err := server.UpdateNetwork(spec.Name, update, etag); err != nil {
+			return EnsureResult{}, fmt.Errorf("update management network %q: %w", spec.Name, err)
+		}
+		return EnsureResult{Updated: true}, nil
 	}
 	if !api.StatusErrorCheck(err, http.StatusNotFound) {
-		return false, fmt.Errorf("get management network %q: %w", spec.Name, err)
+		return EnsureResult{}, fmt.Errorf("get management network %q: %w", spec.Name, err)
 	}
 
 	err = server.CreateNetwork(api.NetworksPost{
@@ -93,10 +111,10 @@ func (c *Client) EnsureManagementNetwork(ctx context.Context, spec ManagementNet
 		},
 	})
 	if err != nil {
-		return false, fmt.Errorf("create management network %q: %w", spec.Name, err)
+		return EnsureResult{}, fmt.Errorf("create management network %q: %w", spec.Name, err)
 	}
 
-	return true, nil
+	return EnsureResult{Created: true}, nil
 }
 
 func validateManagementNetwork(network *api.Network, name string) error {
@@ -110,6 +128,26 @@ func validateManagementNetwork(network *api.Network, name string) error {
 		return fmt.Errorf("network %q already exists but is not owned by Aginctus", name)
 	}
 	return nil
+}
+
+func applyManagementNetworkConfig(config api.ConfigMap, spec ManagementNetworkSpec) bool {
+	desired := map[string]string{
+		"ipv4.address":  spec.IPv4Address,
+		"ipv4.nat":      boolString(spec.IPv4NAT),
+		"ipv4.routing":  boolString(spec.IPv4Routing),
+		"ipv6.address":  spec.IPv6Address,
+		ownerKey:        ownerValue,
+		resourceKey:     resourceValue,
+	}
+
+	changed := false
+	for key, value := range desired {
+		if config[key] != value {
+			config[key] = value
+			changed = true
+		}
+	}
+	return changed
 }
 
 func boolString(value bool) string {
