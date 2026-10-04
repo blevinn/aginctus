@@ -18,24 +18,24 @@ func (o fakeOperation) Wait() error {
 }
 
 type fakeServer struct {
-	server          *api.Server
-	serverErr       error
-	network         *api.Network
-	networkErr      error
-	etag            string
-	created         *api.NetworksPost
-	updatedName     string
-	updatedPut      *api.NetworkPut
-	updateETag      string
-	deletedName     string
-	instance        *api.Instance
-	instanceErr     error
-	instanceETag    string
-	createdInstance *api.InstancesPost
+	server            *api.Server
+	serverErr         error
+	network           *api.Network
+	networkErr        error
+	etag              string
+	created           *api.NetworksPost
+	updatedName       string
+	updatedPut        *api.NetworkPut
+	updateETag        string
+	deletedName       string
+	instance          *api.Instance
+	instanceErr       error
+	instanceETag      string
+	createdInstance   *api.InstancesPost
 	createdImageAlias string
-	updatedInstance *api.InstancePut
-	deletedInstance string
-	stateChange     *api.InstanceStatePut
+	updatedInstance   *api.InstancePut
+	deletedInstance   string
+	stateChange       *api.InstanceStatePut
 }
 
 func (s *fakeServer) GetServer() (*api.Server, string, error) {
@@ -384,7 +384,7 @@ func TestEnsureHerdrClientCreatesContainer(t *testing.T) {
 	if got := server.createdInstance.Devices["root"]["pool"]; got != "default" {
 		t.Fatalf("storage pool = %q", got)
 	}
-		if len(server.createdInstance.Profiles) != 0 {
+	if len(server.createdInstance.Profiles) != 0 {
 		t.Fatalf("profiles = %#v, want none", server.createdInstance.Profiles)
 	}
 }

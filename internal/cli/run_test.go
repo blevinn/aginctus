@@ -367,7 +367,6 @@ func TestHerdrClientTeardownUsesConfiguredName(t *testing.T) {
 	}
 }
 
-
 func TestHerdrClientEnsureStopsWhenManagementNetworkEnsureFails(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	loader := config.NewLoader()
@@ -392,7 +391,6 @@ func TestHerdrClientEnsureStopsWhenManagementNetworkEnsureFails(t *testing.T) {
 		t.Fatalf("Herdr ensure called after network failure: %#v", client.herdrSpec)
 	}
 }
-
 
 func TestGatewayRenderUsesEffectiveConfiguration(t *testing.T) {
 	var stdout, stderr bytes.Buffer
