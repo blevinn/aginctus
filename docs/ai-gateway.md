@@ -1,6 +1,6 @@
 # AI gateway design
 
-Status: agreed design direction; initial configuration validation and Compose rendering are implemented, while lifecycle, authentication, credentials, MCP policy, and backup/restore remain follow-up work.
+Status: agreed design direction; configuration validation, Compose rendering, and initial orchestration-backed deployment are implemented, while authentication, credential management, MCP policy, teardown/status, health, and backup/restore remain follow-up work.
 
 ## Scope
 
@@ -14,16 +14,19 @@ Multi-tenancy, multiple gateways, federation, a central control plane, high avai
 
 ## Initial implementation slice
 
-The first implementation exposes:
+The current implementation exposes:
 
 ```text
 aginctus gateway validate
 aginctus gateway render
+aginctus gateway up
 ```
 
-The effective configuration currently provides a stable gateway ID, Compose project name, management network, and pinned LiteLLM/PostgreSQL images. `gateway render` emits a deterministic Compose model for LiteLLM plus PostgreSQL and references runtime secrets through environment variables rather than embedding credentials.
+The effective configuration provides a stable gateway ID, Compose project name, management network, and pinned LiteLLM/PostgreSQL images. `gateway render` emits a deterministic Compose model for LiteLLM plus PostgreSQL and references runtime secrets through environment variables rather than embedding credentials.
 
-This slice deliberately does not mutate Incus. Deployment will be wired through the declarative orchestration/Compose integration so the gateway does not introduce another bespoke reconciliation path.
+`gateway up` evaluates the embedded `gateway.jsonnet` orchestration resource and executes its Compose step through the direct Go `incus-compose` driver. The generated plan contains only secret references. The PostgreSQL password, LiteLLM master key, and LiteLLM salt key must be supplied at runtime through `AGINCTUS_GATEWAY_POSTGRES_PASSWORD`, `AGINCTUS_GATEWAY_MASTER_KEY`, and `AGINCTUS_GATEWAY_SALT_KEY`.
+
+The management network remains a transitional prerequisite: until the Apply driver is available, `gateway up` ensures it through the existing management-network reconciler before running the Compose orchestration step. The gateway services themselves do not introduce a bespoke reconciliation path.
 
 ## Deployment and ownership
 
