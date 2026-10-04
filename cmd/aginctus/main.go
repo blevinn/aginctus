@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/blevinn/aginctus/internal/cli"
+	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/incus"
 )
 
@@ -15,5 +16,6 @@ func main() {
 		os.Stdout,
 		os.Stderr,
 		incus.NewClient(),
+		config.NewLoader(),
 	))
 }
