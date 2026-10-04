@@ -1,6 +1,6 @@
 # Declarative orchestration design
 
-Status: accepted design; the typed plan, embedded/restricted Jsonnet generator, and sequential driver engine are implemented. Apply/Compose driver integrations and migration of existing lifecycle commands remain follow-up work.
+Status: accepted design; the typed plan, embedded/restricted Jsonnet generator, sequential driver engine, and initial direct Go incus-compose driver are implemented. The apply driver and migration of existing lifecycle commands remain follow-up work.
 
 ## Goal
 
@@ -346,4 +346,4 @@ The first implementation establishes the Aginctus-owned orchestration contract w
 - dry-run execution is rejected when any selected driver cannot support it;
 - unit tests use in-memory fake drivers and do not require Incus.
 
-The next implementation step is to add the first real driver integration while preserving this boundary.
+The first real driver integration now uses `github.com/lxc/incus-compose` directly. It validates Compose content, stamps Aginctus ownership metadata on the project and generated instances, and performs ensure/start through the incus-compose client and stack APIs. It does not claim dry-run support because incus-compose does not currently expose an adequate planning contract. The apply integration remains blocked on a native, non-subprocess backend.
