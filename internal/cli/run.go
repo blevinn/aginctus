@@ -15,7 +15,7 @@ const Version = "0.0.0-dev"
 
 type IncusClient interface {
 	ServerVersion(context.Context) (string, error)
-	EnsureManagementNetwork(context.Context, incus.ManagementNetworkSpec) (bool, error)
+	EnsureManagementNetwork(context.Context, incus.ManagementNetworkSpec) (incus.EnsureResult, error)
 }
 
 type ConfigLoader interface {
@@ -195,15 +195,18 @@ func runNetwork(
 		return 1
 	}
 
-	created, err := incusClient.EnsureManagementNetwork(ctx, spec)
+	result, err := incusClient.EnsureManagementNetwork(ctx, spec)
 	if err != nil {
 		fmt.Fprintf(stderr, "management network: %v\n", err)
 		return 1
 	}
 
-	if created {
+	switch {
+	case result.Created:
 		fmt.Fprintf(stdout, "management network %q: created\n", spec.Name)
-	} else {
+	case result.Updated:
+		fmt.Fprintf(stdout, "management network %q: updated\n", spec.Name)
+	default:
 		fmt.Fprintf(stdout, "management network %q: ready\n", spec.Name)
 	}
 	return 0
