@@ -307,6 +307,16 @@ func runHerdr(
 
 	switch args[0] {
 	case "ensure":
+		networkSpec, err := managementNetworkSpec(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
+			return 1
+		}
+		if _, err := incusClient.EnsureManagementNetwork(ctx, networkSpec, options); err != nil {
+			fmt.Fprintf(stderr, "management network: %v\n", err)
+			return 1
+		}
+
 		spec, err := herdrClientSpec(effective)
 		if err != nil {
 			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
