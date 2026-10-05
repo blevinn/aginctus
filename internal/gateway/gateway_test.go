@@ -9,11 +9,15 @@ import (
 
 func TestRenderCompose(t *testing.T) {
 	spec := Spec{
-		ID:            "local",
-		Project:       "aginctus-gateway",
-		Network:       "aginctus-mgmt",
-		LiteLLMImage:  "ghcr.io/berriai/litellm:v1.103.0-stable",
-		PostgresImage: "docker.io/library/postgres:17-alpine",
+		ID:                 "local",
+		Project:            "aginctus-gateway",
+		Network:            "aginctus-mgmt",
+		NetworkIPv4Address: "10.42.0.1/24",
+		NetworkIPv4NAT:     false,
+		NetworkIPv4Routing: false,
+		NetworkIPv6Address: "none",
+		LiteLLMImage:       "ghcr.io/berriai/litellm:v1.103.0-stable",
+		PostgresImage:      "docker.io/library/postgres:17-alpine",
 	}
 
 	rendered, err := spec.RenderCompose()
@@ -41,7 +45,7 @@ func TestValidateRejectsEmptyImage(t *testing.T) {
 	}
 }
 
-func TestOrchestrationPlanUsesComposeDriverAndSecretReferences(t *testing.T) {
+func TestOrchestrationPlanOrdersNetworkBeforeComposeAndKeepsSecretReferences(t *testing.T) {
 	spec := Spec{
 		ID:            "local",
 		Project:       "aginctus-gateway",
@@ -54,10 +58,22 @@ func TestOrchestrationPlanUsesComposeDriverAndSecretReferences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OrchestrationPlan() error = %v", err)
 	}
-	if len(plan.Steps) != 1 || plan.Steps[0].Driver != "compose" {
+	if len(plan.Steps) != 2 {
 		t.Fatalf("plan steps = %#v", plan.Steps)
 	}
-	configuration := string(plan.Steps[0].Configuration)
+	if plan.Steps[0].ID != "management-network" || plan.Steps[0].Driver != "apply" {
+		t.Fatalf("first plan step = %#v", plan.Steps[0])
+	}
+	if plan.Steps[1].ID != "gateway" || plan.Steps[1].Driver != "compose" {
+		t.Fatalf("second plan step = %#v", plan.Steps[1])
+	}
+	networkConfiguration := string(plan.Steps[0].Configuration)
+	for _, want := range []string{"aginctus-mgmt", "10.42.0.1/24", "user.aginctus.managed", "management-network"} {
+		if !strings.Contains(networkConfiguration, want) {
+			t.Fatalf("network configuration missing %q: %s", want, networkConfiguration)
+		}
+	}
+	configuration := string(plan.Steps[1].Configuration)
 	for _, want := range []string{
 		"aginctus-gateway",
 		`${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}`,
