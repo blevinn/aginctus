@@ -316,8 +316,9 @@ func runGateway(
 		fmt.Fprint(stdout, rendered)
 		return 0
 	case "up":
-		if err := gateway.ValidateRuntimeEnvironment(); err != nil {
-			fmt.Fprintf(stderr, "gateway runtime: %v\n", err)
+		runtimeEnvironment, err := spec.InitializeRuntimeEnvironment()
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
 			return 1
 		}
 		networkSpec, err := managementNetworkSpec(effective)
@@ -329,7 +330,7 @@ func runGateway(
 			fmt.Fprintf(stderr, "management network: %v\n", err)
 			return 1
 		}
-		if err := spec.Deploy(ctx); err != nil {
+		if err := spec.Deploy(ctx, runtimeEnvironment); err != nil {
 			fmt.Fprintf(stderr, "gateway deployment: %v\n", err)
 			return 1
 		}
