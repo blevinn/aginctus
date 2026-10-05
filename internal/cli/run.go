@@ -321,15 +321,6 @@ func runGateway(
 			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
 			return 1
 		}
-		networkSpec, err := managementNetworkSpec(effective)
-		if err != nil {
-			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
-			return 1
-		}
-		if _, err := incusClient.EnsureManagementNetwork(ctx, networkSpec, incus.MutationOptions{}); err != nil {
-			fmt.Fprintf(stderr, "management network: %v\n", err)
-			return 1
-		}
 		if err := spec.Deploy(ctx, runtimeEnvironment); err != nil {
 			fmt.Fprintf(stderr, "gateway deployment: %v\n", err)
 			return 1

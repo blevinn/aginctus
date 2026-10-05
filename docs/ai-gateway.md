@@ -28,7 +28,7 @@ The effective configuration provides a stable gateway ID, Compose project name, 
 
 Generated gateway secret state is stored outside declarative configuration under the XDG state directory (normally `~/.local/state/aginctus/gateway/<id>/secrets.json`) with restrictive permissions. Secret values are injected into the Compose loader out-of-band and never enter Jsonnet or the generated orchestration plan. Explicit credential rotation remains future lifecycle work.
 
-The management network remains a transitional prerequisite: until the Apply driver is available, `gateway up` ensures it through the existing management-network reconciler before running the Compose orchestration step. The gateway services themselves do not introduce a bespoke reconciliation path.
+The management network is now part of the same generated orchestration plan as the gateway. `gateway up` executes an Apply step first using the native `incus-apply` backend, then executes the Compose step only after the network succeeds. The network document carries Aginctus ownership metadata and the configured IPv4/IPv6 policy, so gateway deployment no longer calls the bespoke management-network ensure path.
 
 ## Deployment and ownership
 

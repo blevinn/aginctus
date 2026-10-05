@@ -13,15 +13,20 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/orchestration"
+	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
 )
 
 type Spec struct {
-	ID            string
-	Project       string
-	Network       string
-	LiteLLMImage  string
-	PostgresImage string
+	ID                 string
+	Project            string
+	Network            string
+	NetworkIPv4Address string
+	NetworkIPv4NAT     bool
+	NetworkIPv4Routing bool
+	NetworkIPv6Address string
+	LiteLLMImage       string
+	PostgresImage      string
 }
 
 func FromConfig(effective *config.Config) (Spec, error) {
@@ -38,6 +43,8 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		{"gateway.id", &spec.ID},
 		{"gateway.compose.project", &spec.Project},
 		{"incus.management.network.name", &spec.Network},
+		{"incus.management.network.ipv4.address", &spec.NetworkIPv4Address},
+		{"incus.management.network.ipv6.address", &spec.NetworkIPv6Address},
 		{"gateway.images.litellm", &spec.LiteLLMImage},
 		{"gateway.images.postgres", &spec.PostgresImage},
 	}
@@ -48,6 +55,16 @@ func FromConfig(effective *config.Config) (Spec, error) {
 			return Spec{}, err
 		}
 		*key.dst = value
+	}
+
+	var err error
+	spec.NetworkIPv4NAT, err = effective.Bool("incus.management.network.ipv4.nat")
+	if err != nil {
+		return Spec{}, err
+	}
+	spec.NetworkIPv4Routing, err = effective.Bool("incus.management.network.ipv4.routing")
+	if err != nil {
+		return Spec{}, err
 	}
 
 	if err := spec.Validate(); err != nil {
@@ -135,9 +152,15 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 	return generator.Evaluate(
 		"import 'aginctus/gateway.jsonnet'",
 		map[string]any{
-			"id":            s.ID,
-			"project":       s.Project,
-			"network":       s.Network,
+			"id":      s.ID,
+			"project": s.Project,
+			"network": map[string]any{
+				"name":        s.Network,
+				"ipv4Address": s.NetworkIPv4Address,
+				"ipv4Nat":     s.NetworkIPv4NAT,
+				"ipv4Routing": s.NetworkIPv4Routing,
+				"ipv6Address": s.NetworkIPv6Address,
+			},
 			"litellmImage":  s.LiteLLMImage,
 			"postgresImage": s.PostgresImage,
 		},
@@ -254,6 +277,7 @@ func (s Spec) Deploy(ctx context.Context, runtimeEnvironment map[string]string) 
 		return err
 	}
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
+		"apply":   applydriver.New(),
 		"compose": composedriver.NewWithEnvironment(runtimeEnvironment),
 	})
 	if _, err := engine.Execute(ctx, plan, orchestration.ExecuteOptions{}); err != nil {
