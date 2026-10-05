@@ -106,3 +106,45 @@ func TestRenderDocumentsProducesYAMLStream(t *testing.T) {
 		t.Fatalf("rendered stream = %q", rendered)
 	}
 }
+
+
+func TestExecuteMapsDeleteOperationAndExistingResourceGuard(t *testing.T) {
+	fake := &fakeApplyClient{}
+	driver := New()
+	driver.newClient = func(options incusapply.Options) applyClient {
+		if options.Operation != incusapply.Delete {
+			t.Fatalf("Operation = %q, want delete", options.Operation)
+		}
+		if options.RequireExistingConfig["user.aginctus.managed"] != "true" {
+			t.Fatalf("RequireExistingConfig = %#v", options.RequireExistingConfig)
+		}
+		return fake
+	}
+
+	err := driver.Execute(t.Context(), []byte(`{
+		"operation": "delete",
+		"requireExistingConfig": {
+			"user.aginctus.managed": "true"
+		},
+		"documents": [{
+			"kind": "network",
+			"name": "aginctus-mgmt"
+		}]
+	}`), orchestration.ExecuteOptions{})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if !fake.executed {
+		t.Fatal("Execute() did not call incus-apply")
+	}
+}
+
+func TestValidateRejectsUnknownApplyOperation(t *testing.T) {
+	err := New().Validate([]byte(`{
+		"operation": "explode",
+		"documents": [{"kind":"network","name":"aginctus-mgmt"}]
+	}`))
+	if err == nil {
+		t.Fatal("Validate() error = nil, want unsupported operation error")
+	}
+}
