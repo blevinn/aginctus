@@ -4,7 +4,6 @@ local cfg = std.extVar('config');
 ag.orchestration(cfg.id, [
   ag.compose('gateway', {
     project: cfg.project,
-    processEnvironment: true,
     compose: {
       name: cfg.project,
       services: {
