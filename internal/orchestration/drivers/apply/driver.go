@@ -81,6 +81,13 @@ func parseConfig(raw json.RawMessage) (Config, error) {
 	if err := decoder.Decode(&cfg); err != nil {
 		return Config{}, fmt.Errorf("decode apply driver configuration: %w", err)
 	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return Config{}, fmt.Errorf("decode apply driver configuration: unexpected trailing JSON")
+		}
+		return Config{}, fmt.Errorf("decode apply driver configuration trailing data: %w", err)
+	}
 	if len(cfg.Documents) == 0 {
 		return Config{}, fmt.Errorf("apply driver requires at least one document")
 	}
