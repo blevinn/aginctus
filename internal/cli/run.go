@@ -9,6 +9,7 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
+	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 )
@@ -17,8 +18,6 @@ const Version = "0.0.0-dev"
 
 type IncusClient interface {
 	ServerVersion(context.Context) (string, error)
-	EnsureHerdrClient(context.Context, incus.HerdrClientSpec, incus.MutationOptions) (incus.EnsureResult, error)
-	TeardownHerdrClient(context.Context, string, incus.MutationOptions) (incus.TeardownResult, error)
 }
 
 type ConfigLoader interface {
@@ -26,6 +25,10 @@ type ConfigLoader interface {
 }
 
 var executeManagementNetwork = func(ctx context.Context, spec managementnetwork.Spec, options managementnetwork.Options) error {
+	return spec.Execute(ctx, options)
+}
+
+var executeHerdrClient = func(ctx context.Context, spec herdrclient.Spec, options herdrclient.Options) error {
 	return spec.Execute(ctx, options)
 }
 
@@ -340,100 +343,41 @@ func runHerdr(
 		return 2
 	}
 
-	switch args[0] {
-	case "ensure":
-		networkSpec, err := managementnetwork.FromConfig(effective)
-		if err != nil {
-			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
-			return 1
-		}
-		if err := executeManagementNetwork(ctx, networkSpec, managementnetwork.Options{
-			DryRun: options.DryRun,
-			Force:  options.Force,
-		}); err != nil {
-			fmt.Fprintf(stderr, "management network: %v\n", err)
-			return 1
-		}
+	spec, err := herdrclient.FromConfig(effective)
+	if err != nil {
+		fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
+		return 1
+	}
 
-		spec, err := herdrClientSpec(effective)
-		if err != nil {
-			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
-			return 1
-		}
-		result, err := incusClient.EnsureHerdrClient(ctx, spec, options)
-		if err != nil {
-			fmt.Fprintf(stderr, "Herdr client: %v\n", err)
-			return 1
-		}
-
-		switch {
-		case result.DryRun && result.Created:
-			fmt.Fprintf(stdout, "Herdr client %q: would create\n", spec.Name)
-		case result.DryRun && result.Updated:
-			fmt.Fprintf(stdout, "Herdr client %q: would update\n", spec.Name)
-		case result.Created:
-			fmt.Fprintf(stdout, "Herdr client %q: created\n", spec.Name)
-		case result.Updated:
-			fmt.Fprintf(stdout, "Herdr client %q: updated\n", spec.Name)
-		default:
-			fmt.Fprintf(stdout, "Herdr client %q: ready\n", spec.Name)
-		}
-		return 0
-
-	case "teardown":
-		name, err := effective.String("infrastructure.herdr.name")
-		if err != nil {
-			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
-			return 1
-		}
-		result, err := incusClient.TeardownHerdrClient(ctx, name, options)
-		if err != nil {
-			fmt.Fprintf(stderr, "Herdr client: %v\n", err)
-			return 1
-		}
-		switch {
-		case result.DryRun && result.Deleted:
-			fmt.Fprintf(stdout, "Herdr client %q: would delete\n", name)
-		case result.Deleted:
-			fmt.Fprintf(stdout, "Herdr client %q: deleted\n", name)
-		default:
-			fmt.Fprintf(stdout, "Herdr client %q: absent\n", name)
-		}
-		return 0
-
-	default:
+	operation := "upsert"
+	if args[0] == "teardown" {
+		operation = "delete"
+	} else if args[0] != "ensure" {
 		printHerdrClientUsage(stderr)
 		return 2
 	}
-}
 
-func herdrClientSpec(effective *config.Config) (incus.HerdrClientSpec, error) {
-	name, err := effective.String("infrastructure.herdr.name")
+	err = executeHerdrClient(ctx, spec, herdrclient.Options{
+		DryRun:    options.DryRun,
+		Force:     options.Force,
+		Operation: operation,
+	})
 	if err != nil {
-		return incus.HerdrClientSpec{}, err
-	}
-	alias, err := effective.String("infrastructure.herdr.image.alias")
-	if err != nil {
-		return incus.HerdrClientSpec{}, err
-	}
-	pool, err := effective.String("infrastructure.herdr.storage.pool")
-	if err != nil {
-		return incus.HerdrClientSpec{}, err
-	}
-	network, err := effective.String("incus.management.network.name")
-	if err != nil {
-		return incus.HerdrClientSpec{}, err
-	}
-	if name == "" || alias == "" || pool == "" || network == "" {
-		return incus.HerdrClientSpec{}, fmt.Errorf("Herdr client name, image alias, storage pool, and management network must not be empty")
+		fmt.Fprintf(stderr, "Herdr client: %v\n", err)
+		return 1
 	}
 
-	return incus.HerdrClientSpec{
-		Name:              name,
-		ImageAlias:        alias,
-		StoragePool:       pool,
-		ManagementNetwork: network,
-	}, nil
+	switch {
+	case args[0] == "ensure" && options.DryRun:
+		fmt.Fprintf(stdout, "Herdr client %q: would reconcile\n", spec.Name)
+	case args[0] == "ensure":
+		fmt.Fprintf(stdout, "Herdr client %q: ready\n", spec.Name)
+	case options.DryRun:
+		fmt.Fprintf(stdout, "Herdr client %q: would delete if present\n", spec.Name)
+	default:
+		fmt.Fprintf(stdout, "Herdr client %q: absent\n", spec.Name)
+	}
+	return 0
 }
 
 func printHerdrClientUsage(w io.Writer) {
