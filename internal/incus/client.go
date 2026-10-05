@@ -3,27 +3,10 @@ package incus
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 )
-
-type MutationOptions struct {
-	DryRun bool
-	Force  bool
-}
-
-type EnsureResult struct {
-	Created bool
-	Updated bool
-	DryRun  bool
-}
-
-type TeardownResult struct {
-	Deleted bool
-	DryRun  bool
-}
 
 type Server interface {
 	GetServer() (*api.Server, string, error)
@@ -41,7 +24,7 @@ func NewClient() *Client {
 		if err != nil {
 			return nil, err
 		}
-		return realServer{InstanceServer: server}, nil
+		return server, nil
 	}}
 }
 
