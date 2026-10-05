@@ -11,6 +11,7 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/managementnetwork"
 )
 
 type fakeIncusClient struct {
@@ -77,6 +78,14 @@ func (l *fakeConfigLoader) Load(options config.Options) (*config.Config, error) 
 	return (&config.Loader{}).Load(config.Options{})
 }
 
+
+func stubManagementNetwork(t *testing.T, fn func(context.Context, managementnetwork.Spec, managementnetwork.Options) error) {
+	t.Helper()
+	previous := executeManagementNetwork
+	executeManagementNetwork = fn
+	t.Cleanup(func() { executeManagementNetwork = previous })
+}
+
 func TestDoctorSuccess(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	loader := &fakeConfigLoader{}
@@ -141,7 +150,15 @@ func TestNetworkEnsureUsesEffectiveConfiguration(t *testing.T) {
 	loader.SystemPath = ""
 	loader.UserPath = ""
 	loader.Environment = nil
-	client := &fakeIncusClient{networkResult: incus.EnsureResult{Created: true}}
+	client := &fakeIncusClient{}
+
+	var gotSpec managementnetwork.Spec
+	var gotOptions managementnetwork.Options
+	stubManagementNetwork(t, func(_ context.Context, spec managementnetwork.Spec, options managementnetwork.Options) error {
+		gotSpec = spec
+		gotOptions = options
+		return nil
+	})
 
 	code := Run(
 		context.Background(),
@@ -157,16 +174,16 @@ func TestNetworkEnsureUsesEffectiveConfiguration(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
 	}
-	if client.networkSpec.Name != "lab-mgmt" || client.networkSpec.IPv4Address != "10.42.0.1/24" {
-		t.Fatalf("network spec = %#v", client.networkSpec)
+	if gotSpec.Name != "lab-mgmt" || gotSpec.IPv4Address != "10.42.0.1/24" {
+		t.Fatalf("network spec = %#v", gotSpec)
 	}
-	if !client.networkSpec.IPv4NAT || client.networkSpec.IPv4Routing {
-		t.Fatalf("network policy = %#v", client.networkSpec)
+	if !gotSpec.IPv4NAT || gotSpec.IPv4Routing {
+		t.Fatalf("network policy = %#v", gotSpec)
 	}
-	if !client.networkOptions.DryRun || !client.networkOptions.Force {
-		t.Fatalf("network options = %#v", client.networkOptions)
+	if !gotOptions.DryRun || !gotOptions.Force || gotOptions.Operation != "upsert" {
+		t.Fatalf("network options = %#v", gotOptions)
 	}
-	if !strings.Contains(stdout.String(), "created") {
+	if !strings.Contains(stdout.String(), "would reconcile") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 }
@@ -227,18 +244,19 @@ func TestNetworkEnsureDryRunOutput(t *testing.T) {
 	loader.SystemPath = ""
 	loader.UserPath = ""
 	loader.Environment = nil
-	client := &fakeIncusClient{networkResult: incus.EnsureResult{Updated: true, DryRun: true}}
+	client := &fakeIncusClient{}
+	stubManagementNetwork(t, func(_ context.Context, _ managementnetwork.Spec, options managementnetwork.Options) error {
+		if !options.DryRun {
+			t.Fatal("DryRun = false, want true")
+		}
+		return nil
+	})
 
-	code := Run(
-		context.Background(),
-		[]string{"network", "ensure", "--dry-run"},
-		&stdout, &stderr, client, loader,
-	)
-
+	code := Run(context.Background(), []string{"network", "ensure", "--dry-run"}, &stdout, &stderr, client, loader)
 	if code != 0 {
 		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "would update") {
+	if !strings.Contains(stdout.String(), "would reconcile") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 }
@@ -249,7 +267,15 @@ func TestNetworkTeardownUsesConfiguredNameAndOptions(t *testing.T) {
 	loader.SystemPath = ""
 	loader.UserPath = ""
 	loader.Environment = nil
-	client := &fakeIncusClient{teardownResult: incus.TeardownResult{Deleted: true, DryRun: true}}
+	client := &fakeIncusClient{}
+
+	var gotSpec managementnetwork.Spec
+	var gotOptions managementnetwork.Options
+	stubManagementNetwork(t, func(_ context.Context, spec managementnetwork.Spec, options managementnetwork.Options) error {
+		gotSpec = spec
+		gotOptions = options
+		return nil
+	})
 
 	code := Run(
 		context.Background(),
@@ -263,11 +289,11 @@ func TestNetworkTeardownUsesConfiguredNameAndOptions(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
 	}
-	if client.teardownName != "lab-mgmt" {
-		t.Fatalf("teardown name = %q", client.teardownName)
+	if gotSpec.Name != "lab-mgmt" {
+		t.Fatalf("teardown spec = %#v", gotSpec)
 	}
-	if !client.teardownOptions.DryRun || !client.teardownOptions.Force {
-		t.Fatalf("teardown options = %#v", client.teardownOptions)
+	if !gotOptions.DryRun || !gotOptions.Force || gotOptions.Operation != "delete" {
+		t.Fatalf("teardown options = %#v", gotOptions)
 	}
 	if !strings.Contains(stdout.String(), "would delete") {
 		t.Fatalf("stdout = %q", stdout.String())
@@ -281,9 +307,9 @@ func TestNetworkTeardownAbsent(t *testing.T) {
 	loader.UserPath = ""
 	loader.Environment = nil
 	client := &fakeIncusClient{}
+	stubManagementNetwork(t, func(context.Context, managementnetwork.Spec, managementnetwork.Options) error { return nil })
 
 	code := Run(context.Background(), []string{"network", "teardown"}, &stdout, &stderr, client, loader)
-
 	if code != 0 {
 		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
 	}
@@ -318,6 +344,14 @@ func TestHerdrClientEnsureUsesEffectiveConfiguration(t *testing.T) {
 	loader.Environment = nil
 	client := &fakeIncusClient{herdrResult: incus.EnsureResult{Created: true, DryRun: true}}
 
+	var gotNetwork managementnetwork.Spec
+	var gotNetworkOptions managementnetwork.Options
+	stubManagementNetwork(t, func(_ context.Context, spec managementnetwork.Spec, options managementnetwork.Options) error {
+		gotNetwork = spec
+		gotNetworkOptions = options
+		return nil
+	})
+
 	code := Run(
 		context.Background(),
 		[]string{
@@ -333,8 +367,8 @@ func TestHerdrClientEnsureUsesEffectiveConfiguration(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
 	}
-	if client.networkSpec.Name != "lab-mgmt" || !client.networkOptions.DryRun {
-		t.Fatalf("network dependency = %#v options = %#v", client.networkSpec, client.networkOptions)
+	if gotNetwork.Name != "lab-mgmt" || !gotNetworkOptions.DryRun {
+		t.Fatalf("network dependency = %#v options = %#v", gotNetwork, gotNetworkOptions)
 	}
 	if client.herdrSpec.Name != "lab-herdr" || client.herdrSpec.ImageAlias != "lab-herdr-image" || client.herdrSpec.StoragePool != "fast" || client.herdrSpec.ManagementNetwork != "lab-mgmt" {
 		t.Fatalf("Herdr spec = %#v", client.herdrSpec)
@@ -375,14 +409,12 @@ func TestHerdrClientEnsureStopsWhenManagementNetworkEnsureFails(t *testing.T) {
 	loader.SystemPath = ""
 	loader.UserPath = ""
 	loader.Environment = nil
-	client := &fakeIncusClient{networkErr: errors.New("network failed")}
+	client := &fakeIncusClient{}
+	stubManagementNetwork(t, func(context.Context, managementnetwork.Spec, managementnetwork.Options) error {
+		return errors.New("network failed")
+	})
 
-	code := Run(
-		context.Background(),
-		[]string{"herdr", "client", "ensure"},
-		&stdout, &stderr, client, loader,
-	)
-
+	code := Run(context.Background(), []string{"herdr", "client", "ensure"}, &stdout, &stderr, client, loader)
 	if code != 1 {
 		t.Fatalf("Run() code = %d, want 1", code)
 	}
