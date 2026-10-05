@@ -47,11 +47,15 @@ func TestValidateRejectsEmptyImage(t *testing.T) {
 
 func TestOrchestrationPlanOrdersNetworkBeforeComposeAndKeepsSecretReferences(t *testing.T) {
 	spec := Spec{
-		ID:            "local",
-		Project:       "aginctus-gateway",
-		Network:       "aginctus-mgmt",
-		LiteLLMImage:  "ghcr.io/berriai/litellm:v1.103.0-stable",
-		PostgresImage: "docker.io/library/postgres:17-alpine",
+		ID:                 "local",
+		Project:            "aginctus-gateway",
+		Network:            "aginctus-mgmt",
+		NetworkIPv4Address: "10.42.0.1/24",
+		NetworkIPv4NAT:     false,
+		NetworkIPv4Routing: false,
+		NetworkIPv6Address: "none",
+		LiteLLMImage:       "ghcr.io/berriai/litellm:v1.103.0-stable",
+		PostgresImage:      "docker.io/library/postgres:17-alpine",
 	}
 
 	plan, err := spec.OrchestrationPlan()
