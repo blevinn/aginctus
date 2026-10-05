@@ -152,8 +152,8 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 	return generator.Evaluate(
 		"import 'aginctus/gateway.jsonnet'",
 		map[string]any{
-			"id":            s.ID,
-			"project":       s.Project,
+			"id":      s.ID,
+			"project": s.Project,
 			"network": map[string]any{
 				"name":        s.Network,
 				"ipv4Address": s.NetworkIPv4Address,
