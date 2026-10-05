@@ -3,6 +3,7 @@ module github.com/blevinn/aginctus
 go 1.26.7
 
 require (
+	github.com/abiosoft/incus-apply v0.0.0
 	github.com/google/go-jsonnet v0.22.0
 	github.com/lxc/incus-compose v1.3.4
 	github.com/lxc/incus/v7 v7.3.0
@@ -73,3 +74,6 @@ require (
 	oras.land/oras-go/v2 v2.6.2 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+
+replace github.com/abiosoft/incus-apply => github.com/blevinn/incus-apply v0.0.0-20261005022355-b3d59a5c0391
