@@ -1,9 +1,24 @@
 package managementnetwork
 
 import (
-	"strings"
+	"encoding/json"
 	"testing"
 )
+
+type applyStepConfig struct {
+	Operation             string                       `json:"operation"`
+	RequireExistingConfig map[string]string            `json:"requireExistingConfig"`
+	Documents             []map[string]json.RawMessage `json:"documents"`
+}
+
+func decodeApplyStepConfig(t *testing.T, raw []byte) applyStepConfig {
+	t.Helper()
+	var cfg applyStepConfig
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatalf("decode apply step configuration: %v\n%s", err, raw)
+	}
+	return cfg
+}
 
 func TestPlanRequiresOwnershipByDefault(t *testing.T) {
 	spec := Spec{
@@ -20,16 +35,16 @@ func TestPlanRequiresOwnershipByDefault(t *testing.T) {
 	if len(plan.Steps) != 1 || plan.Steps[0].Driver != "apply" {
 		t.Fatalf("steps = %#v", plan.Steps)
 	}
-	cfg := string(plan.Steps[0].Configuration)
-	for _, want := range []string{
-		`"operation":"upsert"`,
-		"user.aginctus.managed",
-		"user.aginctus.resource",
-		"management-network",
-	} {
-		if !strings.Contains(cfg, want) {
-			t.Fatalf("configuration missing %q: %s", want, cfg)
-		}
+
+	cfg := decodeApplyStepConfig(t, plan.Steps[0].Configuration)
+	if cfg.Operation != "upsert" {
+		t.Fatalf("operation = %q, want upsert", cfg.Operation)
+	}
+	if cfg.RequireExistingConfig["user.aginctus.managed"] != "true" {
+		t.Fatalf("managed guard = %#v", cfg.RequireExistingConfig)
+	}
+	if cfg.RequireExistingConfig["user.aginctus.resource"] != "management-network" {
+		t.Fatalf("resource guard = %#v", cfg.RequireExistingConfig)
 	}
 }
 
@@ -39,11 +54,12 @@ func TestPlanForceOmitsExistingResourceGuard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
-	cfg := string(plan.Steps[0].Configuration)
-	if !strings.Contains(cfg, `"operation":"delete"`) {
-		t.Fatalf("configuration = %s", cfg)
+
+	cfg := decodeApplyStepConfig(t, plan.Steps[0].Configuration)
+	if cfg.Operation != "delete" {
+		t.Fatalf("operation = %q, want delete", cfg.Operation)
 	}
-	if strings.Contains(cfg, "requireExistingConfig") && !strings.Contains(cfg, `"requireExistingConfig":{}`) {
-		t.Fatalf("force plan retained ownership guard: %s", cfg)
+	if len(cfg.RequireExistingConfig) != 0 {
+		t.Fatalf("force plan retained ownership guard: %#v", cfg.RequireExistingConfig)
 	}
 }
