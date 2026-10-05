@@ -47,7 +47,7 @@ func TestSupportsDryRunIsFalse(t *testing.T) {
 func TestExecuteUsesValidatedConfiguration(t *testing.T) {
 	driver := New()
 	var got Config
-	driver.execute = func(_ context.Context, cfg Config) error {
+	driver.execute = func(_ context.Context, cfg Config, _ map[string]string) error {
 		got = cfg
 		return nil
 	}
