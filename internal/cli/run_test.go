@@ -11,35 +11,17 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/herdrclient"
-	"github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 )
 
 type fakeIncusClient struct {
-	version         string
-	err             error
-	herdrResult     incus.EnsureResult
-	herdrErr        error
-	herdrSpec       incus.HerdrClientSpec
-	herdrOptions    incus.MutationOptions
-	herdrTeardown   incus.TeardownResult
-	herdrName       string
+	version string
+	err     error
 }
+
 
 func (c *fakeIncusClient) ServerVersion(context.Context) (string, error) {
 	return c.version, c.err
-}
-
-func (c *fakeIncusClient) EnsureHerdrClient(_ context.Context, spec incus.HerdrClientSpec, options incus.MutationOptions) (incus.EnsureResult, error) {
-	c.herdrSpec = spec
-	c.herdrOptions = options
-	return c.herdrResult, c.herdrErr
-}
-
-func (c *fakeIncusClient) TeardownHerdrClient(_ context.Context, name string, options incus.MutationOptions) (incus.TeardownResult, error) {
-	c.herdrName = name
-	c.herdrOptions = options
-	return c.herdrTeardown, c.herdrErr
 }
 
 type fakeConfigLoader struct {
