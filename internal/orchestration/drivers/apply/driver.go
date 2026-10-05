@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 
 	incusapply "github.com/abiosoft/incus-apply/apply"
 	"sigs.k8s.io/yaml"
@@ -22,8 +23,8 @@ type Driver struct {
 }
 
 type applyClient interface {
-	Plan(reader interface{ Read([]byte) (int, error) }) (incusapply.Preview, error)
-	Execute(reader interface{ Read([]byte) (int, error) }) (incusapply.Result, error)
+	Plan(io.Reader) (incusapply.Preview, error)
+	Execute(io.Reader) (incusapply.Result, error)
 }
 
 var _ orchestration.Driver = (*Driver)(nil)
