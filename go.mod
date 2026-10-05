@@ -7,6 +7,7 @@ require (
 	github.com/google/go-jsonnet v0.22.0
 	github.com/lxc/incus-compose v1.3.4
 	github.com/lxc/incus/v7 v7.3.0
+	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
@@ -72,7 +73,6 @@ require (
 	golang.org/x/text v0.41.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	oras.land/oras-go/v2 v2.6.2 // indirect
-	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
 
