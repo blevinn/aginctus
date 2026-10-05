@@ -3,8 +3,12 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"text/template"
 
 	"github.com/blevinn/aginctus/internal/config"
@@ -141,25 +145,117 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 	)
 }
 
-func ValidateRuntimeEnvironment() error {
-	for _, name := range requiredRuntimeEnvironment {
-		if value, ok := os.LookupEnv(name); !ok || value == "" {
-			return fmt.Errorf("required gateway environment variable %s is not set", name)
+func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
+	stateDir, err := gatewayStateDir()
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(stateDir, "aginctus", "gateway", s.ID)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("create gateway state directory: %w", err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("protect gateway state directory: %w", err)
+	}
+
+	path := filepath.Join(dir, "secrets.json")
+	values := map[string]string{}
+	if data, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(data, &values); err != nil {
+			return nil, fmt.Errorf("decode gateway secret state: %w", err)
 		}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read gateway secret state: %w", err)
+	}
+
+	changed := false
+	for _, name := range requiredRuntimeEnvironment {
+		if values[name] != "" {
+			continue
+		}
+		if seed, ok := os.LookupEnv(name); ok && seed != "" {
+			values[name] = seed
+		} else {
+			generated, err := generateSecret()
+			if err != nil {
+				return nil, fmt.Errorf("generate %s: %w", name, err)
+			}
+			values[name] = generated
+		}
+		changed = true
+	}
+
+	if changed {
+		if err := writeSecretState(path, values); err != nil {
+			return nil, err
+		}
+	}
+
+	result := make(map[string]string, len(requiredRuntimeEnvironment))
+	for _, name := range requiredRuntimeEnvironment {
+		result[name] = values[name]
+	}
+	return result, nil
+}
+
+func gatewayStateDir() (string, error) {
+	if value := os.Getenv("XDG_STATE_HOME"); value != "" {
+		return value, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory for gateway state: %w", err)
+	}
+	return filepath.Join(home, ".local", "state"), nil
+}
+
+func generateSecret() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func writeSecretState(path string, values map[string]string) error {
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, ".secrets-*.json")
+	if err != nil {
+		return fmt.Errorf("create gateway secret state: %w", err)
+	}
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }()
+
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("protect gateway secret state: %w", err)
+	}
+	encoder := json.NewEncoder(f)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(values); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("encode gateway secret state: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("sync gateway secret state: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close gateway secret state: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("persist gateway secret state: %w", err)
 	}
 	return nil
 }
 
-func (s Spec) Deploy(ctx context.Context) error {
-	if err := ValidateRuntimeEnvironment(); err != nil {
-		return err
-	}
+func (s Spec) Deploy(ctx context.Context, runtimeEnvironment map[string]string) error {
 	plan, err := s.OrchestrationPlan()
 	if err != nil {
 		return err
 	}
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
-		"compose": composedriver.New(),
+		"compose": composedriver.NewWithEnvironment(runtimeEnvironment),
 	})
 	if _, err := engine.Execute(ctx, plan, orchestration.ExecuteOptions{}); err != nil {
 		return fmt.Errorf("deploy gateway orchestration: %w", err)
