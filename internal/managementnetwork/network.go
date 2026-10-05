@@ -18,8 +18,8 @@ type Spec struct {
 }
 
 type Options struct {
-	DryRun   bool
-	Force    bool
+	DryRun    bool
+	Force     bool
 	Operation string
 }
 
@@ -48,9 +48,9 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		return Spec{}, fmt.Errorf("configuration key %q must not be empty", "incus.management.network.name")
 	}
 	return Spec{
-		Name: name,
+		Name:        name,
 		IPv4Address: ipv4Address,
-		IPv4NAT: ipv4NAT,
+		IPv4NAT:     ipv4NAT,
 		IPv4Routing: ipv4Routing,
 		IPv6Address: ipv6Address,
 	}, nil
@@ -67,13 +67,13 @@ func (s Spec) Plan(operation string, force bool) (orchestration.Plan, error) {
 	return generator.Evaluate(
 		"local ag = import 'aginctus/orchestration.libsonnet'; local network = import 'aginctus/management-network.jsonnet'; ag.orchestration('management-network', [network(std.extVar('config'))])",
 		map[string]any{
-			"name": s.Name,
+			"name":        s.Name,
 			"ipv4Address": s.IPv4Address,
-			"ipv4Nat": s.IPv4NAT,
+			"ipv4Nat":     s.IPv4NAT,
 			"ipv4Routing": s.IPv4Routing,
 			"ipv6Address": s.IPv6Address,
-			"operation": operation,
-			"force": force,
+			"operation":   operation,
+			"force":       force,
 		},
 	)
 }

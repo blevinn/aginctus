@@ -107,7 +107,6 @@ func TestRenderDocumentsProducesYAMLStream(t *testing.T) {
 	}
 }
 
-
 func TestExecuteMapsDeleteOperationAndExistingResourceGuard(t *testing.T) {
 	fake := &fakeApplyClient{}
 	driver := New()

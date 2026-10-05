@@ -78,7 +78,6 @@ func (l *fakeConfigLoader) Load(options config.Options) (*config.Config, error) 
 	return (&config.Loader{}).Load(config.Options{})
 }
 
-
 func stubManagementNetwork(t *testing.T, fn func(context.Context, managementnetwork.Spec, managementnetwork.Options) error) {
 	t.Helper()
 	previous := executeManagementNetwork
