@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -418,5 +420,32 @@ func TestGatewayRenderUsesEffectiveConfiguration(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q: %q", want, stdout.String())
 		}
+	}
+}
+
+func TestGatewayUpStopsBeforeNetworkMutationWhenSecretInitializationFails(t *testing.T) {
+	stateRoot := t.TempDir()
+	blocked := filepath.Join(stateRoot, "not-a-directory")
+	if err := os.WriteFile(blocked, []byte("blocked"), 0o600); err != nil {
+		t.Fatalf("write blocked state path: %v", err)
+	}
+	t.Setenv("XDG_STATE_HOME", blocked)
+
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	code := Run(context.Background(), []string{"gateway", "up"}, &stdout, &stderr, client, loader)
+	if code != 1 {
+		t.Fatalf("Run() code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "gateway initialization") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+	if client.networkSpec.Name != "" {
+		t.Fatalf("network ensure ran after initialization failure: %#v", client.networkSpec)
 	}
 }

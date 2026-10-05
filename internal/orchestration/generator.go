@@ -10,7 +10,7 @@ import (
 	jsonnet "github.com/google/go-jsonnet"
 )
 
-//go:embed resources/*.libsonnet
+//go:embed resources/*.libsonnet resources/*.jsonnet
 var embeddedResources embed.FS
 
 type Generator struct {

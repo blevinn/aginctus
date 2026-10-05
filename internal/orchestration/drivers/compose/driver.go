@@ -24,13 +24,22 @@ type Config struct {
 }
 
 type Driver struct {
-	execute func(context.Context, Config) error
+	execute     func(context.Context, Config, map[string]string) error
+	environment map[string]string
 }
 
 var _ orchestration.Driver = (*Driver)(nil)
 
 func New() *Driver {
 	return &Driver{execute: executeCompose}
+}
+
+func NewWithEnvironment(environment map[string]string) *Driver {
+	copied := make(map[string]string, len(environment))
+	for key, value := range environment {
+		copied[key] = value
+	}
+	return &Driver{execute: executeCompose, environment: copied}
 }
 
 func (d *Driver) SupportsDryRun() bool {
@@ -50,7 +59,7 @@ func (d *Driver) Execute(ctx context.Context, raw json.RawMessage, options orche
 	if err != nil {
 		return err
 	}
-	return d.execute(ctx, cfg)
+	return d.execute(ctx, cfg, d.environment)
 }
 
 func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
@@ -73,21 +82,21 @@ func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
 	}
 	defer cleanup()
 
-	_, err = loadProject(ctx, cfg.Project, path)
+	_, err = loadProject(ctx, cfg.Project, path, nil)
 	if err != nil {
 		return Config{}, fmt.Errorf("validate compose project %q: %w", cfg.Project, err)
 	}
 	return cfg, nil
 }
 
-func executeCompose(ctx context.Context, cfg Config) error {
+func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
-	p, err := loadProject(ctx, cfg.Project, path)
+	p, err := loadProject(ctx, cfg.Project, path, environment)
 	if err != nil {
 		return fmt.Errorf("load compose project %q: %w", cfg.Project, err)
 	}
@@ -137,9 +146,8 @@ func executeCompose(ctx context.Context, cfg Config) error {
 	return nil
 }
 
-func loadProject(ctx context.Context, name, path string) (*composeproject.Project, error) {
-	return composeproject.New().Load(
-		ctx,
+func loadProject(ctx context.Context, name, path string, environment map[string]string) (*composeproject.Project, error) {
+	options := []composeproject.LoadOption{
 		composeproject.LoadFiles([]string{path}),
 		composeproject.LoadName(name),
 		composeproject.LoadInstanceMarks(map[string]string{
@@ -150,7 +158,41 @@ func loadProject(ctx context.Context, name, path string) (*composeproject.Projec
 			ownershipManagedKey:  "true",
 			ownershipResourceKey: "compose-project",
 		}),
-	)
+	}
+	if len(environment) > 0 {
+		envPath, cleanup, err := writeEnvironment(environment)
+		if err != nil {
+			return nil, err
+		}
+		defer cleanup()
+		options = append(options, composeproject.LoadEnvFiles([]string{envPath}))
+	}
+	return composeproject.New().Load(ctx, options...)
+}
+
+func writeEnvironment(environment map[string]string) (string, func(), error) {
+	f, err := os.CreateTemp("", "aginctus-compose-env-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("create temporary compose environment: %w", err)
+	}
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", nil, fmt.Errorf("protect temporary compose environment: %w", err)
+	}
+	cleanup := func() { _ = os.Remove(f.Name()) }
+	for key, value := range environment {
+		if _, err := fmt.Fprintf(f, "%s=%s\n", key, value); err != nil {
+			_ = f.Close()
+			cleanup()
+			return "", nil, fmt.Errorf("write temporary compose environment: %w", err)
+		}
+	}
+	if err := f.Close(); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("close temporary compose environment: %w", err)
+	}
+	return f.Name(), cleanup, nil
 }
 
 func writeCompose(contents []byte) (string, func(), error) {

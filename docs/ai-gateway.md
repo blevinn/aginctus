@@ -1,6 +1,6 @@
 # AI gateway design
 
-Status: agreed design direction; initial configuration validation and Compose rendering are implemented, while lifecycle, authentication, credentials, MCP policy, and backup/restore remain follow-up work.
+Status: agreed design direction; configuration validation, Compose rendering, and initial orchestration-backed deployment are implemented, while authentication, credential management, MCP policy, teardown/status, health, and backup/restore remain follow-up work.
 
 ## Scope
 
@@ -14,16 +14,21 @@ Multi-tenancy, multiple gateways, federation, a central control plane, high avai
 
 ## Initial implementation slice
 
-The first implementation exposes:
+The current implementation exposes:
 
 ```text
 aginctus gateway validate
 aginctus gateway render
+aginctus gateway up
 ```
 
-The effective configuration currently provides a stable gateway ID, Compose project name, management network, and pinned LiteLLM/PostgreSQL images. `gateway render` emits a deterministic Compose model for LiteLLM plus PostgreSQL and references runtime secrets through environment variables rather than embedding credentials.
+The effective configuration provides a stable gateway ID, Compose project name, management network, and pinned LiteLLM/PostgreSQL images. `gateway render` emits a deterministic Compose model for LiteLLM plus PostgreSQL and references runtime secrets through environment variables rather than embedding credentials.
 
-This slice deliberately does not mutate Incus. Deployment will be wired through the declarative orchestration/Compose integration so the gateway does not introduce another bespoke reconciliation path.
+`gateway up` evaluates the embedded `gateway.jsonnet` orchestration resource and executes its Compose step through the direct Go `incus-compose` driver. The generated plan contains only secret references. Before the first deployment, Aginctus runs an idempotent secret initialization step: any missing PostgreSQL password, LiteLLM master key, or LiteLLM salt key is generated with cryptographic randomness and persisted in protected gateway state. `AGINCTUS_GATEWAY_POSTGRES_PASSWORD`, `AGINCTUS_GATEWAY_MASTER_KEY`, and `AGINCTUS_GATEWAY_SALT_KEY` may seed values that have not yet been initialized, but persisted values remain authoritative on subsequent runs so an ambient environment change does not silently rotate gateway credentials.
+
+Generated gateway secret state is stored outside declarative configuration under the XDG state directory (normally `~/.local/state/aginctus/gateway/<id>/secrets.json`) with restrictive permissions. Secret values are injected into the Compose loader out-of-band and never enter Jsonnet or the generated orchestration plan. Explicit credential rotation remains future lifecycle work.
+
+The management network remains a transitional prerequisite: until the Apply driver is available, `gateway up` ensures it through the existing management-network reconciler before running the Compose orchestration step. The gateway services themselves do not introduce a bespoke reconciliation path.
 
 ## Deployment and ownership
 

@@ -70,7 +70,7 @@ func Run(
 	case "network":
 		return runNetwork(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	case "gateway":
-		return runGateway(commandArgs[1:], stdout, stderr, effective)
+		return runGateway(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	case "herdr":
 		return runHerdr(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	default:
@@ -285,7 +285,13 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network teardown [--dry-run] [--force]")
 }
 
-func runGateway(args []string, stdout, stderr io.Writer, effective *config.Config) int {
+func runGateway(
+	ctx context.Context,
+	args []string,
+	stdout, stderr io.Writer,
+	incusClient IncusClient,
+	effective *config.Config,
+) int {
 	if len(args) != 1 {
 		printGatewayUsage(stderr)
 		return 2
@@ -309,6 +315,27 @@ func runGateway(args []string, stdout, stderr io.Writer, effective *config.Confi
 		}
 		fmt.Fprint(stdout, rendered)
 		return 0
+	case "up":
+		runtimeEnvironment, err := spec.InitializeRuntimeEnvironment()
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
+			return 1
+		}
+		networkSpec, err := managementNetworkSpec(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
+			return 1
+		}
+		if _, err := incusClient.EnsureManagementNetwork(ctx, networkSpec, incus.MutationOptions{}); err != nil {
+			fmt.Fprintf(stderr, "management network: %v\n", err)
+			return 1
+		}
+		if err := spec.Deploy(ctx, runtimeEnvironment); err != nil {
+			fmt.Fprintf(stderr, "gateway deployment: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "gateway %q: ready\n", spec.ID)
+		return 0
 	default:
 		printGatewayUsage(stderr)
 		return 2
@@ -318,6 +345,7 @@ func runGateway(args []string, stdout, stderr io.Writer, effective *config.Confi
 func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
+	fmt.Fprintln(w, "       aginctus [global options] gateway up")
 }
 
 func runHerdr(
