@@ -118,7 +118,6 @@ func (s Spec) RenderCompose() (string, error) {
 	return out.String(), nil
 }
 
-
 var requiredRuntimeEnvironment = []string{
 	"AGINCTUS_GATEWAY_POSTGRES_PASSWORD",
 	"AGINCTUS_GATEWAY_MASTER_KEY",

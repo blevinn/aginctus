@@ -423,7 +423,6 @@ func TestGatewayRenderUsesEffectiveConfiguration(t *testing.T) {
 	}
 }
 
-
 func TestGatewayUpStopsBeforeNetworkMutationWhenSecretInitializationFails(t *testing.T) {
 	stateRoot := t.TempDir()
 	blocked := filepath.Join(stateRoot, "not-a-directory")

@@ -41,7 +41,6 @@ func TestValidateRejectsEmptyImage(t *testing.T) {
 	}
 }
 
-
 func TestOrchestrationPlanUsesComposeDriverAndSecretReferences(t *testing.T) {
 	spec := Spec{
 		ID:            "local",
