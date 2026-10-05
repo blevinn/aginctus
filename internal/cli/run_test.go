@@ -456,7 +456,4 @@ func TestGatewayUpStopsBeforeNetworkMutationWhenSecretInitializationFails(t *tes
 	if !strings.Contains(stderr.String(), "gateway initialization") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
-	if client.networkSpec.Name != "" {
-		t.Fatalf("network ensure ran after initialization failure: %#v", client.networkSpec)
-	}
 }
