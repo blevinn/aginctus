@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -59,7 +61,6 @@ func TestOrchestrationPlanUsesComposeDriverAndSecretReferences(t *testing.T) {
 	configuration := string(plan.Steps[0].Configuration)
 	for _, want := range []string{
 		"aginctus-gateway",
-		"processEnvironment",
 		`${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}`,
 		`${AGINCTUS_GATEWAY_MASTER_KEY}`,
 		`${AGINCTUS_GATEWAY_SALT_KEY}`,
@@ -70,13 +71,64 @@ func TestOrchestrationPlanUsesComposeDriverAndSecretReferences(t *testing.T) {
 	}
 }
 
-func TestValidateRuntimeEnvironmentRejectsMissingSecret(t *testing.T) {
+func TestInitializeRuntimeEnvironmentGeneratesAndPersistsMissingSecrets(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
 	for _, name := range requiredRuntimeEnvironment {
-		t.Setenv(name, "set")
+		t.Setenv(name, "")
 	}
-	t.Setenv("AGINCTUS_GATEWAY_MASTER_KEY", "")
 
-	if err := ValidateRuntimeEnvironment(); err == nil {
-		t.Fatal("ValidateRuntimeEnvironment() error = nil, want error")
+	spec := Spec{ID: "local"}
+	first, err := spec.InitializeRuntimeEnvironment()
+	if err != nil {
+		t.Fatalf("InitializeRuntimeEnvironment() error = %v", err)
+	}
+	second, err := spec.InitializeRuntimeEnvironment()
+	if err != nil {
+		t.Fatalf("InitializeRuntimeEnvironment() second error = %v", err)
+	}
+
+	for _, name := range requiredRuntimeEnvironment {
+		if first[name] == "" {
+			t.Fatalf("%s was not generated", name)
+		}
+		if second[name] != first[name] {
+			t.Fatalf("%s changed between runs", name)
+		}
+	}
+
+	info, err := os.Stat(filepath.Join(state, "aginctus", "gateway", "local", "secrets.json"))
+	if err != nil {
+		t.Fatalf("stat secret state: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("secret state mode = %o, want 600", info.Mode().Perm())
+	}
+}
+
+func TestInitializeRuntimeEnvironmentUsesProvidedSeedOnlyWhenMissing(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	for _, name := range requiredRuntimeEnvironment {
+		t.Setenv(name, "")
+	}
+	t.Setenv("AGINCTUS_GATEWAY_MASTER_KEY", "seeded-value")
+
+	spec := Spec{ID: "local"}
+	first, err := spec.InitializeRuntimeEnvironment()
+	if err != nil {
+		t.Fatalf("InitializeRuntimeEnvironment() error = %v", err)
+	}
+	if first["AGINCTUS_GATEWAY_MASTER_KEY"] != "seeded-value" {
+		t.Fatalf("seeded master key = %q", first["AGINCTUS_GATEWAY_MASTER_KEY"])
+	}
+
+	t.Setenv("AGINCTUS_GATEWAY_MASTER_KEY", "replacement")
+	second, err := spec.InitializeRuntimeEnvironment()
+	if err != nil {
+		t.Fatalf("InitializeRuntimeEnvironment() second error = %v", err)
+	}
+	if second["AGINCTUS_GATEWAY_MASTER_KEY"] != "seeded-value" {
+		t.Fatalf("persisted master key = %q, want original seed", second["AGINCTUS_GATEWAY_MASTER_KEY"])
 	}
 }
