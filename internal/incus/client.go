@@ -14,17 +14,8 @@ const (
 	resourceKey    = "user.aginctus.resource"
 	roleKey        = "user.aginctus.role"
 	ownerValue     = "true"
-	resourceValue  = "management-network"
 	herdrRoleValue = "herdr-client"
 )
-
-type ManagementNetworkSpec struct {
-	Name        string
-	IPv4Address string
-	IPv4NAT     bool
-	IPv4Routing bool
-	IPv6Address string
-}
 
 type MutationOptions struct {
 	DryRun bool
@@ -48,10 +39,6 @@ type operation interface {
 
 type Server interface {
 	GetServer() (*api.Server, string, error)
-	GetNetwork(string) (*api.Network, string, error)
-	CreateNetwork(api.NetworksPost) error
-	UpdateNetwork(string, api.NetworkPut, string) error
-	DeleteNetwork(string) error
 	GetInstance(string) (*api.Instance, string, error)
 	CreateInstanceFromLocalImage(string, api.InstancesPost) (operation, error)
 	UpdateInstance(string, api.InstancePut, string) (operation, error)
