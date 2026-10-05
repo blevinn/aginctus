@@ -25,6 +25,10 @@ type ConfigLoader interface {
 	Load(config.Options) (*config.Config, error)
 }
 
+var executeManagementNetwork = func(ctx context.Context, spec managementnetwork.Spec, options managementnetwork.Options) error {
+	return spec.Execute(ctx, options)
+}
+
 func Run(
 	ctx context.Context,
 	args []string,
@@ -216,7 +220,7 @@ func runNetwork(
 		return 2
 	}
 
-	err = spec.Execute(ctx, managementnetwork.Options{
+	err = executeManagementNetwork(ctx, spec, managementnetwork.Options{
 		DryRun:    options.DryRun,
 		Force:     options.Force,
 		Operation: operation,
@@ -343,7 +347,7 @@ func runHerdr(
 			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
 			return 1
 		}
-		if err := networkSpec.Execute(ctx, managementnetwork.Options{
+		if err := executeManagementNetwork(ctx, networkSpec, managementnetwork.Options{
 			DryRun: options.DryRun,
 			Force:  options.Force,
 		}); err != nil {
