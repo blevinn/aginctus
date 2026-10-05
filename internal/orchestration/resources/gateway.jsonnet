@@ -1,7 +1,9 @@
 local ag = import 'aginctus/orchestration.libsonnet';
 local cfg = std.extVar('config');
+local managementNetwork = import 'aginctus/management-network.jsonnet';
 
 ag.orchestration(cfg.id, [
+  managementNetwork(cfg.network),
   ag.compose('gateway', {
     project: cfg.project,
     compose: {
@@ -37,7 +39,7 @@ ag.orchestration(cfg.id, [
       networks: {
         management: {
           external: true,
-          name: cfg.network,
+          name: cfg.network.name,
         },
       },
     },
