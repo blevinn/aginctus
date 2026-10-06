@@ -15,38 +15,18 @@ import (
 )
 
 type fakeIncusClient struct {
-	version         string
-	err             error
-	networkResult   incus.EnsureResult
-	networkErr      error
-	networkSpec     incus.ManagementNetworkSpec
-	networkOptions  incus.MutationOptions
-	teardownResult  incus.TeardownResult
-	teardownErr     error
-	teardownName    string
-	teardownOptions incus.MutationOptions
-	herdrResult     incus.EnsureResult
-	herdrErr        error
-	herdrSpec       incus.HerdrClientSpec
-	herdrOptions    incus.MutationOptions
-	herdrTeardown   incus.TeardownResult
-	herdrName       string
+	version       string
+	err           error
+	herdrResult   incus.EnsureResult
+	herdrErr      error
+	herdrSpec     incus.HerdrClientSpec
+	herdrOptions  incus.MutationOptions
+	herdrTeardown incus.TeardownResult
+	herdrName     string
 }
 
 func (c *fakeIncusClient) ServerVersion(context.Context) (string, error) {
 	return c.version, c.err
-}
-
-func (c *fakeIncusClient) EnsureManagementNetwork(_ context.Context, spec incus.ManagementNetworkSpec, options incus.MutationOptions) (incus.EnsureResult, error) {
-	c.networkSpec = spec
-	c.networkOptions = options
-	return c.networkResult, c.networkErr
-}
-
-func (c *fakeIncusClient) TeardownManagementNetwork(_ context.Context, name string, options incus.MutationOptions) (incus.TeardownResult, error) {
-	c.teardownName = name
-	c.teardownOptions = options
-	return c.teardownResult, c.teardownErr
 }
 
 func (c *fakeIncusClient) EnsureHerdrClient(_ context.Context, spec incus.HerdrClientSpec, options incus.MutationOptions) (incus.EnsureResult, error) {
@@ -475,8 +455,5 @@ func TestGatewayUpStopsBeforeNetworkMutationWhenSecretInitializationFails(t *tes
 	}
 	if !strings.Contains(stderr.String(), "gateway initialization") {
 		t.Fatalf("stderr = %q", stderr.String())
-	}
-	if client.networkSpec.Name != "" {
-		t.Fatalf("network ensure ran after initialization failure: %#v", client.networkSpec)
 	}
 }
