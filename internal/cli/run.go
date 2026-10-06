@@ -10,20 +10,23 @@ import (
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/managementnetwork"
 )
 
 const Version = "0.0.0-dev"
 
 type IncusClient interface {
 	ServerVersion(context.Context) (string, error)
-	EnsureManagementNetwork(context.Context, incus.ManagementNetworkSpec, incus.MutationOptions) (incus.EnsureResult, error)
-	TeardownManagementNetwork(context.Context, string, incus.MutationOptions) (incus.TeardownResult, error)
 	EnsureHerdrClient(context.Context, incus.HerdrClientSpec, incus.MutationOptions) (incus.EnsureResult, error)
 	TeardownHerdrClient(context.Context, string, incus.MutationOptions) (incus.TeardownResult, error)
 }
 
 type ConfigLoader interface {
 	Load(config.Options) (*config.Config, error)
+}
+
+var executeManagementNetwork = func(ctx context.Context, spec managementnetwork.Spec, options managementnetwork.Options) error {
+	return spec.Execute(ctx, options)
 }
 
 func Run(
@@ -68,7 +71,7 @@ func Run(
 	case "config":
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
 	case "network":
-		return runNetwork(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
+		return runNetwork(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "gateway":
 		return runGateway(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	case "herdr":
@@ -189,7 +192,6 @@ func runNetwork(
 	ctx context.Context,
 	args []string,
 	stdout, stderr io.Writer,
-	incusClient IncusClient,
 	effective *config.Config,
 ) int {
 	if len(args) == 0 {
@@ -204,65 +206,41 @@ func runNetwork(
 		return 2
 	}
 
-	switch action {
-	case "ensure":
-		spec, err := managementNetworkSpec(effective)
-		if err != nil {
-			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
-			return 1
-		}
+	spec, err := managementnetwork.FromConfig(effective)
+	if err != nil {
+		fmt.Fprintf(stderr, "management network configuration: %v\n", err)
+		return 1
+	}
 
-		result, err := incusClient.EnsureManagementNetwork(ctx, spec, options)
-		if err != nil {
-			fmt.Fprintf(stderr, "management network: %v\n", err)
-			return 1
-		}
-
-		switch {
-		case result.DryRun && result.Created:
-			fmt.Fprintf(stdout, "management network %q: would create\n", spec.Name)
-		case result.DryRun && result.Updated:
-			fmt.Fprintf(stdout, "management network %q: would update\n", spec.Name)
-		case result.Created:
-			fmt.Fprintf(stdout, "management network %q: created\n", spec.Name)
-		case result.Updated:
-			fmt.Fprintf(stdout, "management network %q: updated\n", spec.Name)
-		default:
-			fmt.Fprintf(stdout, "management network %q: ready\n", spec.Name)
-		}
-		return 0
-
-	case "teardown":
-		name, err := effective.String("incus.management.network.name")
-		if err != nil {
-			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
-			return 1
-		}
-		if name == "" {
-			fmt.Fprintf(stderr, "management network configuration: configuration key %q must not be empty\n", "incus.management.network.name")
-			return 1
-		}
-
-		result, err := incusClient.TeardownManagementNetwork(ctx, name, options)
-		if err != nil {
-			fmt.Fprintf(stderr, "management network: %v\n", err)
-			return 1
-		}
-
-		switch {
-		case result.DryRun && result.Deleted:
-			fmt.Fprintf(stdout, "management network %q: would delete\n", name)
-		case result.Deleted:
-			fmt.Fprintf(stdout, "management network %q: deleted\n", name)
-		default:
-			fmt.Fprintf(stdout, "management network %q: absent\n", name)
-		}
-		return 0
-
-	default:
+	operation := "upsert"
+	if action == "teardown" {
+		operation = "delete"
+	} else if action != "ensure" {
 		printNetworkUsage(stderr)
 		return 2
 	}
+
+	err = executeManagementNetwork(ctx, spec, managementnetwork.Options{
+		DryRun:    options.DryRun,
+		Force:     options.Force,
+		Operation: operation,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "management network: %v\n", err)
+		return 1
+	}
+
+	switch {
+	case action == "ensure" && options.DryRun:
+		fmt.Fprintf(stdout, "management network %q: would reconcile\n", spec.Name)
+	case action == "ensure":
+		fmt.Fprintf(stdout, "management network %q: ready\n", spec.Name)
+	case options.DryRun:
+		fmt.Fprintf(stdout, "management network %q: would delete if present\n", spec.Name)
+	default:
+		fmt.Fprintf(stdout, "management network %q: absent\n", spec.Name)
+	}
+	return 0
 }
 
 func parseNetworkOptions(args []string) (incus.MutationOptions, error) {
@@ -364,12 +342,15 @@ func runHerdr(
 
 	switch args[0] {
 	case "ensure":
-		networkSpec, err := managementNetworkSpec(effective)
+		networkSpec, err := managementnetwork.FromConfig(effective)
 		if err != nil {
 			fmt.Fprintf(stderr, "management network configuration: %v\n", err)
 			return 1
 		}
-		if _, err := incusClient.EnsureManagementNetwork(ctx, networkSpec, options); err != nil {
+		if err := executeManagementNetwork(ctx, networkSpec, managementnetwork.Options{
+			DryRun: options.DryRun,
+			Force:  options.Force,
+		}); err != nil {
 			fmt.Fprintf(stderr, "management network: %v\n", err)
 			return 1
 		}
@@ -458,41 +439,6 @@ func herdrClientSpec(effective *config.Config) (incus.HerdrClientSpec, error) {
 func printHerdrClientUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] herdr client ensure [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client teardown [--dry-run] [--force]")
-}
-
-func managementNetworkSpec(effective *config.Config) (incus.ManagementNetworkSpec, error) {
-	name, err := effective.String("incus.management.network.name")
-	if err != nil {
-		return incus.ManagementNetworkSpec{}, err
-	}
-	ipv4Address, err := effective.String("incus.management.network.ipv4.address")
-	if err != nil {
-		return incus.ManagementNetworkSpec{}, err
-	}
-	ipv4NAT, err := effective.Bool("incus.management.network.ipv4.nat")
-	if err != nil {
-		return incus.ManagementNetworkSpec{}, err
-	}
-	ipv4Routing, err := effective.Bool("incus.management.network.ipv4.routing")
-	if err != nil {
-		return incus.ManagementNetworkSpec{}, err
-	}
-	ipv6Address, err := effective.String("incus.management.network.ipv6.address")
-	if err != nil {
-		return incus.ManagementNetworkSpec{}, err
-	}
-
-	if name == "" {
-		return incus.ManagementNetworkSpec{}, fmt.Errorf("configuration key %q must not be empty", "incus.management.network.name")
-	}
-
-	return incus.ManagementNetworkSpec{
-		Name:        name,
-		IPv4Address: ipv4Address,
-		IPv4NAT:     ipv4NAT,
-		IPv4Routing: ipv4Routing,
-		IPv6Address: ipv6Address,
-	}, nil
 }
 
 func printUsage(w io.Writer) {

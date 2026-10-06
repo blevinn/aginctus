@@ -14,8 +14,10 @@ import (
 )
 
 type Config struct {
-	Project   string            `json:"project,omitempty"`
-	Documents []json.RawMessage `json:"documents"`
+	Operation             incusapply.Operation `json:"operation,omitempty"`
+	Project               string               `json:"project,omitempty"`
+	RequireExistingConfig map[string]string    `json:"requireExistingConfig,omitempty"`
+	Documents             []json.RawMessage    `json:"documents"`
 }
 
 type Driver struct {
@@ -56,10 +58,15 @@ func (d *Driver) Execute(_ context.Context, raw json.RawMessage, options orchest
 		return err
 	}
 
+	operation := cfg.Operation
+	if operation == "" {
+		operation = incusapply.Upsert
+	}
 	client := d.newClient(incusapply.Options{
-		Operation: incusapply.Upsert,
-		Project:   cfg.Project,
-		FailFast:  true,
+		Operation:             operation,
+		Project:               cfg.Project,
+		FailFast:              true,
+		RequireExistingConfig: cfg.RequireExistingConfig,
 	})
 
 	if options.DryRun {
@@ -87,6 +94,11 @@ func parseConfig(raw json.RawMessage) (Config, error) {
 			return Config{}, fmt.Errorf("decode apply driver configuration: unexpected trailing JSON")
 		}
 		return Config{}, fmt.Errorf("decode apply driver configuration trailing data: %w", err)
+	}
+	switch cfg.Operation {
+	case "", incusapply.Upsert, incusapply.Delete, incusapply.Reset:
+	default:
+		return Config{}, fmt.Errorf("unsupported apply operation %q", cfg.Operation)
 	}
 	if len(cfg.Documents) == 0 {
 		return Config{}, fmt.Errorf("apply driver requires at least one document")
