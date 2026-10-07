@@ -148,7 +148,6 @@ func TestValidateRejectsUnknownApplyOperation(t *testing.T) {
 	}
 }
 
-
 func TestExecuteMapsEnsureRunningOption(t *testing.T) {
 	fake := &fakeApplyClient{}
 	driver := New()
