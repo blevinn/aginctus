@@ -16,14 +16,14 @@ import (
 )
 
 type fakeIncusClient struct {
-	version         string
-	err             error
-	herdrResult     incus.EnsureResult
-	herdrErr        error
-	herdrSpec       incus.HerdrClientSpec
-	herdrOptions    incus.MutationOptions
-	herdrTeardown   incus.TeardownResult
-	herdrName       string
+	version       string
+	err           error
+	herdrResult   incus.EnsureResult
+	herdrErr      error
+	herdrSpec     incus.HerdrClientSpec
+	herdrOptions  incus.MutationOptions
+	herdrTeardown incus.TeardownResult
+	herdrName     string
 }
 
 func (c *fakeIncusClient) ServerVersion(context.Context) (string, error) {
