@@ -17,6 +17,7 @@ type Config struct {
 	Operation             incusapply.Operation `json:"operation,omitempty"`
 	Project               string               `json:"project,omitempty"`
 	RequireExistingConfig map[string]string    `json:"requireExistingConfig,omitempty"`
+	EnsureRunning         bool                 `json:"ensureRunning,omitempty"`
 	Documents             []json.RawMessage    `json:"documents"`
 }
 
@@ -67,6 +68,7 @@ func (d *Driver) Execute(_ context.Context, raw json.RawMessage, options orchest
 		Project:               cfg.Project,
 		FailFast:              true,
 		RequireExistingConfig: cfg.RequireExistingConfig,
+		EnsureRunning:         cfg.EnsureRunning,
 	})
 
 	if options.DryRun {

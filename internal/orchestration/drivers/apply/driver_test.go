@@ -147,3 +147,22 @@ func TestValidateRejectsUnknownApplyOperation(t *testing.T) {
 		t.Fatal("Validate() error = nil, want unsupported operation error")
 	}
 }
+
+func TestExecuteMapsEnsureRunningOption(t *testing.T) {
+	fake := &fakeApplyClient{}
+	driver := New()
+	driver.newClient = func(options incusapply.Options) applyClient {
+		if !options.EnsureRunning {
+			t.Fatal("EnsureRunning = false, want true")
+		}
+		return fake
+	}
+
+	err := driver.Execute(t.Context(), []byte(`{
+		"ensureRunning": true,
+		"documents": [{"kind":"instance","name":"herdr","image":"aginctus-herdr-client"}]
+	}`), orchestration.ExecuteOptions{})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+}
