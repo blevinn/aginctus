@@ -45,4 +45,3 @@ func (c *Client) ServerVersion(ctx context.Context) (string, error) {
 
 	return status.Environment.ServerVersion, nil
 }
-

@@ -19,7 +19,6 @@ type fakeIncusClient struct {
 	err     error
 }
 
-
 func (c *fakeIncusClient) ServerVersion(context.Context) (string, error) {
 	return c.version, c.err
 }
