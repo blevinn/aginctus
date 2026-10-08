@@ -6,9 +6,10 @@ import (
 )
 
 type applyStepConfig struct {
-	Operation             string                       `json:"operation"`
-	RequireExistingConfig map[string]string            `json:"requireExistingConfig"`
-	Documents             []map[string]json.RawMessage `json:"documents"`
+	Operation                string                       `json:"operation"`
+	RejectUnsupportedChanges bool                         `json:"rejectUnsupportedChanges"`
+	RequireExistingConfig    map[string]string            `json:"requireExistingConfig"`
+	Documents                []map[string]json.RawMessage `json:"documents"`
 }
 
 func decodeApplyStepConfig(t *testing.T, raw []byte) applyStepConfig {
@@ -40,6 +41,9 @@ func TestPlanRequiresOwnershipByDefault(t *testing.T) {
 	if cfg.Operation != "upsert" {
 		t.Fatalf("operation = %q, want upsert", cfg.Operation)
 	}
+	if !cfg.RejectUnsupportedChanges {
+		t.Fatal("rejectUnsupportedChanges = false, want true")
+	}
 	if cfg.RequireExistingConfig["user.aginctus.managed"] != "true" {
 		t.Fatalf("managed guard = %#v", cfg.RequireExistingConfig)
 	}
@@ -61,5 +65,8 @@ func TestPlanForceOmitsExistingResourceGuard(t *testing.T) {
 	}
 	if len(cfg.RequireExistingConfig) != 0 {
 		t.Fatalf("force plan retained ownership guard: %#v", cfg.RequireExistingConfig)
+	}
+	if !cfg.RejectUnsupportedChanges {
+		t.Fatal("force plan disabled immutable-drift rejection")
 	}
 }

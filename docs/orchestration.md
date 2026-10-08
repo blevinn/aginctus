@@ -347,3 +347,12 @@ The first implementation establishes the Aginctus-owned orchestration contract w
 - unit tests use in-memory fake drivers and do not require Incus.
 
 The orchestration layer now has two direct Go drivers. The Compose driver uses `github.com/lxc/incus-compose` for gateway services and intentionally does not claim dry-run support. The Apply driver uses the native backend from the pinned `blevinn/incus-apply` fork; it accepts trusted in-memory resource documents, uses `Plan` for real dry-run, and uses `Execute` for mutation without invoking the `incus` CLI. `management-network.jsonnet` expresses the Aginctus management bridge as an Apply step with ownership metadata. Gateway deployment evaluates a single ordered plan containing the management-network Apply step followed by the Compose gateway step. The standalone `network ensure` / `network teardown` commands use the same resource and Apply driver. `herdr-client.jsonnet` now expresses the Herdr infrastructure container, and `herdr client ensure` executes an ordered network-then-instance plan while requiring the instance to be running. `herdr client teardown` deletes only the Herdr instance. Existing-resource update/delete requires Aginctus ownership markers by default through incus-apply's `RequireExistingConfig` guard; `--force` deliberately disables that guard for explicit adoption or deletion. Native cloud-init and VM-agent waits remain unsupported in the current fork, so workload-instance migration remains a separate follow-up.
+
+
+### Fail-closed immutable drift
+
+Apply-backed Aginctus resources set `rejectUnsupportedChanges` when adopting or
+reconciling existing resources. Ownership checks may be bypassed explicitly with
+`--force`, but immutable identity/type drift is still rejected rather than silently
+ignored. This keeps management-network bridge type and instance isolation semantics
+(container versus VM) separate from ownership adoption policy.

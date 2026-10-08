@@ -16,7 +16,8 @@ import (
 type Config struct {
 	Operation             incusapply.Operation `json:"operation,omitempty"`
 	Project               string               `json:"project,omitempty"`
-	RequireExistingConfig map[string]string    `json:"requireExistingConfig,omitempty"`
+	RequireExistingConfig   map[string]string    `json:"requireExistingConfig,omitempty"`
+	RejectUnsupportedChanges bool                `json:"rejectUnsupportedChanges,omitempty"`
 	EnsureRunning         bool                 `json:"ensureRunning,omitempty"`
 	Documents             []json.RawMessage    `json:"documents"`
 }
@@ -67,7 +68,8 @@ func (d *Driver) Execute(_ context.Context, raw json.RawMessage, options orchest
 		Operation:             operation,
 		Project:               cfg.Project,
 		FailFast:              true,
-		RequireExistingConfig: cfg.RequireExistingConfig,
+		RequireExistingConfig:    cfg.RequireExistingConfig,
+		RejectUnsupportedChanges: cfg.RejectUnsupportedChanges,
 		EnsureRunning:         cfg.EnsureRunning,
 	})
 

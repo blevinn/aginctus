@@ -166,3 +166,23 @@ func TestExecuteMapsEnsureRunningOption(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 }
+
+
+func TestExecuteMapsRejectUnsupportedChangesOption(t *testing.T) {
+	fake := &fakeApplyClient{}
+	driver := New()
+	driver.newClient = func(options incusapply.Options) applyClient {
+		if !options.RejectUnsupportedChanges {
+			t.Fatal("RejectUnsupportedChanges = false, want true")
+		}
+		return fake
+	}
+
+	err := driver.Execute(t.Context(), []byte(`{
+		"rejectUnsupportedChanges": true,
+		"documents": [{"kind":"network","name":"aginctus-mgmt","networkType":"bridge"}]
+	}`), orchestration.ExecuteOptions{})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+}

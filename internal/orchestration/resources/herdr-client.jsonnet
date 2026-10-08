@@ -10,6 +10,7 @@ function(cfg)
     };
   ag.apply('herdr-client', {
     operation: if std.objectHas(cfg, 'operation') then cfg.operation else 'upsert',
+    rejectUnsupportedChanges: true,
     ensureRunning: !std.objectHas(cfg, 'operation') || cfg.operation == 'upsert',
     requireExistingConfig: requireExistingConfig,
     documents: [
