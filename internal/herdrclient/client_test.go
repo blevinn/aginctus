@@ -9,9 +9,10 @@ import (
 )
 
 type applyConfig struct {
-	Operation             string            `json:"operation"`
-	EnsureRunning         bool              `json:"ensureRunning"`
-	RequireExistingConfig map[string]string `json:"requireExistingConfig"`
+	Operation                string            `json:"operation"`
+	RejectUnsupportedChanges bool              `json:"rejectUnsupportedChanges"`
+	EnsureRunning            bool              `json:"ensureRunning"`
+	RequireExistingConfig    map[string]string `json:"requireExistingConfig"`
 }
 
 func decodeApplyConfig(t *testing.T, raw []byte) applyConfig {
@@ -55,7 +56,7 @@ func TestPlanEnsureOrdersNetworkBeforeRunningHerdrClient(t *testing.T) {
 	}
 
 	cfg := decodeApplyConfig(t, plan.Steps[1].Configuration)
-	if cfg.Operation != "upsert" || !cfg.EnsureRunning {
+	if cfg.Operation != "upsert" || !cfg.EnsureRunning || !cfg.RejectUnsupportedChanges {
 		t.Fatalf("Herdr apply config = %#v", cfg)
 	}
 	for key, want := range map[string]string{
@@ -106,5 +107,8 @@ func TestPlanForceOmitsHerdrOwnershipGuard(t *testing.T) {
 	cfg := decodeApplyConfig(t, plan.Steps[0].Configuration)
 	if len(cfg.RequireExistingConfig) != 0 {
 		t.Fatalf("force retained guard = %#v", cfg.RequireExistingConfig)
+	}
+	if !cfg.RejectUnsupportedChanges {
+		t.Fatal("force plan disabled immutable-drift rejection")
 	}
 }

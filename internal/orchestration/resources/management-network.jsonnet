@@ -9,6 +9,7 @@ function(cfg)
     };
   ag.apply('management-network', {
     operation: if std.objectHas(cfg, 'operation') then cfg.operation else 'upsert',
+    rejectUnsupportedChanges: true,
     requireExistingConfig: requireExistingConfig,
     documents: [
       {
