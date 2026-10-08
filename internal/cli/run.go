@@ -10,7 +10,6 @@ import (
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
-	"github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 )
 
@@ -246,8 +245,13 @@ func runNetwork(
 	return 0
 }
 
-func parseNetworkOptions(args []string) (incus.MutationOptions, error) {
-	var options incus.MutationOptions
+type mutationOptions struct {
+	DryRun bool
+	Force  bool
+}
+
+func parseNetworkOptions(args []string) (mutationOptions, error) {
+	var options mutationOptions
 	for _, arg := range args {
 		switch arg {
 		case "--dry-run":
@@ -255,7 +259,7 @@ func parseNetworkOptions(args []string) (incus.MutationOptions, error) {
 		case "--force":
 			options.Force = true
 		default:
-			return incus.MutationOptions{}, fmt.Errorf("unknown option %q", arg)
+			return mutationOptions{}, fmt.Errorf("unknown option %q", arg)
 		}
 	}
 	return options, nil
