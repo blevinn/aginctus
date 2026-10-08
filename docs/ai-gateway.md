@@ -12,7 +12,7 @@ The MVP includes workload identities, explicit model and MCP permissions, infere
 
 Multi-tenancy, multiple gateways, federation, a central control plane, high availability, local MCP subprocess execution, and an approval UI are outside this MVP. This gateway slice does not change the scope of the [first Herdr milestone](milestones/0001-herdr-console.md).
 
-The [locally hosted LLM proposal](local-llms.md) extends this direction with operator-managed OpenAI-compatible inference servers behind the same identity and model-policy boundary. It is a proposed follow-up, not part of the implemented gateway slice.
+The [locally hosted LLM proposal](local-llms.md) extends this direction with Aginctus-managed OpenAI-compatible inference servers inside Incus, backed by persistent model storage and the same identity/model-policy boundary. It is a proposed follow-up, not part of the implemented gateway slice.
 
 ## Initial implementation slice
 
