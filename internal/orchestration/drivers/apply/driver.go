@@ -14,12 +14,12 @@ import (
 )
 
 type Config struct {
-	Operation             incusapply.Operation `json:"operation,omitempty"`
-	Project               string               `json:"project,omitempty"`
-	RequireExistingConfig   map[string]string    `json:"requireExistingConfig,omitempty"`
-	RejectUnsupportedChanges bool                `json:"rejectUnsupportedChanges,omitempty"`
-	EnsureRunning         bool                 `json:"ensureRunning,omitempty"`
-	Documents             []json.RawMessage    `json:"documents"`
+	Operation                incusapply.Operation `json:"operation,omitempty"`
+	Project                  string               `json:"project,omitempty"`
+	RequireExistingConfig    map[string]string    `json:"requireExistingConfig,omitempty"`
+	RejectUnsupportedChanges bool                 `json:"rejectUnsupportedChanges,omitempty"`
+	EnsureRunning            bool                 `json:"ensureRunning,omitempty"`
+	Documents                []json.RawMessage    `json:"documents"`
 }
 
 type Driver struct {
@@ -65,12 +65,12 @@ func (d *Driver) Execute(_ context.Context, raw json.RawMessage, options orchest
 		operation = incusapply.Upsert
 	}
 	client := d.newClient(incusapply.Options{
-		Operation:             operation,
-		Project:               cfg.Project,
-		FailFast:              true,
+		Operation:                operation,
+		Project:                  cfg.Project,
+		FailFast:                 true,
 		RequireExistingConfig:    cfg.RequireExistingConfig,
 		RejectUnsupportedChanges: cfg.RejectUnsupportedChanges,
-		EnsureRunning:         cfg.EnsureRunning,
+		EnsureRunning:            cfg.EnsureRunning,
 	})
 
 	if options.DryRun {

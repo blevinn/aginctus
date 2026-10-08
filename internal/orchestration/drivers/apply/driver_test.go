@@ -167,7 +167,6 @@ func TestExecuteMapsEnsureRunningOption(t *testing.T) {
 	}
 }
 
-
 func TestExecuteMapsRejectUnsupportedChangesOption(t *testing.T) {
 	fake := &fakeApplyClient{}
 	driver := New()

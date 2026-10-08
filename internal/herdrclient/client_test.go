@@ -11,8 +11,8 @@ import (
 type applyConfig struct {
 	Operation                string            `json:"operation"`
 	RejectUnsupportedChanges bool              `json:"rejectUnsupportedChanges"`
-	EnsureRunning             bool              `json:"ensureRunning"`
-	RequireExistingConfig map[string]string `json:"requireExistingConfig"`
+	EnsureRunning            bool              `json:"ensureRunning"`
+	RequireExistingConfig    map[string]string `json:"requireExistingConfig"`
 }
 
 func decodeApplyConfig(t *testing.T, raw []byte) applyConfig {
