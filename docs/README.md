@@ -7,7 +7,7 @@ This directory contains project documentation that is too detailed or long-lived
 - [Project overview](project-overview.md) — vision, design principles, broad scope, and non-goals.
 - [Architecture](architecture.md) — initial component boundaries, workload roles, management networking, SSH identity, and deferred decisions.
 - [AI gateway design](ai-gateway.md) — single-operator LiteLLM deployment, inference and MCP policy, CLI authentication flows, and MVP acceptance criteria.
-- [Locally hosted LLMs](local-llms.md) — proposed gateway integration for operator-managed inference servers, connectivity, isolation, compatibility, and acceptance criteria.
+- [Locally hosted LLMs](local-llms.md) — proposed managed Incus model-serving lifecycle with persistent shared model storage, gateway integration, isolation, compatibility, and acceptance criteria.
 - [Declarative orchestration design](orchestration.md) — Jsonnet-generated execution plans with direct Go integration for incus-apply and incus-compose.
 - [Milestone 1: Herdr console over managed workloads](milestones/0001-herdr-console.md) — the first usable vertical slice and its success criteria.
 - [OpenCode workload](workloads/opencode.md) — first agent workload image, guest services, and local image workflow.
