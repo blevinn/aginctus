@@ -11,6 +11,7 @@ import (
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
+	"github.com/blevinn/aginctus/internal/workload"
 )
 
 const Version = "0.0.0-dev"
@@ -28,6 +29,10 @@ var executeManagementNetwork = func(ctx context.Context, spec managementnetwork.
 }
 
 var executeHerdrClient = func(ctx context.Context, spec herdrclient.Spec, options herdrclient.Options) error {
+	return spec.Execute(ctx, options)
+}
+
+var executeWorkload = func(ctx context.Context, spec workload.Spec, options workload.Options) error {
 	return spec.Execute(ctx, options)
 }
 
@@ -78,6 +83,8 @@ func Run(
 		return runGateway(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	case "herdr":
 		return runHerdr(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
+	case "workload":
+		return runWorkload(ctx, commandArgs[1:], stdout, stderr, effective)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", commandArgs[0])
 		printUsage(stderr)
@@ -389,6 +396,67 @@ func printHerdrClientUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] herdr client teardown [--dry-run] [--force]")
 }
 
+func runWorkload(
+	ctx context.Context,
+	args []string,
+	stdout, stderr io.Writer,
+	effective *config.Config,
+) int {
+	if len(args) < 2 {
+		printWorkloadUsage(stderr)
+		return 2
+	}
+
+	id := args[0]
+	action := args[1]
+	options, err := parseNetworkOptions(args[2:])
+	if err != nil {
+		fmt.Fprintf(stderr, "workload options: %v\n", err)
+		return 2
+	}
+
+	spec, err := workload.FromConfig(effective, id)
+	if err != nil {
+		fmt.Fprintf(stderr, "workload %q configuration: %v\n", id, err)
+		return 1
+	}
+
+	operation := "upsert"
+	if action == "teardown" {
+		operation = "delete"
+	} else if action != "ensure" {
+		printWorkloadUsage(stderr)
+		return 2
+	}
+
+	err = executeWorkload(ctx, spec, workload.Options{
+		DryRun:    options.DryRun,
+		Force:     options.Force,
+		Operation: operation,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "workload %q: %v\n", id, err)
+		return 1
+	}
+
+	switch {
+	case action == "ensure" && options.DryRun:
+		fmt.Fprintf(stdout, "workload %q: would reconcile\n", id)
+	case action == "ensure":
+		fmt.Fprintf(stdout, "workload %q: ready\n", id)
+	case options.DryRun:
+		fmt.Fprintf(stdout, "workload %q: would delete if present\n", id)
+	default:
+		fmt.Fprintf(stdout, "workload %q: absent\n", id)
+	}
+	return 0
+}
+
+func printWorkloadUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: aginctus [global options] workload <name> ensure [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] workload <name> teardown [--dry-run] [--force]")
+}
+
 func printUsage(w io.Writer) {
 	fmt.Fprintln(w, `Usage: aginctus [global options] <command>
 
@@ -407,6 +475,8 @@ Commands:
   herdr client teardown  Delete the Herdr client container
   network ensure    Create or reconcile the configured management network
   network teardown  Delete the configured management network
+  workload NAME ensure    Create or reconcile an agent workload
+  workload NAME teardown  Delete an agent workload
   version           Print the Aginctus CLI version
   help              Show this help`)
 }

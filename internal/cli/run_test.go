@@ -12,6 +12,7 @@ import (
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
+	"github.com/blevinn/aginctus/internal/workload"
 )
 
 type fakeIncusClient struct {
@@ -52,6 +53,13 @@ func stubHerdrClient(t *testing.T, fn func(context.Context, herdrclient.Spec, he
 	previous := executeHerdrClient
 	executeHerdrClient = fn
 	t.Cleanup(func() { executeHerdrClient = previous })
+}
+
+func stubWorkload(t *testing.T, fn func(context.Context, workload.Spec, workload.Options) error) {
+	t.Helper()
+	previous := executeWorkload
+	executeWorkload = fn
+	t.Cleanup(func() { executeWorkload = previous })
 }
 
 func TestDoctorSuccess(t *testing.T) {
@@ -447,6 +455,85 @@ func TestGatewayUpStopsBeforeNetworkMutationWhenSecretInitializationFails(t *tes
 		t.Fatalf("Run() code = %d, want 1", code)
 	}
 	if !strings.Contains(stderr.String(), "gateway initialization") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestWorkloadEnsureUsesGenericConfiguredWorkload(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	var gotSpec workload.Spec
+	var gotOptions workload.Options
+	stubWorkload(t, func(_ context.Context, spec workload.Spec, options workload.Options) error {
+		gotSpec = spec
+		gotOptions = options
+		return nil
+	})
+
+	code := Run(
+		context.Background(),
+		[]string{"workload", "dev", "ensure", "--dry-run"},
+		&stdout, &stderr, client, loader,
+	)
+	if code != 0 {
+		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
+	}
+	if gotSpec.ID != "dev" || gotSpec.Runtime != "opencode" || gotSpec.ImageAlias != "aginctus-opencode-workload" {
+		t.Fatalf("workload spec = %#v", gotSpec)
+	}
+	if !gotOptions.DryRun || gotOptions.Operation != "upsert" {
+		t.Fatalf("workload options = %#v", gotOptions)
+	}
+	if !strings.Contains(stdout.String(), "would reconcile") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestWorkloadTeardownMapsForceAndDelete(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	var gotOptions workload.Options
+	stubWorkload(t, func(_ context.Context, _ workload.Spec, options workload.Options) error {
+		gotOptions = options
+		return nil
+	})
+
+	code := Run(
+		context.Background(),
+		[]string{"workload", "dev", "teardown", "--force"},
+		&stdout, &stderr, client, loader,
+	)
+	if code != 0 {
+		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
+	}
+	if !gotOptions.Force || gotOptions.Operation != "delete" {
+		t.Fatalf("workload options = %#v", gotOptions)
+	}
+}
+
+func TestWorkloadUnknownNameFailsConfigurationLookup(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	code := Run(context.Background(), []string{"workload", "missing", "ensure"}, &stdout, &stderr, client, loader)
+	if code != 1 {
+		t.Fatalf("Run() code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "workloads.missing") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }

@@ -77,4 +77,4 @@ require (
 	oras.land/oras-go/v2 v2.6.2 // indirect
 )
 
-replace github.com/abiosoft/incus-apply => github.com/blevinn/incus-apply v0.0.0-20261008060330-238ddd34f372
+replace github.com/abiosoft/incus-apply => github.com/blevinn/incus-apply v0.0.0-20261009045408-a74cdb3cbb03
