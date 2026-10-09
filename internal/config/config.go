@@ -138,6 +138,23 @@ var defaults = map[string]any{
 			},
 		},
 	},
+	"workloads": map[string]any{
+		"dev": map[string]any{
+			"instance": map[string]any{
+				"name": "aginctus-dev",
+			},
+			"runtime": map[string]any{
+				"type": "opencode",
+			},
+			"isolation": "container",
+			"image": map[string]any{
+				"alias": "aginctus-opencode-workload",
+			},
+			"storage": map[string]any{
+				"pool": "default",
+			},
+		},
+	},
 	"incus": map[string]any{
 		"management": map[string]any{
 			"network": map[string]any{
