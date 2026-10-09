@@ -154,6 +154,8 @@ A single deployment-scoped keypair is sufficient for the first milestone. Per-wo
 
 The human host does not need direct SSH credentials for agent workloads in order to use Herdr.
 
+The proposed [Herdr SSH credential lifecycle](ssh-credentials.md) specifies generation, guest delivery, host-trust bootstrap, rotation, revocation, and orchestration integration for this path.
+
 ## Herdr machine discovery
 
 Aginctus owns the mapping between managed agent workloads and the machine entries consumed by the Herdr client.
