@@ -13,7 +13,7 @@ import (
 
 // Run only with AGINCTUS_INCUS_INTEGRATION=1 against a disposable Incus host.
 // A unique project is created for every test. The test never removes existing
-// projects or instances, and deliberately leaves artifacts for inspection.
+// projects or instances; cleanup is disabled only with --retain.
 func TestIncusComposeReconciliationIntegration(t *testing.T) {
 	if os.Getenv("AGINCTUS_INCUS_INTEGRATION") != "1" {
 		t.Skip("requires AGINCTUS_INCUS_INTEGRATION=1 and disposable Incus")
@@ -24,7 +24,8 @@ func TestIncusComposeReconciliationIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	name := fmt.Sprintf("aginctus-it-%d", time.Now().UnixNano())
-	t.Logf("test project %s (retained for manual inspection/cleanup)", name)
+	t.Logf("test project %s", name)
+	integrationProjectCleanup(t, name)
 	composeDoc := func(image string) []byte {
 		return []byte(fmt.Sprintf(`services:
   app:
