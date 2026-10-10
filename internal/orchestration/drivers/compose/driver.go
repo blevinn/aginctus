@@ -303,6 +303,31 @@ func stampComposeCommands(config *composeclient.InstanceConfig) error {
 	return nil
 }
 
+// verifyComposeDeploymentOwnership inspects the persisted project and every
+// instance, not merely the intended service names. Recheck after the upstream
+// project Ensure and before any subsequent instance actions so a collision
+// is rejected instead of silently being adopted on the next operation.
+func verifyComposeDeploymentOwnership(ctx context.Context, connection *iclient.Connection, project string) error {
+	incusProject := composeclient.SanitizeProjectName(project)
+	existing, _, err := connection.GetProject(ctx, incusProject)
+	if err != nil {
+		return fmt.Errorf("inspect Compose project %q ownership: %w", project, err)
+	}
+	if err := verifyComposeProjectOwnership(existing.Config, project); err != nil {
+		return err
+	}
+	instances, err := connection.GetInstances(ctx, incusProject, nil)
+	if err != nil {
+		return fmt.Errorf("inspect Compose instances in project %q: %w", project, err)
+	}
+	for _, instance := range instances {
+		if err := verifyComposeInstanceOwnership(instance.Config, project, instance.Name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -355,6 +380,11 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	}
 	defer c.WarnError(c.Done, "compose client cleanup failed")
 
+	// Upstream EnsureProject can encounter a concurrently created project.
+	// Verify what now exists before opening or ensuring child resources.
+	if err := verifyComposeDeploymentOwnership(ctx, connection, p.Name); err != nil {
+		return fmt.Errorf("post-ensure Compose ownership check: %w", err)
+	}
 	if err := c.Open(); err != nil {
 		return fmt.Errorf("open compose project %q: %w", p.Name, err)
 	}
@@ -564,6 +594,13 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		}
 	}
 
+	// Final ownership gate after prerequisite actions and before every
+	// instance Ensure/Start pass. This does not claim transactional isolation
+	// from concurrent external writers; future mutation paths must retain
+	// their own ownership checks.
+	if err := verifyComposeDeploymentOwnership(ctx, connection, p.Name); err != nil {
+		return fmt.Errorf("pre-service Compose ownership check: %w", err)
+	}
 	for _, action := range []composeclient.Action{composeclient.ActionEnsure, composeclient.ActionStart} {
 		if err := runComposeServicesSequentially(ctx, order, func(service string) error {
 			for _, resource := range resources[service] {
