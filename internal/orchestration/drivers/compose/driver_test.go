@@ -435,3 +435,33 @@ func TestComposeDeviceAndProfileDriftRecreationDecisions(t *testing.T) {
 		})
 	}
 }
+
+func TestStampComposeCommandsDetectsChangesWithoutExposingValues(t *testing.T) {
+	makeConfig := func(command string) composeclient.InstanceConfig {
+		return composeclient.InstanceConfig{Command: []string{"sh", "-c", command}}
+	}
+	first := makeConfig("echo secret-one")
+	unchanged := makeConfig("echo secret-one")
+	changed := makeConfig("echo secret-two")
+	for _, cfg := range []*composeclient.InstanceConfig{&first, &unchanged, &changed} {
+		if err := stampComposeCommands(cfg); err != nil {t.Fatal(err)}
+	}
+	a := first.Extensions[ownershipCommandKey]
+	if a == "" || a != unchanged.Extensions[ownershipCommandKey] || a == changed.Extensions[ownershipCommandKey] {
+		t.Fatalf("command digest not stable or fails to detect change")
+	}
+	if strings.Contains(a, "secret") {t.Fatal("command marker leaked command contents")}
+	if err := detectComposeInstanceDrift(changed.Extensions,nil,first.Extensions,nil); err == nil {
+		t.Fatal("command digest change must register as configuration drift")
+	}
+	entrypoint := makeConfig("echo secret-one")
+	entrypoint.Entrypoint = []string{"/bin/sh"}
+	if err := stampComposeCommands(&entrypoint); err != nil {t.Fatal(err)}
+	if entrypoint.Extensions[ownershipCommandKey] == a {
+		t.Fatal("entrypoint change was not detected")
+	}
+}
+func TestStampComposeCommandsRejectsReservedMarker(t *testing.T) {
+	cfg := composeclient.InstanceConfig{Extensions: map[string]string{ownershipCommandKey:"overridden"}}
+	if err := stampComposeCommands(&cfg); err == nil {t.Fatal("accepted user-controlled command marker")}
+}
