@@ -353,6 +353,46 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	if err := prerequisites.ForAction(composeclient.ActionEnsure).Run(ctx, composeclient.ActionEnsure, runOptions...); err != nil {
 		return fmt.Errorf("compose project %q ensure prerequisites: %w", p.Name, err)
 	}
+	// Image aliases absent at initial preflight can appear during the
+	// prerequisite pass. Recheck every pre-existing owned instance now,
+	// before Ensure or Start can silently reuse an obsolete base image.
+	for _, service := range order {
+		for _, resource := range resources[service] {
+			instance, ok := resource.(*composeclient.Instance)
+			if !ok || instance.Config.Image == "" {
+				continue
+			}
+			existing, _, err := connection.GetInstance(ctx, composeclient.SanitizeProjectName(p.Name), instance.IncusName(), nil)
+			if api.StatusErrorCheck(err, http.StatusNotFound) {
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("recheck Compose instance %q image state: %w", instance.IncusName(), err)
+			}
+			if err := verifyComposeInstanceOwnership(existing.Config, p.Name, instance.IncusName()); err != nil {
+				return err
+			}
+			imageResource, err := c.Resource(composeclient.KindImage, instance.Config.Image, &composeclient.ImageConfig{})
+			if err != nil {
+				return fmt.Errorf("resolve ensured image for service %q: %w", service, err)
+			}
+			image, ok := imageResource.(*composeclient.Image)
+			if !ok {
+				return fmt.Errorf("resolve ensured image for service %q: unexpected resource type", service)
+			}
+			if err := detectComposeImageDrift(image.IncusName(), existing.Config["user.image_alias"]); err != nil {
+				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+			}
+			alias, _, err := connection.GetImageAlias(ctx, composeclient.SanitizeProjectName(p.Name), image.IncusName(), nil)
+			if err != nil {
+				return fmt.Errorf("resolve ensured image alias for service %q: %w", service, err)
+			}
+			if err := detectComposeImageFingerprintDrift(alias.Target, existing.Config["volatile.base_image"]); err != nil {
+				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+			}
+		}
+	}
+
 	for _, action := range []composeclient.Action{composeclient.ActionEnsure, composeclient.ActionStart} {
 		if err := runComposeServicesSequentially(ctx, order, func(service string) error {
 			for _, resource := range resources[service] {
