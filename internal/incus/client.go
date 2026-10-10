@@ -118,14 +118,9 @@ func (c *Client) ExecInstance(ctx context.Context, name string, command []string
 		return InstanceExecResult{}, ctx.Err()
 	}
 
-	exitCode := 0
-	if metadata := op.Get().Metadata; metadata != nil {
-		switch value := metadata["return"].(type) {
-		case float64:
-			exitCode = int(value)
-		case int:
-			exitCode = value
-		}
+	exitCode, err := instanceExecExitCode(op.Get().Metadata)
+	if err != nil {
+		return InstanceExecResult{}, fmt.Errorf("read exec status in instance %q: %w", name, err)
 	}
 	return InstanceExecResult{
 		Stdout:   stdout.String(),
@@ -165,4 +160,25 @@ func (c *Client) InstanceAddress(ctx context.Context, name, interfaceName string
 		}
 	}
 	return "", fmt.Errorf("instance %q interface %q has no usable global address", name, interfaceName)
+}
+
+
+func instanceExecExitCode(metadata map[string]any) (int, error) {
+	if metadata == nil {
+		return 0, fmt.Errorf("missing operation metadata")
+	}
+	value, ok := metadata["return"]
+	if !ok {
+		return 0, fmt.Errorf("missing return code")
+	}
+	switch value := value.(type) {
+	case float64:
+		return int(value), nil
+	case int:
+		return value, nil
+	case int64:
+		return int(value), nil
+	default:
+		return 0, fmt.Errorf("unexpected return code type %T", value)
+	}
 }
