@@ -41,6 +41,7 @@ func gatewayServiceName(project, name string) bool {
 	}
 	return false
 }
+
 var numericInstanceSuffix = regexp.MustCompile(`^[1-9][0-9]*$`)
 
 func numericSuffix(name, prefix string) bool {
