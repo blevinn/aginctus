@@ -2,9 +2,9 @@ package compose
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -88,11 +88,17 @@ func TestComposeServiceOrderAndFailFastAreSequential(t *testing.T) {
 	errFailure := errors.New("postgres failed")
 	err := runComposeServicesSequentially(context.Background(), []string{"postgres", "litellm"}, func(service string) error {
 		visited = append(visited, service)
-		if service == "postgres" { return errFailure }
+		if service == "postgres" {
+			return errFailure
+		}
 		return nil
 	})
-	if !errors.Is(err, errFailure) { t.Fatalf("error = %v", err) }
-	if !reflect.DeepEqual(visited, []string{"postgres"}) { t.Fatalf("visited = %v", visited) }
+	if !errors.Is(err, errFailure) {
+		t.Fatalf("error = %v", err)
+	}
+	if !reflect.DeepEqual(visited, []string{"postgres"}) {
+		t.Fatalf("visited = %v", visited)
+	}
 }
 
 func TestComposeServiceExecutionWaitsForActiveResource(t *testing.T) {
@@ -117,7 +123,9 @@ func TestComposeServiceExecutionWaitsForActiveResource(t *testing.T) {
 	default:
 	}
 	close(release)
-	if err := <-done; err == nil { t.Fatal("expected failure") }
+	if err := <-done; err == nil {
+		t.Fatal("expected failure")
+	}
 }
 
 func TestComposeServiceExecutionStopsOnCancellation(t *testing.T) {
@@ -128,6 +136,10 @@ func TestComposeServiceExecutionStopsOnCancellation(t *testing.T) {
 		cancel()
 		return nil
 	})
-	if !errors.Is(err, context.Canceled) { t.Fatalf("error = %v", err) }
-	if !reflect.DeepEqual(visited, []string{"postgres"}) { t.Fatalf("visited = %v", visited) }
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v", err)
+	}
+	if !reflect.DeepEqual(visited, []string{"postgres"}) {
+		t.Fatalf("visited = %v", visited)
+	}
 }

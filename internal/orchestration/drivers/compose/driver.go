@@ -89,7 +89,6 @@ func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
 	return cfg, nil
 }
 
-
 func runComposeServicesSequentially(ctx context.Context, order []string, run func(string) error) error {
 	for _, service := range order {
 		if err := ctx.Err(); err != nil {
@@ -141,7 +140,6 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	if err != nil {
 		return fmt.Errorf("order compose services for %q: %w", p.Name, err)
 	}
-
 
 	runOptions := []composeclient.Option{composeclient.OptionCreate()}
 	for _, action := range []composeclient.Action{composeclient.ActionEnsure, composeclient.ActionStart} {
