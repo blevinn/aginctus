@@ -83,19 +83,19 @@ func TestWorkloadListRejectsForeignAndDaemonErrors(t *testing.T) {
 	loader.Environment = nil
 	for _, tc := range []struct {
 		name string
-		raw string
-		err error
+		raw  string
+		err  error
 		want string
 	}{
 		{"foreign", `[{"name":"aginctus-dev","status":"Running","config":{}}]`, nil, "ownership"},
 		{"daemon", "", errors.New("unavailable"), "unavailable"},
 	} {
-		t.Run(tc.name,func(t *testing.T) {
-			inspectIncusInstances = func(context.Context)([]byte,error){return []byte(tc.raw),tc.err}
-			var out,errOut bytes.Buffer
-			code:=Run(context.Background(),[]string{"workload","ls"},&out,&errOut,&fakeIncusClient{},loader)
-			if code!=1 || out.Len()!=0 || !strings.Contains(errOut.String(),tc.want) {
-				t.Fatalf("code=%d stdout=%q stderr=%q",code,out.String(),errOut.String())
+		t.Run(tc.name, func(t *testing.T) {
+			inspectIncusInstances = func(context.Context) ([]byte, error) { return []byte(tc.raw), tc.err }
+			var out, errOut bytes.Buffer
+			code := Run(context.Background(), []string{"workload", "ls"}, &out, &errOut, &fakeIncusClient{}, loader)
+			if code != 1 || out.Len() != 0 || !strings.Contains(errOut.String(), tc.want) {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
 			}
 		})
 	}
