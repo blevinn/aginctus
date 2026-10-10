@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"text/template"
+	"syscall"
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/orchestration"
@@ -179,6 +180,18 @@ func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("protect gateway state directory: %w", err)
 	}
+
+	// Hold a per-gateway interprocess lock through read, initialization and
+	// atomic publication, so concurrent first-time callers use one credential set.
+	lockFile, err := os.OpenFile(filepath.Join(dir, ".secrets.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open gateway initialization lock: %w", err)
+	}
+	defer lockFile.Close()
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		return nil, fmt.Errorf("lock gateway initialization: %w", err)
+	}
+	defer syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
 
 	path := filepath.Join(dir, "secrets.json")
 	values := map[string]string{}
