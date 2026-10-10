@@ -16,12 +16,24 @@ import (
 )
 
 type fakeIncusClient struct {
-	version string
-	err     error
+	version      string
+	err          error
+	httpsAddress string
+	httpsMissing bool
 }
 
 func (c *fakeIncusClient) ServerVersion(context.Context) (string, error) {
 	return c.version, c.err
+}
+
+func (c *fakeIncusClient) HTTPSAddress(context.Context) (string, error) {
+	if c.httpsMissing {
+		return "", nil
+	}
+	if c.httpsAddress != "" {
+		return c.httpsAddress, nil
+	}
+	return "127.0.0.1:8443", nil
 }
 
 type fakeConfigLoader struct {
@@ -535,5 +547,30 @@ func TestWorkloadUnknownNameFailsConfigurationLookup(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "workloads.missing") {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestDoctorDetectsMissingHTTPSListener(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	client := &fakeIncusClient{version: "7.0.1", httpsMissing: true}
+	code := Run(context.Background(), []string{"doctor"}, &stdout, &stderr, client, &fakeConfigLoader{})
+	if code != 1 || !strings.Contains(stderr.String(), "doctor --fix") {
+		t.Fatalf("code=%d, stderr=%q", code, stderr.String())
+	}
+}
+
+func TestDoctorFixConfiguresLoopbackOnly(t *testing.T) {
+	previous := setIncusHTTPSAddress
+	t.Cleanup(func() { setIncusHTTPSAddress = previous })
+	var called string
+	setIncusHTTPSAddress = func(_ context.Context, address string) error {
+		called = address
+		return nil
+	}
+	var stdout, stderr bytes.Buffer
+	client := &fakeIncusClient{version: "7.0.1", httpsMissing: true}
+	code := Run(context.Background(), []string{"doctor", "--fix"}, &stdout, &stderr, client, &fakeConfigLoader{})
+	if code != 0 || called != "127.0.0.1:8443" {
+		t.Fatalf("code=%d, address=%q, stderr=%q", code, called, stderr.String())
 	}
 }
