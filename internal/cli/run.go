@@ -327,7 +327,7 @@ func runGateway(
 			fmt.Fprintf(stderr, "gateway deployment: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "gateway %q: ready\n", spec.ID)
+		fmt.Fprintf(stdout, "gateway %q: started (application readiness not verified)\n", spec.ID)
 		return 0
 	default:
 		printGatewayUsage(stderr)
