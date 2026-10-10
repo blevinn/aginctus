@@ -11,13 +11,13 @@ import (
 func TestValidateGatewayCleanup(t *testing.T) {
 	project := "aginctus-gateway"
 	owned := cleanupProject{Name: project, Config: map[string]string{
-		"user.aginctus.managed": "true",
-		"user.aginctus.resource": "compose-project",
+		"user.aginctus.managed":    "true",
+		"user.aginctus.resource":   "compose-project",
 		"user.aginctus.deployment": project,
 	}}
 	instances := []cleanupInstance{{Name: project + "-postgres-1", Config: map[string]string{
-		"user.aginctus.managed": "true",
-		"user.aginctus.resource": "compose-instance",
+		"user.aginctus.managed":    "true",
+		"user.aginctus.resource":   "compose-instance",
 		"user.aginctus.deployment": project,
 	}}}
 	if err := validateGatewayCleanup(project, owned, instances, false); err != nil {

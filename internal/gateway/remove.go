@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-
 )
 
 // runIncus is replaceable in tests. Each invocation uses the local Incus CLI.
@@ -21,11 +20,11 @@ var runIncus = func(ctx context.Context, args ...string) ([]byte, error) {
 }
 
 type cleanupProject struct {
-	Name string            `json:"name"`
+	Name   string            `json:"name"`
 	Config map[string]string `json:"config"`
 }
 type cleanupInstance struct {
-	Name string            `json:"name"`
+	Name   string            `json:"name"`
 	Config map[string]string `json:"config"`
 }
 
