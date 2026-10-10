@@ -58,12 +58,18 @@ func (e *Engine) Validate(plan Plan, options ExecuteOptions) error {
 }
 
 func (e *Engine) Execute(ctx context.Context, plan Plan, options ExecuteOptions) (Result, error) {
+	if err := ctx.Err(); err != nil {
+		return Result{}, fmt.Errorf("orchestration canceled before validation: %w", err)
+	}
 	if err := e.Validate(plan, options); err != nil {
 		return Result{}, err
 	}
 
 	result := Result{Steps: make([]StepResult, 0, len(plan.Steps))}
 	for _, step := range plan.Steps {
+		if err := ctx.Err(); err != nil {
+			return result, fmt.Errorf("orchestration canceled before step %q: %w", step.ID, err)
+		}
 		driver := e.drivers[step.Driver]
 		if err := driver.Execute(ctx, step.Configuration, options); err != nil {
 			return result, fmt.Errorf("execute orchestration step %q (%s): %w", step.ID, step.Driver, err)
