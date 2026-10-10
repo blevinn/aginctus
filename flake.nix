@@ -185,6 +185,10 @@
         }
       );
 
+      checks = forAllSystems (system: {
+        nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
+      });
+
       devShells = forAllSystems (
         system:
         let
