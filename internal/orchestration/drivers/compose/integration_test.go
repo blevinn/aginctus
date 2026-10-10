@@ -33,25 +33,45 @@ func TestIncusComposeReconciliationIntegration(t *testing.T) {
 `, image))
 	}
 	run := func(image string, recreate bool) error {
-		return executeCompose(ctx, Config{Project:name, Compose:composeDoc(image), RecreateOnDrift:recreate},nil)
+		return executeCompose(ctx, Config{Project: name, Compose: composeDoc(image), RecreateOnDrift: recreate}, nil)
 	}
 	const first = "docker.io/library/alpine:3.21"
 	const second = "docker.io/library/alpine:3.22"
-	if err := run(first, false); err != nil { t.Fatalf("initial deployment: %v",err) }
-	if err := run(first, false); err != nil { t.Fatalf("idempotent deployment: %v",err) }
-	err := run(second, false)
-	if err == nil || !strings.Contains(err.Error(),"drift") {
-		t.Fatalf("expected fail-closed image drift, got %v",err)
+	if err := run(first, false); err != nil {
+		t.Fatalf("initial deployment: %v", err)
 	}
-	if err := run(second, true); err != nil { t.Fatalf("opt-in recreation: %v",err) }
-	if err := run(second, false); err != nil { t.Fatalf("post-recreation idempotence: %v",err) }
-	conn,err:=iclient.NewConnection(&iclient.ConfigRemoteInfo{Name:"local",Addrs:[]string{"unix://"},Protocol:"incus"})
-	if err != nil {t.Fatal(err)}
-	instanceNames,err:=conn.GetInstanceNames(ctx,name,nil)
-	if err != nil {t.Fatal(err)}
-	if len(instanceNames)!=1 {t.Fatalf("expected one instance, got %v",instanceNames)}
-	inst,_,err:=conn.GetInstance(ctx,name,instanceNames[0],nil)
-	if err!=nil {t.Fatal(err)}
-	if err:=verifyComposeInstanceOwnership(inst.Config,name,inst.Name);err!=nil{t.Fatal(err)}
-	if inst.Config["user.image_alias"] == "" {t.Fatal("recreated instance is missing image alias") }
+	if err := run(first, false); err != nil {
+		t.Fatalf("idempotent deployment: %v", err)
+	}
+	err := run(second, false)
+	if err == nil || !strings.Contains(err.Error(), "drift") {
+		t.Fatalf("expected fail-closed image drift, got %v", err)
+	}
+	if err := run(second, true); err != nil {
+		t.Fatalf("opt-in recreation: %v", err)
+	}
+	if err := run(second, false); err != nil {
+		t.Fatalf("post-recreation idempotence: %v", err)
+	}
+	conn, err := iclient.NewConnection(&iclient.ConfigRemoteInfo{Name: "local", Addrs: []string{"unix://"}, Protocol: "incus"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	instanceNames, err := conn.GetInstanceNames(ctx, name, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(instanceNames) != 1 {
+		t.Fatalf("expected one instance, got %v", instanceNames)
+	}
+	inst, _, err := conn.GetInstance(ctx, name, instanceNames[0], nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyComposeInstanceOwnership(inst.Config, name, inst.Name); err != nil {
+		t.Fatal(err)
+	}
+	if inst.Config["user.image_alias"] == "" {
+		t.Fatal("recreated instance is missing image alias")
+	}
 }
