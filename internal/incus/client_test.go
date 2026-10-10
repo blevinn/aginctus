@@ -84,3 +84,50 @@ func TestInstanceExecExitCode(t *testing.T) {
 		})
 	}
 }
+
+
+func TestSelectInstanceAddress(t *testing.T) {
+	tests := []struct {
+		name      string
+		addresses []api.InstanceStateNetworkAddress
+		want      string
+		wantOK    bool
+	}{
+		{
+			name: "prefers global IPv4",
+			addresses: []api.InstanceStateNetworkAddress{
+				{Family: "inet6", Scope: "global", Address: "fd42::25"},
+				{Family: "inet", Scope: "global", Address: "10.42.0.25"},
+			},
+			want:   "10.42.0.25",
+			wantOK: true,
+		},
+		{
+			name: "accepts private IPv4 with non-global scope",
+			addresses: []api.InstanceStateNetworkAddress{
+				{Family: "inet", Scope: "local", Address: "10.42.0.25"},
+			},
+			want:   "10.42.0.25",
+			wantOK: true,
+		},
+		{
+			name: "skips loopback and link-local",
+			addresses: []api.InstanceStateNetworkAddress{
+				{Family: "inet", Scope: "local", Address: "127.0.0.1"},
+				{Family: "inet6", Scope: "link", Address: "fe80::1"},
+			},
+			wantOK: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := selectInstanceAddress(tt.addresses)
+			if ok != tt.wantOK {
+				t.Fatalf("selectInstanceAddress() ok = %v, want %v", ok, tt.wantOK)
+			}
+			if got != tt.want {
+				t.Fatalf("selectInstanceAddress() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
