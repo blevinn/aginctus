@@ -29,7 +29,6 @@ let
 
   imageUpdateService =
     {
-      name,
       alias,
       source,
     }:
@@ -37,7 +36,8 @@ let
       description = "Update Aginctus Incus image ${alias}";
       wantedBy = [ "multi-user.target" ];
       after = [ "incus.service" ];
-      wants = [ "incus.service" ];
+      requires = [ "incus.service" ];
+      path = [ pkgs.incus ];
       restartTriggers = [ source ];
       serviceConfig = {
         Type = "oneshot";
@@ -233,14 +233,12 @@ in
     systemd.services =
       lib.optionalAttrs cfg.images.herdrClient.enable {
         aginctus-image-herdr-client = imageUpdateService {
-          name = "herdr-client";
           alias = cfg.images.herdrClient.alias;
           source = cfg.images.herdrClient.source;
         };
       }
       // lib.optionalAttrs cfg.images.opencodeWorkload.enable {
         aginctus-image-opencode-workload = imageUpdateService {
-          name = "opencode-workload";
           alias = cfg.images.opencodeWorkload.alias;
           source = cfg.images.opencodeWorkload.source;
         };
@@ -251,10 +249,15 @@ in
           wantedBy = [ "multi-user.target" ];
           after = [
             "incus.service"
-            "aginctus-image-herdr-client.service"
-            "aginctus-image-opencode-workload.service"
-          ];
-          wants = [ "incus.service" ];
+          ]
+          ++ lib.optional cfg.images.herdrClient.enable "aginctus-image-herdr-client.service"
+          ++ lib.optional cfg.images.opencodeWorkload.enable "aginctus-image-opencode-workload.service";
+          requires = [
+            "incus.service"
+          ]
+          ++ lib.optional cfg.images.herdrClient.enable "aginctus-image-herdr-client.service"
+          ++ lib.optional cfg.images.opencodeWorkload.enable "aginctus-image-opencode-workload.service";
+          path = [ pkgs.incus ];
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
