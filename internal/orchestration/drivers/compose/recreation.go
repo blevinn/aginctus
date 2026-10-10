@@ -40,3 +40,28 @@ func planComposeRecreation(drift *ComposeDriftError, devices map[string]map[stri
 	sort.Strings(plan.PersistentDevices)
 	return plan, nil
 }
+
+// verifyComposeRecreationVolumes ensures replacement never silently rebinds
+// an existing persistent mount to a different volume or drops it. The
+// caller must compare the actual instance devices with the fully materialized
+// desired instance devices, including Compose-generated mounts.
+func verifyComposeRecreationVolumes(existing, replacement map[string]map[string]string) error {
+	for name, current := range existing {
+		if current["type"] != "disk" || current["path"] == "/" {
+			continue
+		}
+		if current["path"] == "" || current["pool"] == "" || current["source"] == "" {
+			return fmt.Errorf("cannot replace instance: existing disk %q has ambiguous persistent storage", name)
+		}
+		desired, ok := replacement[name]
+		if !ok {
+			return fmt.Errorf("cannot replace instance: persistent disk %q would be removed", name)
+		}
+		for _, field := range []string{"type", "path", "pool", "source"} {
+			if desired[field] != current[field] {
+				return fmt.Errorf("cannot replace instance: persistent disk %q changes %s", name, field)
+			}
+		}
+	}
+	return nil
+}
