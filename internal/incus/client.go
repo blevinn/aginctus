@@ -55,6 +55,5 @@ func (c *Client) HTTPSAddress(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("get Incus server configuration: %w", err)
 	}
-	value, _ := status.Config["core.https_address"].(string)
-	return value, nil
+	return status.Config["core.https_address"], nil
 }
