@@ -135,6 +135,8 @@ func (s Spec) RenderCompose() (string, error) {
 	return out.String(), nil
 }
 
+var safeGatewaySecret = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
 var requiredRuntimeEnvironment = []string{
 	"AGINCTUS_GATEWAY_POSTGRES_PASSWORD",
 	"AGINCTUS_GATEWAY_MASTER_KEY",
@@ -219,6 +221,12 @@ func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
 			values[name] = generated
 		}
 		changed = true
+	}
+
+	for _, name := range requiredRuntimeEnvironment {
+		if !safeGatewaySecret.MatchString(values[name]) {
+			return nil, fmt.Errorf("%s contains unsupported characters: use only ASCII letters, digits, underscore or hyphen", name)
+		}
 	}
 
 	if changed {
