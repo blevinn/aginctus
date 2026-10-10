@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/lxc/incus-compose/iclient"
-	"errors"
 	"reflect"
 	"strings"
 	"testing"
