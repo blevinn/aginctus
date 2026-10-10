@@ -16,7 +16,7 @@ func TestRenderCompose(t *testing.T) {
 		NetworkIPv4NAT:     false,
 		NetworkIPv4Routing: false,
 		NetworkIPv6Address: "none",
-		LiteLLMImage:       "ghcr.io/berriai/litellm:v1.103.0-stable",
+		LiteLLMImage:       "ghcr.io/berriai/litellm:v1.103.0",
 		PostgresImage:      "docker.io/library/postgres:17-alpine",
 	}
 
@@ -27,7 +27,7 @@ func TestRenderCompose(t *testing.T) {
 
 	for _, want := range []string{
 		"name: aginctus-gateway",
-		"ghcr.io/berriai/litellm:v1.103.0-stable",
+		"ghcr.io/berriai/litellm:v1.103.0",
 		"docker.io/library/postgres:17-alpine",
 		"name: aginctus-mgmt",
 		"${AGINCTUS_GATEWAY_MASTER_KEY}",
@@ -54,7 +54,7 @@ func TestOrchestrationPlanOrdersNetworkBeforeComposeAndKeepsSecretReferences(t *
 		NetworkIPv4NAT:     false,
 		NetworkIPv4Routing: false,
 		NetworkIPv6Address: "none",
-		LiteLLMImage:       "ghcr.io/berriai/litellm:v1.103.0-stable",
+		LiteLLMImage:       "ghcr.io/berriai/litellm:v1.103.0",
 		PostgresImage:      "docker.io/library/postgres:17-alpine",
 	}
 
