@@ -183,6 +183,17 @@ func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
 		return nil, fmt.Errorf("protect gateway state directory: %w", err)
 	}
 
+	// Hold a per-gateway interprocess lock across secret initialization and publication.
+	lockFile, err := os.OpenFile(filepath.Join(dir, ".secrets.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open gateway initialization lock: %w", err)
+	}
+	defer lockFile.Close()
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		return nil, fmt.Errorf("lock gateway initialization: %w", err)
+	}
+	defer syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+
 	path := filepath.Join(dir, "secrets.json")
 	values := map[string]string{}
 	if data, err := readSecretState(path); err == nil {
