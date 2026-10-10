@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -256,6 +257,20 @@ func verifyComposeEnsuredImage(imageAlias, cachedAlias, desiredFingerprint, inst
 	return detectComposeImageFingerprintDrift(desiredFingerprint, instanceFingerprint)
 }
 
+// explainComposeRecreationSafety retains the original typed drift error while
+// checking that all attached persistent disks can be identified in advance.
+func explainComposeRecreationSafety(err error, devices map[string]map[string]string) error {
+	var drift *ComposeDriftError
+	if !errors.As(err, &drift) {
+		return err
+	}
+	plan, planErr := planComposeRecreation(drift, devices)
+	if planErr != nil {
+		return fmt.Errorf("%w; recreation safety preflight failed: %v", err, planErr)
+	}
+	return fmt.Errorf("%w; recreation requires preserving %d explicit storage volume attachment(s)", err, len(plan.PersistentDevices))
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -347,14 +362,14 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 					return fmt.Errorf("resolve desired image for service %q: unexpected resource type", service)
 				}
 				if err := detectComposeImageDrift(image.IncusName(), existing.Config["user.image_alias"]); err != nil {
-					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
 				}
 				// Resolve the *current* local alias as well as comparing its
 				// name. Without this, a refreshed mutable tag goes unnoticed.
 				alias, _, err := connection.GetImageAlias(ctx, composeclient.SanitizeProjectName(p.Name), image.IncusName(), nil)
 				if err == nil {
 					if err := detectComposeImageFingerprintDrift(alias.Target, existing.Config["volatile.base_image"]); err != nil {
-						return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+						return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
 					}
 				} else if !api.StatusErrorCheck(err, http.StatusNotFound) {
 					return fmt.Errorf("inspect image alias for service %q: %w", service, err)
@@ -364,10 +379,10 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 
 			}
 			if err := detectComposeInstanceDrift(instance.Config.Extensions, instance.Config.Profiles, existing.Config, existing.Profiles); err != nil {
-				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
 			}
 			if err := detectComposeDeviceDrift(instance.Config.ExtraDevices, existing.Devices); err != nil {
-				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
 			}
 		}
 	}
@@ -420,7 +435,7 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 				return fmt.Errorf("resolve ensured image alias for service %q: %w", service, err)
 			}
 			if err := verifyComposeEnsuredImage(image.IncusName(), existing.Config["user.image_alias"], alias.Target, existing.Config["volatile.base_image"]); err != nil {
-				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
 			}
 		}
 	}
