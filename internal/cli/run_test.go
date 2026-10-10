@@ -575,7 +575,6 @@ func TestDoctorFixConfiguresLoopbackOnly(t *testing.T) {
 	}
 }
 
-
 func TestNetworkApplyAndRemoveCommands(t *testing.T) {
 	loader := config.NewLoader()
 	loader.SystemPath = ""
