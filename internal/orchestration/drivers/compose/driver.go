@@ -272,6 +272,13 @@ func explainComposeRecreationSafety(err error, devices map[string]map[string]str
 	return fmt.Errorf("%w; recreation requires preserving %d explicit storage volume attachment(s)", err, len(plan.PersistentDevices))
 }
 
+// composeNeedsStart avoids treating an already-running instance as a failed
+// deployment. Other resource types still run their normal Start action.
+func composeNeedsStart(resource composeclient.Resource) bool {
+	instance, ok := resource.(*composeclient.Instance)
+	return !ok || !instance.Running()
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -518,7 +525,7 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 				if action == composeclient.ActionEnsure && isComposePrerequisite(resource.Priority()) {
 					continue // already ensured in the prerequisite pass
 				}
-				if action == composeclient.ActionStart && !resource.IsEnsured() {
+				if action == composeclient.ActionStart && (!resource.IsEnsured() || !composeNeedsStart(resource)) {
 					continue
 				}
 				stack := composeclient.NewStack(c, composeclient.StackWorkers(1))

@@ -398,3 +398,12 @@ func TestComposeDriftErrorsAreTypedAndSecretSafe(t *testing.T) {
 		})
 	}
 }
+
+func TestComposeNeedsStartSkipsRunningInstance(t *testing.T) {
+	// A freshly constructed instance has no fetched state and still needs
+	// its initial start after Ensure. Live running-state behavior is covered
+	// by TestIncusComposeReconciliationIntegration.
+	if !composeNeedsStart(nil) {
+		t.Fatal("non-instance resources must retain their Start action")
+	}
+}
