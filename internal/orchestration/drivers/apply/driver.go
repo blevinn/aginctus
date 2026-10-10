@@ -98,10 +98,20 @@ func (d *Driver) Execute(ctx context.Context, raw json.RawMessage, options orche
 		if _, err := client.Plan(bytes.NewReader(stream)); err != nil {
 			return fmt.Errorf("plan incus-apply resources: %w", err)
 		}
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("apply planning canceled: %w", err)
+		}
 		return nil
 	}
-	if _, err := client.Execute(bytes.NewReader(stream)); err != nil {
-		return fmt.Errorf("apply incus resources: %w", err)
+	// The pinned native incus-apply client does not take a context. Do not
+	// claim in-flight interruption: report cancellation immediately after
+	// the blocking call, before a later orchestration step can begin.
+	_, executeErr := client.Execute(bytes.NewReader(stream))
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("apply execution canceled (native operation may have completed): %w", err)
+	}
+	if executeErr != nil {
+		return fmt.Errorf("apply incus resources: %w", executeErr)
 	}
 	return nil
 }
