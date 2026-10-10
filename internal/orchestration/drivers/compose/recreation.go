@@ -2,6 +2,7 @@ package compose
 
 import (
 	"context"
+	composeclient "github.com/lxc/incus-compose/client"
 	"fmt"
 	"sort"
 	"strings"
@@ -113,3 +114,30 @@ func verifyComposeRecreationVolumes(existing, replacement map[string]map[string]
 	}
 	return nil
 }
+
+
+// recreateWithRetainedVolumes checks the fully materialized replacement,
+// then executes the already ownership-guarded lifecycle. No volume-delete
+// options are passed through this path.
+func recreateWithRetainedVolumes(ctx context.Context, oldDevices, replacement map[string]map[string]string, recheckOwnership, stop, remove, create func(context.Context) error) error {
+	if err := verifyComposeRecreationVolumes(oldDevices, replacement); err != nil { return err }
+	return recreateWithoutPersistentDisks(ctx, nil, recheckOwnership, stop, remove, create)
+}
+
+// materializeComposeDevices converts generated and raw Compose devices to the
+// exact Incus device shape before any existing instance is replaced.
+func materializeComposeDevices(config composeclient.InstanceConfig) (map[string]map[string]string, error) {
+	result := make(map[string]map[string]string, len(config.Devices)+len(config.ExtraDevices))
+	for _, dev := range config.Devices {
+		name, values, err := dev.ToIncusDevice()
+		if err != nil { return nil, fmt.Errorf("materialize Compose device: %w", err) }
+		if _, duplicate := result[name]; duplicate { return nil, fmt.Errorf("duplicate Compose device %q", name) }
+		result[name] = values
+	}
+	for name, values := range config.ExtraDevices {
+		if _, duplicate := result[name]; duplicate { return nil, fmt.Errorf("duplicate Compose device %q", name) }
+		result[name] = values
+	}
+	return result, nil
+}
+
