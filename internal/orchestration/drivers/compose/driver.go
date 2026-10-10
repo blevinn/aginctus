@@ -221,6 +221,15 @@ func detectComposeImageFingerprintDrift(desiredFingerprint, actualFingerprint st
 	return nil
 }
 
+// verifyComposeEnsuredImage is invoked after the image prerequisite pass,
+// when an initially uncached alias must now be resolvable.
+func verifyComposeEnsuredImage(imageAlias, cachedAlias, desiredFingerprint, instanceFingerprint string) error {
+	if err := detectComposeImageDrift(imageAlias, cachedAlias); err != nil {
+		return err
+	}
+	return detectComposeImageFingerprintDrift(desiredFingerprint, instanceFingerprint)
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -380,14 +389,11 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 			if !ok {
 				return fmt.Errorf("resolve ensured image for service %q: unexpected resource type", service)
 			}
-			if err := detectComposeImageDrift(image.IncusName(), existing.Config["user.image_alias"]); err != nil {
-				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
-			}
 			alias, _, err := connection.GetImageAlias(ctx, composeclient.SanitizeProjectName(p.Name), image.IncusName(), nil)
 			if err != nil {
 				return fmt.Errorf("resolve ensured image alias for service %q: %w", service, err)
 			}
-			if err := detectComposeImageFingerprintDrift(alias.Target, existing.Config["volatile.base_image"]); err != nil {
+			if err := verifyComposeEnsuredImage(image.IncusName(), existing.Config["user.image_alias"], alias.Target, existing.Config["volatile.base_image"]); err != nil {
 				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
 			}
 		}
