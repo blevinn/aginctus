@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	composeclient "github.com/lxc/incus-compose/client"
 	"github.com/lxc/incus-compose/iclient"
 	"reflect"
 	"strings"
@@ -178,5 +179,22 @@ func TestExplainComposeConnectionError(t *testing.T) {
 	other := errors.New("unrelated connection failure")
 	if got := explainComposeConnectionError(other); got != other {
 		t.Fatalf("unrelated error altered: %v", got)
+	}
+}
+
+func TestComposePrerequisitesPrecedeInstances(t *testing.T) {
+	for _, priority := range []int{
+		composeclient.PriorityProject,
+		composeclient.PriorityProfile,
+		composeclient.PriorityImage,
+		composeclient.PriorityNetwork,
+		composeclient.PriorityVolume,
+	} {
+		if !isComposePrerequisite(priority) {
+			t.Fatalf("priority %d should be a prerequisite", priority)
+		}
+	}
+	if isComposePrerequisite(composeclient.PriorityInstance) {
+		t.Fatal("instances must remain in dependency-ordered service pass")
 	}
 }
