@@ -407,3 +407,69 @@ func TestComposeNeedsStartSkipsRunningInstance(t *testing.T) {
 		t.Fatal("non-instance resources must retain their Start action")
 	}
 }
+
+func TestComposeDeviceAndProfileDriftRecreationDecisions(t *testing.T) {
+	tests := []struct {
+		name  string
+		drift func() error
+		kind  ComposeDriftKind
+	}{
+		{"profile changes", func() error {
+			return detectComposeInstanceDrift(nil, []string{"new-profile"}, nil, []string{"old-profile"})
+		}, ComposeDriftProfiles},
+		{"raw device changes", func() error {
+			return detectComposeDeviceDrift(
+				map[string]map[string]string{"eth0": {"type": "nic", "network": "new"}},
+				map[string]map[string]string{"eth0": {"type": "nic", "network": "old"}})
+		}, ComposeDriftDevice},
+		{"missing device", func() error {
+			return detectComposeDeviceDrift(map[string]map[string]string{"cache": {"type": "disk", "path": "/cache"}}, nil)
+		}, ComposeDriftDevice},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var typed *ComposeDriftError
+			if err := tc.drift(); !errors.As(err, &typed) || typed.Kind != tc.kind {
+				t.Fatalf("expected %s drift; got %v", tc.kind, err)
+			}
+		})
+	}
+}
+
+func TestStampComposeCommandsDetectsChangesWithoutExposingValues(t *testing.T) {
+	makeConfig := func(command string) composeclient.InstanceConfig {
+		return composeclient.InstanceConfig{Command: []string{"sh", "-c", command}}
+	}
+	first := makeConfig("echo secret-one")
+	unchanged := makeConfig("echo secret-one")
+	changed := makeConfig("echo secret-two")
+	for _, cfg := range []*composeclient.InstanceConfig{&first, &unchanged, &changed} {
+		if err := stampComposeCommands(cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := first.Extensions[ownershipCommandKey]
+	if a == "" || a != unchanged.Extensions[ownershipCommandKey] || a == changed.Extensions[ownershipCommandKey] {
+		t.Fatalf("command digest not stable or fails to detect change")
+	}
+	if strings.Contains(a, "secret") {
+		t.Fatal("command marker leaked command contents")
+	}
+	if err := detectComposeInstanceDrift(changed.Extensions, nil, first.Extensions, nil); err == nil {
+		t.Fatal("command digest change must register as configuration drift")
+	}
+	entrypoint := makeConfig("echo secret-one")
+	entrypoint.Entrypoint = []string{"/bin/sh"}
+	if err := stampComposeCommands(&entrypoint); err != nil {
+		t.Fatal(err)
+	}
+	if entrypoint.Extensions[ownershipCommandKey] == a {
+		t.Fatal("entrypoint change was not detected")
+	}
+}
+func TestStampComposeCommandsRejectsReservedMarker(t *testing.T) {
+	cfg := composeclient.InstanceConfig{Extensions: map[string]string{ownershipCommandKey: "overridden"}}
+	if err := stampComposeCommands(&cfg); err == nil {
+		t.Fatal("accepted user-controlled command marker")
+	}
+}
