@@ -2,9 +2,9 @@ package config
 
 import (
 	"encoding/json"
-	"strings"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 

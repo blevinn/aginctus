@@ -2,13 +2,13 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sigs.k8s.io/yaml"
 	"strings"
 	"testing"
-	"fmt"
 )
 
 func TestRenderCompose(t *testing.T) {
@@ -249,7 +249,9 @@ func TestGatewayRejectsUnsafeSeedValues(t *testing.T) {
 	for _, seed := range []string{"a\nb", "a$b", "a#b", "a=b", "a:b", "a@b", "a/b", "a\\\\b", "a'b", "a\"b", "a b"} {
 		t.Run(fmt.Sprintf("%q", seed), func(t *testing.T) {
 			t.Setenv("XDG_STATE_HOME", t.TempDir())
-			for _, key := range requiredRuntimeEnvironment { t.Setenv(key, "") }
+			for _, key := range requiredRuntimeEnvironment {
+				t.Setenv(key, "")
+			}
 			t.Setenv("AGINCTUS_GATEWAY_POSTGRES_PASSWORD", seed)
 			if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
 				t.Fatal("accepted unsafe credential seed")
@@ -262,12 +264,15 @@ func TestGatewayRejectsUnsafeSeedValues(t *testing.T) {
 
 func TestGatewayAcceptsSafeCredentialSeed(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	for _, key := range requiredRuntimeEnvironment { t.Setenv(key, "") }
+	for _, key := range requiredRuntimeEnvironment {
+		t.Setenv(key, "")
+	}
 	t.Setenv("AGINCTUS_GATEWAY_POSTGRES_PASSWORD", "AZaz09_-safe")
 	values, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if values["AGINCTUS_GATEWAY_POSTGRES_PASSWORD"] != "AZaz09_-safe" {
 		t.Fatal("valid seed changed unexpectedly")
 	}
 }
-
