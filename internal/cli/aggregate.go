@@ -2,6 +2,11 @@ package cli
 
 import (
 	"encoding/json"
+	"context"
+	"os"
+	"strings"
+	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
+	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
 	"fmt"
 	"io"
 
@@ -105,22 +110,106 @@ func aggregateApplyPlan(effective *config.Config) (orchestration.Plan, error) {
 	return plan, nil
 }
 
-func runAggregateApply(args []string, stdout, stderr io.Writer, effective *config.Config) int {
-	if len(args) != 1 || args[0] != "--render" {
-		fmt.Fprintln(stderr, "Usage: aginctus [global options] apply --render")
-		fmt.Fprintln(stderr, "Execution and --from support are not implemented yet")
+// executeAggregatePlan validates every step before initializing secrets or
+// changing host resources. The engine still executes in document order.
+var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, effective *config.Config) error {
+	spec, err := gateway.FromConfig(effective)
+	if err != nil {
+		return fmt.Errorf("gateway configuration: %w", err)
+	}
+	// First validate without side effects, including unknown drivers and
+	// malformed Compose documents.
+	validator := orchestration.NewEngine(map[string]orchestration.Driver{
+		"apply": applydriver.New(), "compose": composedriver.New(),
+	})
+	if err := validator.Validate(plan, orchestration.ExecuteOptions{}); err != nil {
+		return err
+	}
+	var environment map[string]string
+	for _, step := range plan.Steps {
+		if step.Driver == "compose" {
+			// In a --from plan, only inject credentials into the configured
+			// gateway project; never publish gateway secrets to arbitrary
+			// Compose projects supplied in a document.
+			var cfg composedriver.Config
+			if err := json.Unmarshal(step.Configuration, &cfg); err != nil {
+				return err
+			}
+			if cfg.Project != spec.Project {
+				return fmt.Errorf("compose project %q is not configured gateway project %q", cfg.Project, spec.Project)
+			}
+			environment, err = spec.InitializeRuntimeEnvironment()
+			if err != nil {
+				return fmt.Errorf("gateway initialization: %w", err)
+			}
+			break
+		}
+	}
+	engine := orchestration.NewEngine(map[string]orchestration.Driver{
+		"apply": applydriver.New(), "compose": composedriver.NewWithEnvironment(environment),
+	})
+	_, err = engine.Execute(ctx, plan, orchestration.ExecuteOptions{})
+	return err
+}
+
+func runAggregateApply(ctx context.Context, args []string, stdout, stderr io.Writer, effective *config.Config) int {
+	var plan orchestration.Plan
+	var err error
+	switch {
+	case len(args) == 1 && args[0] == "--render":
+		plan, err = aggregateApplyPlan(effective)
+		if err == nil {
+			encoder := json.NewEncoder(stdout)
+			encoder.SetIndent("", "  ")
+			err = encoder.Encode(plan)
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "render orchestration: %v\n", err)
+			return 1
+		}
+		return 0
+	case len(args) == 0:
+		plan, err = aggregateApplyPlan(effective)
+	case len(args) == 2 && args[0] == "--from":
+		plan, err = readAggregatePlan(args[1])
+	case len(args) == 1 && strings.HasPrefix(args[0], "--from="):
+		plan, err = readAggregatePlan(strings.TrimPrefix(args[0], "--from="))
+	default:
+		fmt.Fprintln(stderr, "Usage: aginctus [global options] apply [--render | --from FILE]")
 		return 2
 	}
-	plan, err := aggregateApplyPlan(effective)
 	if err != nil {
-		fmt.Fprintf(stderr, "render orchestration: %v\n", err)
+		fmt.Fprintf(stderr, "load orchestration: %v\n", err)
 		return 1
 	}
-	encoder := json.NewEncoder(stdout)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(plan); err != nil {
-		fmt.Fprintf(stderr, "encode orchestration: %v\n", err)
+	if err := executeAggregatePlan(ctx, plan, effective); err != nil {
+		fmt.Fprintf(stderr, "apply orchestration: %v\n", err)
 		return 1
 	}
+	fmt.Fprintf(stdout, "applied orchestration %q (%d steps)\n", plan.Metadata.Name, len(plan.Steps))
 	return 0
+}
+
+func readAggregatePlan(path string) (orchestration.Plan, error) {
+	if path == "" || path == "-" {
+		return orchestration.Plan{}, fmt.Errorf("--from requires a regular file path")
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return orchestration.Plan{}, err
+	}
+	if !info.Mode().IsRegular() {
+		return orchestration.Plan{}, fmt.Errorf("orchestration input must be a regular file")
+	}
+	if info.Size() > 16<<20 {
+		return orchestration.Plan{}, fmt.Errorf("orchestration input exceeds 16 MiB")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return orchestration.Plan{}, err
+	}
+	if len(data) > 16<<20 {
+		return orchestration.Plan{}, fmt.Errorf("orchestration input exceeds 16 MiB")
+	}
+	return orchestration.ParsePlan(data)
 }
