@@ -193,6 +193,6 @@ func TestEngineDoesNotReportCanceledStepAsSuccess(t *testing.T) {
 		t.Fatalf("error = %v, want context.Canceled", err)
 	}
 	if len(result.Steps) != 0 || second.executions != 0 {
-		t.Fatalf("canceled step reported success or next step ran: %#v, calls=%d",result,second.executions)
+		t.Fatalf("canceled step reported success or next step ran: %#v, calls=%d", result, second.executions)
 	}
 }
