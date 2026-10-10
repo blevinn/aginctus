@@ -233,13 +233,13 @@ in
     systemd.services =
       lib.optionalAttrs cfg.images.herdrClient.enable {
         aginctus-image-herdr-client = imageUpdateService {
-           alias = cfg.images.herdrClient.alias;
+          alias = cfg.images.herdrClient.alias;
           source = cfg.images.herdrClient.source;
         };
       }
       // lib.optionalAttrs cfg.images.opencodeWorkload.enable {
         aginctus-image-opencode-workload = imageUpdateService {
-           alias = cfg.images.opencodeWorkload.alias;
+          alias = cfg.images.opencodeWorkload.alias;
           source = cfg.images.opencodeWorkload.source;
         };
       }
@@ -247,12 +247,16 @@ in
         aginctus-reconcile = {
           description = "Reconcile Aginctus host resources";
           wantedBy = [ "multi-user.target" ];
-          after = [ "incus.service" ]
-            ++ lib.optional cfg.images.herdrClient.enable "aginctus-image-herdr-client.service"
-            ++ lib.optional cfg.images.opencodeWorkload.enable "aginctus-image-opencode-workload.service";
-          requires = [ "incus.service" ]
-            ++ lib.optional cfg.images.herdrClient.enable "aginctus-image-herdr-client.service"
-            ++ lib.optional cfg.images.opencodeWorkload.enable "aginctus-image-opencode-workload.service";
+          after = [
+            "incus.service"
+          ]
+          ++ lib.optional cfg.images.herdrClient.enable "aginctus-image-herdr-client.service"
+          ++ lib.optional cfg.images.opencodeWorkload.enable "aginctus-image-opencode-workload.service";
+          requires = [
+            "incus.service"
+          ]
+          ++ lib.optional cfg.images.herdrClient.enable "aginctus-image-herdr-client.service"
+          ++ lib.optional cfg.images.opencodeWorkload.enable "aginctus-image-opencode-workload.service";
           path = [ pkgs.incus ];
           serviceConfig = {
             Type = "oneshot";
