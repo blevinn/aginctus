@@ -16,7 +16,7 @@ vet:
 check: modules test vet
 
 modules:
-    bash scripts/check-go-modules.sh
+    go mod verify
 
 herdr-client-image-update:
     just build herdr-client
