@@ -118,3 +118,26 @@ func TestValidateRejectsUnknownIsolation(t *testing.T) {
 		t.Fatal("Validate() error = nil, want isolation error")
 	}
 }
+
+func TestPlanForcePreservesManagementNetworkOwnershipGuard(t *testing.T) {
+	plan, err := testSpec().Plan("upsert", true)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if len(plan.Steps) != 2 {
+		t.Fatalf("steps = %#v", plan.Steps)
+	}
+	network := decodeApplyConfig(t, plan.Steps[0].Configuration)
+	for key, want := range map[string]string{
+		"user.aginctus.managed":  "true",
+		"user.aginctus.resource": "management-network",
+	} {
+		if got := network.RequireExistingConfig[key]; got != want {
+			t.Fatalf("network guard %s = %q, want %q", key, got, want)
+		}
+	}
+	workload := decodeApplyConfig(t, plan.Steps[1].Configuration)
+	if len(workload.RequireExistingConfig) != 0 {
+		t.Fatalf("force did not relax workload guard: %#v", workload.RequireExistingConfig)
+	}
+}
