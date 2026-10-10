@@ -11,6 +11,7 @@
 
   outputs =
     {
+      self,
       nixpkgs,
       herdr,
       ...
@@ -24,6 +25,11 @@
       forAllSystems = nixpkgs.lib.genAttrs systems;
     in
     {
+      nixosModules = {
+        aginctus = import ./nix/nixos-module.nix { inherit self; };
+        default = self.nixosModules.aginctus;
+      };
+
       packages = forAllSystems (
         system:
         let
