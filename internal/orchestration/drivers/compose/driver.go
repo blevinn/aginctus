@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	composeclient "github.com/lxc/incus-compose/client"
 	"github.com/lxc/incus-compose/iclient"
@@ -114,6 +115,15 @@ func newComposeGlobalClient(ctx context.Context, newConnection func(*iclient.Con
 	return composeclient.New(ctx, composeclient.ClientProvideConnection(connection)), nil
 }
 
+// Image caching copies images between Incus projects using pull mode. Even when
+// the primary connection uses the local Unix socket, Incus must offer HTTPS.
+func explainComposeConnectionError(err error) error {
+	if strings.Contains(err.Error(), "core.https_address is not set") {
+		return fmt.Errorf("%w; configure an appropriately restricted Incus HTTPS listener with `incus config set core.https_address=<host-address>:8443` and verify it using `incus config get core.https_address` (setting a listener on all interfaces may expose the daemon; review firewall and trust configuration first)", err)
+	}
+	return err
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -131,7 +141,7 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		return fmt.Errorf("construct local Incus connection for Compose: %w", err)
 	}
 	if err := global.Connect(); err != nil {
-		return fmt.Errorf("connect incus-compose client: %w", err)
+		return fmt.Errorf("connect incus-compose client: %w", explainComposeConnectionError(err))
 	}
 
 	c, err := global.EnsureProject(
