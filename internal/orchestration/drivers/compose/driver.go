@@ -26,8 +26,9 @@ const (
 )
 
 type Config struct {
-	Project string          `json:"project"`
-	Compose json.RawMessage `json:"compose"`
+	Project         string          `json:"project"`
+	Compose         json.RawMessage `json:"compose"`
+	RecreateOnDrift bool            `json:"recreateOnDrift,omitempty"`
 }
 
 type Driver struct {
@@ -336,6 +337,7 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		return fmt.Errorf("order compose services for %q: %w", p.Name, err)
 	}
 
+	recreationCandidates := map[string]bool{}
 	// Detect drift before any resource in this orchestration step is changed.
 	// The pinned upstream Ensure only fills missing keys; silently treating
 	// conflicting values as converged would be unsafe.
@@ -362,14 +364,22 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 					return fmt.Errorf("resolve desired image for service %q: unexpected resource type", service)
 				}
 				if err := detectComposeImageDrift(image.IncusName(), existing.Config["user.image_alias"]); err != nil {
-					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+					if cfg.RecreateOnDrift {
+						recreationCandidates[instance.IncusName()] = true
+					} else {
+						return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+					}
 				}
 				// Resolve the *current* local alias as well as comparing its
 				// name. Without this, a refreshed mutable tag goes unnoticed.
 				alias, _, err := connection.GetImageAlias(ctx, composeclient.SanitizeProjectName(p.Name), image.IncusName(), nil)
 				if err == nil {
 					if err := detectComposeImageFingerprintDrift(alias.Target, existing.Config["volatile.base_image"]); err != nil {
-						return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+						if cfg.RecreateOnDrift {
+							recreationCandidates[instance.IncusName()] = true
+						} else {
+							return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+						}
 					}
 				} else if !api.StatusErrorCheck(err, http.StatusNotFound) {
 					return fmt.Errorf("inspect image alias for service %q: %w", service, err)
@@ -379,10 +389,18 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 
 			}
 			if err := detectComposeInstanceDrift(instance.Config.Extensions, instance.Config.Profiles, existing.Config, existing.Profiles); err != nil {
-				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				if cfg.RecreateOnDrift {
+					recreationCandidates[instance.IncusName()] = true
+				} else {
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				}
 			}
 			if err := detectComposeDeviceDrift(instance.Config.ExtraDevices, existing.Devices); err != nil {
-				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				if cfg.RecreateOnDrift {
+					recreationCandidates[instance.IncusName()] = true
+				} else {
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				}
 			}
 		}
 	}
@@ -435,7 +453,57 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 				return fmt.Errorf("resolve ensured image alias for service %q: %w", service, err)
 			}
 			if err := verifyComposeEnsuredImage(image.IncusName(), existing.Config["user.image_alias"], alias.Target, existing.Config["volatile.base_image"]); err != nil {
-				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				if cfg.RecreateOnDrift {
+					recreationCandidates[instance.IncusName()] = true
+				} else {
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				}
+			}
+		}
+	}
+
+	// A replacement is opt-in and never proceeds for attached persistent data.
+	// We re-fetch ownership immediately before stop and once again before
+	// deletion. A failed create remains an explicit error, never success.
+	for _, service := range order {
+		for _, resource := range resources[service] {
+			instance, ok := resource.(*composeclient.Instance)
+			if !ok || !recreationCandidates[instance.IncusName()] {
+				continue
+			}
+			name := instance.IncusName()
+			project := composeclient.SanitizeProjectName(p.Name)
+			current, _, err := connection.GetInstance(ctx, project, name, nil)
+			if err != nil {
+				return fmt.Errorf("fetch instance for recreation: %w", err)
+			}
+			recheck := func(ctx context.Context) error {
+				v, _, err := connection.GetInstance(ctx, project, name, nil)
+				if err != nil {
+					return err
+				}
+				return verifyComposeInstanceOwnership(v.Config, p.Name, name)
+			}
+			if err := rejectPersistentDisks(current.Devices); err != nil {
+				return fmt.Errorf("recreate Compose instance %q: %w", name, err)
+			}
+			// Hydrate the pinned Compose resource before using its Stop/Delete
+			// lifecycle. Its Ensure may add missing extension keys.
+			if err := instance.Ensure(ctx, composeclient.OptionCreate()); err != nil {
+				return fmt.Errorf("prepare owned instance %q for recreation: %w", name, err)
+			}
+			err = recreateWithoutPersistentDisks(ctx, current.Devices, recheck,
+				func(ctx context.Context) error {
+					if !instance.Running() {
+						return nil
+					}
+					return instance.Stop(ctx)
+				},
+				func(ctx context.Context) error { return instance.Delete(ctx) },
+				func(ctx context.Context) error { return instance.Ensure(ctx, composeclient.OptionCreate()) },
+			)
+			if err != nil {
+				return fmt.Errorf("recreate Compose instance %q: %w", name, err)
 			}
 		}
 	}
