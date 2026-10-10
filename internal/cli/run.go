@@ -356,6 +356,8 @@ func runGateway(
 	}
 
 	switch args[0] {
+	case "status":
+		return runGatewayStatus(ctx, args[1:], stdout, stderr, effective)
 	case "remove":
 		if err := spec.Remove(ctx, len(args) == 2); err != nil {
 			fmt.Fprintf(stderr, "gateway cleanup: %v\n", err)
@@ -410,6 +412,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway up")
 	fmt.Fprintln(w, "       aginctus [global options] gateway apply")
 	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 }
 
 func runHerdr(
@@ -619,6 +622,7 @@ Commands:
   doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
   gateway validate  Validate the AI gateway deployment configuration
   gateway apply     Reconcile the AI gateway
+  gateway status    Inspect gateway project and service state
   gateway remove [--force] Remove gateway instances, preserving data volumes
   gateway render    Render the AI gateway Compose model
   herdr client apply     Create, reconcile, and bootstrap the Herdr client
