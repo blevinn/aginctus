@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"reflect"
+	"sigs.k8s.io/yaml"
 	"os"
 	"path/filepath"
 	"strings"
@@ -186,4 +188,43 @@ func TestGatewaySecretStateRejectsSymlinkAndLooseMode(t *testing.T) {
 	if err := os.Remove(path); err != nil { t.Fatal(err) }
 	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil { t.Fatal(err) }
 	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil { t.Fatal("accepted loosely permissioned secret state") }
+}
+
+func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
+	spec := Spec{
+		ID: "parity", Project: "gateway-parity", Network: "management-parity",
+		NetworkIPv4Address: "10.42.0.1/24", NetworkIPv6Address: "none",
+		LiteLLMImage: "example/litellm:custom", PostgresImage: "example/postgres:custom",
+	}
+	rendered, err := spec.RenderCompose()
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalized, err := yaml.YAMLToJSON([]byte(rendered))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var renderModel map[string]any
+	if err := json.Unmarshal(normalized, &renderModel); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := spec.OrchestrationPlan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Steps) != 2 {
+		t.Fatalf("plan steps = %d", len(plan.Steps))
+	}
+	var config struct {
+		Compose map[string]any `json:"compose"`
+	}
+	if err := json.Unmarshal(plan.Steps[1].Configuration, &config); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(renderModel, config.Compose) {
+		renderJSON, _ := json.MarshalIndent(renderModel, "", "  ")
+		deployJSON, _ := json.MarshalIndent(config.Compose, "", "  ")
+		t.Fatalf("render and deploy Compose models differ:\\nrender=%s\\ndeploy=%s", renderJSON, deployJSON)
+	}
 }
