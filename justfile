@@ -13,7 +13,7 @@ test:
 vet:
     go vet ./...
 
-check: test vet modules
+check: modules test vet
 
 modules:
     bash scripts/check-go-modules.sh
