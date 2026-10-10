@@ -1,10 +1,10 @@
 # Herdr SSH credential lifecycle
 
-Status: implementation in progress. The guest-side identity and authorization contracts are implemented; host-side credential delivery, incarnation tracking, host-trust reconciliation, probing, rotation, and Herdr machine publication remain follow-up slices.
+Status: initial managed workload remotes are implemented for the container path: guest identity/authorization, management-address discovery, strict host-key pinning, SSH probing, and Herdr saved-machine registration. Workload incarnation tracking, rotation/recovery, and VM guest-readiness remain follow-up slices.
 
 ## Purpose and current state
 
-Define how Aginctus generates and deploys SSH credentials for the dedicated Herdr client to connect to managed workloads. For a concrete explanation of the two guest helpers, their caller, and the public-key handoff, see [SSH bootstrap workflow](ssh-bootstrap-workflow.md). This implements the identity responsibilities in [Architecture](architecture.md) and [ADR 0001](adr/0001-herdr-client-topology.md), within the [first Herdr milestone](milestones/0001-herdr-console.md).
+Define how Aginctus generates and deploys SSH credentials for the dedicated Herdr client to connect to managed workloads. For the concrete guest-helper invocation and public-key handoff, see [SSH bootstrap workflow](ssh-bootstrap-workflow.md). This implements the identity responsibilities in [Architecture](architecture.md) and [ADR 0001](adr/0001-herdr-client-topology.md), within the [first Herdr milestone](milestones/0001-herdr-console.md).
 
 Today, `internal/incus/client.go` creates and reconciles the Herdr client container, its root disk, and management NIC. It does not provision SSH credentials or machine entries. `flake.nix` supplies a root-run Herdr service in the client image and an `agent`-run Herdr service plus SSH server in the OpenCode image. The workload disables password authentication, keyboard-interactive authentication, and root SSH login, and contains no authorized client key.
 
@@ -47,6 +47,20 @@ Derive the public key from the stored private key on every reconciliation and co
 
 The initial storage policy uses the client root disk. Stop/start retains identity; client deletion destroys it. A future separate credential volume can change that policy deliberately. Client snapshots and backups include credentials and require equivalent access controls; restoring an old snapshot must not automatically reauthorize a retired key. Public generation metadata on workloads is checked against restored client state, and discrepancies require explicit recovery.
 
+## Herdr remote commands
+
+Managed console access is exposed as a Herdr concept rather than a generic deployment concept:
+
+```sh
+aginctus herdr add-remote <workload>
+aginctus herdr add-remote <workload> --dry-run
+aginctus herdr remove-remote <workload>
+```
+
+`add-remote` is idempotent. It resolves the configured Herdr client and workload, verifies their existing Aginctus ownership markers, ensures the client identity, authorizes its public key on the workload, discovers the realized management address, pins the workload Ed25519 host key, probes strict SSH, and finally reconciles a Herdr saved machine using Herdr's supported `machine add` interface. It reports success only after Herdr's saved-machine status check succeeds.
+
+`remove-remote` removes the Herdr saved-machine entry and managed SSH target data before revoking Aginctus's workload authorization. It does not delete the workload or Herdr client instance.
+
 ## Initial deployment sequence
 
 The following ordering is mandatory. A target is published to Herdr only after its SSH probe succeeds.
@@ -71,7 +85,7 @@ Disable agent, TCP, and Unix-socket forwarding, X11 forwarding, user RC executio
 
 ## Client configuration and host trust
 
-Aginctus owns a dedicated SSH config and `known_hosts`, independent of `/root/.ssh`, user agents, and host configuration. Each generated target specifies:
+Aginctus owns dedicated per-workload SSH fragments and `known_hosts` files under `/var/lib/aginctus/ssh`. Because Herdr's supported saved-machine flow intentionally uses ordinary OpenSSH configuration, the dedicated Herdr client also owns a minimal `/root/.ssh/config` whose only purpose is to include those Aginctus-managed fragments; no host-user SSH state is imported. Each generated target specifies:
 
 - the discovered management `HostName`, port, and workload `User`;
 - `IdentityFile` pointing to the active generation and `IdentitiesOnly yes`;
@@ -84,11 +98,11 @@ Provision only the host key algorithms the client policy permits. Ed25519 is the
 
 Address changes regenerate connection data while preserving the alias and pinned host key. An unexpected host-key change for the same incarnation blocks connection even if the public key was fetched through Incus; it requires an explicit host-key replacement operation. An orchestrated workload recreation has a new incarnation, removes the old trust entry, and bootstraps fresh trust through Incus. Revalidate incarnation immediately before publication and probing to avoid trusting a replacement created during reconciliation.
 
-Implementation must inspect the pinned Herdr SSH invocation/configuration format and prove it honors this dedicated configuration, including host alias and known-hosts settings. If Herdr cannot select a config file, a managed SSH wrapper with fixed arguments or an upstream change is required. Machine-entry field names and wrapper choice remain an integration gate; do not claim host verification from configuration Herdr never consumes.
+The pinned Herdr version provides `herdr machine add`, `machine list --json`, `machine status`, and `machine remove`, and its saved-machine path uses ordinary OpenSSH configuration. Aginctus therefore publishes a managed host alias into the dedicated client's OpenSSH include path, verifies that alias with strict host checking first, and only then asks Herdr to save the machine. Herdr remains the authority for its saved-machine catalog.
 
 ## Reconciliation and orchestration integration
 
-Keep resource creation in the existing Apply/Compose drivers. Add a typed runtime `ssh-access` driver for credential bootstrap, delivery, probing, and cleanup. This is a proposed addition, not an existing driver. Its plan contains only client/workload instance references, selected accounts, desired console access, and an operation such as reconcile or revoke. It resolves key material and realized addresses after resource steps complete; Jsonnet never sees private keys or runtime guest contents.
+Keep resource creation in the existing Apply/Compose drivers. A typed internal `ssh-access` driver handles credential bootstrap, delivery, probing, Herdr saved-machine reconciliation, and cleanup. The public surface is `herdr add-remote/remove-remote`; the driver is not a user-facing abstraction. Its plan contains only client/workload instance references, the workload ID, selected account, and reconcile/revoke operation. It resolves key material and realized addresses after resource steps complete; Jsonnet never sees private keys or runtime guest contents.
 
 Validate the entire plan before mutation, as required by [Declarative orchestration](orchestration.md). Structural validation checks references and account/path policy; runtime readiness checks happen after instances exist. Run resource, credential, and machine-publication steps sequentially and fail-fast. Do not add a second bespoke workload `ensure` path.
 
