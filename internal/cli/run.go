@@ -493,11 +493,8 @@ func runWorkload(
 	if len(args) > 0 && args[0] == "status" {
 		return runWorkloadStatus(ctx, args[1:], stdout, stderr, effective)
 	}
-	if len(args) == 1 && (args[0] == "ls" || args[0] == "list") {
-		for _, id := range workloadIDs(effective) {
-			fmt.Fprintln(stdout, id)
-		}
-		return 0
+	if len(args) > 0 && (args[0] == "ls" || args[0] == "list") {
+		return runActiveWorkloadList(ctx, args[1:], stdout, stderr, effective)
 	}
 
 	if len(args) == 0 {
@@ -630,7 +627,7 @@ Commands:
   network apply          Create or reconcile the configured management network
   network remove         Delete the configured management network
   network status         Inspect the configured management network
-  workload ls            List configured workloads
+  workload ls            List active managed workloads
   workload apply [NAME]  Reconcile one workload, or all configured workloads
   workload remove [NAME] Remove one workload, or all configured workloads
   workload status [NAME] Inspect one or all configured workloads
