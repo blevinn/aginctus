@@ -163,7 +163,9 @@ type doctorHTTPSClient interface {
 var setIncusHTTPSAddress = func(ctx context.Context, address string) error {
 	cmd := exec.CommandContext(ctx, "incus", "config", "set", "core.https_address="+address)
 	output, err := cmd.CombinedOutput()
-	if err != nil { return fmt.Errorf("incus config set: %w: %s", err, strings.TrimSpace(string(output))) }
+	if err != nil {
+		return fmt.Errorf("incus config set: %w: %s", err, strings.TrimSpace(string(output)))
+	}
 	return nil
 }
 

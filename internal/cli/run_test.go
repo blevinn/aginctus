@@ -16,8 +16,8 @@ import (
 )
 
 type fakeIncusClient struct {
-	version string
-	err     error
+	version      string
+	err          error
 	httpsAddress string
 	httpsMissing bool
 }
@@ -27,8 +27,12 @@ func (c *fakeIncusClient) ServerVersion(context.Context) (string, error) {
 }
 
 func (c *fakeIncusClient) HTTPSAddress(context.Context) (string, error) {
-	if c.httpsMissing { return "", nil }
-	if c.httpsAddress != "" { return c.httpsAddress, nil }
+	if c.httpsMissing {
+		return "", nil
+	}
+	if c.httpsAddress != "" {
+		return c.httpsAddress, nil
+	}
 	return "127.0.0.1:8443", nil
 }
 
