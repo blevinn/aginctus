@@ -256,6 +256,10 @@ func runNetwork(
 		return 2
 	}
 
+	if args[0] == "status" {
+		return runNetworkStatus(ctx, args[1:], stdout, stderr, effective)
+	}
+
 	action := args[0]
 	options, err := parseNetworkOptions(args[1:])
 	if err != nil {
@@ -326,6 +330,7 @@ func parseNetworkOptions(args []string) (mutationOptions, error) {
 func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] network apply [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] network remove [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] network status")
 }
 
 func runGateway(
@@ -615,6 +620,7 @@ Commands:
   herdr client remove    Delete the Herdr client container
   network apply          Create or reconcile the configured management network
   network remove         Delete the configured management network
+  network status         Inspect the configured management network
   workload ls            List configured workloads
   workload apply [NAME]  Reconcile one workload, or all configured workloads
   workload remove [NAME] Remove one workload, or all configured workloads
