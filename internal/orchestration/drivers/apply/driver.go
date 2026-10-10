@@ -50,7 +50,10 @@ func (d *Driver) Validate(raw json.RawMessage) error {
 	return err
 }
 
-func (d *Driver) Execute(_ context.Context, raw json.RawMessage, options orchestration.ExecuteOptions) error {
+func (d *Driver) Execute(ctx context.Context, raw json.RawMessage, options orchestration.ExecuteOptions) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("apply step canceled before preparation: %w", err)
+	}
 	cfg, err := parseConfig(raw)
 	if err != nil {
 		return err
@@ -73,6 +76,9 @@ func (d *Driver) Execute(_ context.Context, raw json.RawMessage, options orchest
 		EnsureRunning:            cfg.EnsureRunning,
 	})
 
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("apply step canceled before execution: %w", err)
+	}
 	if options.DryRun {
 		if _, err := client.Plan(bytes.NewReader(stream)); err != nil {
 			return fmt.Errorf("plan incus-apply resources: %w", err)
