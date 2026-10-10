@@ -355,18 +355,20 @@ func TestDetectComposeImageFingerprintDrift(t *testing.T) {
 func TestVerifyComposeEnsuredImage(t *testing.T) {
 	cases := []struct {
 		name, alias, recordedAlias, currentFingerprint, baseFingerprint string
-		wantErr bool
+		wantErr                                                         bool
 	}{
-		{name:"unchanged after cache",alias:"docker.io/library/postgres:17-alpine",recordedAlias:"docker.io/library/postgres:17-alpine",currentFingerprint:"abc123",baseFingerprint:"abc123"},
-		{name:"alias changed",alias:"docker.io/library/postgres:18-alpine",recordedAlias:"docker.io/library/postgres:17-alpine",currentFingerprint:"abc123",baseFingerprint:"abc123",wantErr:true},
-		{name:"new cache differs",alias:"docker.io/library/postgres:17-alpine",recordedAlias:"docker.io/library/postgres:17-alpine",currentFingerprint:"def456",baseFingerprint:"abc123",wantErr:true},
-		{name:"alias absent",alias:"docker.io/library/postgres:17-alpine",currentFingerprint:"abc123",baseFingerprint:"abc123",wantErr:true},
-		{name:"fingerprint missing",alias:"docker.io/library/postgres:17-alpine",recordedAlias:"docker.io/library/postgres:17-alpine",baseFingerprint:"abc123",wantErr:true},
+		{name: "unchanged after cache", alias: "docker.io/library/postgres:17-alpine", recordedAlias: "docker.io/library/postgres:17-alpine", currentFingerprint: "abc123", baseFingerprint: "abc123"},
+		{name: "alias changed", alias: "docker.io/library/postgres:18-alpine", recordedAlias: "docker.io/library/postgres:17-alpine", currentFingerprint: "abc123", baseFingerprint: "abc123", wantErr: true},
+		{name: "new cache differs", alias: "docker.io/library/postgres:17-alpine", recordedAlias: "docker.io/library/postgres:17-alpine", currentFingerprint: "def456", baseFingerprint: "abc123", wantErr: true},
+		{name: "alias absent", alias: "docker.io/library/postgres:17-alpine", currentFingerprint: "abc123", baseFingerprint: "abc123", wantErr: true},
+		{name: "fingerprint missing", alias: "docker.io/library/postgres:17-alpine", recordedAlias: "docker.io/library/postgres:17-alpine", baseFingerprint: "abc123", wantErr: true},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name,func(t *testing.T){
-			err:=verifyComposeEnsuredImage(tc.alias,tc.recordedAlias,tc.currentFingerprint,tc.baseFingerprint)
-			if (err!=nil)!=tc.wantErr {t.Fatalf("got %v, want error %t",err,tc.wantErr)}
+		t.Run(tc.name, func(t *testing.T) {
+			err := verifyComposeEnsuredImage(tc.alias, tc.recordedAlias, tc.currentFingerprint, tc.baseFingerprint)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("got %v, want error %t", err, tc.wantErr)
+			}
 		})
 	}
 }
