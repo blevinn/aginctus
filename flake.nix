@@ -35,6 +35,19 @@
         let
           pkgs = import nixpkgs { inherit system; };
           herdrPackage = herdr.packages.${system}.herdr;
+          aginctusCli = pkgs.buildGoModule {
+            pname = "aginctus";
+            version = "0.0.0-dev";
+            src = ./.;
+            # Resolve against the lockfile with the command documented below.
+            # Do not merge while this placeholder remains.
+            vendorHash = pkgs.lib.fakeHash;
+            subPackages = [ "./cmd/aginctus" ];
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            postInstall = ''
+              wrapProgram "$out/bin/aginctus" --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.incus ]}"
+            '';
+          };
           sshClientIdentityHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-client-identity";
             runtimeInputs = [
@@ -171,6 +184,9 @@
           opencodeWorkloadMetadata = opencodeWorkloadSystem.config.system.build.metadata;
         in
         {
+          aginctus = aginctusCli;
+          default = aginctusCli;
+
           herdr-client = pkgs.runCommand "aginctus-herdr-client-image" { } ''
             mkdir -p "$out"
             ln -s ${herdrClientRootfs} "$out/rootfs"
