@@ -23,6 +23,8 @@ func TestGatewayStatus(t *testing.T) {
 	}{
 		{"absent", `[]`, "", "absent", false},
 		{"healthy", `[{"name":"aginctus-gateway","config":{"user.aginctus.managed":"true","user.aginctus.resource":"compose-project","user.aginctus.deployment":"aginctus-gateway"}}]`, `[{"name":"postgres-1","status":"Running","config":{"user.aginctus.managed":"true","user.aginctus.resource":"compose-instance","user.aginctus.deployment":"aginctus-gateway"}},{"name":"litellm-1","status":"Stopped","config":{"user.aginctus.managed":"true","user.aginctus.resource":"compose-instance","user.aginctus.deployment":"aginctus-gateway"}}]`, "1/2", false},
+		{"retained empty project", `[{"name":"aginctus-gateway","config":{"user.aginctus.managed":"true","user.aginctus.resource":"compose-project","user.aginctus.deployment":"aginctus-gateway"}}]`, `[]`, "inactive (no service instances; persistent data retained)", false},
+		{"all services stopped", `[{"name":"aginctus-gateway","config":{"user.aginctus.managed":"true","user.aginctus.resource":"compose-project","user.aginctus.deployment":"aginctus-gateway"}}]`, `[{"name":"postgres-1","status":"Stopped","config":{"user.aginctus.managed":"true","user.aginctus.resource":"compose-instance","user.aginctus.deployment":"aginctus-gateway"}}]`, "0/1 service instances running", false},
 		{"foreign project", `[{"name":"aginctus-gateway","config":{}}]`, "", "ownership", true},
 		{"foreign service", `[{"name":"aginctus-gateway","config":{"user.aginctus.managed":"true","user.aginctus.resource":"compose-project","user.aginctus.deployment":"aginctus-gateway"}}]`, `[{"name":"unrelated","config":{}}]`, "unexpected", true},
 		{"invalid projects", `{`, "", "decode", true},
