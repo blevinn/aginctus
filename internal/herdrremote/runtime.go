@@ -65,14 +65,6 @@ func (r *Runtime) Reconcile(ctx context.Context, cfg sshaccess.Config) error {
 		return err
 	}
 
-	result, err = r.incus.ExecInstance(ctx, cfg.TargetInstance, []string{"aginctus-ssh-authorize", "reconcile", cfg.TargetAccount}, identity.PublicKey+"\n")
-	if err != nil {
-		return err
-	}
-	if result.ExitCode != 0 {
-		return helperError("authorize Herdr client on workload", result)
-	}
-
 	address, err := r.incus.InstanceAddress(ctx, cfg.TargetInstance, "eth0")
 	if err != nil {
 		return err
@@ -84,6 +76,16 @@ func (r *Runtime) Reconcile(ctx context.Context, cfg sshaccess.Config) error {
 	alias := hostAlias(cfg.WorkloadID)
 	if err := r.verifyExistingHostTrust(ctx, cfg.ClientInstance, cfg.WorkloadID, alias, hostKey); err != nil {
 		return err
+	}
+
+	// Refuse a changed host key before mutating workload authorization. This
+	// keeps a failed trust check read-only with respect to the target.
+	result, err = r.incus.ExecInstance(ctx, cfg.TargetInstance, []string{"aginctus-ssh-authorize", "reconcile", cfg.TargetAccount}, identity.PublicKey+"\n")
+	if err != nil {
+		return err
+	}
+	if result.ExitCode != 0 {
+		return helperError("authorize Herdr client on workload", result)
 	}
 	if err := r.publishSSHConfig(ctx, cfg.ClientInstance, cfg.WorkloadID, alias, address, cfg.TargetAccount, identity.Generation, hostKey); err != nil {
 		return err
@@ -128,10 +130,10 @@ func (r *Runtime) Revoke(ctx context.Context, cfg sshaccess.Config) error {
 
 	result, err := r.incus.ExecInstance(ctx, cfg.TargetInstance, []string{"aginctus-ssh-authorize", "remove", cfg.TargetAccount}, "")
 	if err != nil {
-		return err
+		return fmt.Errorf("Herdr remote removed from client, but workload authorization revocation is incomplete: %w", err)
 	}
 	if result.ExitCode != 0 {
-		return helperError("revoke Herdr client from workload", result)
+		return fmt.Errorf("Herdr remote removed from client, but workload authorization revocation is incomplete: %w", helperError("revoke Herdr client from workload", result))
 	}
 	return nil
 }
@@ -308,19 +310,49 @@ func (r *Runtime) publishSSHConfig(ctx context.Context, client, workloadID, alia
 }
 
 func (r *Runtime) writeClientFile(ctx context.Context, client, path, content, mode string) error {
-	result, err := r.incus.ExecInstance(ctx, client, []string{"tee", path}, content)
+	// Stage in the destination directory and rename only after content and mode
+	// are complete, so readers never observe a partially written trust/config file.
+	result, err := r.incus.ExecInstance(ctx, client, []string{"mktemp", path + ".tmp.XXXXXX"}, "")
 	if err != nil {
 		return err
 	}
 	if result.ExitCode != 0 {
+		return helperError("stage Herdr client SSH configuration", result)
+	}
+	tmp := strings.TrimSpace(result.Stdout)
+	if tmp == "" || !strings.HasPrefix(tmp, path+".tmp.") {
+		return fmt.Errorf("stage Herdr client SSH configuration returned unexpected path %q", tmp)
+	}
+	cleanup := func() {
+		_, _ = r.incus.ExecInstance(ctx, client, []string{"rm", "-f", tmp}, "")
+	}
+
+	result, err = r.incus.ExecInstance(ctx, client, []string{"tee", tmp}, content)
+	if err != nil {
+		cleanup()
+		return err
+	}
+	if result.ExitCode != 0 {
+		cleanup()
 		return helperError("write Herdr client SSH configuration", result)
 	}
-	result, err = r.incus.ExecInstance(ctx, client, []string{"chmod", mode, path}, "")
+	result, err = r.incus.ExecInstance(ctx, client, []string{"chmod", mode, tmp}, "")
 	if err != nil {
+		cleanup()
 		return err
 	}
 	if result.ExitCode != 0 {
+		cleanup()
 		return helperError("set Herdr client SSH configuration permissions", result)
+	}
+	result, err = r.incus.ExecInstance(ctx, client, []string{"mv", tmp, path}, "")
+	if err != nil {
+		cleanup()
+		return err
+	}
+	if result.ExitCode != 0 {
+		cleanup()
+		return helperError("publish Herdr client SSH configuration", result)
 	}
 	return nil
 }
