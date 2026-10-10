@@ -35,6 +35,11 @@ var executeHerdrClient = func(ctx context.Context, spec herdrclient.Spec, option
 }
 
 var executeWorkload = func(ctx context.Context, spec workload.Spec, options workload.Options) error {
+	if options.Operation == "delete" && !options.DryRun {
+		if err := transitionWorkload(ctx, spec, "stop"); err != nil {
+			return fmt.Errorf("stop workload before deletion: %w", err)
+		}
+	}
 	return spec.Execute(ctx, options)
 }
 
@@ -513,7 +518,7 @@ func runWorkload(
 	var ids []string
 	var optionArgs []string
 	switch action {
-	case "apply", "remove":
+	case "apply", "remove", "start", "stop":
 		if len(args) > 1 && !strings.HasPrefix(args[1], "--") {
 			ids = []string{args[1]}
 			optionArgs = args[2:]
@@ -535,6 +540,10 @@ func runWorkload(
 		optionArgs = args[2:]
 	}
 
+	if (action == "start" || action == "stop") && len(optionArgs) != 0 {
+		printWorkloadUsage(stderr)
+		return 2
+	}
 	options, err := parseNetworkOptions(optionArgs)
 	if err != nil {
 		fmt.Fprintf(stderr, "workload options: %v\n", err)
@@ -557,6 +566,18 @@ func runWorkload(
 			return 1
 		}
 
+		if action == "start" || action == "stop" {
+			if err := transitionWorkload(ctx, spec, action); err != nil {
+				fmt.Fprintf(stderr, "workload %q %s: %v\n", id, action, err)
+				return 1
+			}
+			verb := "started"
+			if action == "stop" {
+				verb = "stopped"
+			}
+			fmt.Fprintf(stdout, "workload %q: %s\n", id, verb)
+			continue
+		}
 		err = executeWorkload(ctx, spec, workload.Options{
 			DryRun:    options.DryRun,
 			Force:     options.Force,
@@ -602,6 +623,8 @@ func printWorkloadUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] workload ls")
 	fmt.Fprintln(w, "       aginctus [global options] workload apply [name] [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] workload remove [name] [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] workload start [name]")
+	fmt.Fprintln(w, "       aginctus [global options] workload stop [name]")
 	fmt.Fprintln(w, "       aginctus [global options] workload status [name]")
 }
 
@@ -636,7 +659,9 @@ Commands:
   network status         Inspect the configured management network
   workload ls            List active managed workloads
   workload apply [NAME]  Reconcile one workload, or all configured workloads
-  workload remove [NAME] Remove one workload, or all configured workloads
+  workload remove [NAME] Stop and remove one workload, or all configured workloads
+  workload start [NAME]  Start one or all configured workloads
+  workload stop [NAME]   Stop one or all configured workloads
   workload status [NAME] Inspect one or all configured workloads
   version           Print the Aginctus CLI version
   help              Show this help`)
