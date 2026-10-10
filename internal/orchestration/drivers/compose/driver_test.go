@@ -222,3 +222,31 @@ func TestComposeProjectOwnershipValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestComposeInstanceOwnershipValidation(t *testing.T) {
+	const project = "gateway-test"
+	valid := map[string]string{
+		ownershipManagedKey: "true",
+		ownershipResourceKey: "compose-instance",
+		ownershipDeploymentKey: project,
+	}
+	if err := verifyComposeInstanceOwnership(valid, project, "postgres-1"); err != nil {
+		t.Fatalf("owned instance rejected: %v", err)
+	}
+	cases := []struct {
+		name string
+		config map[string]string
+	}{
+		{name: "unmarked", config: map[string]string{}},
+		{name: "wrong deployment", config: map[string]string{ownershipManagedKey:"true",ownershipResourceKey:"compose-instance",ownershipDeploymentKey:"other"}},
+		{name: "wrong kind", config: map[string]string{ownershipManagedKey:"true",ownershipResourceKey:"compose-project",ownershipDeploymentKey:project}},
+		{name: "missing deployment", config: map[string]string{ownershipManagedKey:"true",ownershipResourceKey:"compose-instance"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := verifyComposeInstanceOwnership(tc.config, project, "postgres-1"); err == nil {
+				t.Fatal("accepted foreign instance")
+			}
+		})
+	}
+}
