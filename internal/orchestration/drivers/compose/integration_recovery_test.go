@@ -30,16 +30,19 @@ func TestIncusComposeRecoveryIntegration(t *testing.T) {
 	defer cancel()
 	project := fmt.Sprintf("aginctus-recovery-it-%d", time.Now().UnixNano())
 	t.Logf("retaining test project %q for manual inspection and cleanup", project)
-	compose := []byte(`services:
+	doc := func(command string) []byte {
+		return []byte(fmt.Sprintf(`services:
   app:
     image: docker.io/library/alpine:3.21
-    command: ["sh", "-c", "test \"$(cat /data/sentinel)\" = recovery-sentinel && sleep 3600"]
+    command: ["sh", "-c", %q]
     volumes:
       - data:/data
 volumes:
   data:
-`)
-	first := []byte(strings.Replace(string(compose), "test \"$(cat /data/sentinel)\" = recovery-sentinel && sleep 3600", "echo recovery-sentinel > /data/sentinel; sleep 3600", 1))
+`, command))
+	}
+	compose := doc("test \"$(cat /data/sentinel)\" = recovery-sentinel && sleep 3600")
+	first := doc("echo recovery-sentinel > /data/sentinel; sleep 3600")
 	run := func(doc []byte) error {
 		return executeCompose(ctx, Config{Project: project, Compose: doc}, nil)
 	}
