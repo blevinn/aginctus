@@ -154,7 +154,7 @@ func TestInitializeRuntimeEnvironmentUsesProvidedSeedOnlyWhenMissing(t *testing.
 }
 
 func TestGatewayRejectsUnsafeSeedValues(t *testing.T) {
-	for _, seed := range []string{"a\\nb", "a$b", "a#b", "a=b", "a:b", "a@b", "a/b", "a\\\\b", "a'b", "a\"b", "a b"} {
+	for _, seed := range []string{"a\nb", "a$b", "a#b", "a=b", "a:b", "a@b", "a/b", "a\\\\b", "a'b", "a\"b", "a b"} {
 		t.Run(fmt.Sprintf("%q", seed), func(t *testing.T) {
 			t.Setenv("XDG_STATE_HOME", t.TempDir())
 			for _, key := range requiredRuntimeEnvironment { t.Setenv(key, "") }
