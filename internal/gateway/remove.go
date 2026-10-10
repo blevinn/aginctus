@@ -108,5 +108,19 @@ func (s Spec) Remove(ctx context.Context, force bool) error {
 			return fmt.Errorf("delete gateway instance %q: %w", instance.Name, err)
 		}
 	}
+	// Explicit stale-deployment recovery transitions only this named project
+	// to the same ownership markers used by the Compose driver. This makes
+	// the subsequent ordinary apply possible without a global bypass.
+	if force {
+		for _, entry := range []string{
+			"user.aginctus.managed=true",
+			"user.aginctus.resource=compose-project",
+			"user.aginctus.deployment=" + s.Project,
+		} {
+			if _, err := runIncus(ctx, "project", "set", s.Project, entry); err != nil {
+				return fmt.Errorf("mark recovered gateway project: %w", err)
+			}
+		}
+	}
 	return nil
 }
