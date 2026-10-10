@@ -147,19 +147,33 @@ func (c *Client) InstanceAddress(ctx context.Context, name, interfaceName string
 		return "", fmt.Errorf("instance %q has no network interface %q", name, interfaceName)
 	}
 
-	for _, family := range []string{"inet", "inet6"} {
-		for _, address := range network.Addresses {
-			if address.Family != family || address.Scope != "global" {
-				continue
+	address, ok := selectInstanceAddress(network.Addresses)
+	if !ok {
+		return "", fmt.Errorf("instance %q interface %q has no usable unicast address", name, interfaceName)
+	}
+	return address, nil
+}
+
+func selectInstanceAddress(addresses []api.InstanceStateNetworkAddress) (string, bool) {
+	// Prefer IPv4 over IPv6 and kernel-global scope over other scopes, but do
+	// not require Scope == "global". Incus-managed private addresses can be
+	// perfectly reachable from the Herdr client even when the reported scope
+	// differs. Reject only addresses that cannot be useful as SSH destinations.
+	for _, wantGlobal := range []bool{true, false} {
+		for _, family := range []string{"inet", "inet6"} {
+			for _, address := range addresses {
+				if address.Family != family || (address.Scope == "global") != wantGlobal {
+					continue
+				}
+				ip := net.ParseIP(address.Address)
+				if ip == nil || ip.IsUnspecified() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
+					continue
+				}
+				return address.Address, true
 			}
-			ip := net.ParseIP(address.Address)
-			if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
-				continue
-			}
-			return address.Address, nil
 		}
 	}
-	return "", fmt.Errorf("instance %q interface %q has no usable global address", name, interfaceName)
+	return "", false
 }
 
 func instanceExecExitCode(metadata map[string]any) (int, error) {
