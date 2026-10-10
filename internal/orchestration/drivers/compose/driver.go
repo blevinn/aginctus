@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"reflect"
 	"os"
+	"reflect"
 	"strings"
 
 	composeclient "github.com/lxc/incus-compose/client"
@@ -245,10 +245,14 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	for _, service := range order {
 		for _, resource := range resources[service] {
 			instance, ok := resource.(*composeclient.Instance)
-			if !ok { continue }
+			if !ok {
+				continue
+			}
 			existing, _, err := connection.GetInstance(ctx, composeclient.SanitizeProjectName(p.Name), instance.IncusName(), nil)
 			if err != nil {
-				if api.StatusErrorCheck(err, http.StatusNotFound) { continue }
+				if api.StatusErrorCheck(err, http.StatusNotFound) {
+					continue
+				}
 				return fmt.Errorf("inspect Compose instance %q before reconcile: %w", instance.IncusName(), err)
 			}
 			if err := detectComposeInstanceDrift(instance.Config.Extensions, instance.Config.Profiles, existing.Config, existing.Profiles); err != nil {

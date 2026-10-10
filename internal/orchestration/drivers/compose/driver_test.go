@@ -252,26 +252,30 @@ func TestComposeInstanceOwnershipValidation(t *testing.T) {
 }
 
 func TestDetectComposeInstanceDrift(t *testing.T) {
-	tests := []struct{
-		name string
-		desired map[string]string
-		actual map[string]string
-		profiles []string
+	tests := []struct {
+		name           string
+		desired        map[string]string
+		actual         map[string]string
+		profiles       []string
 		actualProfiles []string
-		wantDrift bool
+		wantDrift      bool
 	}{
-		{name:"unchanged", desired:map[string]string{"user.setting":"new"}, actual:map[string]string{"user.setting":"new"}},
-		{name:"missing key is additive", desired:map[string]string{"user.setting":"new"}, actual:map[string]string{}},
-		{name:"changed environment extension", desired:map[string]string{"environment.TEST":"new"}, actual:map[string]string{"environment.TEST":"old"}, wantDrift:true},
-		{name:"changed command extension", desired:map[string]string{"oci.entrypoint":"new"}, actual:map[string]string{"oci.entrypoint":"old"}, wantDrift:true},
-		{name:"changed image alias extension", desired:map[string]string{"user.image_alias":"new"}, actual:map[string]string{"user.image_alias":"old"}, wantDrift:true},
-		{name:"changed profile", profiles:[]string{"default","new"}, actualProfiles:[]string{"default","old"}, wantDrift:true},
+		{name: "unchanged", desired: map[string]string{"user.setting": "new"}, actual: map[string]string{"user.setting": "new"}},
+		{name: "missing key is additive", desired: map[string]string{"user.setting": "new"}, actual: map[string]string{}},
+		{name: "changed environment extension", desired: map[string]string{"environment.TEST": "new"}, actual: map[string]string{"environment.TEST": "old"}, wantDrift: true},
+		{name: "changed command extension", desired: map[string]string{"oci.entrypoint": "new"}, actual: map[string]string{"oci.entrypoint": "old"}, wantDrift: true},
+		{name: "changed image alias extension", desired: map[string]string{"user.image_alias": "new"}, actual: map[string]string{"user.image_alias": "old"}, wantDrift: true},
+		{name: "changed profile", profiles: []string{"default", "new"}, actualProfiles: []string{"default", "old"}, wantDrift: true},
 	}
 	for _, tc := range tests {
-		t.Run(tc.name,func(t *testing.T){
-			err:=detectComposeInstanceDrift(tc.desired,tc.profiles,tc.actual,tc.actualProfiles)
-			if (err!=nil)!=tc.wantDrift {t.Fatalf("drift=%v, want %t",err,tc.wantDrift)}
-			if tc.wantDrift && strings.Contains(err.Error(),"old") {t.Fatalf("drift error leaked a previous value: %v",err)}
+		t.Run(tc.name, func(t *testing.T) {
+			err := detectComposeInstanceDrift(tc.desired, tc.profiles, tc.actual, tc.actualProfiles)
+			if (err != nil) != tc.wantDrift {
+				t.Fatalf("drift=%v, want %t", err, tc.wantDrift)
+			}
+			if tc.wantDrift && strings.Contains(err.Error(), "old") {
+				t.Fatalf("drift error leaked a previous value: %v", err)
+			}
 		})
 	}
 }
