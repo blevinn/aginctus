@@ -74,6 +74,11 @@ func (e *Engine) Execute(ctx context.Context, plan Plan, options ExecuteOptions)
 		if err := driver.Execute(ctx, step.Configuration, options); err != nil {
 			return result, fmt.Errorf("execute orchestration step %q (%s): %w", step.ID, step.Driver, err)
 		}
+		// A driver may finish normally even if its context was canceled during
+		// a blocking native operation. Do not report that step as successful.
+		if err := ctx.Err(); err != nil {
+			return result, fmt.Errorf("orchestration canceled during step %q (%s): %w", step.ID, step.Driver, err)
+		}
 		result.Steps = append(result.Steps, StepResult{
 			ID:     step.ID,
 			Driver: step.Driver,
