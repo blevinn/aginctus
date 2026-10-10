@@ -45,3 +45,12 @@ func (c *Client) ServerVersion(ctx context.Context) (string, error) {
 
 	return status.Environment.ServerVersion, nil
 }
+
+func (c *Client) HTTPSAddress(ctx context.Context) (string, error) {
+	server, err := c.connect(ctx)
+	if err != nil { return "", fmt.Errorf("connect to local Incus daemon: %w", err) }
+	status, _, err := server.GetServer()
+	if err != nil { return "", fmt.Errorf("get Incus server configuration: %w", err) }
+	value, _ := status.Config["core.https_address"].(string)
+	return value, nil
+}
