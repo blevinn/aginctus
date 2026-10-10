@@ -164,18 +164,18 @@ func verifyComposeInstanceOwnership(config map[string]string, project, instance 
 type ComposeDriftKind string
 
 const (
-	ComposeDriftConfig ComposeDriftKind = "config"
+	ComposeDriftConfig   ComposeDriftKind = "config"
 	ComposeDriftProfiles ComposeDriftKind = "profiles"
-	ComposeDriftDevice ComposeDriftKind = "device"
-	ComposeDriftImage ComposeDriftKind = "image"
+	ComposeDriftDevice   ComposeDriftKind = "device"
+	ComposeDriftImage    ComposeDriftKind = "image"
 )
 
 // ComposeDriftError identifies a change that the pinned upstream Compose
 // implementation cannot converge on an existing instance. Key names are
 // safe to print; old and new configuration values are deliberately omitted.
 type ComposeDriftError struct {
-	Kind ComposeDriftKind
-	Key string
+	Kind   ComposeDriftKind
+	Key    string
 	Reason string
 }
 
