@@ -313,6 +313,35 @@ func stampComposeCommands(config *composeclient.InstanceConfig) error {
 	return nil
 }
 
+func isComposeImageSeed(name string) bool { return strings.HasPrefix(name, "ic-seed-") }
+
+func verifyComposeDeploymentOwnership(ctx context.Context, connection *iclient.Connection, project string) error {
+	incusProject := composeclient.SanitizeProjectName(project)
+	existing, _, err := connection.GetProject(ctx, incusProject)
+	if err != nil {
+		return fmt.Errorf("inspect Compose project %q ownership: %w", project, err)
+	}
+	if err := verifyComposeProjectOwnership(existing.Config, project); err != nil {
+		return err
+	}
+	instances, err := connection.GetInstances(ctx, incusProject, nil)
+	if err != nil {
+		return fmt.Errorf("inspect Compose instances in project %q: %w", project, err)
+	}
+	for _, instance := range instances {
+		// The pinned incus-compose image preparer creates transient ic-seed-*
+		// instances while importing OCI images. These are not deployment
+		// services and carry no Aginctus ownership marker. Never adopt them.
+		if isComposeImageSeed(instance.Name) {
+			continue
+		}
+		if err := verifyComposeInstanceOwnership(instance.Config, project, instance.Name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -365,6 +394,11 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	}
 	defer c.WarnError(c.Done, "compose client cleanup failed")
 
+	// Upstream EnsureProject can encounter a concurrently created project.
+	// Verify what now exists before opening or ensuring child resources.
+	if err := verifyComposeDeploymentOwnership(ctx, connection, p.Name); err != nil {
+		return fmt.Errorf("post-ensure Compose ownership check: %w", err)
+	}
 	if err := c.Open(); err != nil {
 		return fmt.Errorf("open compose project %q: %w", p.Name, err)
 	}
