@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/lxc/incus/v7/shared/api"
 )
 
 // runIncus is replaceable in tests. Each invocation uses the local Incus CLI.
@@ -75,13 +74,23 @@ func (s Spec) Remove(ctx context.Context, force bool) error {
 	if force && !strings.HasPrefix(s.Project, "aginctus-") {
 		return fmt.Errorf("forced gateway cleanup requires an aginctus-prefixed project name, got %q", s.Project)
 	}
-	raw, err := runIncus(ctx, "project", "show", s.Project, "--format=json")
+	raw, err := runIncus(ctx, "project", "list", "--format=json")
 	if err != nil {
 		return fmt.Errorf("inspect gateway project: %w", err)
 	}
-	var project cleanupProject
-	if err := json.Unmarshal(raw, &project); err != nil {
+	var projects []cleanupProject
+	if err := json.Unmarshal(raw, &projects); err != nil {
 		return fmt.Errorf("decode gateway project: %w", err)
+	}
+	var project cleanupProject
+	for _, candidate := range projects {
+		if candidate.Name == s.Project {
+			project = candidate
+			break
+		}
+	}
+	if project.Name == "" {
+		return fmt.Errorf("gateway project %q not found", s.Project)
 	}
 	instancesRaw, err := runIncus(ctx, "list", "--project", s.Project, "--format=json")
 	if err != nil {
@@ -101,6 +110,3 @@ func (s Spec) Remove(ctx context.Context, force bool) error {
 	}
 	return nil
 }
-
-// Ensure the Incus model remains anchored to the official resource API.
-var _ api.Instance
