@@ -574,3 +574,146 @@ func TestDoctorFixConfiguresLoopbackOnly(t *testing.T) {
 		t.Fatalf("code=%d, address=%q, stderr=%q", code, called, stderr.String())
 	}
 }
+
+func TestNetworkApplyAndRemoveCommands(t *testing.T) {
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	var operations []string
+	stubManagementNetwork(t, func(_ context.Context, _ managementnetwork.Spec, options managementnetwork.Options) error {
+		operations = append(operations, options.Operation)
+		return nil
+	})
+
+	for _, args := range [][]string{
+		{"network", "apply", "--dry-run"},
+		{"network", "remove", "--dry-run"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := Run(context.Background(), args, &stdout, &stderr, client, loader); code != 0 {
+			t.Fatalf("Run(%v) code = %d; stderr = %q", args, code, stderr.String())
+		}
+	}
+
+	if got, want := strings.Join(operations, ","), "upsert,delete"; got != want {
+		t.Fatalf("operations = %q, want %q", got, want)
+	}
+}
+
+func TestHerdrClientApplyAndRemoveCommands(t *testing.T) {
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	var operations []string
+	stubHerdrClient(t, func(_ context.Context, _ herdrclient.Spec, options herdrclient.Options) error {
+		operations = append(operations, options.Operation)
+		return nil
+	})
+
+	for _, args := range [][]string{
+		{"herdr", "client", "apply", "--dry-run"},
+		{"herdr", "client", "remove", "--dry-run"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := Run(context.Background(), args, &stdout, &stderr, client, loader); code != 0 {
+			t.Fatalf("Run(%v) code = %d; stderr = %q", args, code, stderr.String())
+		}
+	}
+
+	if got, want := strings.Join(operations, ","), "upsert,delete"; got != want {
+		t.Fatalf("operations = %q, want %q", got, want)
+	}
+}
+
+func TestWorkloadListAndApplyAll(t *testing.T) {
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	original := inspectIncusInstances
+	t.Cleanup(func() { inspectIncusInstances = original })
+	inspectIncusInstances = func(context.Context) ([]byte, error) {
+		return []byte(`[{"name":"aginctus-alpha","status":"Running","config":{"user.aginctus.managed":"true","user.aginctus.resource":"workload","user.aginctus.role":"agent-workload","user.aginctus.workload":"alpha"}},{"name":"aginctus-dev","status":"Stopped","config":{"user.aginctus.managed":"true","user.aginctus.resource":"workload","user.aginctus.role":"agent-workload","user.aginctus.workload":"dev"}}]`), nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := Run(
+		context.Background(),
+		[]string{
+			"--config=workloads.alpha.instance.name=aginctus-alpha",
+			"--config=workloads.alpha.runtime.type=opencode",
+			"--config=workloads.alpha.isolation=container",
+			"--config=workloads.alpha.image.alias=aginctus-opencode-workload",
+			"--config=workloads.alpha.storage.pool=default",
+			"workload", "ls",
+		},
+		&stdout, &stderr, client, loader,
+	); code != 0 {
+		t.Fatalf("workload ls code = %d; stderr = %q", code, stderr.String())
+	}
+	if got := stdout.String(); got != "alpha\n" {
+		t.Fatalf("workload ls output = %q", got)
+	}
+
+	var applied []string
+	stubWorkload(t, func(_ context.Context, spec workload.Spec, options workload.Options) error {
+		if options.Operation != "upsert" || !options.DryRun {
+			t.Fatalf("options = %#v", options)
+		}
+		applied = append(applied, spec.ID)
+		return nil
+	})
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := Run(
+		context.Background(),
+		[]string{
+			"--config=workloads.alpha.instance.name=aginctus-alpha",
+			"--config=workloads.alpha.runtime.type=opencode",
+			"--config=workloads.alpha.isolation=container",
+			"--config=workloads.alpha.image.alias=aginctus-opencode-workload",
+			"--config=workloads.alpha.storage.pool=default",
+			"workload", "apply", "--dry-run",
+		},
+		&stdout, &stderr, client, loader,
+	); code != 0 {
+		t.Fatalf("workload apply code = %d; stderr = %q", code, stderr.String())
+	}
+	if got, want := strings.Join(applied, ","), "alpha,dev"; got != want {
+		t.Fatalf("applied workloads = %q, want %q", got, want)
+	}
+}
+
+func TestWorkloadRemoveNamed(t *testing.T) {
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	var gotID string
+	var gotOptions workload.Options
+	stubWorkload(t, func(_ context.Context, spec workload.Spec, options workload.Options) error {
+		gotID = spec.ID
+		gotOptions = options
+		return nil
+	})
+
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{"workload", "remove", "dev", "--dry-run", "--force"}, &stdout, &stderr, client, loader)
+	if code != 0 {
+		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
+	}
+	if gotID != "dev" || gotOptions.Operation != "delete" || !gotOptions.DryRun || !gotOptions.Force {
+		t.Fatalf("id = %q, options = %#v", gotID, gotOptions)
+	}
+}

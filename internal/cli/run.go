@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
@@ -30,10 +31,20 @@ var executeManagementNetwork = func(ctx context.Context, spec managementnetwork.
 }
 
 var executeHerdrClient = func(ctx context.Context, spec herdrclient.Spec, options herdrclient.Options) error {
+	if options.Operation == "delete" && !options.DryRun {
+		if err := transitionHerdrClient(ctx, spec, "stop"); err != nil {
+			return fmt.Errorf("stop Herdr client before deletion: %w", err)
+		}
+	}
 	return spec.Execute(ctx, options)
 }
 
 var executeWorkload = func(ctx context.Context, spec workload.Spec, options workload.Options) error {
+	if options.Operation == "delete" && !options.DryRun {
+		if err := transitionWorkload(ctx, spec, "stop"); err != nil {
+			return fmt.Errorf("stop workload before deletion: %w", err)
+		}
+	}
 	return spec.Execute(ctx, options)
 }
 
@@ -74,6 +85,12 @@ func Run(
 	}
 
 	switch commandArgs[0] {
+	case "remove":
+		return runAggregateRemove(ctx, commandArgs[1:], stdout, stderr, effective)
+	case "status":
+		return runAggregateStatus(ctx, commandArgs[1:], stdout, stderr, effective)
+	case "apply":
+		return runAggregateApply(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "doctor":
 		return runDoctor(ctx, commandArgs[1:], stdout, stderr, incusClient)
 	case "images":
@@ -253,6 +270,10 @@ func runNetwork(
 		return 2
 	}
 
+	if args[0] == "status" {
+		return runNetworkStatus(ctx, args[1:], stdout, stderr, effective)
+	}
+
 	action := args[0]
 	options, err := parseNetworkOptions(args[1:])
 	if err != nil {
@@ -266,10 +287,13 @@ func runNetwork(
 		return 1
 	}
 
-	operation := "upsert"
-	if action == "teardown" {
+	var operation string
+	switch action {
+	case "apply", "ensure":
+		operation = "upsert"
+	case "remove", "teardown":
 		operation = "delete"
-	} else if action != "ensure" {
+	default:
 		printNetworkUsage(stderr)
 		return 2
 	}
@@ -285,9 +309,9 @@ func runNetwork(
 	}
 
 	switch {
-	case action == "ensure" && options.DryRun:
+	case operation == "upsert" && options.DryRun:
 		fmt.Fprintf(stdout, "management network %q: would reconcile\n", spec.Name)
-	case action == "ensure":
+	case operation == "upsert":
 		fmt.Fprintf(stdout, "management network %q: ready\n", spec.Name)
 	case options.DryRun:
 		fmt.Fprintf(stdout, "management network %q: would delete if present\n", spec.Name)
@@ -318,8 +342,9 @@ func parseNetworkOptions(args []string) (mutationOptions, error) {
 }
 
 func printNetworkUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] network ensure [--dry-run] [--force]")
-	fmt.Fprintln(w, "       aginctus [global options] network teardown [--dry-run] [--force]")
+	fmt.Fprintln(w, "Usage: aginctus [global options] network apply [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] network remove [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] network status")
 }
 
 func runGateway(
@@ -329,7 +354,11 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) != 1 {
+	if len(args) == 0 || len(args) > 2 {
+		printGatewayUsage(stderr)
+		return 2
+	}
+	if len(args) == 2 && (args[0] != "remove" || args[1] != "--force") {
 		printGatewayUsage(stderr)
 		return 2
 	}
@@ -341,6 +370,27 @@ func runGateway(
 	}
 
 	switch args[0] {
+	case "status":
+		return runGatewayStatus(ctx, args[1:], stdout, stderr, effective)
+	case "remove":
+		if err := spec.Remove(ctx, len(args) == 2); err != nil {
+			fmt.Fprintf(stderr, "gateway cleanup: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "gateway %q: gateway instances removed (persistent volumes retained)\n", spec.ID)
+		return 0
+	case "apply":
+		runtimeEnvironment, err := spec.InitializeRuntimeEnvironment()
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
+			return 1
+		}
+		if err := spec.Deploy(ctx, runtimeEnvironment); err != nil {
+			fmt.Fprintf(stderr, "gateway deployment: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "gateway %q: started (application readiness not verified)\n", spec.ID)
+		return 0
 	case "validate":
 		fmt.Fprintf(stdout, "gateway %q: configuration valid\n", spec.ID)
 		return 0
@@ -374,6 +424,9 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
 	fmt.Fprintln(w, "       aginctus [global options] gateway up")
+	fmt.Fprintln(w, "       aginctus [global options] gateway apply")
+	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 }
 
 func runHerdr(
@@ -383,11 +436,38 @@ func runHerdr(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) == 0 || args[0] != "client" {
+	if len(args) == 0 {
+		return runHerdrConsole(ctx, nil, stdout, stderr, effective)
+	}
+	if args[0] != "client" {
 		printHerdrClientUsage(stderr)
 		return 2
 	}
 	args = args[1:]
+	if len(args) > 0 && args[0] == "status" {
+		return runHerdrClientStatus(ctx, args[1:], stdout, stderr, effective)
+	}
+	if len(args) > 0 && (args[0] == "start" || args[0] == "stop") {
+		if len(args) != 1 {
+			printHerdrClientUsage(stderr)
+			return 2
+		}
+		spec, err := herdrclient.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
+			return 1
+		}
+		if err := transitionHerdrClient(ctx, spec, args[0]); err != nil {
+			fmt.Fprintf(stderr, "Herdr client %s: %v\n", args[0], err)
+			return 1
+		}
+		verb := "started"
+		if args[0] == "stop" {
+			verb = "stopped"
+		}
+		fmt.Fprintf(stdout, "Herdr client %q: %s\n", spec.Name, verb)
+		return 0
+	}
 	if len(args) == 0 {
 		printHerdrClientUsage(stderr)
 		return 2
@@ -405,10 +485,13 @@ func runHerdr(
 		return 1
 	}
 
-	operation := "upsert"
-	if args[0] == "teardown" {
+	var operation string
+	switch args[0] {
+	case "apply", "ensure":
+		operation = "upsert"
+	case "remove", "teardown":
 		operation = "delete"
-	} else if args[0] != "ensure" {
+	default:
 		printHerdrClientUsage(stderr)
 		return 2
 	}
@@ -424,9 +507,9 @@ func runHerdr(
 	}
 
 	switch {
-	case args[0] == "ensure" && options.DryRun:
+	case operation == "upsert" && options.DryRun:
 		fmt.Fprintf(stdout, "Herdr client %q: would reconcile\n", spec.Name)
-	case args[0] == "ensure":
+	case operation == "upsert":
 		fmt.Fprintf(stdout, "Herdr client %q: ready\n", spec.Name)
 	case options.DryRun:
 		fmt.Fprintf(stdout, "Herdr client %q: would delete if present\n", spec.Name)
@@ -437,8 +520,11 @@ func runHerdr(
 }
 
 func printHerdrClientUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] herdr client ensure [--dry-run] [--force]")
-	fmt.Fprintln(w, "       aginctus [global options] herdr client teardown [--dry-run] [--force]")
+	fmt.Fprintln(w, "Usage: aginctus [global options] herdr client apply [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] herdr client remove [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] herdr client status")
+	fmt.Fprintln(w, "       aginctus [global options] herdr client start")
+	fmt.Fprintln(w, "       aginctus [global options] herdr client stop")
 }
 
 func runWorkload(
@@ -447,59 +533,132 @@ func runWorkload(
 	stdout, stderr io.Writer,
 	effective *config.Config,
 ) int {
-	if len(args) < 2 {
+	if len(args) > 0 && args[0] == "status" {
+		return runWorkloadStatus(ctx, args[1:], stdout, stderr, effective)
+	}
+	if len(args) > 0 && (args[0] == "ls" || args[0] == "list") {
+		return runActiveWorkloadList(ctx, args[1:], stdout, stderr, effective)
+	}
+
+	if len(args) == 0 {
 		printWorkloadUsage(stderr)
 		return 2
 	}
 
-	id := args[0]
-	action := args[1]
-	options, err := parseNetworkOptions(args[2:])
+	// New grammar is "workload apply|remove [name]". Keep the historical
+	// "workload <name> ensure|teardown" form as a compatibility alias.
+	action := args[0]
+	var ids []string
+	var optionArgs []string
+	switch action {
+	case "apply", "remove", "start", "stop":
+		if len(args) > 1 && !strings.HasPrefix(args[1], "--") {
+			ids = []string{args[1]}
+			optionArgs = args[2:]
+		} else {
+			ids = workloadIDs(effective)
+			optionArgs = args[1:]
+		}
+	default:
+		if len(args) < 2 || (args[1] != "ensure" && args[1] != "teardown") {
+			printWorkloadUsage(stderr)
+			return 2
+		}
+		ids = []string{args[0]}
+		if args[1] == "ensure" {
+			action = "apply"
+		} else {
+			action = "remove"
+		}
+		optionArgs = args[2:]
+	}
+
+	if (action == "start" || action == "stop") && len(optionArgs) != 0 {
+		printWorkloadUsage(stderr)
+		return 2
+	}
+	options, err := parseNetworkOptions(optionArgs)
 	if err != nil {
 		fmt.Fprintf(stderr, "workload options: %v\n", err)
 		return 2
 	}
-
-	spec, err := workload.FromConfig(effective, id)
-	if err != nil {
-		fmt.Fprintf(stderr, "workload %q configuration: %v\n", id, err)
+	if len(ids) == 0 {
+		fmt.Fprintln(stderr, "no workloads are configured")
 		return 1
 	}
 
 	operation := "upsert"
-	if action == "teardown" {
+	if action == "remove" {
 		operation = "delete"
-	} else if action != "ensure" {
-		printWorkloadUsage(stderr)
-		return 2
 	}
 
-	err = executeWorkload(ctx, spec, workload.Options{
-		DryRun:    options.DryRun,
-		Force:     options.Force,
-		Operation: operation,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "workload %q: %v\n", id, err)
-		return 1
-	}
+	for _, id := range ids {
+		spec, err := workload.FromConfig(effective, id)
+		if err != nil {
+			fmt.Fprintf(stderr, "workload %q configuration: %v\n", id, err)
+			return 1
+		}
 
-	switch {
-	case action == "ensure" && options.DryRun:
-		fmt.Fprintf(stdout, "workload %q: would reconcile\n", id)
-	case action == "ensure":
-		fmt.Fprintf(stdout, "workload %q: ready\n", id)
-	case options.DryRun:
-		fmt.Fprintf(stdout, "workload %q: would delete if present\n", id)
-	default:
-		fmt.Fprintf(stdout, "workload %q: absent\n", id)
+		if action == "start" || action == "stop" {
+			if err := transitionWorkload(ctx, spec, action); err != nil {
+				fmt.Fprintf(stderr, "workload %q %s: %v\n", id, action, err)
+				return 1
+			}
+			verb := "started"
+			if action == "stop" {
+				verb = "stopped"
+			}
+			fmt.Fprintf(stdout, "workload %q: %s\n", id, verb)
+			continue
+		}
+		err = executeWorkload(ctx, spec, workload.Options{
+			DryRun:    options.DryRun,
+			Force:     options.Force,
+			Operation: operation,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "workload %q: %v\n", id, err)
+			return 1
+		}
+
+		switch {
+		case operation == "upsert" && options.DryRun:
+			fmt.Fprintf(stdout, "workload %q: would reconcile\n", id)
+		case operation == "upsert":
+			fmt.Fprintf(stdout, "workload %q: ready\n", id)
+		case options.DryRun:
+			fmt.Fprintf(stdout, "workload %q: would delete if present\n", id)
+		default:
+			fmt.Fprintf(stdout, "workload %q: absent\n", id)
+		}
 	}
 	return 0
 }
 
+func workloadIDs(effective *config.Config) []string {
+	value, ok := effective.Get("workloads")
+	if !ok {
+		return nil
+	}
+	workloads, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	ids := make([]string, 0, len(workloads))
+	for id := range workloads {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 func printWorkloadUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] workload <name> ensure [--dry-run] [--force]")
-	fmt.Fprintln(w, "       aginctus [global options] workload <name> teardown [--dry-run] [--force]")
+	fmt.Fprintln(w, "Usage: aginctus [global options] workload ls")
+	fmt.Fprintln(w, "       aginctus [global options] workload apply [name] [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] workload remove [name] [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] workload start [name]")
+	fmt.Fprintln(w, "       aginctus [global options] workload stop [name]")
+	fmt.Fprintln(w, "       aginctus [global options] workload status [name]")
 }
 
 func printUsage(w io.Writer) {
@@ -511,19 +670,36 @@ Global options:
   --configuration-file=path    Load an explicit JSON configuration file
 
 Commands:
+  remove            Remove configured resources in reverse dependency order
+  status            Inspect all configured resource groups
+  apply             Deploy the complete configured orchestration
+  apply --render    Print one deterministic JSON orchestration plan (no mutation)
+  apply --from FILE Deploy a validated JSON orchestration plan
   images list|ls    List local Incus images and aliases
   images update NAME PATH   Safely import an image from a Nix result directory
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
   gateway validate  Validate the AI gateway deployment configuration
+  gateway apply     Reconcile the AI gateway
+  gateway status    Inspect gateway project and service state
+  gateway remove [--force] Remove gateway instances, preserving data volumes
   gateway render    Render the AI gateway Compose model
-  herdr client ensure    Create, reconcile, and bootstrap the Herdr client
-  herdr client teardown  Delete the Herdr client container
-  network ensure    Create or reconcile the configured management network
-  network teardown  Delete the configured management network
-  workload NAME ensure    Create or reconcile an agent workload
-  workload NAME teardown  Delete an agent workload
+  herdr                  Launch interactive Herdr in its client container
+  herdr client apply     Create, reconcile, and bootstrap the Herdr client
+  herdr client remove    Delete the Herdr client container
+  herdr client status    Inspect the Herdr client instance
+  herdr client start     Start the Herdr client
+  herdr client stop      Stop the Herdr client
+  network apply          Create or reconcile the configured management network
+  network remove         Delete the configured management network
+  network status         Inspect the configured management network
+  workload ls            List active managed workloads
+  workload apply [NAME]  Reconcile one workload, or all configured workloads
+  workload remove [NAME] Stop and remove one workload, or all configured workloads
+  workload start [NAME]  Start one or all configured workloads
+  workload stop [NAME]   Stop one or all configured workloads
+  workload status [NAME] Inspect one or all configured workloads
   version           Print the Aginctus CLI version
   help              Show this help`)
 }

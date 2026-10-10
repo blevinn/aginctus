@@ -3,7 +3,9 @@ package compose
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -22,11 +24,13 @@ const (
 	ownershipManagedKey    = "user.aginctus.managed"
 	ownershipResourceKey   = "user.aginctus.resource"
 	ownershipDeploymentKey = "user.aginctus.deployment"
+	ownershipCommandKey    = "user.aginctus.command_sha256"
 )
 
 type Config struct {
-	Project string          `json:"project"`
-	Compose json.RawMessage `json:"compose"`
+	Project         string          `json:"project"`
+	Compose         json.RawMessage `json:"compose"`
+	RecreateOnDrift bool            `json:"recreateOnDrift,omitempty"`
 }
 
 type Driver struct {
@@ -53,7 +57,7 @@ func (d *Driver) SupportsDryRun() bool {
 }
 
 func (d *Driver) Validate(raw json.RawMessage) error {
-	_, err := parseConfig(context.Background(), raw)
+	_, err := parseConfig(context.Background(), raw, validationEnvironment())
 	return err
 }
 
@@ -61,14 +65,24 @@ func (d *Driver) Execute(ctx context.Context, raw json.RawMessage, options orche
 	if options.DryRun {
 		return fmt.Errorf("compose driver does not support dry-run")
 	}
-	cfg, err := parseConfig(ctx, raw)
+	cfg, err := parseConfig(ctx, raw, d.environment)
 	if err != nil {
 		return err
 	}
 	return d.execute(ctx, cfg, d.environment)
 }
 
-func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
+// validationEnvironment substitutes non-secret, syntax-safe values only during
+// structural validation. Runtime execution receives real credentials separately.
+func validationEnvironment() map[string]string {
+	return map[string]string{
+		"AGINCTUS_GATEWAY_POSTGRES_PASSWORD": "validation-placeholder",
+		"AGINCTUS_GATEWAY_MASTER_KEY":        "validation-placeholder",
+		"AGINCTUS_GATEWAY_SALT_KEY":          "validation-placeholder",
+	}
+}
+
+func parseConfig(ctx context.Context, raw json.RawMessage, environment map[string]string) (Config, error) {
 	var cfg Config
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -88,7 +102,7 @@ func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
 	}
 	defer cleanup()
 
-	_, err = loadProject(ctx, cfg.Project, path, nil)
+	_, err = loadProject(ctx, cfg.Project, path, environment)
 	if err != nil {
 		return Config{}, fmt.Errorf("validate compose project %q: %w", cfg.Project, err)
 	}
@@ -160,17 +174,142 @@ func verifyComposeInstanceOwnership(config map[string]string, project, instance 
 	return nil
 }
 
+// ComposeDriftKind classifies reconciliation decisions without exposing values.
+type ComposeDriftKind string
+
+const (
+	ComposeDriftConfig   ComposeDriftKind = "config"
+	ComposeDriftProfiles ComposeDriftKind = "profiles"
+	ComposeDriftDevice   ComposeDriftKind = "device"
+	ComposeDriftImage    ComposeDriftKind = "image"
+)
+
+// ComposeDriftError identifies a change that the pinned upstream Compose
+// implementation cannot converge on an existing instance. Key names are
+// safe to print; old and new configuration values are deliberately omitted.
+type ComposeDriftError struct {
+	Kind   ComposeDriftKind
+	Key    string
+	Reason string
+}
+
+func (e *ComposeDriftError) Error() string {
+	if e.Key != "" {
+		return fmt.Sprintf("compose %s drift at %q: %s", e.Kind, e.Key, e.Reason)
+	}
+	return fmt.Sprintf("compose %s drift: %s", e.Kind, e.Reason)
+}
+
 // detectComposeInstanceDrift rejects changes the pinned Compose Ensure would
 // silently ignore. Missing extension keys are safe: Ensure adds them.
 func detectComposeInstanceDrift(desired map[string]string, desiredProfiles []string, actual map[string]string, actualProfiles []string) error {
 	for key, want := range desired {
 		if got, exists := actual[key]; exists && got != want {
-			return fmt.Errorf("configuration drift for %q: instance recreation or an explicit update is required", key)
+			return &ComposeDriftError{Kind: ComposeDriftConfig, Key: key, Reason: "instance recreation or an explicit update is required"}
 		}
 	}
 	if desiredProfiles != nil && !reflect.DeepEqual(desiredProfiles, actualProfiles) {
-		return fmt.Errorf("instance profile drift: explicit reconciliation required")
+		return &ComposeDriftError{Kind: ComposeDriftProfiles, Reason: "explicit reconciliation required"}
 	}
+	return nil
+}
+
+// detectComposeDeviceDrift only compares devices explicitly controlled by the
+// desired Compose model. Extra host devices are left untouched.
+func detectComposeDeviceDrift(desired, actual map[string]map[string]string) error {
+	for name, desiredValues := range desired {
+		current, exists := actual[name]
+		if !exists {
+			// The pinned upstream Ensure does not add missing raw devices to
+			// existing instances, so absence is drift too.
+			return &ComposeDriftError{Kind: ComposeDriftDevice, Key: name, Reason: "device missing; explicit instance reconciliation required"}
+		}
+		for key, want := range desiredValues {
+			if got, ok := current[key]; !ok || got != want {
+				return &ComposeDriftError{Kind: ComposeDriftDevice, Key: name + "." + key, Reason: "explicit instance reconciliation required"}
+			}
+		}
+	}
+	return nil
+}
+
+// A change to the source image alias is recreate-only with pinned incus-compose.
+// Comparing resolved Incus names avoids treating equivalent normalized OCI
+// references as different while preserving a fail-closed result on drift.
+func detectComposeImageDrift(want, got string) error {
+	if want == "" {
+		return nil
+	}
+	if got == "" {
+		return &ComposeDriftError{Kind: ComposeDriftImage, Reason: "missing recorded image alias; cannot verify convergence without recreation"}
+	}
+	if want != got {
+		return &ComposeDriftError{Kind: ComposeDriftImage, Reason: "recreation required to apply changed image"}
+	}
+	return nil
+}
+
+// A mutable image alias can continue to name the same tag after its image
+// has changed. The instance records the fingerprint it was launched from.
+func detectComposeImageFingerprintDrift(desiredFingerprint, actualFingerprint string) error {
+	if desiredFingerprint == "" || actualFingerprint == "" {
+		return &ComposeDriftError{Kind: ComposeDriftImage, Reason: "missing base image fingerprint; explicit reconciliation required"}
+	}
+	if !strings.EqualFold(desiredFingerprint, actualFingerprint) {
+		return &ComposeDriftError{Kind: ComposeDriftImage, Reason: "recreation required"}
+	}
+	return nil
+}
+
+// verifyComposeEnsuredImage is invoked after the image prerequisite pass,
+// when an initially uncached alias must now be resolvable.
+func verifyComposeEnsuredImage(imageAlias, cachedAlias, desiredFingerprint, instanceFingerprint string) error {
+	if err := detectComposeImageDrift(imageAlias, cachedAlias); err != nil {
+		return err
+	}
+	return detectComposeImageFingerprintDrift(desiredFingerprint, instanceFingerprint)
+}
+
+// explainComposeRecreationSafety retains the original typed drift error while
+// checking that all attached persistent disks can be identified in advance.
+func explainComposeRecreationSafety(err error, devices map[string]map[string]string) error {
+	var drift *ComposeDriftError
+	if !errors.As(err, &drift) {
+		return err
+	}
+	plan, planErr := planComposeRecreation(drift, devices)
+	if planErr != nil {
+		return fmt.Errorf("%w; recreation safety preflight failed: %v", err, planErr)
+	}
+	return fmt.Errorf("%w; recreation requires preserving %d explicit storage volume attachment(s)", err, len(plan.PersistentDevices))
+}
+
+// composeNeedsStart avoids treating an already-running instance as a failed
+// deployment. Other resource types still run their normal Start action.
+func composeNeedsStart(resource composeclient.Resource) bool {
+	instance, ok := resource.(*composeclient.Instance)
+	return !ok || !instance.Running()
+}
+
+// stampComposeCommands tracks command and entrypoint from the resolved Compose
+// model. Upstream only computes oci.entrypoint during Create and ignores later
+// changes; the content digest makes changes detectable without logging secrets.
+func stampComposeCommands(config *composeclient.InstanceConfig) error {
+	encoded, err := json.Marshal(struct {
+		Entrypoint []string
+		Command    []string
+	}{config.Entrypoint, config.Command})
+	if err != nil {
+		return fmt.Errorf("encode Compose command: %w", err)
+	}
+	if config.Extensions == nil {
+		config.Extensions = map[string]string{}
+	}
+	if _, reserved := config.Extensions[ownershipCommandKey]; reserved {
+		return fmt.Errorf("reserved Compose command marker must not be set explicitly")
+	}
+	digest := sha256.Sum256(encoded)
+	config.Extensions[ownershipCommandKey] = fmt.Sprintf("%x", digest)
 	return nil
 }
 
@@ -239,6 +378,21 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		return fmt.Errorf("order compose services for %q: %w", p.Name, err)
 	}
 
+	// Stamp commands before preflight and resource Ensure. Every new instance
+	// records its desired command; legacy instances without the marker must
+	// be explicitly reconciled rather than silently marked as converged.
+	for _, service := range order {
+		for _, resource := range resources[service] {
+			instance, ok := resource.(*composeclient.Instance)
+			if !ok {
+				continue
+			}
+			if err := stampComposeCommands(&instance.Config); err != nil {
+				return fmt.Errorf("prepare Compose command marker for service %q: %w", service, err)
+			}
+		}
+	}
+	recreationCandidates := map[string]bool{}
 	// Detect drift before any resource in this orchestration step is changed.
 	// The pinned upstream Ensure only fills missing keys; silently treating
 	// conflicting values as converged would be unsafe.
@@ -255,8 +409,60 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 				}
 				return fmt.Errorf("inspect Compose instance %q before reconcile: %w", instance.IncusName(), err)
 			}
+			if instance.Config.Image != "" {
+				imageResource, err := c.Resource(composeclient.KindImage, instance.Config.Image, &composeclient.ImageConfig{})
+				if err != nil {
+					return fmt.Errorf("resolve desired image for service %q: %w", service, err)
+				}
+				image, ok := imageResource.(*composeclient.Image)
+				if !ok {
+					return fmt.Errorf("resolve desired image for service %q: unexpected resource type", service)
+				}
+				if err := detectComposeImageDrift(image.IncusName(), existing.Config["user.image_alias"]); err != nil {
+					if cfg.RecreateOnDrift {
+						recreationCandidates[instance.IncusName()] = true
+					} else {
+						return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+					}
+				}
+				// Resolve the *current* local alias as well as comparing its
+				// name. Without this, a refreshed mutable tag goes unnoticed.
+				alias, _, err := connection.GetImageAlias(ctx, composeclient.SanitizeProjectName(p.Name), image.IncusName(), nil)
+				if err == nil {
+					if err := detectComposeImageFingerprintDrift(alias.Target, existing.Config["volatile.base_image"]); err != nil {
+						if cfg.RecreateOnDrift {
+							recreationCandidates[instance.IncusName()] = true
+						} else {
+							return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+						}
+					}
+				} else if !api.StatusErrorCheck(err, http.StatusNotFound) {
+					return fmt.Errorf("inspect image alias for service %q: %w", service, err)
+				}
+				// Missing aliases may be downloaded in the prerequisite pass;
+				// do not infer freshness before the image is available.
+
+			}
+			if existing.Config[ownershipCommandKey] == "" {
+				if cfg.RecreateOnDrift {
+					recreationCandidates[instance.IncusName()] = true
+				} else {
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), &ComposeDriftError{Kind: ComposeDriftConfig, Key: ownershipCommandKey, Reason: "command marker missing; recreation required"})
+				}
+			}
 			if err := detectComposeInstanceDrift(instance.Config.Extensions, instance.Config.Profiles, existing.Config, existing.Profiles); err != nil {
-				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+				if cfg.RecreateOnDrift {
+					recreationCandidates[instance.IncusName()] = true
+				} else {
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				}
+			}
+			if err := detectComposeDeviceDrift(instance.Config.ExtraDevices, existing.Devices); err != nil {
+				if cfg.RecreateOnDrift {
+					recreationCandidates[instance.IncusName()] = true
+				} else {
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				}
 			}
 		}
 	}
@@ -277,13 +483,104 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	if err := prerequisites.ForAction(composeclient.ActionEnsure).Run(ctx, composeclient.ActionEnsure, runOptions...); err != nil {
 		return fmt.Errorf("compose project %q ensure prerequisites: %w", p.Name, err)
 	}
+	// Image aliases absent at initial preflight can appear during the
+	// prerequisite pass. Recheck every pre-existing owned instance now,
+	// before Ensure or Start can silently reuse an obsolete base image.
+	for _, service := range order {
+		for _, resource := range resources[service] {
+			instance, ok := resource.(*composeclient.Instance)
+			if !ok || instance.Config.Image == "" {
+				continue
+			}
+			existing, _, err := connection.GetInstance(ctx, composeclient.SanitizeProjectName(p.Name), instance.IncusName(), nil)
+			if api.StatusErrorCheck(err, http.StatusNotFound) {
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("recheck Compose instance %q image state: %w", instance.IncusName(), err)
+			}
+			if err := verifyComposeInstanceOwnership(existing.Config, p.Name, instance.IncusName()); err != nil {
+				return err
+			}
+			imageResource, err := c.Resource(composeclient.KindImage, instance.Config.Image, &composeclient.ImageConfig{})
+			if err != nil {
+				return fmt.Errorf("resolve ensured image for service %q: %w", service, err)
+			}
+			image, ok := imageResource.(*composeclient.Image)
+			if !ok {
+				return fmt.Errorf("resolve ensured image for service %q: unexpected resource type", service)
+			}
+			alias, _, err := connection.GetImageAlias(ctx, composeclient.SanitizeProjectName(p.Name), image.IncusName(), nil)
+			if err != nil {
+				return fmt.Errorf("resolve ensured image alias for service %q: %w", service, err)
+			}
+			if err := verifyComposeEnsuredImage(image.IncusName(), existing.Config["user.image_alias"], alias.Target, existing.Config["volatile.base_image"]); err != nil {
+				if cfg.RecreateOnDrift {
+					recreationCandidates[instance.IncusName()] = true
+				} else {
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				}
+			}
+		}
+	}
+
+	// A replacement is opt-in and never proceeds for attached persistent data.
+	// We re-fetch ownership immediately before stop and once again before
+	// deletion. A failed create remains an explicit error, never success.
+	for _, service := range order {
+		for _, resource := range resources[service] {
+			instance, ok := resource.(*composeclient.Instance)
+			if !ok || !recreationCandidates[instance.IncusName()] {
+				continue
+			}
+			name := instance.IncusName()
+			project := composeclient.SanitizeProjectName(p.Name)
+			current, _, err := connection.GetInstance(ctx, project, name, nil)
+			if err != nil {
+				return fmt.Errorf("fetch instance for recreation: %w", err)
+			}
+			recheck := func(ctx context.Context) error {
+				v, _, err := connection.GetInstance(ctx, project, name, nil)
+				if err != nil {
+					return err
+				}
+				return verifyComposeInstanceOwnership(v.Config, p.Name, name)
+			}
+			desiredDevices, err := materializeComposeDevices(instance.Config)
+			if err != nil {
+				return fmt.Errorf("materialize replacement devices for %q: %w", name, err)
+			}
+			if err := verifyComposeRecreationVolumes(current.Devices, desiredDevices); err != nil {
+				return fmt.Errorf("recreate Compose instance %q: %w", name, err)
+			}
+			// Hydrate the pinned Compose resource before using its Stop/Delete
+			// lifecycle. Its Ensure may add missing extension keys.
+			if err := instance.Ensure(ctx, composeclient.OptionCreate()); err != nil {
+				return fmt.Errorf("prepare owned instance %q for recreation: %w", name, err)
+			}
+			err = recreateWithRetainedVolumes(ctx, current.Devices, desiredDevices, recheck,
+				func(ctx context.Context) error {
+					if !instance.Running() {
+						return nil
+					}
+					return instance.Stop(ctx)
+				},
+				func(ctx context.Context) error { return instance.Delete(ctx) },
+				func(ctx context.Context) error { return instance.Ensure(ctx, composeclient.OptionCreate()) },
+			)
+			if err != nil {
+				return fmt.Errorf("recreate Compose instance %q: %w", name, err)
+			}
+		}
+	}
+
 	for _, action := range []composeclient.Action{composeclient.ActionEnsure, composeclient.ActionStart} {
 		if err := runComposeServicesSequentially(ctx, order, func(service string) error {
 			for _, resource := range resources[service] {
 				if action == composeclient.ActionEnsure && isComposePrerequisite(resource.Priority()) {
 					continue // already ensured in the prerequisite pass
 				}
-				if action == composeclient.ActionStart && !resource.IsEnsured() {
+				if action == composeclient.ActionStart && (!resource.IsEnsured() || !composeNeedsStart(resource)) {
 					continue
 				}
 				stack := composeclient.NewStack(c, composeclient.StackWorkers(1))
