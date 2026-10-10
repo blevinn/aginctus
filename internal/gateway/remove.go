@@ -98,7 +98,8 @@ func (s Spec) Remove(ctx context.Context, force bool) error {
 		}
 	}
 	if project.Name == "" {
-		return fmt.Errorf("gateway project %q not found", s.Project)
+		// An already-removed gateway is a successful no-op.
+		return nil
 	}
 	instancesRaw, err := runIncus(ctx, "list", "--project", s.Project, "--format=json")
 	if err != nil {
