@@ -26,6 +26,7 @@ func TestIncusComposePersistentVolumeIntegration(t *testing.T) {
 	defer cancel()
 	name := fmt.Sprintf("aginctus-volume-it-%d", time.Now().UnixNano())
 	t.Logf("persistent-volume test project %q (retained for inspection)", name)
+	integrationProjectCleanup(t, name)
 
 	doc := func(image, command string) []byte {
 		return []byte(fmt.Sprintf(`services:
