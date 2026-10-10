@@ -75,6 +75,10 @@ func runGatewayStatus(ctx context.Context, args []string, out, stderr io.Writer,
 				running++
 			}
 		}
+		if len(instances) == 0 {
+			fmt.Fprintf(out, "gateway %q: inactive (no service instances; persistent data retained)\n", spec.ID)
+			return 0
+		}
 		fmt.Fprintf(out, "gateway %q: present (%d/%d service instances running; application readiness not verified)\n", spec.ID, running, len(instances))
 		return 0
 	}

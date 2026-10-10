@@ -474,6 +474,52 @@ func TestStampComposeCommandsRejectsReservedMarker(t *testing.T) {
 	}
 }
 
+func TestComposeValidationUsesSafeNonemptyInterpolation(t *testing.T) {
+	environment := validationEnvironment()
+	for _, key := range []string{
+		"AGINCTUS_GATEWAY_POSTGRES_PASSWORD",
+		"AGINCTUS_GATEWAY_MASTER_KEY",
+		"AGINCTUS_GATEWAY_SALT_KEY",
+	} {
+		if environment[key] == "" {
+			t.Fatalf("missing validation placeholder for %s", key)
+		}
+	}
+	raw := json.RawMessage(`{"project":"aginctus-test","compose":{"services":{"postgres":{"image":"postgres:latest","environment":{"POSTGRES_PASSWORD":"${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}"}},"litellm":{"image":"alpine:latest","environment":{"LITELLM_MASTER_KEY":"${AGINCTUS_GATEWAY_MASTER_KEY}","LITELLM_SALT_KEY":"${AGINCTUS_GATEWAY_SALT_KEY}"}}}}}`)
+	if err := New().Validate(raw); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
+func TestComposeExecutionGetsRuntimeEnvironment(t *testing.T) {
+	environment := map[string]string{
+		"AGINCTUS_GATEWAY_POSTGRES_PASSWORD": "real-test-password",
+		"AGINCTUS_GATEWAY_MASTER_KEY":        "real-test-key",
+		"AGINCTUS_GATEWAY_SALT_KEY":          "real-test-salt",
+	}
+	d := NewWithEnvironment(environment)
+	called := false
+	d.execute = func(_ context.Context, _ Config, got map[string]string) error {
+		called = true
+		for k, want := range environment {
+			if got[k] != want {
+				t.Errorf("%s not passed to execution", k)
+			}
+		}
+		return nil
+	}
+	raw := json.RawMessage(`{"project":"aginctus-test","compose":{"services":{"web":{"image":"alpine:latest","environment":{"TOKEN":"${AGINCTUS_GATEWAY_MASTER_KEY}"}}}}}`)
+	if err := d.Validate(raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Execute(context.Background(), raw, orchestration.ExecuteOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("execution not invoked")
+	}
+}
+
 func TestSeedInstanceOwnershipExceptionIsNarrow(t *testing.T) {
 	if !isComposeImageSeed("ic-seed-abc") {
 		t.Fatal("upstream image seed not identified")

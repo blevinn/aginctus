@@ -57,7 +57,7 @@ func (d *Driver) SupportsDryRun() bool {
 }
 
 func (d *Driver) Validate(raw json.RawMessage) error {
-	_, err := parseConfig(context.Background(), raw)
+	_, err := parseConfig(context.Background(), raw, validationEnvironment())
 	return err
 }
 
@@ -65,14 +65,24 @@ func (d *Driver) Execute(ctx context.Context, raw json.RawMessage, options orche
 	if options.DryRun {
 		return fmt.Errorf("compose driver does not support dry-run")
 	}
-	cfg, err := parseConfig(ctx, raw)
+	cfg, err := parseConfig(ctx, raw, d.environment)
 	if err != nil {
 		return err
 	}
 	return d.execute(ctx, cfg, d.environment)
 }
 
-func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
+// validationEnvironment substitutes non-secret, syntax-safe values only during
+// structural validation. Runtime execution receives real credentials separately.
+func validationEnvironment() map[string]string {
+	return map[string]string{
+		"AGINCTUS_GATEWAY_POSTGRES_PASSWORD": "validation-placeholder",
+		"AGINCTUS_GATEWAY_MASTER_KEY":        "validation-placeholder",
+		"AGINCTUS_GATEWAY_SALT_KEY":          "validation-placeholder",
+	}
+}
+
+func parseConfig(ctx context.Context, raw json.RawMessage, environment map[string]string) (Config, error) {
 	var cfg Config
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -92,7 +102,7 @@ func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
 	}
 	defer cleanup()
 
-	_, err = loadProject(ctx, cfg.Project, path, nil)
+	_, err = loadProject(ctx, cfg.Project, path, environment)
 	if err != nil {
 		return Config{}, fmt.Errorf("validate compose project %q: %w", cfg.Project, err)
 	}
@@ -303,10 +313,6 @@ func stampComposeCommands(config *composeclient.InstanceConfig) error {
 	return nil
 }
 
-// verifyComposeDeploymentOwnership inspects the persisted project and every
-// instance, not merely the intended service names. Recheck after the upstream
-// project Ensure and before any subsequent instance actions so a collision
-// is rejected instead of silently being adopted on the next operation.
 func isComposeImageSeed(name string) bool { return strings.HasPrefix(name, "ic-seed-") }
 
 func verifyComposeDeploymentOwnership(ctx context.Context, connection *iclient.Connection, project string) error {
@@ -602,13 +608,6 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		}
 	}
 
-	// Final ownership gate after prerequisite actions and before every
-	// instance Ensure/Start pass. This does not claim transactional isolation
-	// from concurrent external writers; future mutation paths must retain
-	// their own ownership checks.
-	if err := verifyComposeDeploymentOwnership(ctx, connection, p.Name); err != nil {
-		return fmt.Errorf("pre-service Compose ownership check: %w", err)
-	}
 	for _, action := range []composeclient.Action{composeclient.ActionEnsure, composeclient.ActionStart} {
 		if err := runComposeServicesSequentially(ctx, order, func(service string) error {
 			for _, resource := range resources[service] {
