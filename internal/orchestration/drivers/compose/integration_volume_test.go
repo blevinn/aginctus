@@ -12,7 +12,7 @@ import (
 )
 
 // TestIncusComposePersistentVolumeIntegration requires a disposable Incus
-// daemon, and retains its uniquely named project for manual inspection.
+// daemon, using a uniquely named project cleaned up unless --retain.
 // It proves a sentinel written by an old container can be read by its
 // replacement, not merely that a volume name survives in the device map.
 func TestIncusComposePersistentVolumeIntegration(t *testing.T) {
@@ -25,7 +25,7 @@ func TestIncusComposePersistentVolumeIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	name := fmt.Sprintf("aginctus-volume-it-%d", time.Now().UnixNano())
-	t.Logf("persistent-volume test project %q (retained for inspection)", name)
+	t.Logf("persistent-volume test project %q", name)
 	integrationProjectCleanup(t, name)
 
 	doc := func(image, command string) []byte {
