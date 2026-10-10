@@ -41,31 +41,49 @@ volumes:
 	initial := doc("docker.io/library/alpine:3.21", "echo aginctus-volume-sentinel > /data/sentinel; sleep 3600")
 	replacement := doc("docker.io/library/alpine:3.22", "test \"$(cat /data/sentinel)\" = aginctus-volume-sentinel && sleep 3600")
 	run := func(contents []byte, recreate bool) error {
-		return executeCompose(ctx, Config{Project:name, Compose:contents, RecreateOnDrift:recreate},nil)
+		return executeCompose(ctx, Config{Project: name, Compose: contents, RecreateOnDrift: recreate}, nil)
 	}
-	if err := run(initial,false); err != nil { t.Fatalf("create initial volume-bearing instance: %v",err) }
+	if err := run(initial, false); err != nil {
+		t.Fatalf("create initial volume-bearing instance: %v", err)
+	}
 	// Allow the first container to write its sentinel before replacement.
 	select {
-	case <-ctx.Done(): t.Fatal(ctx.Err())
-	case <-time.After(2*time.Second):
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	case <-time.After(2 * time.Second):
 	}
-	if err := run(replacement,true); err != nil { t.Fatalf("recreate with retained named volume: %v",err) }
-	conn,err:=iclient.NewConnection(&iclient.ConfigRemoteInfo{Name:"local",Addrs:[]string{"unix://"},Protocol:"incus"})
-	if err != nil { t.Fatal(err) }
-	names,err:=conn.GetInstanceNames(ctx,name,nil)
-	if err != nil {t.Fatal(err)}
-	if len(names)!=1 {t.Fatalf("wanted exactly one replacement instance, got %v",names)}
+	if err := run(replacement, true); err != nil {
+		t.Fatalf("recreate with retained named volume: %v", err)
+	}
+	conn, err := iclient.NewConnection(&iclient.ConfigRemoteInfo{Name: "local", Addrs: []string{"unix://"}, Protocol: "incus"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	names, err := conn.GetInstanceNames(ctx, name, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 1 {
+		t.Fatalf("wanted exactly one replacement instance, got %v", names)
+	}
 	// The replacement command exits immediately if the persistent sentinel
 	// is missing or its bytes differ. Wait for it to settle before checking.
 	select {
-	case <-ctx.Done(): t.Fatal(ctx.Err())
-	case <-time.After(2*time.Second):
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	case <-time.After(2 * time.Second):
 	}
-	instance,_,err:=conn.GetInstance(ctx,name,names[0],nil)
-	if err != nil {t.Fatal(err)}
-	if err:=verifyComposeInstanceOwnership(instance.Config,name,instance.Name);err!=nil{t.Fatal(err)}
+	instance, _, err := conn.GetInstance(ctx, name, names[0], nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyComposeInstanceOwnership(instance.Config, name, instance.Name); err != nil {
+		t.Fatal(err)
+	}
 	if instance.StatusCode != api.Running {
-		t.Fatalf("replacement is %s; sentinel check may have failed (inspect project %q)",instance.Status,name)
+		t.Fatalf("replacement is %s; sentinel check may have failed (inspect project %q)", instance.Status, name)
 	}
-	if err:=run(replacement,false);err!=nil{t.Fatalf("unchanged replacement not idempotent: %v",err)}
+	if err := run(replacement, false); err != nil {
+		t.Fatalf("unchanged replacement not idempotent: %v", err)
+	}
 }
