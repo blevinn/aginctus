@@ -25,6 +25,7 @@ func TestIncusComposeReconciliationIntegration(t *testing.T) {
 	defer cancel()
 	name := fmt.Sprintf("aginctus-it-%d", time.Now().UnixNano())
 	t.Logf("test project %s (retained for manual inspection/cleanup)", name)
+	integrationProjectCleanup(t, name)
 	composeDoc := func(image string) []byte {
 		return []byte(fmt.Sprintf(`services:
   app:
