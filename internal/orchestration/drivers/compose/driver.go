@@ -209,6 +209,18 @@ func detectComposeImageDrift(want, got string) error {
 	return nil
 }
 
+// A mutable image alias can continue to name the same tag after its image
+// has changed. The instance records the fingerprint it was launched from.
+func detectComposeImageFingerprintDrift(desiredFingerprint, actualFingerprint string) error {
+	if desiredFingerprint == "" || actualFingerprint == "" {
+		return fmt.Errorf("cannot verify instance base image fingerprint: explicit reconciliation required")
+	}
+	if !strings.EqualFold(desiredFingerprint, actualFingerprint) {
+		return fmt.Errorf("instance base image fingerprint drift: recreation required")
+	}
+	return nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -302,6 +314,19 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 				if err := detectComposeImageDrift(image.IncusName(), existing.Config["user.image_alias"]); err != nil {
 					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
 				}
+				// Resolve the *current* local alias as well as comparing its
+				// name. Without this, a refreshed mutable tag goes unnoticed.
+				alias, _, err := connection.GetImageAlias(ctx, composeclient.SanitizeProjectName(p.Name), image.IncusName(), nil)
+				if err == nil {
+					if err := detectComposeImageFingerprintDrift(alias.Target, existing.Config["volatile.base_image"]); err != nil {
+						return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+					}
+				} else if !api.StatusErrorCheck(err, http.StatusNotFound) {
+					return fmt.Errorf("inspect image alias for service %q: %w", service, err)
+				}
+				// Missing aliases may be downloaded in the prerequisite pass;
+				// do not infer freshness before the image is available.
+
 			}
 			if err := detectComposeInstanceDrift(instance.Config.Extensions, instance.Config.Profiles, existing.Config, existing.Profiles); err != nil {
 				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
