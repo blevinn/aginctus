@@ -8,6 +8,7 @@ import (
 	"os"
 
 	composeclient "github.com/lxc/incus-compose/client"
+	"github.com/lxc/incus-compose/iclient"
 	composeproject "github.com/lxc/incus-compose/project"
 
 	"github.com/blevinn/aginctus/internal/orchestration"
@@ -89,6 +90,19 @@ func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
 	return cfg, nil
 }
 
+
+func newComposeGlobalClient(ctx context.Context, newConnection func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error)) (*composeclient.GlobalClient, error) {
+	connection, err := newConnection(&iclient.ConfigRemoteInfo{
+		Name: "local",
+		Addrs: []string{"unix://"},
+		Protocol: "incus",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return composeclient.New(ctx, composeclient.ClientProvideConnection(connection)), nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -101,7 +115,10 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		return fmt.Errorf("load compose project %q: %w", cfg.Project, err)
 	}
 
-	global := composeclient.New(ctx)
+	global, err := newComposeGlobalClient(ctx, iclient.NewConnection)
+	if err != nil {
+		return fmt.Errorf("construct local Incus connection for Compose: %w", err)
+	}
 	if err := global.Connect(); err != nil {
 		return fmt.Errorf("connect incus-compose client: %w", err)
 	}
