@@ -56,23 +56,33 @@ func rejectPersistentDisks(existingDevices map[string]map[string]string) error {
 // preflight and again immediately before invoking it. It never requests volume
 // deletion. No action is taken unless no non-root disks are attached.
 func recreateWithoutPersistentDisks(ctx context.Context, existingDevices map[string]map[string]string, recheckOwnership, stop, remove, create func(context.Context) error) error {
-	if err := ctx.Err(); err != nil { return err }
-	if err := rejectPersistentDisks(existingDevices); err != nil { return err }
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := rejectPersistentDisks(existingDevices); err != nil {
+		return err
+	}
 	if err := recheckOwnership(ctx); err != nil {
 		return fmt.Errorf("refuse automatic recreation: ownership recheck: %w", err)
 	}
-	if err := ctx.Err(); err != nil { return err }
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := stop(ctx); err != nil {
 		return fmt.Errorf("stop owned instance for recreation: %w", err)
 	}
-	if err := ctx.Err(); err != nil { return err }
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := recheckOwnership(ctx); err != nil {
 		return fmt.Errorf("refuse instance deletion: ownership changed: %w", err)
 	}
 	if err := remove(ctx); err != nil {
 		return fmt.Errorf("delete owned instance without volumes: %w", err)
 	}
-	if err := ctx.Err(); err != nil { return fmt.Errorf("instance removed; recreation canceled: %w",err) }
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("instance removed; recreation canceled: %w", err)
+	}
 	if err := create(ctx); err != nil {
 		return fmt.Errorf("instance removed; recreation failed and manual recovery may be required: %w", err)
 	}
