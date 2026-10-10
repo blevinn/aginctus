@@ -9,7 +9,7 @@ import (
 // ComposeRecreationPlan is a non-destructive inventory for replacing a
 // drifted instance. It never triggers stop, delete, or create operations.
 type ComposeRecreationPlan struct {
-	Required bool
+	Required          bool
 	PersistentDevices []string
 }
 
