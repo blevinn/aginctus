@@ -174,6 +174,25 @@ func detectComposeInstanceDrift(desired map[string]string, desiredProfiles []str
 	return nil
 }
 
+// detectComposeDeviceDrift only compares devices explicitly controlled by the
+// desired Compose model. Extra host devices are left untouched.
+func detectComposeDeviceDrift(desired, actual map[string]map[string]string) error {
+	for name, desiredValues := range desired {
+		current, exists := actual[name]
+		if !exists {
+			// The pinned upstream Ensure does not add missing raw devices to
+			// existing instances, so absence is drift too.
+			return fmt.Errorf("device %q missing: explicit instance reconciliation required", name)
+		}
+		for key, want := range desiredValues {
+			if got, ok := current[key]; !ok || got != want {
+				return fmt.Errorf("device %q setting %q drift: explicit instance reconciliation required", name, key)
+			}
+		}
+	}
+	return nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -256,6 +275,9 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 				return fmt.Errorf("inspect Compose instance %q before reconcile: %w", instance.IncusName(), err)
 			}
 			if err := detectComposeInstanceDrift(instance.Config.Extensions, instance.Config.Profiles, existing.Config, existing.Profiles); err != nil {
+				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+			}
+			if err := detectComposeDeviceDrift(instance.Config.ExtraDevices, existing.Devices); err != nil {
 				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
 			}
 		}
