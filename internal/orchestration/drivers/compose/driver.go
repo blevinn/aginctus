@@ -124,6 +124,10 @@ func explainComposeConnectionError(err error) error {
 	return err
 }
 
+func isComposePrerequisite(priority int) bool {
+	return priority < composeclient.PriorityInstance
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -175,7 +179,7 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	prerequisites := composeclient.NewStack(c, composeclient.StackWorkers(1), composeclient.StackFailFast())
 	for _, service := range order {
 		for _, resource := range resources[service] {
-			if resource.Priority() < composeclient.PriorityInstance {
+			if isComposePrerequisite(resource.Priority()) {
 				prerequisites.Add(resource)
 			}
 		}
@@ -186,7 +190,7 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	for _, action := range []composeclient.Action{composeclient.ActionEnsure, composeclient.ActionStart} {
 		if err := runComposeServicesSequentially(ctx, order, func(service string) error {
 			for _, resource := range resources[service] {
-				if action == composeclient.ActionEnsure && resource.Priority() < composeclient.PriorityInstance {
+				if action == composeclient.ActionEnsure && isComposePrerequisite(resource.Priority()) {
 					continue // already ensured in the prerequisite pass
 				}
 				if action == composeclient.ActionStart && !resource.IsEnsured() {
