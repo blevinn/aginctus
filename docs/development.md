@@ -74,7 +74,7 @@ Both `ensure` and `teardown` accept `--force`. Without it, Aginctus refuses to m
 Build the NixOS Incus image with:
 
 ```sh
-just herdr-client-image-build
+just build herdr-client
 ```
 
 This builds the `.#herdr-client` flake target. The result contains the Incus
@@ -83,7 +83,7 @@ metadata tarball and squashfs root filesystem for the current host architecture.
 Update the pinned Herdr flake input when desired with:
 
 ```sh
-just herdr-flake-update
+just update nix herdr
 ```
 
 Commit the resulting `flake.lock` change together with the image changes. Then import or replace the local development image alias with:
@@ -107,8 +107,9 @@ go run ./cmd/aginctus herdr client teardown
 ```
 
 The Herdr client instance is an Aginctus-owned container attached to the
-configured management network. SSH credentials and generated machine
-configuration are still deferred.
+configured management network. The guest-side SSH identity and authorization helpers are included in the images;
+host-side remote registration, identity rotation and gateway credentials remain
+separate integration work.
 
 Both lifecycle operations accept `--dry-run` and `--force`. Teardown stops a
 running owned container before deleting it. With `--force`, the stop request is

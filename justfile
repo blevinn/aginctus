@@ -13,7 +13,10 @@ test:
 vet:
     go vet ./...
 
-check: test vet
+check: modules test vet
+
+modules:
+    go mod verify
 
 herdr-client-image-update:
     just build herdr-client

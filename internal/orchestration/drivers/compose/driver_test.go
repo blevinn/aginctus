@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/lxc/incus-compose/iclient"
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -80,6 +82,67 @@ func TestExecuteRejectsDryRun(t *testing.T) {
 	}`), orchestration.ExecuteOptions{DryRun: true})
 	if err == nil || !strings.Contains(err.Error(), "does not support dry-run") {
 		t.Fatalf("Execute() error = %v, want dry-run capability error", err)
+	}
+}
+
+func TestComposeServiceOrderAndFailFastAreSequential(t *testing.T) {
+	visited := []string{}
+	errFailure := errors.New("postgres failed")
+	err := runComposeServicesSequentially(context.Background(), []string{"postgres", "litellm"}, func(service string) error {
+		visited = append(visited, service)
+		if service == "postgres" {
+			return errFailure
+		}
+		return nil
+	})
+	if !errors.Is(err, errFailure) {
+		t.Fatalf("error = %v", err)
+	}
+	if !reflect.DeepEqual(visited, []string{"postgres"}) {
+		t.Fatalf("visited = %v", visited)
+	}
+}
+
+func TestComposeServiceExecutionWaitsForActiveResource(t *testing.T) {
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	started := make(chan struct{})
+	go func() {
+		done <- runComposeServicesSequentially(context.Background(), []string{"postgres", "litellm"}, func(service string) error {
+			if service == "postgres" {
+				close(started)
+				<-release
+				return errors.New("failed after active work")
+			}
+			t.Error("dependent started after prerequisite failed")
+			return nil
+		})
+	}()
+	<-started
+	select {
+	case <-done:
+		t.Fatal("returned while postgres resource remained active")
+	default:
+	}
+	close(release)
+	if err := <-done; err == nil {
+		t.Fatal("expected failure")
+	}
+}
+
+func TestComposeServiceExecutionStopsOnCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var visited []string
+	err := runComposeServicesSequentially(ctx, []string{"postgres", "litellm"}, func(s string) error {
+		visited = append(visited, s)
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v", err)
+	}
+	if !reflect.DeepEqual(visited, []string{"postgres"}) {
+		t.Fatalf("visited = %v", visited)
 	}
 }
 
