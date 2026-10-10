@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"os"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -149,5 +150,31 @@ func TestInitializeRuntimeEnvironmentUsesProvidedSeedOnlyWhenMissing(t *testing.
 	}
 	if second["AGINCTUS_GATEWAY_MASTER_KEY"] != "seeded-value" {
 		t.Fatalf("persisted master key = %q, want original seed", second["AGINCTUS_GATEWAY_MASTER_KEY"])
+	}
+}
+
+func TestGatewayRejectsUnsafeSeedValues(t *testing.T) {
+	for _, seed := range []string{"a\\nb", "a$b", "a#b", "a=b", "a:b", "a@b", "a/b", "a\\\\b", "a'b", "a\"b", "a b"} {
+		t.Run(fmt.Sprintf("%q", seed), func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			for _, key := range requiredRuntimeEnvironment { t.Setenv(key, "") }
+			t.Setenv("AGINCTUS_GATEWAY_POSTGRES_PASSWORD", seed)
+			if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+				t.Fatal("accepted unsafe credential seed")
+			} else if strings.Contains(err.Error(), seed) {
+				t.Fatal("error exposed secret material")
+			}
+		})
+	}
+}
+
+func TestGatewayAcceptsSafeCredentialSeed(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	for _, key := range requiredRuntimeEnvironment { t.Setenv(key, "") }
+	t.Setenv("AGINCTUS_GATEWAY_POSTGRES_PASSWORD", "AZaz09_-safe")
+	values, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment()
+	if err != nil { t.Fatal(err) }
+	if values["AGINCTUS_GATEWAY_POSTGRES_PASSWORD"] != "AZaz09_-safe" {
+		t.Fatal("valid seed changed unexpectedly")
 	}
 }
