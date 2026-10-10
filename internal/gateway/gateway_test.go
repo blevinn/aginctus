@@ -1,12 +1,12 @@
 package gateway
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"sigs.k8s.io/yaml"
-	"os"
-	"sync"
-	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 

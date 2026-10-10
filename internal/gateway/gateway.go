@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"text/template"
 	"syscall"
+	"text/template"
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/orchestration"
