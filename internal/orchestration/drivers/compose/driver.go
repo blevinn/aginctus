@@ -104,11 +104,13 @@ func runComposeServicesSequentially(ctx context.Context, order []string, run fun
 
 func newComposeGlobalClient(ctx context.Context, newConnection func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error)) (*composeclient.GlobalClient, error) {
 	connection, err := newConnection(&iclient.ConfigRemoteInfo{
-		Name: "local",
-		Addrs: []string{"unix://"},
+		Name:     "local",
+		Addrs:    []string{"unix://"},
 		Protocol: "incus",
 	})
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	return composeclient.New(ctx, composeclient.ClientProvideConnection(connection)), nil
 }
 
@@ -125,7 +127,9 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	}
 
 	global, err := newComposeGlobalClient(ctx, iclient.NewConnection)
-	if err != nil { return fmt.Errorf("construct local Incus connection for Compose: %w", err) }
+	if err != nil {
+		return fmt.Errorf("construct local Incus connection for Compose: %w", err)
+	}
 	if err := global.Connect(); err != nil {
 		return fmt.Errorf("connect incus-compose client: %w", err)
 	}
