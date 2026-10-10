@@ -484,7 +484,11 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 				}
 				return verifyComposeInstanceOwnership(v.Config, p.Name, name)
 			}
-			if err := rejectPersistentDisks(current.Devices); err != nil {
+			desiredDevices, err := materializeComposeDevices(instance.Config)
+			if err != nil {
+				return fmt.Errorf("materialize replacement devices for %q: %w", name, err)
+			}
+			if err := verifyComposeRecreationVolumes(current.Devices, desiredDevices); err != nil {
 				return fmt.Errorf("recreate Compose instance %q: %w", name, err)
 			}
 			// Hydrate the pinned Compose resource before using its Stop/Delete
@@ -492,7 +496,7 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 			if err := instance.Ensure(ctx, composeclient.OptionCreate()); err != nil {
 				return fmt.Errorf("prepare owned instance %q for recreation: %w", name, err)
 			}
-			err = recreateWithoutPersistentDisks(ctx, current.Devices, recheck,
+			err = recreateWithRetainedVolumes(ctx, current.Devices, desiredDevices, recheck,
 				func(ctx context.Context) error {
 					if !instance.Running() {
 						return nil
