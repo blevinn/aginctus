@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	ownershipManagedKey  = "user.aginctus.managed"
-	ownershipResourceKey = "user.aginctus.resource"
+	ownershipManagedKey    = "user.aginctus.managed"
+	ownershipResourceKey   = "user.aginctus.resource"
 	ownershipDeploymentKey = "user.aginctus.deployment"
 )
 
@@ -133,8 +133,8 @@ func isComposePrerequisite(priority int) bool {
 
 func verifyComposeProjectOwnership(config map[string]string, project string) error {
 	expected := map[string]string{
-		ownershipManagedKey: "true",
-		ownershipResourceKey: "compose-project",
+		ownershipManagedKey:    "true",
+		ownershipResourceKey:   "compose-project",
 		ownershipDeploymentKey: project,
 	}
 	for key, want := range expected {
@@ -147,8 +147,8 @@ func verifyComposeProjectOwnership(config map[string]string, project string) err
 
 func verifyComposeInstanceOwnership(config map[string]string, project, instance string) error {
 	expected := map[string]string{
-		ownershipManagedKey: "true",
-		ownershipResourceKey: "compose-instance",
+		ownershipManagedKey:    "true",
+		ownershipResourceKey:   "compose-instance",
 		ownershipDeploymentKey: project,
 	}
 	for key, want := range expected {
@@ -180,10 +180,14 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	}
 
 	connection, err := global.Connection()
-	if err != nil { return fmt.Errorf("inspect Compose project ownership: %w", err) }
+	if err != nil {
+		return fmt.Errorf("inspect Compose project ownership: %w", err)
+	}
 	existing, _, err := connection.GetProject(ctx, composeclient.SanitizeProjectName(p.Name))
 	if err == nil {
-		if err := verifyComposeProjectOwnership(existing.Config, p.Name); err != nil { return err }
+		if err := verifyComposeProjectOwnership(existing.Config, p.Name); err != nil {
+			return err
+		}
 		instances, listErr := connection.GetInstances(ctx, composeclient.SanitizeProjectName(p.Name), nil)
 		if listErr != nil {
 			return fmt.Errorf("inspect Compose instances in project %q: %w", p.Name, listErr)
@@ -264,13 +268,13 @@ func loadProject(ctx context.Context, name, path string, environment map[string]
 		composeproject.LoadFiles([]string{path}),
 		composeproject.LoadName(name),
 		composeproject.LoadInstanceMarks(map[string]string{
-			ownershipManagedKey:  "true",
-			ownershipResourceKey: "compose-instance",
+			ownershipManagedKey:    "true",
+			ownershipResourceKey:   "compose-instance",
 			ownershipDeploymentKey: name,
 		}),
 		composeproject.LoadProjectMarks(map[string]string{
-			ownershipManagedKey:  "true",
-			ownershipResourceKey: "compose-project",
+			ownershipManagedKey:    "true",
+			ownershipResourceKey:   "compose-project",
 			ownershipDeploymentKey: name,
 		}),
 	}
