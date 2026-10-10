@@ -1,6 +1,6 @@
 # OpenCode workload
 
-Status: initial NixOS workload image implemented; lifecycle orchestration and managed SSH identity remain follow-up work.
+Status: initial NixOS workload image and guest-side managed SSH authorization contract implemented; host-side credential delivery and trust reconciliation remain follow-up work.
 
 ## Purpose
 
@@ -42,7 +42,7 @@ aginctus-opencode-workload
 
 The image enables `sshd` but disables password and keyboard-interactive authentication. Root SSH login is disabled.
 
-No SSH public key is baked into the image. Aginctus will provision the Herdr client identity when workload lifecycle orchestration is added.
+No SSH public key is baked into the image. The image exposes a fixed `aginctus-ssh-authorize` helper and a dedicated root-owned authorization path for Aginctus-managed client keys; host-side orchestration still needs to deliver and reconcile those keys. See [SSH bootstrap workflow](../ssh-bootstrap-workflow.md) for the exact client-helper → host → workload-helper handoff.
 
 The Herdr headless server starts at boot as the `agent` user with persistent state under `/var/lib/herdr` and runtime state under `/run/herdr`.
 
