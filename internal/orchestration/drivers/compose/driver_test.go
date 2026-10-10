@@ -473,3 +473,10 @@ func TestStampComposeCommandsRejectsReservedMarker(t *testing.T) {
 		t.Fatal("accepted user-controlled command marker")
 	}
 }
+
+func TestSeedInstanceOwnershipExceptionIsNarrow(t *testing.T) {
+	if !isComposeImageSeed("ic-seed-abc") { t.Fatal("upstream image seed not identified") }
+	for _,name:=range []string{"app-1","ic-seed","custom-ic-seed-abc"} {
+		if isComposeImageSeed(name) { t.Fatalf("unexpected exemption %q",name) }
+	}
+}
