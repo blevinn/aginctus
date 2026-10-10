@@ -51,3 +51,37 @@ func TestServerVersionQueryFailure(t *testing.T) {
 		t.Fatalf("ServerVersion() error = %v", err)
 	}
 }
+
+
+func TestInstanceExecExitCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		want     int
+		wantErr  bool
+	}{
+		{name: "success", metadata: map[string]any{"return": float64(0)}, want: 0},
+		{name: "failure", metadata: map[string]any{"return": float64(17)}, want: 17},
+		{name: "integer", metadata: map[string]any{"return": 3}, want: 3},
+		{name: "missing metadata", metadata: nil, wantErr: true},
+		{name: "missing return", metadata: map[string]any{}, wantErr: true},
+		{name: "unexpected type", metadata: map[string]any{"return": "0"}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := instanceExecExitCode(tt.metadata)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("instanceExecExitCode() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("instanceExecExitCode() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("instanceExecExitCode() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
