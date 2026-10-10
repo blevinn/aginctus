@@ -5,17 +5,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
 
 	composeclient "github.com/lxc/incus-compose/client"
+	"github.com/lxc/incus-compose/iclient"
 	composeproject "github.com/lxc/incus-compose/project"
+	"github.com/lxc/incus/v7/shared/api"
 
 	"github.com/blevinn/aginctus/internal/orchestration"
 )
 
 const (
-	ownershipManagedKey  = "user.aginctus.managed"
-	ownershipResourceKey = "user.aginctus.resource"
+	ownershipManagedKey    = "user.aginctus.managed"
+	ownershipResourceKey   = "user.aginctus.resource"
+	ownershipDeploymentKey = "user.aginctus.deployment"
 )
 
 type Config struct {
@@ -89,6 +94,71 @@ func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
 	return cfg, nil
 }
 
+func runComposeServicesSequentially(ctx context.Context, order []string, run func(string) error) error {
+	for _, service := range order {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := run(service); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func newComposeGlobalClient(ctx context.Context, newConnection func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error)) (*composeclient.GlobalClient, error) {
+	connection, err := newConnection(&iclient.ConfigRemoteInfo{
+		Name:     "local",
+		Addrs:    []string{"unix://"},
+		Protocol: "incus",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return composeclient.New(ctx, composeclient.ClientProvideConnection(connection)), nil
+}
+
+// Image caching copies images between Incus projects using pull mode. Even when
+// the primary connection uses the local Unix socket, Incus must offer HTTPS.
+func explainComposeConnectionError(err error) error {
+	if strings.Contains(err.Error(), "core.https_address is not set") {
+		return fmt.Errorf("%w; configure an appropriately restricted Incus HTTPS listener with `incus config set core.https_address=<host-address>:8443` and verify it using `incus config get core.https_address` (setting a listener on all interfaces may expose the daemon; review firewall and trust configuration first)", err)
+	}
+	return err
+}
+
+func isComposePrerequisite(priority int) bool {
+	return priority < composeclient.PriorityInstance
+}
+
+func verifyComposeProjectOwnership(config map[string]string, project string) error {
+	expected := map[string]string{
+		ownershipManagedKey:    "true",
+		ownershipResourceKey:   "compose-project",
+		ownershipDeploymentKey: project,
+	}
+	for key, want := range expected {
+		if config[key] != want {
+			return fmt.Errorf("compose project %q is not owned by this deployment: %s ownership marker missing or mismatched; refusing adoption", project, key)
+		}
+	}
+	return nil
+}
+
+func verifyComposeInstanceOwnership(config map[string]string, project, instance string) error {
+	expected := map[string]string{
+		ownershipManagedKey:    "true",
+		ownershipResourceKey:   "compose-instance",
+		ownershipDeploymentKey: project,
+	}
+	for key, want := range expected {
+		if config[key] != want {
+			return fmt.Errorf("compose instance %q in project %q is not owned by this deployment: %s ownership marker missing or mismatched; refusing adoption", instance, project, key)
+		}
+	}
+	return nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -101,9 +171,34 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		return fmt.Errorf("load compose project %q: %w", cfg.Project, err)
 	}
 
-	global := composeclient.New(ctx)
+	global, err := newComposeGlobalClient(ctx, iclient.NewConnection)
+	if err != nil {
+		return fmt.Errorf("construct local Incus connection for Compose: %w", err)
+	}
 	if err := global.Connect(); err != nil {
-		return fmt.Errorf("connect incus-compose client: %w", err)
+		return fmt.Errorf("connect incus-compose client: %w", explainComposeConnectionError(err))
+	}
+
+	connection, err := global.Connection()
+	if err != nil {
+		return fmt.Errorf("inspect Compose project ownership: %w", err)
+	}
+	existing, _, err := connection.GetProject(ctx, composeclient.SanitizeProjectName(p.Name))
+	if err == nil {
+		if err := verifyComposeProjectOwnership(existing.Config, p.Name); err != nil {
+			return err
+		}
+		instances, listErr := connection.GetInstances(ctx, composeclient.SanitizeProjectName(p.Name), nil)
+		if listErr != nil {
+			return fmt.Errorf("inspect Compose instances in project %q: %w", p.Name, listErr)
+		}
+		for _, instance := range instances {
+			if err := verifyComposeInstanceOwnership(instance.Config, p.Name, instance.Name); err != nil {
+				return err
+			}
+		}
+	} else if !api.StatusErrorCheck(err, http.StatusNotFound) {
+		return fmt.Errorf("inspect Compose project %q: %w", p.Name, err)
 	}
 
 	c, err := global.EnsureProject(
@@ -129,19 +224,41 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		return fmt.Errorf("order compose services for %q: %w", p.Name, err)
 	}
 
-	stack := composeclient.NewStack(c, composeclient.StackFailFast())
-	stack.AddOrdered(order, resources)
-
-	runOptions := []composeclient.Option{
-		composeclient.OptionCreate(),
-		composeclient.OptionNoHealthd(),
+	runOptions := []composeclient.Option{composeclient.OptionCreate()}
+	// Instance resources depend on images, networks, profiles and volumes.
+	// Ensure prerequisites across *all* services before proceeding through
+	// the service dependency order; per-service stacks otherwise try to
+	// create an instance while its image has not yet been ensured.
+	prerequisites := composeclient.NewStack(c, composeclient.StackWorkers(1), composeclient.StackFailFast())
+	for _, service := range order {
+		for _, resource := range resources[service] {
+			if isComposePrerequisite(resource.Priority()) {
+				prerequisites.Add(resource)
+			}
+		}
 	}
-	if err := stack.ForAction(composeclient.ActionEnsure).Run(ctx, composeclient.ActionEnsure, runOptions...); err != nil {
-		return fmt.Errorf("ensure compose resources for %q: %w", p.Name, err)
+	if err := prerequisites.ForAction(composeclient.ActionEnsure).Run(ctx, composeclient.ActionEnsure, runOptions...); err != nil {
+		return fmt.Errorf("compose project %q ensure prerequisites: %w", p.Name, err)
 	}
-	startable := func(resource composeclient.Resource) bool { return resource.IsEnsured() }
-	if err := stack.ForActionF(composeclient.ActionStart, startable).Run(ctx, composeclient.ActionStart, runOptions...); err != nil {
-		return fmt.Errorf("start compose resources for %q: %w", p.Name, err)
+	for _, action := range []composeclient.Action{composeclient.ActionEnsure, composeclient.ActionStart} {
+		if err := runComposeServicesSequentially(ctx, order, func(service string) error {
+			for _, resource := range resources[service] {
+				if action == composeclient.ActionEnsure && isComposePrerequisite(resource.Priority()) {
+					continue // already ensured in the prerequisite pass
+				}
+				if action == composeclient.ActionStart && !resource.IsEnsured() {
+					continue
+				}
+				stack := composeclient.NewStack(c, composeclient.StackWorkers(1))
+				stack.Add(resource)
+				if err := stack.ForAction(action).Run(ctx, action, runOptions...); err != nil {
+					return fmt.Errorf("service %q resource action %v: %w", service, action, err)
+				}
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("compose project %q action %v: %w", p.Name, action, err)
+		}
 	}
 	return nil
 }
@@ -151,12 +268,14 @@ func loadProject(ctx context.Context, name, path string, environment map[string]
 		composeproject.LoadFiles([]string{path}),
 		composeproject.LoadName(name),
 		composeproject.LoadInstanceMarks(map[string]string{
-			ownershipManagedKey:  "true",
-			ownershipResourceKey: "compose-instance",
+			ownershipManagedKey:    "true",
+			ownershipResourceKey:   "compose-instance",
+			ownershipDeploymentKey: name,
 		}),
 		composeproject.LoadProjectMarks(map[string]string{
-			ownershipManagedKey:  "true",
-			ownershipResourceKey: "compose-project",
+			ownershipManagedKey:    "true",
+			ownershipResourceKey:   "compose-project",
+			ownershipDeploymentKey: name,
 		}),
 	}
 	if len(environment) > 0 {

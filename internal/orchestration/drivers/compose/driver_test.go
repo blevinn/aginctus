@@ -3,6 +3,10 @@ package compose
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	composeclient "github.com/lxc/incus-compose/client"
+	"github.com/lxc/incus-compose/iclient"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -78,5 +82,171 @@ func TestExecuteRejectsDryRun(t *testing.T) {
 	}`), orchestration.ExecuteOptions{DryRun: true})
 	if err == nil || !strings.Contains(err.Error(), "does not support dry-run") {
 		t.Fatalf("Execute() error = %v, want dry-run capability error", err)
+	}
+}
+
+func TestComposeServiceOrderAndFailFastAreSequential(t *testing.T) {
+	visited := []string{}
+	errFailure := errors.New("postgres failed")
+	err := runComposeServicesSequentially(context.Background(), []string{"postgres", "litellm"}, func(service string) error {
+		visited = append(visited, service)
+		if service == "postgres" {
+			return errFailure
+		}
+		return nil
+	})
+	if !errors.Is(err, errFailure) {
+		t.Fatalf("error = %v", err)
+	}
+	if !reflect.DeepEqual(visited, []string{"postgres"}) {
+		t.Fatalf("visited = %v", visited)
+	}
+}
+
+func TestComposeServiceExecutionWaitsForActiveResource(t *testing.T) {
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	started := make(chan struct{})
+	go func() {
+		done <- runComposeServicesSequentially(context.Background(), []string{"postgres", "litellm"}, func(service string) error {
+			if service == "postgres" {
+				close(started)
+				<-release
+				return errors.New("failed after active work")
+			}
+			t.Error("dependent started after prerequisite failed")
+			return nil
+		})
+	}()
+	<-started
+	select {
+	case <-done:
+		t.Fatal("returned while postgres resource remained active")
+	default:
+	}
+	close(release)
+	if err := <-done; err == nil {
+		t.Fatal("expected failure")
+	}
+}
+
+func TestComposeServiceExecutionStopsOnCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var visited []string
+	err := runComposeServicesSequentially(ctx, []string{"postgres", "litellm"}, func(s string) error {
+		visited = append(visited, s)
+		cancel()
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v", err)
+	}
+	if !reflect.DeepEqual(visited, []string{"postgres"}) {
+		t.Fatalf("visited = %v", visited)
+	}
+}
+
+func TestComposeClientConstructionProvidesLocalConnection(t *testing.T) {
+	var called bool
+	client, err := newComposeGlobalClient(context.Background(), func(info *iclient.ConfigRemoteInfo) (*iclient.Connection, error) {
+		called = true
+		if info.Name != "local" || len(info.Addrs) != 1 || info.Addrs[0] != "unix://" {
+			t.Fatalf("unexpected connection info: %#v", info)
+		}
+		return iclient.NewConnection(info)
+	})
+	if err != nil || !called || client == nil {
+		t.Fatalf("newComposeGlobalClient() = %v, %v, called=%t", client, err, called)
+	}
+}
+
+func TestComposeClientConstructionRejectsConnectionError(t *testing.T) {
+	want := errors.New("unavailable socket")
+	client, err := newComposeGlobalClient(context.Background(), func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error) {
+		return nil, want
+	})
+	if client != nil || !errors.Is(err, want) {
+		t.Fatalf("newComposeGlobalClient() = %v, %v", client, err)
+	}
+}
+
+func TestExplainComposeConnectionError(t *testing.T) {
+	err := errors.New("the incus server is not listening on the network (core.https_address is not set)")
+	got := explainComposeConnectionError(err)
+	if !errors.Is(got, err) || !strings.Contains(got.Error(), "incus config get core.https_address") {
+		t.Fatalf("missing actionable connection diagnostic: %v", got)
+	}
+	other := errors.New("unrelated connection failure")
+	if got := explainComposeConnectionError(other); got != other {
+		t.Fatalf("unrelated error altered: %v", got)
+	}
+}
+
+func TestComposePrerequisitesPrecedeInstances(t *testing.T) {
+	for _, priority := range []int{
+		composeclient.PriorityProject,
+		composeclient.PriorityProfile,
+		composeclient.PriorityImage,
+		composeclient.PriorityNetwork,
+		composeclient.PriorityVolume,
+	} {
+		if !isComposePrerequisite(priority) {
+			t.Fatalf("priority %d should be a prerequisite", priority)
+		}
+	}
+	if isComposePrerequisite(composeclient.PriorityInstance) {
+		t.Fatal("instances must remain in dependency-ordered service pass")
+	}
+}
+
+func TestComposeProjectOwnershipValidation(t *testing.T) {
+	project := "gateway-test"
+	valid := map[string]string{
+		ownershipManagedKey:    "true",
+		ownershipResourceKey:   "compose-project",
+		ownershipDeploymentKey: project,
+	}
+	if err := verifyComposeProjectOwnership(valid, project); err != nil {
+		t.Fatalf("owned project rejected: %v", err)
+	}
+	for name, changes := range map[string]map[string]string{
+		"unmarked":             {},
+		"wrong deployment":     {ownershipManagedKey: "true", ownershipResourceKey: "compose-project", ownershipDeploymentKey: "other"},
+		"wrong kind":           {ownershipManagedKey: "true", ownershipResourceKey: "compose-instance", ownershipDeploymentKey: project},
+		"wrong managed marker": {ownershipManagedKey: "false", ownershipResourceKey: "compose-project", ownershipDeploymentKey: project},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := verifyComposeProjectOwnership(changes, project); err == nil {
+				t.Fatal("accepted foreign project")
+			}
+		})
+	}
+}
+
+func TestComposeInstanceOwnershipValidation(t *testing.T) {
+	const project = "gateway-test"
+	valid := map[string]string{
+		ownershipManagedKey:    "true",
+		ownershipResourceKey:   "compose-instance",
+		ownershipDeploymentKey: project,
+	}
+	if err := verifyComposeInstanceOwnership(valid, project, "postgres-1"); err != nil {
+		t.Fatalf("owned instance rejected: %v", err)
+	}
+	cases := []struct {
+		name   string
+		config map[string]string
+	}{
+		{name: "unmarked", config: map[string]string{}},
+		{name: "wrong deployment", config: map[string]string{ownershipManagedKey: "true", ownershipResourceKey: "compose-instance", ownershipDeploymentKey: "other"}},
+		{name: "wrong kind", config: map[string]string{ownershipManagedKey: "true", ownershipResourceKey: "compose-project", ownershipDeploymentKey: project}},
+		{name: "missing deployment", config: map[string]string{ownershipManagedKey: "true", ownershipResourceKey: "compose-instance"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := verifyComposeInstanceOwnership(tc.config, project, "postgres-1"); err == nil {
+				t.Fatal("accepted foreign instance")
+			}
+		})
 	}
 }

@@ -2,7 +2,9 @@ package apply
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -183,5 +185,85 @@ func TestExecuteMapsRejectUnsupportedChangesOption(t *testing.T) {
 	}`), orchestration.ExecuteOptions{})
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
+	}
+}
+
+type rejectedApplyClient struct {
+	fakeApplyClient
+	planError error
+}
+
+func (f *rejectedApplyClient) Plan(reader io.Reader) (incusapply.Preview, error) {
+	f.planned = true
+	return incusapply.Preview{}, f.planError
+}
+
+func TestPreflightRejectsInvalidLaterApplyBeforeFirstMutation(t *testing.T) {
+	first := &fakeApplyClient{}
+	second := &rejectedApplyClient{planError: errors.New("unsupported resource kind")}
+	firstDriver := New()
+	firstDriver.newClient = func(incusapply.Options) applyClient { return first }
+	secondDriver := New()
+	secondDriver.newClient = func(incusapply.Options) applyClient { return second }
+	engine := orchestration.NewEngine(map[string]orchestration.Driver{
+		"first":  firstDriver,
+		"second": secondDriver,
+	})
+	_, err := engine.Execute(context.Background(), orchestration.Plan{
+		APIVersion: orchestration.APIVersion,
+		Kind:       orchestration.Kind,
+		Metadata:   orchestration.Metadata{Name: "preflight"},
+		Steps: []orchestration.Step{
+			{ID: "first", Driver: "first", Configuration: json.RawMessage(`{"documents":[{"kind":"network","name":"safe"}]}`)},
+			{ID: "second", Driver: "second", Configuration: json.RawMessage(`{"documents":[{"kind":"unsupported","name":"invalid"}]}`)},
+		},
+	}, orchestration.ExecuteOptions{})
+	if !errors.Is(err, second.planError) {
+		t.Fatalf("expected preflight error, got %v", err)
+	}
+	if first.executed || second.executed {
+		t.Fatalf("mutation before full preflight: first=%v second=%v", first.executed, second.executed)
+	}
+	if !first.planned || !second.planned {
+		t.Fatal("not all Apply steps were planned before execution")
+	}
+}
+
+type cancellationApplyClient struct {
+	cancel   context.CancelFunc
+	planned  bool
+	executed bool
+}
+
+func (c *cancellationApplyClient) Plan(io.Reader) (incusapply.Preview, error) {
+	c.planned = true
+	c.cancel()
+	return incusapply.Preview{}, nil
+}
+func (c *cancellationApplyClient) Execute(io.Reader) (incusapply.Result, error) {
+	c.executed = true
+	c.cancel()
+	return incusapply.Result{}, nil
+}
+
+func TestApplyReturnsCancellationAfterNativeExecution(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	client := &cancellationApplyClient{cancel: cancel}
+	driver := New()
+	driver.newClient = func(incusapply.Options) applyClient { return client }
+	err := driver.Execute(ctx, json.RawMessage(`{"documents":[{"kind":"network","name":"example"}]}`), orchestration.ExecuteOptions{})
+	if !errors.Is(err, context.Canceled) || !client.executed {
+		t.Fatalf("native cancellation: err=%v executed=%t", err, client.executed)
+	}
+}
+
+func TestApplyReturnsCancellationAfterNativePlanning(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	client := &cancellationApplyClient{cancel: cancel}
+	driver := New()
+	driver.newClient = func(incusapply.Options) applyClient { return client }
+	err := driver.Execute(ctx, json.RawMessage(`{"documents":[{"kind":"network","name":"example"}]}`), orchestration.ExecuteOptions{DryRun: true})
+	if !errors.Is(err, context.Canceled) || !client.planned || client.executed {
+		t.Fatalf("planning cancellation: err=%v planned=%t executed=%t", err, client.planned, client.executed)
 	}
 }

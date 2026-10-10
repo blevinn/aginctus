@@ -12,6 +12,7 @@ This directory contains project documentation that is too detailed or long-lived
 - [Locally hosted LLMs](local-llms.md) — proposed managed Incus model-serving lifecycle with persistent shared model storage, gateway integration, isolation, compatibility, and acceptance criteria.
 - [Declarative orchestration design](orchestration.md) — Jsonnet-generated execution plans with direct Go integration for incus-apply and incus-compose.
 - [Milestone 1: Herdr console over managed workloads](milestones/0001-herdr-console.md) — the first usable vertical slice and its success criteria.
+- [Workload lifecycle](workloads/lifecycle.md) — named workload provisioning, isolation, ownership, and teardown.
 - [OpenCode workload](workloads/opencode.md) — first agent workload image, guest services, and local image workflow.
 - [Development](development.md) — reproducible development shell, tooling, and Incus development notes.
 - [Configuration](configuration.md) — configuration sources, precedence, environment mapping, and inspection commands.

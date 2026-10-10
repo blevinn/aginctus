@@ -1,6 +1,6 @@
 # Declarative orchestration design
 
-Status: accepted design; the typed plan, embedded/restricted Jsonnet generator, sequential driver engine, and initial direct Go incus-compose driver are implemented. The apply driver and migration of existing lifecycle commands remain follow-up work.
+Status: implemented initial orchestration engine and direct Go Apply/Compose drivers for management-network, Herdr client, workload instance, and gateway deployment. Runtime-specific readiness, gateway credentials, and full guest bootstrap remain separate work.
 
 ## Goal
 
@@ -214,13 +214,7 @@ The Aginctus adapter should remain narrow so changes in incus-compose do not lea
 
 ### Toolchain compatibility
 
-At the time of this design:
-
-- Aginctus declares Go 1.25.11;
-- current `incus-apply` main declares Go 1.26.1;
-- current `lxc/incus-compose` develop declares Go 1.27.1.
-
-Implementation must select compatible pinned module revisions and update Aginctus's Go baseline when necessary. We should not silently vendor or copy code merely to avoid a deliberate toolchain update.
+Use the Go toolchain specified by the repository's current `go.mod` and Nix development shell. The selected dependencies are pinned in `go.mod`/`go.sum`; verify compatibility against those versions rather than inferring it from upstream development branches.
 
 ## Execution semantics
 
@@ -346,7 +340,7 @@ The first implementation establishes the Aginctus-owned orchestration contract w
 - dry-run execution is rejected when any selected driver cannot support it;
 - unit tests use in-memory fake drivers and do not require Incus.
 
-The orchestration layer now has two direct Go drivers. The Compose driver uses `github.com/lxc/incus-compose` for gateway services and intentionally does not claim dry-run support. The Apply driver uses the native backend from the pinned `blevinn/incus-apply` fork; it accepts trusted in-memory resource documents, uses `Plan` for real dry-run, and uses `Execute` for mutation without invoking the `incus` CLI. `management-network.jsonnet` expresses the Aginctus management bridge as an Apply step with ownership metadata. Gateway deployment evaluates a single ordered plan containing the management-network Apply step followed by the Compose gateway step. The standalone `network ensure` / `network teardown` commands use the same resource and Apply driver. `herdr-client.jsonnet` now expresses the Herdr infrastructure container, and `herdr client ensure` executes an ordered network-then-instance plan while requiring the instance to be running. `herdr client teardown` deletes only the Herdr instance. Existing-resource update/delete requires Aginctus ownership markers by default through incus-apply's `RequireExistingConfig` guard; `--force` deliberately disables that guard for explicit adoption or deletion. Native cloud-init and VM-agent waits remain unsupported in the current fork, so workload-instance migration remains a separate follow-up.
+The orchestration layer now has two direct Go drivers. The Compose driver uses `github.com/lxc/incus-compose` for gateway services and intentionally does not claim dry-run support. The Apply driver uses the native backend from the pinned `blevinn/incus-apply` fork; it accepts trusted in-memory resource documents, uses `Plan` for real dry-run, and uses `Execute` for mutation without invoking the `incus` CLI. `management-network.jsonnet` expresses the Aginctus management bridge as an Apply step with ownership metadata. Gateway deployment evaluates a single ordered plan containing the management-network Apply step followed by the Compose gateway step. The standalone `network ensure` / `network teardown` commands use the same resource and Apply driver. `herdr-client.jsonnet` now expresses the Herdr infrastructure container, and `herdr client ensure` executes an ordered network-then-instance plan while requiring the instance to be running. `herdr client teardown` deletes only the Herdr instance. Existing-resource update/delete requires Aginctus ownership markers by default through incus-apply's `RequireExistingConfig` guard; `--force` deliberately disables that guard for explicit adoption or deletion. Native cloud-init and VM-agent waits remain unsupported in the current fork, while workload-instance reconciliation is implemented through the same Apply driver. Runtime-specific bootstrap and VM readiness remain follow-up work.
 
 
 ### Fail-closed immutable drift

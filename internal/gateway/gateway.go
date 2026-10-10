@@ -7,8 +7,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"syscall"
 	"text/template"
 
 	"github.com/blevinn/aginctus/internal/config"
@@ -68,10 +71,12 @@ func FromConfig(effective *config.Config) (Spec, error) {
 	return spec, nil
 }
 
+var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+
 func (s Spec) Validate() error {
 	switch {
-	case s.ID == "":
-		return fmt.Errorf("gateway id must not be empty")
+	case !gatewayIDPattern.MatchString(s.ID):
+		return fmt.Errorf("gateway id %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.ID)
 	case s.Project == "":
 		return fmt.Errorf("gateway compose project must not be empty")
 	case s.Network == "":
@@ -130,6 +135,8 @@ func (s Spec) RenderCompose() (string, error) {
 	return out.String(), nil
 }
 
+var safeGatewaySecret = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
 var requiredRuntimeEnvironment = []string{
 	"AGINCTUS_GATEWAY_POSTGRES_PASSWORD",
 	"AGINCTUS_GATEWAY_MASTER_KEY",
@@ -163,6 +170,9 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 }
 
 func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
+	if !gatewayIDPattern.MatchString(s.ID) {
+		return nil, fmt.Errorf("invalid gateway id: must start with an ASCII letter or digit and contain only letters, digits, hyphens or underscores")
+	}
 	stateDir, err := gatewayStateDir()
 	if err != nil {
 		return nil, err
@@ -175,9 +185,20 @@ func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
 		return nil, fmt.Errorf("protect gateway state directory: %w", err)
 	}
 
+	// Hold a per-gateway interprocess lock across secret initialization and publication.
+	lockFile, err := os.OpenFile(filepath.Join(dir, ".secrets.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open gateway initialization lock: %w", err)
+	}
+	defer lockFile.Close()
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		return nil, fmt.Errorf("lock gateway initialization: %w", err)
+	}
+	defer syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+
 	path := filepath.Join(dir, "secrets.json")
 	values := map[string]string{}
-	if data, err := os.ReadFile(path); err == nil {
+	if data, err := readSecretState(path); err == nil {
 		if err := json.Unmarshal(data, &values); err != nil {
 			return nil, fmt.Errorf("decode gateway secret state: %w", err)
 		}
@@ -202,6 +223,12 @@ func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
 		changed = true
 	}
 
+	for _, name := range requiredRuntimeEnvironment {
+		if !safeGatewaySecret.MatchString(values[name]) {
+			return nil, fmt.Errorf("%s contains unsupported characters: use only ASCII letters, digits, underscore or hyphen", name)
+		}
+	}
+
 	if changed {
 		if err := writeSecretState(path, values); err != nil {
 			return nil, err
@@ -213,6 +240,30 @@ func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
 		result[name] = values[name]
 	}
 	return result, nil
+}
+
+func readSecretState(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("gateway secret state must be a regular non-symlink file with permissions 0600 or stricter")
+	}
+	// O_NOFOLLOW prevents a substituted symlink between the check and open on Linux.
+	fd, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open gateway secret state safely: %w", err)
+	}
+	defer fd.Close()
+	opened, err := fd.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !opened.Mode().IsRegular() || opened.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("gateway secret state must be a regular file with restrictive permissions")
+	}
+	return io.ReadAll(fd)
 }
 
 func gatewayStateDir() (string, error) {

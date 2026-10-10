@@ -2,12 +2,13 @@ package gateway
 
 import (
 	"encoding/json"
-	"reflect"
-
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sigs.k8s.io/yaml"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -156,6 +157,56 @@ func TestInitializeRuntimeEnvironmentUsesProvidedSeedOnlyWhenMissing(t *testing.
 	}
 }
 
+func TestGatewayIDRejectsTraversalAndSeparators(t *testing.T) {
+	for _, id := range []string{"../outside", ".", "..", "nested/path", "nested\\\\path", "/absolute", ""} {
+		t.Run(id, func(t *testing.T) {
+			spec := Spec{ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+			if err := spec.Validate(); err == nil {
+				t.Fatalf("accepted unsafe gateway ID %q", id)
+			}
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			if _, err := spec.InitializeRuntimeEnvironment(); err == nil {
+				t.Fatalf("initialized unsafe gateway ID %q", id)
+			}
+		})
+	}
+	for _, id := range []string{"local", "gateway-01", "gateway_01"} {
+		spec := Spec{ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+		if err := spec.Validate(); err != nil {
+			t.Fatalf("valid gateway ID %q rejected: %v", id, err)
+		}
+	}
+}
+
+func TestGatewaySecretStateRejectsSymlinkAndLooseMode(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	dir := filepath.Join(state, "aginctus", "gateway", "local")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "secrets.json")
+	outside := filepath.Join(state, "outside")
+	if err := os.WriteFile(outside, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted symlink secret state")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted loosely permissioned secret state")
+	}
+}
+
 func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 	spec := Spec{
 		ID: "parity", Project: "gateway-parity", Network: "management-parity",
@@ -192,5 +243,78 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 		renderJSON, _ := json.MarshalIndent(renderModel, "", "  ")
 		deployJSON, _ := json.MarshalIndent(config.Compose, "", "  ")
 		t.Fatalf("render and deploy Compose models differ:\\nrender=%s\\ndeploy=%s", renderJSON, deployJSON)
+	}
+}
+
+func TestInitializeRuntimeEnvironmentConcurrentFirstUse(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	for _, name := range requiredRuntimeEnvironment {
+		t.Setenv(name, "")
+	}
+	const callers = 24
+	var wg sync.WaitGroup
+	begin := make(chan struct{})
+	results := make([]map[string]string, callers)
+	errs := make([]error, callers)
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-begin
+			results[i], errs[i] = (Spec{ID: "concurrent"}).InitializeRuntimeEnvironment()
+		}(i)
+	}
+	close(begin)
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("caller %d failed: %v", i, err)
+		}
+		for _, key := range requiredRuntimeEnvironment {
+			if results[i][key] == "" || results[i][key] != results[0][key] {
+				t.Fatalf("caller %d got divergent value for %s", i, key)
+			}
+		}
+	}
+	persisted, err := (Spec{ID: "concurrent"}).InitializeRuntimeEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range requiredRuntimeEnvironment {
+		if persisted[key] != results[0][key] {
+			t.Fatalf("persisted %s differs from concurrent result", key)
+		}
+	}
+}
+
+func TestGatewayRejectsUnsafeSeedValues(t *testing.T) {
+	for _, seed := range []string{"a\nb", "a$b", "a#b", "a=b", "a:b", "a@b", "a/b", "a\\\\b", "a'b", "a\"b", "a b"} {
+		t.Run(fmt.Sprintf("%q", seed), func(t *testing.T) {
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			for _, key := range requiredRuntimeEnvironment {
+				t.Setenv(key, "")
+			}
+			t.Setenv("AGINCTUS_GATEWAY_POSTGRES_PASSWORD", seed)
+			if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+				t.Fatal("accepted unsafe credential seed")
+			} else if strings.Contains(err.Error(), seed) {
+				t.Fatal("error exposed secret material")
+			}
+		})
+	}
+}
+
+func TestGatewayAcceptsSafeCredentialSeed(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	for _, key := range requiredRuntimeEnvironment {
+		t.Setenv(key, "")
+	}
+	t.Setenv("AGINCTUS_GATEWAY_POSTGRES_PASSWORD", "AZaz09_-safe")
+	values, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values["AGINCTUS_GATEWAY_POSTGRES_PASSWORD"] != "AZaz09_-safe" {
+		t.Fatal("valid seed changed unexpectedly")
 	}
 }
