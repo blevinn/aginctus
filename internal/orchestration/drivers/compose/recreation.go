@@ -1,8 +1,8 @@
 package compose
 
 import (
-	"fmt"
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -75,6 +75,31 @@ func recreateWithoutPersistentDisks(ctx context.Context, existingDevices map[str
 	if err := ctx.Err(); err != nil { return fmt.Errorf("instance removed; recreation canceled: %w",err) }
 	if err := create(ctx); err != nil {
 		return fmt.Errorf("instance removed; recreation failed and manual recovery may be required: %w", err)
+	}
+	return nil
+}
+
+// verifyComposeRecreationVolumes ensures replacement never silently rebinds
+// an existing persistent mount to a different volume or drops it. The
+// caller must compare the actual instance devices with the fully materialized
+// desired instance devices, including Compose-generated mounts.
+func verifyComposeRecreationVolumes(existing, replacement map[string]map[string]string) error {
+	for name, current := range existing {
+		if current["type"] != "disk" || current["path"] == "/" {
+			continue
+		}
+		if current["path"] == "" || current["pool"] == "" || current["source"] == "" {
+			return fmt.Errorf("cannot replace instance: existing disk %q has ambiguous persistent storage", name)
+		}
+		desired, ok := replacement[name]
+		if !ok {
+			return fmt.Errorf("cannot replace instance: persistent disk %q would be removed", name)
+		}
+		for _, field := range []string{"type", "path", "pool", "source"} {
+			if desired[field] != current[field] {
+				return fmt.Errorf("cannot replace instance: persistent disk %q changes %s", name, field)
+			}
+		}
 	}
 	return nil
 }
