@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"errors"
 	composeclient "github.com/lxc/incus-compose/client"
 	"github.com/lxc/incus-compose/iclient"
 	"reflect"
@@ -368,6 +369,32 @@ func TestVerifyComposeEnsuredImage(t *testing.T) {
 			err := verifyComposeEnsuredImage(tc.alias, tc.recordedAlias, tc.currentFingerprint, tc.baseFingerprint)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("got %v, want error %t", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestComposeDriftErrorsAreTypedAndSecretSafe(t *testing.T) {
+	const secret = "super-secret-value"
+	cases := []struct {
+		name string
+		err error
+		kind ComposeDriftKind
+	}{
+		{"config", detectComposeInstanceDrift(map[string]string{"environment.TOKEN":secret}, nil, map[string]string{"environment.TOKEN":"previous-secret"}, nil), ComposeDriftConfig},
+		{"profiles", detectComposeInstanceDrift(nil, []string{"new"}, nil, []string{"old"}), ComposeDriftProfiles},
+		{"device", detectComposeDeviceDrift(map[string]map[string]string{"disk":{"source":secret}},map[string]map[string]string{"disk":{"source":"old"}}), ComposeDriftDevice},
+		{"image alias", detectComposeImageDrift("new-image","old-image"), ComposeDriftImage},
+		{"image fingerprint", detectComposeImageFingerprintDrift("abcdef", "123456"), ComposeDriftImage},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name,func(t *testing.T){
+			var drift *ComposeDriftError
+			if !errors.As(tc.err,&drift) || drift.Kind != tc.kind {
+				t.Fatalf("error = %v, want typed %q drift",tc.err,tc.kind)
+			}
+			if strings.Contains(tc.err.Error(),secret) || strings.Contains(tc.err.Error(),"previous-secret") {
+				t.Fatalf("drift error exposed secret: %v",tc.err)
 			}
 		})
 	}
