@@ -92,28 +92,42 @@ func TestAggregateRemoveRejectsFlags(t *testing.T) {
 }
 
 func TestAggregateRemoveTwice(t *testing.T) {
- previousGateway:=removeAggregateGateway
- t.Cleanup(func(){removeAggregateGateway=previousGateway})
- var count int
- stubWorkload(t,func(_ context.Context,_ workload.Spec,o workload.Options)error{
-  if o.Operation!="delete" || o.Force {t.Fatalf("unexpected workload options: %#v",o)}
-  count++;return nil
- })
- stubHerdrClient(t,func(_ context.Context,_ herdrclient.Spec,o herdrclient.Options)error{
-  if o.Operation!="delete" || o.Force {t.Fatalf("unexpected Herdr options: %#v",o)}
-  count++;return nil
- })
- removeAggregateGateway=func(context.Context,gateway.Spec)error{count++;return nil}
- stubManagementNetwork(t,func(_ context.Context,_ managementnetwork.Spec,o managementnetwork.Options)error{
-  if o.Operation!="delete" || o.Force {t.Fatalf("unexpected network options: %#v",o)}
-  count++;return nil
- })
- loader:=config.NewLoader();loader.SystemPath="";loader.UserPath="";loader.Environment=nil
- for i:=0;i<2;i++ {
-  var out,stderr bytes.Buffer
-  if code:=Run(context.Background(),[]string{"remove"},&out,&stderr,&fakeIncusClient{},loader);code!=0 {
-   t.Fatalf("remove attempt %d: code=%d stderr=%q",i,code,stderr.String())
-  }
- }
- if count!=8 {t.Fatalf("expected each of four stages to run twice, count=%d",count)}
+	previousGateway := removeAggregateGateway
+	t.Cleanup(func() { removeAggregateGateway = previousGateway })
+	var count int
+	stubWorkload(t, func(_ context.Context, _ workload.Spec, o workload.Options) error {
+		if o.Operation != "delete" || o.Force {
+			t.Fatalf("unexpected workload options: %#v", o)
+		}
+		count++
+		return nil
+	})
+	stubHerdrClient(t, func(_ context.Context, _ herdrclient.Spec, o herdrclient.Options) error {
+		if o.Operation != "delete" || o.Force {
+			t.Fatalf("unexpected Herdr options: %#v", o)
+		}
+		count++
+		return nil
+	})
+	removeAggregateGateway = func(context.Context, gateway.Spec) error { count++; return nil }
+	stubManagementNetwork(t, func(_ context.Context, _ managementnetwork.Spec, o managementnetwork.Options) error {
+		if o.Operation != "delete" || o.Force {
+			t.Fatalf("unexpected network options: %#v", o)
+		}
+		count++
+		return nil
+	})
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	for i := 0; i < 2; i++ {
+		var out, stderr bytes.Buffer
+		if code := Run(context.Background(), []string{"remove"}, &out, &stderr, &fakeIncusClient{}, loader); code != 0 {
+			t.Fatalf("remove attempt %d: code=%d stderr=%q", i, code, stderr.String())
+		}
+	}
+	if count != 8 {
+		t.Fatalf("expected each of four stages to run twice, count=%d", count)
+	}
 }
