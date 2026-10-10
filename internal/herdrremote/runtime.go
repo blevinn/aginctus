@@ -41,10 +41,10 @@ func (r *Runtime) Inspect(ctx context.Context, cfg sshaccess.Config) (sshaccess.
 		return sshaccess.State{}, err
 	}
 	return sshaccess.State{
-		IdentityPresent:       true,
-		AuthorizationPresent:  present,
-		AuthorizationMatches:  present && strings.TrimSpace(authorization) == strings.TrimSpace(identity.PublicKey),
-		MachinePresent:        machinePresent,
+		IdentityPresent:      true,
+		AuthorizationPresent: present,
+		AuthorizationMatches: present && strings.TrimSpace(authorization) == strings.TrimSpace(identity.PublicKey),
+		MachinePresent:       machinePresent,
 	}, nil
 }
 
@@ -254,7 +254,6 @@ func (r *Runtime) readHostKey(ctx context.Context, instance string) (string, err
 	}
 	return fields[0] + " " + fields[1], nil
 }
-
 
 func (r *Runtime) verifyExistingHostTrust(ctx context.Context, client, workloadID, alias, hostKey string) error {
 	path := knownHostsPath(workloadID)

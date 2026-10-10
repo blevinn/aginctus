@@ -52,7 +52,6 @@ func TestServerVersionQueryFailure(t *testing.T) {
 	}
 }
 
-
 func TestInstanceExecExitCode(t *testing.T) {
 	tests := []struct {
 		name     string

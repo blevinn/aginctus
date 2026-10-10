@@ -559,7 +559,6 @@ func TestWorkloadUnknownNameFailsConfigurationLookup(t *testing.T) {
 	}
 }
 
-
 func TestHerdrAddRemoteUsesConfiguredWorkload(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	loader := config.NewLoader()

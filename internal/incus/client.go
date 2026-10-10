@@ -162,7 +162,6 @@ func (c *Client) InstanceAddress(ctx context.Context, name, interfaceName string
 	return "", fmt.Errorf("instance %q interface %q has no usable global address", name, interfaceName)
 }
 
-
 func instanceExecExitCode(metadata map[string]any) (int, error) {
 	if metadata == nil {
 		return 0, fmt.Errorf("missing operation metadata")

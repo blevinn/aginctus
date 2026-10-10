@@ -294,7 +294,6 @@ func equalCommand(got []string, want ...string) bool {
 	return true
 }
 
-
 func TestRuntimeRejectsUnexpectedHostKeyChange(t *testing.T) {
 	incus := ownedIncus()
 	incus.run = func(instance string, command []string, stdin string) (incusadapter.InstanceExecResult, error) {

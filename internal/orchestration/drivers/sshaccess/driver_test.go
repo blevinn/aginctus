@@ -114,7 +114,6 @@ func TestExecuteRequiresRuntime(t *testing.T) {
 	}
 }
 
-
 func TestValidateRejectsUnsafeWorkloadID(t *testing.T) {
 	raw := validConfig(t, Reconcile)
 	var cfg Config
