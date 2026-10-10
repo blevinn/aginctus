@@ -129,7 +129,7 @@ func TestPlanForcePreservesManagementNetworkOwnershipGuard(t *testing.T) {
 	}
 	network := decodeApplyConfig(t, plan.Steps[0].Configuration)
 	for key, want := range map[string]string{
-		"user.aginctus.managed": "true",
+		"user.aginctus.managed":  "true",
 		"user.aginctus.resource": "management-network",
 	} {
 		if got := network.RequireExistingConfig[key]; got != want {
