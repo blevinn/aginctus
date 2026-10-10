@@ -331,20 +331,22 @@ func TestDetectComposeImageDrift(t *testing.T) {
 func TestDetectComposeImageFingerprintDrift(t *testing.T) {
 	cases := []struct {
 		name, desired, actual string
-		wantError bool
+		wantError             bool
 	}{
-		{name:"same fingerprint", desired:"abcdef0123", actual:"abcdef0123"},
-		{name:"case insensitive hex", desired:"ABCDEF0123", actual:"abcdef0123"},
-		{name:"refreshed tag", desired:"abcdef0123", actual:"123456abcd", wantError:true},
-		{name:"missing instance fingerprint", desired:"abcdef0123", wantError:true},
-		{name:"missing alias fingerprint", actual:"abcdef0123", wantError:true},
+		{name: "same fingerprint", desired: "abcdef0123", actual: "abcdef0123"},
+		{name: "case insensitive hex", desired: "ABCDEF0123", actual: "abcdef0123"},
+		{name: "refreshed tag", desired: "abcdef0123", actual: "123456abcd", wantError: true},
+		{name: "missing instance fingerprint", desired: "abcdef0123", wantError: true},
+		{name: "missing alias fingerprint", actual: "abcdef0123", wantError: true},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name,func(t *testing.T){
-			err:=detectComposeImageFingerprintDrift(tc.desired,tc.actual)
-			if (err!=nil)!=tc.wantError {t.Fatalf("got error %v; want error %t",err,tc.wantError)}
-			if err!=nil && (strings.Contains(err.Error(),tc.desired) && tc.desired!="" || strings.Contains(err.Error(),tc.actual) && tc.actual!="") {
-				t.Fatalf("error contains fingerprint: %v",err)
+		t.Run(tc.name, func(t *testing.T) {
+			err := detectComposeImageFingerprintDrift(tc.desired, tc.actual)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("got error %v; want error %t", err, tc.wantError)
+			}
+			if err != nil && (strings.Contains(err.Error(), tc.desired) && tc.desired != "" || strings.Contains(err.Error(), tc.actual) && tc.actual != "") {
+				t.Fatalf("error contains fingerprint: %v", err)
 			}
 		})
 	}
