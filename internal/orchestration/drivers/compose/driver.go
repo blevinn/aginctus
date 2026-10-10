@@ -478,6 +478,9 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 				if err != nil { return err }
 				return verifyComposeInstanceOwnership(v.Config, p.Name, name)
 			}
+			if err := rejectPersistentDisks(current.Devices); err != nil {
+				return fmt.Errorf("recreate Compose instance %q: %w", name, err)
+			}
 			// Hydrate the pinned Compose resource before using its Stop/Delete
 			// lifecycle. Its Ensure may add missing extension keys.
 			if err := instance.Ensure(ctx, composeclient.OptionCreate()); err != nil {
