@@ -39,7 +39,7 @@ let
     };
   };
 
-  json = builtins.fromJSON (builtins.readFile base.environment.etc."aginctus/config.json".source);
+  settings = base.services.aginctus.settings;
   imageUnit = base.systemd.services.aginctus-image-herdr-client;
   reconcile = withReconcile.systemd.services.aginctus-reconcile;
   noImagesReconcile = withoutImages.systemd.services.aginctus-reconcile;
@@ -50,8 +50,8 @@ let
     "aginctus-image-opencode-workload.service"
   ];
 in
-assert json.incus.management.network.name == "integration-mgmt";
-assert json.workloads.dev.runtime.type == "opencode";
+assert settings.incus.management.network.name == "integration-mgmt";
+assert settings.workloads.dev.runtime.type == "opencode";
 assert imageUnit.serviceConfig.Type == "oneshot";
 assert builtins.elem pkgs.incus imageUnit.path;
 assert reconcile.requires == expected;
