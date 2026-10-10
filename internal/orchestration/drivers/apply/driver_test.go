@@ -3,6 +3,8 @@ package apply
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"context"
 	"io"
 	"strings"
 	"testing"
@@ -184,4 +186,38 @@ func TestExecuteMapsRejectUnsupportedChangesOption(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+}
+
+type rejectedApplyClient struct {
+	fakeApplyClient
+	planError error
+}
+func (f *rejectedApplyClient) Plan(reader io.Reader) (incusapply.Preview, error) {
+	f.planned = true
+	return incusapply.Preview{}, f.planError
+}
+
+func TestPreflightRejectsInvalidLaterApplyBeforeFirstMutation(t *testing.T) {
+	first := &fakeApplyClient{}
+	second := &rejectedApplyClient{planError: errors.New("unsupported resource kind")}
+	firstDriver := New()
+	firstDriver.newClient = func(incusapply.Options) applyClient { return first }
+	secondDriver := New()
+	secondDriver.newClient = func(incusapply.Options) applyClient { return second }
+	engine := orchestration.NewEngine(map[string]orchestration.Driver{
+		"first": firstDriver,
+		"second": secondDriver,
+	})
+	_, err := engine.Execute(context.Background(), orchestration.Plan{
+		APIVersion: orchestration.APIVersion,
+		Kind: orchestration.Kind,
+		Metadata: orchestration.Metadata{Name: "preflight"},
+		Steps: []orchestration.Step{
+			{ID: "first", Driver: "first", Configuration: json.RawMessage(`{"documents":[{"kind":"network","name":"safe"}]}`)},
+			{ID: "second", Driver: "second", Configuration: json.RawMessage(`{"documents":[{"kind":"unsupported","name":"invalid"}]}`)},
+		},
+	}, orchestration.ExecuteOptions{})
+	if !errors.Is(err, second.planError) { t.Fatalf("expected preflight error, got %v", err) }
+	if first.executed || second.executed { t.Fatalf("mutation before full preflight: first=%v second=%v", first.executed, second.executed) }
+	if !first.planned || !second.planned { t.Fatal("not all Apply steps were planned before execution") }
 }
