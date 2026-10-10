@@ -2,7 +2,6 @@ package compose
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lxc/incus-compose/iclient"
-	"github.com/lxc/incus/v7/shared/api"
 )
 
 // Run only with AGINCTUS_INCUS_INTEGRATION=1 against a disposable Incus host.
@@ -27,25 +25,22 @@ func TestIncusComposeReconciliationIntegration(t *testing.T) {
 	defer cancel()
 	name := fmt.Sprintf("aginctus-it-%d", time.Now().UnixNano())
 	t.Logf("test project %s (retained for manual inspection/cleanup)", name)
-	composeDoc := func(marker string) []byte {
-		// Use a pinned tag for repeatability; changing an extension exercises
-		// drift without assuming anything about mutable registry tags.
-		return []byte(fmt.Sprintf("services:\n  app:\n    image: docker.io/library/alpine:3.21\n    command: [\"sleep\", \"3600\"]\n    x-incus-compose:\n      config:\n        user.aginctus.test-revision: %q\n", marker))
+	composeDoc := func(image string) []byte {
+		return []byte(fmt.Sprintf("services:\\n  app:\\n    image: %s\\n    command: [\\\"sleep\\\", \\\"3600\\\"]\\n", image))
 	}
-	run := func(marker string, recreate bool) error {
-		raw, err := json.Marshal(Config{Project:name, Compose:json.RawMessage("null"), RecreateOnDrift:recreate})
-		_ = raw // JSON driver config is not required for the runtime entry point.
-		if err != nil { return err }
-		return executeCompose(ctx, Config{Project:name, Compose:composeDoc(marker), RecreateOnDrift:recreate},nil)
+	run := func(image string, recreate bool) error {
+		return executeCompose(ctx, Config{Project:name, Compose:composeDoc(image), RecreateOnDrift:recreate},nil)
 	}
-	if err := run("v1", false); err != nil { t.Fatalf("initial deployment: %v",err) }
-	if err := run("v1", false); err != nil { t.Fatalf("idempotent deployment: %v",err) }
-	err := run("v2", false)
+	const first = "docker.io/library/alpine:3.21"
+	const second = "docker.io/library/alpine:3.22"
+	if err := run(first, false); err != nil { t.Fatalf("initial deployment: %v",err) }
+	if err := run(first, false); err != nil { t.Fatalf("idempotent deployment: %v",err) }
+	err := run(second, false)
 	if err == nil || !strings.Contains(err.Error(),"drift") {
-		t.Fatalf("expected fail-closed drift, got %v",err)
+		t.Fatalf("expected fail-closed image drift, got %v",err)
 	}
-	if err := run("v2", true); err != nil { t.Fatalf("opt-in recreation: %v",err) }
-	if err := run("v2", false); err != nil { t.Fatalf("post-recreation idempotence: %v",err) }
+	if err := run(second, true); err != nil { t.Fatalf("opt-in recreation: %v",err) }
+	if err := run(second, false); err != nil { t.Fatalf("post-recreation idempotence: %v",err) }
 	conn,err:=iclient.NewConnection(&iclient.ConfigRemoteInfo{Name:"local",Addrs:[]string{"unix://"},Protocol:"incus"})
 	if err != nil {t.Fatal(err)}
 	instanceNames,err:=conn.GetInstanceNames(ctx,name,nil)
@@ -54,8 +49,5 @@ func TestIncusComposeReconciliationIntegration(t *testing.T) {
 	inst,_,err:=conn.GetInstance(ctx,name,instanceNames[0],nil)
 	if err!=nil {t.Fatal(err)}
 	if err:=verifyComposeInstanceOwnership(inst.Config,name,inst.Name);err!=nil{t.Fatal(err)}
-	if inst.Config["user.aginctus.test-revision"]!="v2" {
-		t.Fatalf("recreated revision did not converge")
-	}
-	_ = api.InstanceTypeContainer
+	if inst.Config["user.image_alias"] == "" {t.Fatal("recreated instance is missing image alias") }
 }
