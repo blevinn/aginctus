@@ -194,3 +194,63 @@ when the container boots.
 The image alias remains configurable through the normal Aginctus precedence
 rules, allowing a separately built or promoted image to be selected without
 changing orchestration code.
+
+
+## NixOS module
+
+The flake exports `nixosModules.default` (also named `nixosModules.aginctus`) for host integration.
+
+A consuming NixOS flake can import it with:
+
+```nix
+{
+  inputs.aginctus.url = "github:blevinn/aginctus";
+
+  outputs = { self, nixpkgs, aginctus, ... }: {
+    nixosConfigurations.lab = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        aginctus.nixosModules.default
+        ({ pkgs, ... }: {
+          services.aginctus = {
+            enable = true;
+
+            # Temporary until Aginctus exposes a reproducible CLI package output.
+            package = pkgs.aginctus;
+
+            settings = {
+              incus.management.network.name = "aginctus-mgmt";
+              infrastructure.herdr.storage.pool = "default";
+
+              workloads.dev = {
+                instance.name = "aginctus-dev";
+                runtime.type = "opencode";
+                isolation = "container";
+                image.alias = "aginctus-opencode-workload";
+                storage.pool = "default";
+              };
+            };
+          };
+        })
+      ];
+    };
+  };
+}
+```
+
+The module writes the declared settings to `/etc/aginctus/config.json`, preserving the same JSON shape and precedence semantics consumed by the CLI. Known settings are typed Nix options, while a freeform JSON layer allows newly introduced configuration keys to be represented without waiting for a module update. Runtime gateway secrets remain intentionally out of band and are not exposed as Nix configuration options.
+
+When enabled, the module defines oneshot image lifecycle units for the Herdr client and OpenCode workload images. Each unit imports the corresponding image derivation through `aginctus images update` and uses a restart trigger on that derivation, so a NixOS generation containing a new image causes the unit to run again.
+
+Optional boot reconciliation can be enabled with:
+
+```nix
+services.aginctus.reconcile = {
+  enable = true;
+  workloads = [ "dev" ];
+};
+```
+
+This reconciles the management network, Herdr client, and selected workloads after Incus and the image update units. It is disabled by default because reconciliation mutates Incus state.
+
+The current module deliberately requires `services.aginctus.package` to be supplied by the caller. The flake already exports the guest image derivations, but the Go CLI does not yet have a reproducible Nix package output. That packaging work is the remaining piece required to make the module fully self-contained.
