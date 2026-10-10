@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"sigs.k8s.io/yaml"
 	"os"
 	"path/filepath"
+	"sigs.k8s.io/yaml"
 	"strings"
 	"testing"
 )
@@ -163,19 +163,31 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 		LiteLLMImage: "example/litellm:custom", PostgresImage: "example/postgres:custom",
 	}
 	rendered, err := spec.RenderCompose()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	normalized, err := yaml.YAMLToJSON([]byte(rendered))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	var renderModel map[string]any
-	if err := json.Unmarshal(normalized, &renderModel); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(normalized, &renderModel); err != nil {
+		t.Fatal(err)
+	}
 
 	plan, err := spec.OrchestrationPlan()
-	if err != nil { t.Fatal(err) }
-	if len(plan.Steps) != 2 { t.Fatalf("plan steps = %d", len(plan.Steps)) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Steps) != 2 {
+		t.Fatalf("plan steps = %d", len(plan.Steps))
+	}
 	var config struct {
 		Compose map[string]any `json:"compose"`
 	}
-	if err := json.Unmarshal(plan.Steps[1].Configuration, &config); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(plan.Steps[1].Configuration, &config); err != nil {
+		t.Fatal(err)
+	}
 	if !reflect.DeepEqual(renderModel, config.Compose) {
 		renderJSON, _ := json.MarshalIndent(renderModel, "", "  ")
 		deployJSON, _ := json.MarshalIndent(config.Compose, "", "  ")
