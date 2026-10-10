@@ -87,8 +87,8 @@ func TestAggregateApplyFromRejectsTrailingDocuments(t *testing.T) {
 }
 
 func TestAggregateReadMultiDocumentYAML(t *testing.T) {
- path:=filepath.Join(t.TempDir(),"plan.yaml")
- data:=`apiVersion: aginctus.dev/v1alpha1
+	path := filepath.Join(t.TempDir(), "plan.yaml")
+	data := `apiVersion: aginctus.dev/v1alpha1
 kind: Orchestration
 metadata:
   name: aginctus
@@ -106,17 +106,32 @@ steps:
     driver: apply
     configuration: {}
 `
- if err:=os.WriteFile(path,[]byte(data),0600);err!=nil{t.Fatal(err)}
- p,err:=readAggregatePlan(path)
- if err!=nil{t.Fatal(err)}
- if len(p.Steps)!=2 || p.Steps[0].ID!="first" || p.Steps[1].ID!="second" {t.Fatalf("steps=%v",p.Steps)}
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p, err := readAggregatePlan(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Steps) != 2 || p.Steps[0].ID != "first" || p.Steps[1].ID != "second" {
+		t.Fatalf("steps=%v", p.Steps)
+	}
 }
 
 func TestAggregateRenderStreamRoundTrip(t *testing.T) {
- loader:=config.NewLoader();loader.SystemPath="";loader.UserPath="";loader.Environment=nil
- var out,stderr bytes.Buffer
- if code:=Run(context.Background(),[]string{"apply","--render"},&out,&stderr,&fakeIncusClient{},loader);code!=0{t.Fatalf("render: %s",stderr.String())}
- p,err:=orchestration.ParsePlanStream(out.Bytes())
- if err!=nil{t.Fatal(err)}
- if len(p.Steps)!=4{t.Fatalf("steps=%d",len(p.Steps))}
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	var out, stderr bytes.Buffer
+	if code := Run(context.Background(), []string{"apply", "--render"}, &out, &stderr, &fakeIncusClient{}, loader); code != 0 {
+		t.Fatalf("render: %s", stderr.String())
+	}
+	p, err := orchestration.ParsePlanStream(out.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Steps) != 4 {
+		t.Fatalf("steps=%d", len(p.Steps))
+	}
 }
