@@ -29,6 +29,25 @@
         let
           pkgs = import nixpkgs { inherit system; };
           herdrPackage = herdr.packages.${system}.herdr;
+          sshClientIdentityHelper = pkgs.writeShellApplication {
+            name = "aginctus-ssh-client-identity";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.openssh
+              pkgs.util-linux
+              pkgs.gnused
+              pkgs.gawk
+            ];
+            text = builtins.readFile ./guest/ssh/client-identity.sh;
+          };
+          sshAuthorizeHelper = pkgs.writeShellApplication {
+            name = "aginctus-ssh-authorize";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.openssh
+            ];
+            text = builtins.readFile ./guest/ssh/authorize.sh;
+          };
 
           herdrClientSystem = nixpkgs.lib.nixosSystem {
             inherit system;
@@ -39,7 +58,11 @@
                 {
                   system.stateVersion = "26.05";
 
-                  environment.systemPackages = [ herdrPackage ];
+                  environment.systemPackages = [
+                    herdrPackage
+                    pkgs.openssh
+                    sshClientIdentityHelper
+                  ];
                   environment.variables = {
                     XDG_CONFIG_HOME = "/var/lib/herdr/config";
                     XDG_RUNTIME_DIR = "/run/herdr";
@@ -90,6 +113,8 @@
                     herdrPackage
                     pkgs.git
                     pkgs.opencode
+                    pkgs.openssh
+                    sshAuthorizeHelper
                   ];
 
                   services.openssh = {
@@ -98,6 +123,13 @@
                       PasswordAuthentication = false;
                       KbdInteractiveAuthentication = false;
                       PermitRootLogin = "no";
+                      AuthorizedKeysFile = ".ssh/authorized_keys /var/lib/aginctus/ssh/authorized_keys/%u";
+                      AllowAgentForwarding = false;
+                      AllowTcpForwarding = false;
+                      AllowStreamLocalForwarding = false;
+                      X11Forwarding = false;
+                      PermitTunnel = false;
+                      PermitUserRC = false;
                     };
                   };
 
