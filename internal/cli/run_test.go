@@ -11,6 +11,8 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/herdrclient"
+	"github.com/blevinn/aginctus/internal/herdrremote"
+	incusadapter "github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 	"github.com/blevinn/aginctus/internal/workload"
 )
@@ -22,6 +24,18 @@ type fakeIncusClient struct {
 
 func (c *fakeIncusClient) ServerVersion(context.Context) (string, error) {
 	return c.version, c.err
+}
+
+func (c *fakeIncusClient) InstanceConfig(context.Context, string) (map[string]string, error) {
+	return nil, errors.New("unexpected InstanceConfig call")
+}
+
+func (c *fakeIncusClient) InstanceAddress(context.Context, string, string) (string, error) {
+	return "", errors.New("unexpected InstanceAddress call")
+}
+
+func (c *fakeIncusClient) ExecInstance(context.Context, string, []string, string) (incusadapter.InstanceExecResult, error) {
+	return incusadapter.InstanceExecResult{}, errors.New("unexpected ExecInstance call")
 }
 
 type fakeConfigLoader struct {
@@ -53,6 +67,13 @@ func stubHerdrClient(t *testing.T, fn func(context.Context, herdrclient.Spec, he
 	previous := executeHerdrClient
 	executeHerdrClient = fn
 	t.Cleanup(func() { executeHerdrClient = previous })
+}
+
+func stubHerdrRemote(t *testing.T, fn func(context.Context, herdrremote.Spec, herdrremote.Options, IncusClient) error) {
+	t.Helper()
+	previous := executeHerdrRemote
+	executeHerdrRemote = fn
+	t.Cleanup(func() { executeHerdrRemote = previous })
 }
 
 func stubWorkload(t *testing.T, fn func(context.Context, workload.Spec, workload.Options) error) {
@@ -534,6 +555,83 @@ func TestWorkloadUnknownNameFailsConfigurationLookup(t *testing.T) {
 		t.Fatalf("Run() code = %d, want 1", code)
 	}
 	if !strings.Contains(stderr.String(), "workloads.missing") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestHerdrAddRemoteUsesConfiguredWorkload(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	var gotSpec herdrremote.Spec
+	var gotOptions herdrremote.Options
+	stubHerdrRemote(t, func(_ context.Context, spec herdrremote.Spec, options herdrremote.Options, gotClient IncusClient) error {
+		gotSpec = spec
+		gotOptions = options
+		if gotClient != client {
+			t.Fatal("remote command did not receive Incus client")
+		}
+		return nil
+	})
+
+	code := Run(context.Background(), []string{"herdr", "add-remote", "dev", "--dry-run"}, &stdout, &stderr, client, loader)
+	if code != 0 {
+		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
+	}
+	if gotSpec.WorkloadID != "dev" || gotSpec.ClientInstance != "aginctus-herdr" || gotSpec.TargetInstance != "aginctus-dev" || gotSpec.TargetAccount != "agent" {
+		t.Fatalf("remote spec = %#v", gotSpec)
+	}
+	if !gotOptions.DryRun || gotOptions.Operation != "reconcile" {
+		t.Fatalf("remote options = %#v", gotOptions)
+	}
+	if !strings.Contains(stdout.String(), "would reconcile") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestHerdrRemoveRemoteMapsRevoke(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	var gotOptions herdrremote.Options
+	stubHerdrRemote(t, func(_ context.Context, _ herdrremote.Spec, options herdrremote.Options, _ IncusClient) error {
+		gotOptions = options
+		return nil
+	})
+
+	code := Run(context.Background(), []string{"herdr", "remove-remote", "dev"}, &stdout, &stderr, client, loader)
+	if code != 0 {
+		t.Fatalf("Run() code = %d; stderr = %q", code, stderr.String())
+	}
+	if gotOptions.Operation != "revoke" {
+		t.Fatalf("remote operation = %q", gotOptions.Operation)
+	}
+	if !strings.Contains(stdout.String(), "removed") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestHerdrRemoteRejectsForce(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	client := &fakeIncusClient{}
+
+	code := Run(context.Background(), []string{"herdr", "add-remote", "dev", "--force"}, &stdout, &stderr, client, loader)
+	if code != 2 {
+		t.Fatalf("Run() code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "--force is not supported") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }

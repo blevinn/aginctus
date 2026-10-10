@@ -10,7 +10,10 @@ import (
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
+	"github.com/blevinn/aginctus/internal/herdrremote"
+	incusadapter "github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
+	sshaccess "github.com/blevinn/aginctus/internal/orchestration/drivers/sshaccess"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -18,6 +21,9 @@ const Version = "0.0.0-dev"
 
 type IncusClient interface {
 	ServerVersion(context.Context) (string, error)
+	InstanceConfig(context.Context, string) (map[string]string, error)
+	InstanceAddress(context.Context, string, string) (string, error)
+	ExecInstance(context.Context, string, []string, string) (incusadapter.InstanceExecResult, error)
 }
 
 type ConfigLoader interface {
@@ -30,6 +36,10 @@ var executeManagementNetwork = func(ctx context.Context, spec managementnetwork.
 
 var executeHerdrClient = func(ctx context.Context, spec herdrclient.Spec, options herdrclient.Options) error {
 	return spec.Execute(ctx, options)
+}
+
+var executeHerdrRemote = func(ctx context.Context, spec herdrremote.Spec, options herdrremote.Options, incusClient IncusClient) error {
+	return spec.Execute(ctx, herdrremote.NewRuntime(incusClient), options)
 }
 
 var executeWorkload = func(ctx context.Context, spec workload.Spec, options workload.Options) error {
@@ -338,13 +348,63 @@ func runHerdr(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) == 0 || args[0] != "client" {
-		printHerdrClientUsage(stderr)
+	if len(args) == 0 {
+		printHerdrUsage(stderr)
+		return 2
+	}
+
+	if args[0] == "add-remote" || args[0] == "remove-remote" {
+		if len(args) < 2 {
+			printHerdrUsage(stderr)
+			return 2
+		}
+		workloadID := args[1]
+		options, err := parseNetworkOptions(args[2:])
+		if err != nil {
+			fmt.Fprintf(stderr, "Herdr remote options: %v\n", err)
+			return 2
+		}
+		if options.Force {
+			fmt.Fprintln(stderr, "Herdr remote options: --force is not supported")
+			return 2
+		}
+		spec, err := herdrremote.FromConfig(effective, workloadID)
+		if err != nil {
+			fmt.Fprintf(stderr, "Herdr remote %q configuration: %v\n", workloadID, err)
+			return 1
+		}
+		operation := sshaccess.Reconcile
+		if args[0] == "remove-remote" {
+			operation = sshaccess.Revoke
+		}
+		err = executeHerdrRemote(ctx, spec, herdrremote.Options{
+			DryRun:    options.DryRun,
+			Operation: operation,
+		}, incusClient)
+		if err != nil {
+			fmt.Fprintf(stderr, "Herdr remote %q: %v\n", workloadID, err)
+			return 1
+		}
+		switch {
+		case args[0] == "add-remote" && options.DryRun:
+			fmt.Fprintf(stdout, "Herdr remote %q: would reconcile\n", workloadID)
+		case args[0] == "add-remote":
+			fmt.Fprintf(stdout, "Herdr remote %q: added\n", workloadID)
+		case options.DryRun:
+			fmt.Fprintf(stdout, "Herdr remote %q: would remove\n", workloadID)
+		default:
+			fmt.Fprintf(stdout, "Herdr remote %q: removed\n", workloadID)
+		}
+		return 0
+	}
+
+	if args[0] != "client" {
+		printHerdrUsage(stderr)
 		return 2
 	}
 	args = args[1:]
 	if len(args) == 0 {
-		printHerdrClientUsage(stderr)
+		printHerdrUsage(stderr)
 		return 2
 	}
 
@@ -364,7 +424,7 @@ func runHerdr(
 	if args[0] == "teardown" {
 		operation = "delete"
 	} else if args[0] != "ensure" {
-		printHerdrClientUsage(stderr)
+		printHerdrUsage(stderr)
 		return 2
 	}
 
@@ -391,9 +451,11 @@ func runHerdr(
 	return 0
 }
 
-func printHerdrClientUsage(w io.Writer) {
+func printHerdrUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] herdr client ensure [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client teardown [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] herdr add-remote <workload> [--dry-run]")
+	fmt.Fprintln(w, "       aginctus [global options] herdr remove-remote <workload> [--dry-run]")
 }
 
 func runWorkload(
@@ -473,6 +535,8 @@ Commands:
   gateway render    Render the AI gateway Compose model
   herdr client ensure    Create, reconcile, and bootstrap the Herdr client
   herdr client teardown  Delete the Herdr client container
+  herdr add-remote NAME   Authorize a managed workload for the Herdr client
+  herdr remove-remote NAME  Revoke Herdr client access from a workload
   network ensure    Create or reconcile the configured management network
   network teardown  Delete the configured management network
   workload NAME ensure    Create or reconcile an agent workload
