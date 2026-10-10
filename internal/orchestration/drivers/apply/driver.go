@@ -46,8 +46,34 @@ func (d *Driver) SupportsDryRun() bool {
 }
 
 func (d *Driver) Validate(raw json.RawMessage) error {
-	_, err := parseConfig(raw)
-	return err
+	cfg, err := parseConfig(raw)
+	if err != nil {
+		return err
+	}
+	stream, err := renderDocuments(cfg.Documents)
+	if err != nil {
+		return err
+	}
+	client := d.newClient(clientOptions(cfg))
+	if _, err := client.Plan(bytes.NewReader(stream)); err != nil {
+		return fmt.Errorf("preflight incus-apply resources: %w", err)
+	}
+	return nil
+}
+
+func clientOptions(cfg Config) incusapply.Options {
+	operation := cfg.Operation
+	if operation == "" {
+		operation = incusapply.Upsert
+	}
+	return incusapply.Options{
+		Operation:                operation,
+		Project:                  cfg.Project,
+		FailFast:                 true,
+		RequireExistingConfig:    cfg.RequireExistingConfig,
+		RejectUnsupportedChanges: cfg.RejectUnsupportedChanges,
+		EnsureRunning:            cfg.EnsureRunning,
+	}
 }
 
 func (d *Driver) Execute(ctx context.Context, raw json.RawMessage, options orchestration.ExecuteOptions) error {
@@ -63,18 +89,7 @@ func (d *Driver) Execute(ctx context.Context, raw json.RawMessage, options orche
 		return err
 	}
 
-	operation := cfg.Operation
-	if operation == "" {
-		operation = incusapply.Upsert
-	}
-	client := d.newClient(incusapply.Options{
-		Operation:                operation,
-		Project:                  cfg.Project,
-		FailFast:                 true,
-		RequireExistingConfig:    cfg.RequireExistingConfig,
-		RejectUnsupportedChanges: cfg.RejectUnsupportedChanges,
-		EnsureRunning:            cfg.EnsureRunning,
-	})
+	client := d.newClient(clientOptions(cfg))
 
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("apply step canceled before execution: %w", err)

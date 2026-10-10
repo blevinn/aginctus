@@ -75,6 +75,8 @@ func Run(
 	switch commandArgs[0] {
 	case "doctor":
 		return runDoctor(ctx, stdout, stderr, incusClient)
+	case "images":
+		return runImages(ctx, commandArgs[1:], stdout, stderr)
 	case "config":
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
 	case "network":
@@ -466,6 +468,8 @@ Global options:
   --configuration-file=path    Load an explicit JSON configuration file
 
 Commands:
+  images list|ls    List local Incus images and aliases
+  images update NAME PATH   Safely import an image from a Nix result directory
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   doctor            Check local Incus daemon connectivity
