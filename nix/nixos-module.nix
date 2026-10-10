@@ -25,7 +25,7 @@ let
 
   aginctusCommand =
     if cfg.package == null then
-      null
+      "aginctus"
     else
       "${cfg.package}/bin/aginctus";
 
