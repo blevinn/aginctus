@@ -410,27 +410,27 @@ func TestComposeNeedsStartSkipsRunningInstance(t *testing.T) {
 
 func TestComposeDeviceAndProfileDriftRecreationDecisions(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		drift func() error
-		kind ComposeDriftKind
+		kind  ComposeDriftKind
 	}{
-		{"profile changes",func()error{
-			return detectComposeInstanceDrift(nil,[]string{"new-profile"},nil,[]string{"old-profile"})
-		},ComposeDriftProfiles},
-		{"raw device changes",func()error{
+		{"profile changes", func() error {
+			return detectComposeInstanceDrift(nil, []string{"new-profile"}, nil, []string{"old-profile"})
+		}, ComposeDriftProfiles},
+		{"raw device changes", func() error {
 			return detectComposeDeviceDrift(
-				map[string]map[string]string{"eth0":{"type":"nic","network":"new"}},
-				map[string]map[string]string{"eth0":{"type":"nic","network":"old"}})
-		},ComposeDriftDevice},
-		{"missing device",func()error{
-			return detectComposeDeviceDrift(map[string]map[string]string{"cache":{"type":"disk","path":"/cache"}},nil)
-		},ComposeDriftDevice},
+				map[string]map[string]string{"eth0": {"type": "nic", "network": "new"}},
+				map[string]map[string]string{"eth0": {"type": "nic", "network": "old"}})
+		}, ComposeDriftDevice},
+		{"missing device", func() error {
+			return detectComposeDeviceDrift(map[string]map[string]string{"cache": {"type": "disk", "path": "/cache"}}, nil)
+		}, ComposeDriftDevice},
 	}
-	for _,tc:=range tests {
-		t.Run(tc.name,func(t *testing.T){
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			var typed *ComposeDriftError
-			if err:=tc.drift(); !errors.As(err,&typed) || typed.Kind!=tc.kind {
-				t.Fatalf("expected %s drift; got %v",tc.kind,err)
+			if err := tc.drift(); !errors.As(err, &typed) || typed.Kind != tc.kind {
+				t.Fatalf("expected %s drift; got %v", tc.kind, err)
 			}
 		})
 	}
