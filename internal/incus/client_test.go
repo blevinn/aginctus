@@ -131,3 +131,39 @@ func TestSelectInstanceAddress(t *testing.T) {
 		})
 	}
 }
+
+
+func TestSelectInstanceAddressAcrossStateKeys(t *testing.T) {
+	state := map[string]api.InstanceStateNetwork{
+		"lo": {
+			Addresses: []api.InstanceStateNetworkAddress{
+				{Family: "inet", Scope: "local", Address: "127.0.0.1"},
+			},
+		},
+		"management": {
+			Addresses: []api.InstanceStateNetworkAddress{
+				{Family: "inet", Scope: "local", Address: "10.42.0.25"},
+			},
+		},
+	}
+
+	if network, ok := state["eth0"]; ok {
+		if _, ok := selectInstanceAddress(network.Addresses); ok {
+			t.Fatal("unexpected eth0 address")
+		}
+	}
+
+	var got string
+	for key, network := range state {
+		if key == "eth0" {
+			continue
+		}
+		if address, ok := selectInstanceAddress(network.Addresses); ok {
+			got = address
+			break
+		}
+	}
+	if got != "10.42.0.25" {
+		t.Fatalf("fallback address = %q, want %q", got, "10.42.0.25")
+	}
+}
