@@ -123,7 +123,7 @@ var defaults = map[string]any{
 			"project": "aginctus-gateway",
 		},
 		"images": map[string]any{
-			"litellm":  "ghcr.io/berriai/litellm:v1.103.0-stable",
+			"litellm":  "ghcr.io/berriai/litellm:v1.103.0",
 			"postgres": "docker.io/library/postgres:17-alpine",
 		},
 	},
