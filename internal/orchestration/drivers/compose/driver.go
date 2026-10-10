@@ -168,9 +168,27 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	}
 
 	runOptions := []composeclient.Option{composeclient.OptionCreate()}
+	// Instance resources depend on images, networks, profiles and volumes.
+	// Ensure prerequisites across *all* services before proceeding through
+	// the service dependency order; per-service stacks otherwise try to
+	// create an instance while its image has not yet been ensured.
+	prerequisites := composeclient.NewStack(c, composeclient.StackWorkers(1), composeclient.StackFailFast())
+	for _, service := range order {
+		for _, resource := range resources[service] {
+			if resource.Priority() < composeclient.PriorityInstance {
+				prerequisites.Add(resource)
+			}
+		}
+	}
+	if err := prerequisites.ForAction(composeclient.ActionEnsure).Run(ctx, composeclient.ActionEnsure, runOptions...); err != nil {
+		return fmt.Errorf("compose project %q ensure prerequisites: %w", p.Name, err)
+	}
 	for _, action := range []composeclient.Action{composeclient.ActionEnsure, composeclient.ActionStart} {
 		if err := runComposeServicesSequentially(ctx, order, func(service string) error {
 			for _, resource := range resources[service] {
+				if action == composeclient.ActionEnsure && resource.Priority() < composeclient.PriorityInstance {
+					continue // already ensured in the prerequisite pass
+				}
 				if action == composeclient.ActionStart && !resource.IsEnsured() {
 					continue
 				}
