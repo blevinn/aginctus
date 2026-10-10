@@ -168,3 +168,15 @@ func TestComposeClientConstructionRejectsConnectionError(t *testing.T) {
 		t.Fatalf("newComposeGlobalClient() = %v, %v", client, err)
 	}
 }
+
+func TestExplainComposeConnectionError(t *testing.T) {
+	err := errors.New("the incus server is not listening on the network (core.https_address is not set)")
+	got := explainComposeConnectionError(err)
+	if !errors.Is(got, err) || !strings.Contains(got.Error(), "incus config get core.https_address") {
+		t.Fatalf("missing actionable connection diagnostic: %v", got)
+	}
+	other := errors.New("unrelated connection failure")
+	if got := explainComposeConnectionError(other); got != other {
+		t.Fatalf("unrelated error altered: %v", got)
+	}
+}
