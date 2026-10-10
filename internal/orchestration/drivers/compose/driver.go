@@ -135,7 +135,6 @@ func verifyComposeProjectOwnership(config map[string]string, project string) err
 	expected := map[string]string{
 		ownershipManagedKey: "true",
 		ownershipResourceKey: "compose-project",
-			ownershipDeploymentKey: name,
 		ownershipDeploymentKey: project,
 	}
 	for key, want := range expected {
@@ -248,6 +247,7 @@ func loadProject(ctx context.Context, name, path string, environment map[string]
 		composeproject.LoadProjectMarks(map[string]string{
 			ownershipManagedKey:  "true",
 			ownershipResourceKey: "compose-project",
+			ownershipDeploymentKey: name,
 		}),
 	}
 	if len(environment) > 0 {
