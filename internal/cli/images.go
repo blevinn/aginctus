@@ -69,19 +69,32 @@ func runImages(ctx context.Context, args []string, stdout, stderr io.Writer) int
 }
 
 func imageArtifact(dir, subdir, extension string) (string, error) {
-	matches, err := filepath.Glob(filepath.Join(dir, subdir, "*"+extension))
+	root, err := filepath.EvalSymlinks(filepath.Join(dir, subdir))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("resolve image %s artifact: %w", subdir, err)
 	}
+	info, err := os.Stat(root)
+	if err != nil { return "", err }
+	// Nix image outputs often expose rootfs and metadata as symlinks directly
+	// to store files, not as directories containing those files.
+	if info.Mode().IsRegular() {
+		if !strings.HasSuffix(root, extension) {
+			return "", fmt.Errorf("image %s artifact %q does not end in %s", subdir, root, extension)
+		}
+		return root, nil
+	}
+	if !info.IsDir() { return "", fmt.Errorf("image %s artifact is neither a file nor a directory", subdir) }
+	var matches []string
+	err = filepath.Walk(root, func(path string, entry os.FileInfo, walkErr error) error {
+		if walkErr != nil { return walkErr }
+		if entry.Mode().IsRegular() && strings.HasSuffix(path, extension) {
+			matches = append(matches, path)
+		}
+		return nil
+	})
+	if err != nil { return "", err }
 	if len(matches) != 1 {
-		return "", fmt.Errorf("expected exactly one %s artifact in %s", extension, filepath.Join(dir, subdir))
-	}
-	info, err := os.Stat(matches[0])
-	if err != nil {
-		return "", err
-	}
-	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("image artifact is not a regular file")
+		return "", fmt.Errorf("expected exactly one %s artifact under %s, found %d", extension, root, len(matches))
 	}
 	return matches[0], nil
 }
