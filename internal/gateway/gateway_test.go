@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"sigs.k8s.io/yaml"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -242,6 +243,47 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 		renderJSON, _ := json.MarshalIndent(renderModel, "", "  ")
 		deployJSON, _ := json.MarshalIndent(config.Compose, "", "  ")
 		t.Fatalf("render and deploy Compose models differ:\\nrender=%s\\ndeploy=%s", renderJSON, deployJSON)
+	}
+}
+
+func TestInitializeRuntimeEnvironmentConcurrentFirstUse(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	for _, name := range requiredRuntimeEnvironment {
+		t.Setenv(name, "")
+	}
+	const callers = 24
+	var wg sync.WaitGroup
+	begin := make(chan struct{})
+	results := make([]map[string]string, callers)
+	errs := make([]error, callers)
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-begin
+			results[i], errs[i] = (Spec{ID: "concurrent"}).InitializeRuntimeEnvironment()
+		}(i)
+	}
+	close(begin)
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("caller %d failed: %v", i, err)
+		}
+		for _, key := range requiredRuntimeEnvironment {
+			if results[i][key] == "" || results[i][key] != results[0][key] {
+				t.Fatalf("caller %d got divergent value for %s", i, key)
+			}
+		}
+	}
+	persisted, err := (Spec{ID: "concurrent"}).InitializeRuntimeEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range requiredRuntimeEnvironment {
+		if persisted[key] != results[0][key] {
+			t.Fatalf("persisted %s differs from concurrent result", key)
+		}
 	}
 }
 

@@ -135,7 +135,144 @@ func (s Spec) RenderCompose() (string, error) {
 	return out.String(), nil
 }
 
-var safeGatewaySecret = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+var safeGatewaySecret = regexp.MustCompile(`^[A-Za-z0-9_-]+package gateway
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"syscall"
+	"text/template"
+
+	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/orchestration"
+	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
+	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
+)
+
+type Spec struct {
+	ID                 string
+	Project            string
+	Network            string
+	NetworkIPv4Address string
+	NetworkIPv4NAT     bool
+	NetworkIPv4Routing bool
+	NetworkIPv6Address string
+	LiteLLMImage       string
+	PostgresImage      string
+}
+
+func FromConfig(effective *config.Config) (Spec, error) {
+	spec := Spec{}
+	keys := []struct {
+		path string
+		dst  *string
+	}{
+		{"gateway.id", &spec.ID},
+		{"gateway.compose.project", &spec.Project},
+		{"incus.management.network.name", &spec.Network},
+		{"incus.management.network.ipv4.address", &spec.NetworkIPv4Address},
+		{"incus.management.network.ipv6.address", &spec.NetworkIPv6Address},
+		{"gateway.images.litellm", &spec.LiteLLMImage},
+		{"gateway.images.postgres", &spec.PostgresImage},
+	}
+
+	for _, key := range keys {
+		value, err := effective.String(key.path)
+		if err != nil {
+			return Spec{}, err
+		}
+		*key.dst = value
+	}
+
+	var err error
+	spec.NetworkIPv4NAT, err = effective.Bool("incus.management.network.ipv4.nat")
+	if err != nil {
+		return Spec{}, err
+	}
+	spec.NetworkIPv4Routing, err = effective.Bool("incus.management.network.ipv4.routing")
+	if err != nil {
+		return Spec{}, err
+	}
+
+	if err := spec.Validate(); err != nil {
+		return Spec{}, err
+	}
+	return spec, nil
+}
+
+var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+
+func (s Spec) Validate() error {
+	switch {
+	case !gatewayIDPattern.MatchString(s.ID):
+		return fmt.Errorf("gateway id %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.ID)
+	case s.Project == "":
+		return fmt.Errorf("gateway compose project must not be empty")
+	case s.Network == "":
+		return fmt.Errorf("gateway management network must not be empty")
+	case s.LiteLLMImage == "":
+		return fmt.Errorf("LiteLLM image must not be empty")
+	case s.PostgresImage == "":
+		return fmt.Errorf("PostgreSQL image must not be empty")
+	default:
+		return nil
+	}
+}
+
+var composeTemplate = template.Must(template.New("gateway-compose").Parse(`name: {{.Project}}
+services:
+  postgres:
+    image: {{.PostgresImage}}
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}
+    volumes:
+      - gateway-postgres:/var/lib/postgresql/data
+    networks:
+      - management
+
+  litellm:
+    image: {{.LiteLLMImage}}
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://litellm:${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}@postgres:5432/litellm
+      LITELLM_MASTER_KEY: ${AGINCTUS_GATEWAY_MASTER_KEY}
+      LITELLM_SALT_KEY: ${AGINCTUS_GATEWAY_SALT_KEY}
+      STORE_MODEL_IN_DB: "True"
+    networks:
+      - management
+
+volumes:
+  gateway-postgres: {}
+
+networks:
+  management:
+    external: true
+    name: {{.Network}}
+`))
+
+func (s Spec) RenderCompose() (string, error) {
+	if err := s.Validate(); err != nil {
+		return "", err
+	}
+	var out bytes.Buffer
+	if err := composeTemplate.Execute(&out, s); err != nil {
+		return "", fmt.Errorf("render gateway compose: %w", err)
+	}
+	return out.String(), nil
+}
+
+)
 
 var requiredRuntimeEnvironment = []string{
 	"AGINCTUS_GATEWAY_POSTGRES_PASSWORD",
@@ -185,6 +322,17 @@ func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
 		return nil, fmt.Errorf("protect gateway state directory: %w", err)
 	}
 
+	// Hold a per-gateway interprocess lock across secret initialization and publication.
+	lockFile, err := os.OpenFile(filepath.Join(dir, ".secrets.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open gateway initialization lock: %w", err)
+	}
+	defer lockFile.Close()
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		return nil, fmt.Errorf("lock gateway initialization: %w", err)
+	}
+	defer syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+
 	path := filepath.Join(dir, "secrets.json")
 	values := map[string]string{}
 	if data, err := readSecretState(path); err == nil {
@@ -212,8 +360,6 @@ func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
 		changed = true
 	}
 
-	// Restrict seeded credentials to strings that survive Compose dotenv interpolation
-	// and the gateway database URI without reinterpretation.
 	for _, name := range requiredRuntimeEnvironment {
 		if !safeGatewaySecret.MatchString(values[name]) {
 			return nil, fmt.Errorf("%s contains unsupported characters: use only ASCII letters, digits, underscore or hyphen", name)
