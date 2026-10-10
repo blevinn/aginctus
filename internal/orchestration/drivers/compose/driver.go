@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
 	composeclient "github.com/lxc/incus-compose/client"
 	"github.com/lxc/incus-compose/iclient"
 	composeproject "github.com/lxc/incus-compose/project"
+	"github.com/lxc/incus/v7/shared/api"
 
 	"github.com/blevinn/aginctus/internal/orchestration"
 )
@@ -18,6 +20,7 @@ import (
 const (
 	ownershipManagedKey  = "user.aginctus.managed"
 	ownershipResourceKey = "user.aginctus.resource"
+	ownershipDeploymentKey = "user.aginctus.deployment"
 )
 
 type Config struct {
@@ -128,6 +131,21 @@ func isComposePrerequisite(priority int) bool {
 	return priority < composeclient.PriorityInstance
 }
 
+func verifyComposeProjectOwnership(config map[string]string, project string) error {
+	expected := map[string]string{
+		ownershipManagedKey: "true",
+		ownershipResourceKey: "compose-project",
+			ownershipDeploymentKey: name,
+		ownershipDeploymentKey: project,
+	}
+	for key, want := range expected {
+		if config[key] != want {
+			return fmt.Errorf("compose project %q is not owned by this deployment: %s ownership marker missing or mismatched; refusing adoption", project, key)
+		}
+	}
+	return nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -146,6 +164,15 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	}
 	if err := global.Connect(); err != nil {
 		return fmt.Errorf("connect incus-compose client: %w", explainComposeConnectionError(err))
+	}
+
+	connection, err := global.Connection()
+	if err != nil { return fmt.Errorf("inspect Compose project ownership: %w", err) }
+	existing, _, err := connection.GetProject(ctx, composeclient.SanitizeProjectName(p.Name))
+	if err == nil {
+		if err := verifyComposeProjectOwnership(existing.Config, p.Name); err != nil { return err }
+	} else if !api.StatusErrorCheck(err, http.StatusNotFound) {
+		return fmt.Errorf("inspect Compose project %q: %w", p.Name, err)
 	}
 
 	c, err := global.EnsureProject(
