@@ -3,6 +3,8 @@ package compose
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"github.com/lxc/incus-compose/iclient"
 	"strings"
 	"testing"
 
@@ -78,5 +80,29 @@ func TestExecuteRejectsDryRun(t *testing.T) {
 	}`), orchestration.ExecuteOptions{DryRun: true})
 	if err == nil || !strings.Contains(err.Error(), "does not support dry-run") {
 		t.Fatalf("Execute() error = %v, want dry-run capability error", err)
+	}
+}
+
+func TestComposeClientConstructionProvidesLocalConnection(t *testing.T) {
+	var called bool
+	client, err := newComposeGlobalClient(context.Background(), func(info *iclient.ConfigRemoteInfo) (*iclient.Connection, error) {
+		called = true
+		if info.Name != "local" || len(info.Addrs) != 1 || info.Addrs[0] != "unix://" {
+			t.Fatalf("unexpected connection info: %#v", info)
+		}
+		return iclient.NewConnection(info)
+	})
+	if err != nil || !called || client == nil {
+		t.Fatalf("newComposeGlobalClient() = %v, %v, called=%t", client, err, called)
+	}
+}
+
+func TestComposeClientConstructionRejectsConnectionError(t *testing.T) {
+	want := errors.New("unavailable socket")
+	client, err := newComposeGlobalClient(context.Background(), func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error) {
+		return nil, want
+	})
+	if client != nil || !errors.Is(err, want) {
+		t.Fatalf("newComposeGlobalClient() = %v, %v", client, err)
 	}
 }
