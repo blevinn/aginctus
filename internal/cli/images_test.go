@@ -66,3 +66,19 @@ func TestImageUpdateRejectsInvalidInputBeforeIncus(t *testing.T) {
 		}
 	}
 }
+
+func TestImageArtifactResolvesNixSymlinkedFiles(t *testing.T) {
+	dir := t.TempDir()
+	store := filepath.Join(t.TempDir(), "store")
+	if err := os.MkdirAll(store, 0o700); err != nil { t.Fatal(err) }
+	for _, artifact := range []struct{ name, file, suffix string }{
+		{"metadata", "image.tar.xz", ".tar.xz"},
+		{"rootfs", "image.squashfs", ".squashfs"},
+	} {
+		p := filepath.Join(store, artifact.file)
+		if err := os.WriteFile(p, []byte("image"), 0o600); err != nil { t.Fatal(err) }
+		if err := os.Symlink(p, filepath.Join(dir, artifact.name)); err != nil { t.Fatal(err) }
+		got, err := imageArtifact(dir, artifact.name, artifact.suffix)
+		if err != nil || got != p { t.Fatalf("%s got=%q err=%v", artifact.name, got, err) }
+	}
+}
