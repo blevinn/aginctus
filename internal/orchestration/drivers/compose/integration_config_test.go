@@ -23,7 +23,7 @@ func TestIncusComposeConfigurationIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	name := fmt.Sprintf("aginctus-config-it-%d", time.Now().UnixNano())
-	t.Logf("retaining project %q for manual cleanup", name)
+	t.Logf("retaining project %q", name)
 	integrationProjectCleanup(t, name)
 	doc := func(envValue, cmdValue string) []byte {
 		return []byte(fmt.Sprintf(`services:
