@@ -13,7 +13,10 @@ test:
 vet:
     go vet ./...
 
-check: test vet
+check: test vet modules
+
+modules:
+    bash scripts/check-go-modules.sh
 
 herdr-client-image-update:
     just build herdr-client
