@@ -21,8 +21,8 @@ case "$1 $2 $3" in
     done
     ;;
   "image alias rename")
-    if [[ "${FAIL_PROMOTION:-}" == "1" && "$4" == "working" && "$3" == *-staged-* ]]; then exit 1; fi
-    mv "$MOCK_DIR/$3" "$MOCK_DIR/$4"
+    if [[ "${FAIL_PROMOTION:-}" == "1" && "$5" == "working" && "$4" == *-staged-* ]]; then exit 1; fi
+    mv "$MOCK_DIR/$4" "$MOCK_DIR/$5"
     ;;
   "image alias delete")
     rm -f "$MOCK_DIR/$4"
