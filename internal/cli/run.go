@@ -85,6 +85,8 @@ func Run(
 	}
 
 	switch commandArgs[0] {
+	case "remove":
+		return runAggregateRemove(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "status":
 		return runAggregateStatus(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "apply":
@@ -665,6 +667,7 @@ Global options:
   --configuration-file=path    Load an explicit JSON configuration file
 
 Commands:
+  remove            Remove configured resources in reverse dependency order
   status            Inspect all configured resource groups
   apply             Deploy the complete configured orchestration
   apply --render    Print one deterministic JSON orchestration plan (no mutation)
