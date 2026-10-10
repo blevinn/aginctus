@@ -142,16 +142,27 @@ func (c *Client) InstanceAddress(ctx context.Context, name, interfaceName string
 	if err != nil {
 		return "", fmt.Errorf("get instance %q state: %w", name, err)
 	}
-	network, ok := state.Network[interfaceName]
-	if !ok {
-		return "", fmt.Errorf("instance %q has no network interface %q", name, interfaceName)
+	if network, ok := state.Network[interfaceName]; ok {
+		if address, ok := selectInstanceAddress(network.Addresses); ok {
+			return address, nil
+		}
 	}
 
-	address, ok := selectInstanceAddress(network.Addresses)
-	if !ok {
-		return "", fmt.Errorf("instance %q interface %q has no usable unicast address", name, interfaceName)
+	// Incus state keys are not guaranteed to match the guest-visible NIC name.
+	// If the requested key is absent (or has no address), fall back to the
+	// remaining reported interfaces. Loopback/link-local addresses are filtered
+	// by selectInstanceAddress, so this remains safe for the single managed NIC
+	// used by Aginctus workloads.
+	for key, network := range state.Network {
+		if key == interfaceName {
+			continue
+		}
+		if address, ok := selectInstanceAddress(network.Addresses); ok {
+			return address, nil
+		}
 	}
-	return address, nil
+
+	return "", fmt.Errorf("instance %q has no usable unicast address in reported network state", name)
 }
 
 func selectInstanceAddress(addresses []api.InstanceStateNetworkAddress) (string, bool) {
