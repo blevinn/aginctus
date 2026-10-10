@@ -2,8 +2,8 @@ package compose
 
 import (
 	"context"
-	composeclient "github.com/lxc/incus-compose/client"
 	"errors"
+	composeclient "github.com/lxc/incus-compose/client"
 	"reflect"
 	"strings"
 	"testing"
@@ -147,32 +147,40 @@ func TestVerifyComposeRecreationVolumesRejectsAmbiguousExistingDisk(t *testing.T
 }
 
 func TestRetainedVolumeIdentityRejectsChangedOrMissingDisks(t *testing.T) {
-	old:=map[string]map[string]string{"data":{"type":"disk","path":"/data","pool":"default","source":"pg-data"}}
-	good:=map[string]map[string]string{"data":{"type":"disk","path":"/data","pool":"default","source":"pg-data"}}
-	if err:=verifyComposeRecreationVolumes(old,good);err!=nil{t.Fatal(err)}
-	for name, replacement:=range map[string]map[string]map[string]string{
-		"removed":{},
-		"rebound":{"data":{"type":"disk","path":"/data","pool":"default","source":"other"}},
-		"moved":{"data":{"type":"disk","path":"/elsewhere","pool":"default","source":"pg-data"}},
+	old := map[string]map[string]string{"data": {"type": "disk", "path": "/data", "pool": "default", "source": "pg-data"}}
+	good := map[string]map[string]string{"data": {"type": "disk", "path": "/data", "pool": "default", "source": "pg-data"}}
+	if err := verifyComposeRecreationVolumes(old, good); err != nil {
+		t.Fatal(err)
+	}
+	for name, replacement := range map[string]map[string]map[string]string{
+		"removed": {},
+		"rebound": {"data": {"type": "disk", "path": "/data", "pool": "default", "source": "other"}},
+		"moved":   {"data": {"type": "disk", "path": "/elsewhere", "pool": "default", "source": "pg-data"}},
 	} {
-		t.Run(name,func(t *testing.T) {
-			if err:=verifyComposeRecreationVolumes(old,replacement);err==nil{t.Fatal("unsafe recreation permitted")}
+		t.Run(name, func(t *testing.T) {
+			if err := verifyComposeRecreationVolumes(old, replacement); err == nil {
+				t.Fatal("unsafe recreation permitted")
+			}
 		})
 	}
 }
 func TestRetainedVolumeRecreationChecksBeforeMutations(t *testing.T) {
-	called:=false
-	fn:=func(context.Context)error{called=true;return nil}
-	err:=recreateWithRetainedVolumes(context.Background(),
-		map[string]map[string]string{"data":{"type":"disk","path":"/data","pool":"default","source":"old"}},
-		map[string]map[string]string{"data":{"type":"disk","path":"/data","pool":"default","source":"new"}},
-		fn,fn,fn,fn)
-	if err==nil || called {t.Fatalf("error=%v called=%t",err,called)}
+	called := false
+	fn := func(context.Context) error { called = true; return nil }
+	err := recreateWithRetainedVolumes(context.Background(),
+		map[string]map[string]string{"data": {"type": "disk", "path": "/data", "pool": "default", "source": "old"}},
+		map[string]map[string]string{"data": {"type": "disk", "path": "/data", "pool": "default", "source": "new"}},
+		fn, fn, fn, fn)
+	if err == nil || called {
+		t.Fatalf("error=%v called=%t", err, called)
+	}
 }
 func TestMaterializeComposeRawDevices(t *testing.T) {
-	config:=composeclient.InstanceConfig{ExtraDevices:map[string]map[string]string{
-		"data":{"type":"disk","pool":"default","path":"/data","source":"pg-data"},
+	config := composeclient.InstanceConfig{ExtraDevices: map[string]map[string]string{
+		"data": {"type": "disk", "pool": "default", "path": "/data", "source": "pg-data"},
 	}}
-	m,err:=materializeComposeDevices(config)
-	if err!=nil || m["data"]["source"]!="pg-data" {t.Fatalf("devices=%v error=%v",m,err)}
+	m, err := materializeComposeDevices(config)
+	if err != nil || m["data"]["source"] != "pg-data" {
+		t.Fatalf("devices=%v error=%v", m, err)
+	}
 }

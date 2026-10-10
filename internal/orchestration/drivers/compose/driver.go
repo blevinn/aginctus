@@ -26,9 +26,9 @@ const (
 )
 
 type Config struct {
-	Project string          `json:"project"`
-	Compose json.RawMessage `json:"compose"`
-	RecreateOnDrift bool `json:"recreateOnDrift,omitempty"`
+	Project         string          `json:"project"`
+	Compose         json.RawMessage `json:"compose"`
+	RecreateOnDrift bool            `json:"recreateOnDrift,omitempty"`
 }
 
 type Driver struct {
@@ -376,10 +376,10 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 				if err == nil {
 					if err := detectComposeImageFingerprintDrift(alias.Target, existing.Config["volatile.base_image"]); err != nil {
 						if cfg.RecreateOnDrift {
-						recreationCandidates[instance.IncusName()] = true
-					} else {
-						return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
-					}
+							recreationCandidates[instance.IncusName()] = true
+						} else {
+							return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+						}
 					}
 				} else if !api.StatusErrorCheck(err, http.StatusNotFound) {
 					return fmt.Errorf("inspect image alias for service %q: %w", service, err)
@@ -390,17 +390,17 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 			}
 			if err := detectComposeInstanceDrift(instance.Config.Extensions, instance.Config.Profiles, existing.Config, existing.Profiles); err != nil {
 				if cfg.RecreateOnDrift {
-						recreationCandidates[instance.IncusName()] = true
-					} else {
-						return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
-					}
+					recreationCandidates[instance.IncusName()] = true
+				} else {
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				}
 			}
 			if err := detectComposeDeviceDrift(instance.Config.ExtraDevices, existing.Devices); err != nil {
 				if cfg.RecreateOnDrift {
-						recreationCandidates[instance.IncusName()] = true
-					} else {
-						return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
-					}
+					recreationCandidates[instance.IncusName()] = true
+				} else {
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				}
 			}
 		}
 	}
@@ -454,10 +454,10 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 			}
 			if err := verifyComposeEnsuredImage(image.IncusName(), existing.Config["user.image_alias"], alias.Target, existing.Config["volatile.base_image"]); err != nil {
 				if cfg.RecreateOnDrift {
-						recreationCandidates[instance.IncusName()] = true
-					} else {
-						return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
-					}
+					recreationCandidates[instance.IncusName()] = true
+				} else {
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), explainComposeRecreationSafety(err, existing.Devices))
+				}
 			}
 		}
 	}
@@ -468,18 +468,26 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	for _, service := range order {
 		for _, resource := range resources[service] {
 			instance, ok := resource.(*composeclient.Instance)
-			if !ok || !recreationCandidates[instance.IncusName()] { continue }
+			if !ok || !recreationCandidates[instance.IncusName()] {
+				continue
+			}
 			name := instance.IncusName()
 			project := composeclient.SanitizeProjectName(p.Name)
 			current, _, err := connection.GetInstance(ctx, project, name, nil)
-			if err != nil { return fmt.Errorf("fetch instance for recreation: %w", err) }
+			if err != nil {
+				return fmt.Errorf("fetch instance for recreation: %w", err)
+			}
 			recheck := func(ctx context.Context) error {
 				v, _, err := connection.GetInstance(ctx, project, name, nil)
-				if err != nil { return err }
+				if err != nil {
+					return err
+				}
 				return verifyComposeInstanceOwnership(v.Config, p.Name, name)
 			}
 			desiredDevices, err := materializeComposeDevices(instance.Config)
-			if err != nil { return fmt.Errorf("materialize replacement devices for %q: %w", name, err) }
+			if err != nil {
+				return fmt.Errorf("materialize replacement devices for %q: %w", name, err)
+			}
 			if err := verifyComposeRecreationVolumes(current.Devices, desiredDevices); err != nil {
 				return fmt.Errorf("recreate Compose instance %q: %w", name, err)
 			}
@@ -490,13 +498,17 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 			}
 			err = recreateWithRetainedVolumes(ctx, current.Devices, desiredDevices, recheck,
 				func(ctx context.Context) error {
-					if !instance.Running() { return nil }
+					if !instance.Running() {
+						return nil
+					}
 					return instance.Stop(ctx)
 				},
 				func(ctx context.Context) error { return instance.Delete(ctx) },
 				func(ctx context.Context) error { return instance.Ensure(ctx, composeclient.OptionCreate()) },
 			)
-			if err != nil { return fmt.Errorf("recreate Compose instance %q: %w", name, err) }
+			if err != nil {
+				return fmt.Errorf("recreate Compose instance %q: %w", name, err)
+			}
 		}
 	}
 
