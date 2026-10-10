@@ -310,7 +310,7 @@ func TestDetectComposeDeviceDrift(t *testing.T) {
 func TestDetectComposeImageDrift(t *testing.T) {
 	cases := []struct {
 		name, want, got string
-		drift bool
+		drift           bool
 	}{
 		{name: "same image", want: "docker.io/library/postgres:17-alpine", got: "docker.io/library/postgres:17-alpine"},
 		{name: "changed tag", want: "docker.io/library/postgres:18-alpine", got: "docker.io/library/postgres:17-alpine", drift: true},

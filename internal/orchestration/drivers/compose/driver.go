@@ -197,7 +197,9 @@ func detectComposeDeviceDrift(desired, actual map[string]map[string]string) erro
 // Comparing resolved Incus names avoids treating equivalent normalized OCI
 // references as different while preserving a fail-closed result on drift.
 func detectComposeImageDrift(want, got string) error {
-	if want == "" { return nil }
+	if want == "" {
+		return nil
+	}
 	if got == "" {
 		return fmt.Errorf("existing instance has no image alias marker; cannot verify image convergence without recreation")
 	}
