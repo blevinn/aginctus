@@ -2,10 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 mod build '.just/build.just'
 mod update '.just/update.just'
-
-# `just fmt` runs both formatters; pass `go` or `nix` to select one.
-fmt target="all":
-    @case "{{target}}" in go) gofmt -w cmd internal ;; nix) nix fmt ;; all) gofmt -w cmd internal; nix fmt ;; *) echo "unknown formatter: {{target}} (expected go or nix)" >&2; exit 2 ;; esac
+mod fmt '.just/fmt.just'
 
 test:
     go test ./...
