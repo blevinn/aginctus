@@ -29,7 +29,7 @@ func TestIncusComposeRecoveryIntegration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	defer cancel()
 	project := fmt.Sprintf("aginctus-recovery-it-%d", time.Now().UnixNano())
-	t.Logf("retaining test project %q for manual inspection and cleanup", project)
+	t.Logf("retaining test project %q", project)
 	integrationProjectCleanup(t, project)
 	doc := func(command string) []byte {
 		return []byte(fmt.Sprintf(`services:
