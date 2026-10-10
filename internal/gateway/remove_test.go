@@ -94,3 +94,17 @@ func TestRemoveGatewayFailurePreventsWrites(t *testing.T) {
 		t.Fatalf("failure = %v, mutations = %d", err, writes)
 	}
 }
+
+func TestGatewayServiceNameIncusComposeNaming(t *testing.T) {
+	project := "aginctus-gateway"
+	for _, name := range []string{"litellm-1", "postgres-1", "litellm-2", "postgres-12", "aginctus-gateway-litellm-1", "aginctus-gateway-postgres-1"} {
+		if !gatewayServiceName(project, name) {
+			t.Errorf("valid gateway service %q rejected", name)
+		}
+	}
+	for _, name := range []string{"unrelated-1", "litellm-backup-1", "postgres-data", "litellm-1-backup", "litellm-0", "postgres-xyz", "some-other-project-postgres-1"} {
+		if gatewayServiceName(project, name) {
+			t.Errorf("unexpected instance %q accepted", name)
+		}
+	}
+}
