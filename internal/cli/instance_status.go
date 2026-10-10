@@ -127,3 +127,35 @@ func runWorkloadStatus(ctx context.Context, args []string, out, stderr io.Writer
 	}
 	return 0
 }
+
+func runActiveWorkloadList(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
+	if len(args) != 0 {
+		fmt.Fprintln(stderr, "Usage: aginctus workload ls")
+		return 2
+	}
+	instances, err := statusInstances(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "list active workloads: %v\n", err)
+		return 1
+	}
+	var active []string
+	for _, id := range workloadIDs(cfg) {
+		spec, err := workload.FromConfig(cfg, id)
+		if err != nil {
+			fmt.Fprintf(stderr, "workload %q configuration: %v\n", id, err)
+			return 1
+		}
+		state, err := findManagedInstance(instances, spec.Name, "workload", "agent-workload", spec.ID)
+		if err != nil {
+			fmt.Fprintf(stderr, "workload %q: %v\n", id, err)
+			return 1
+		}
+		if strings.EqualFold(state, "running") {
+			active = append(active, id)
+		}
+	}
+	for _, id := range active {
+		fmt.Fprintln(out, id)
+	}
+	return 0
+}

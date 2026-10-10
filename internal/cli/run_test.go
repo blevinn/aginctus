@@ -638,6 +638,12 @@ func TestWorkloadListAndApplyAll(t *testing.T) {
 	loader.Environment = nil
 	client := &fakeIncusClient{}
 
+	original := inspectIncusInstances
+	t.Cleanup(func() { inspectIncusInstances = original })
+	inspectIncusInstances = func(context.Context) ([]byte, error) {
+		return []byte(`[{"name":"aginctus-alpha","status":"Running","config":{"user.aginctus.managed":"true","user.aginctus.resource":"workload","user.aginctus.role":"agent-workload","user.aginctus.workload":"alpha"}},{"name":"aginctus-dev","status":"Stopped","config":{"user.aginctus.managed":"true","user.aginctus.resource":"workload","user.aginctus.role":"agent-workload","user.aginctus.workload":"dev"}}]`), nil
+	}
+
 	var stdout, stderr bytes.Buffer
 	if code := Run(
 		context.Background(),
@@ -653,7 +659,7 @@ func TestWorkloadListAndApplyAll(t *testing.T) {
 	); code != 0 {
 		t.Fatalf("workload ls code = %d; stderr = %q", code, stderr.String())
 	}
-	if got := stdout.String(); got != "alpha\ndev\n" {
+	if got := stdout.String(); got != "alpha\n" {
 		t.Fatalf("workload ls output = %q", got)
 	}
 
