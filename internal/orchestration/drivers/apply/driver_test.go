@@ -228,3 +228,41 @@ func TestPreflightRejectsInvalidLaterApplyBeforeFirstMutation(t *testing.T) {
 		t.Fatal("not all Apply steps were planned before execution")
 	}
 }
+
+type cancellationApplyClient struct {
+	cancel context.CancelFunc
+	planned bool
+	executed bool
+}
+func (c *cancellationApplyClient) Plan(io.Reader) (incusapply.Preview, error) {
+	c.planned = true
+	c.cancel()
+	return incusapply.Preview{}, nil
+}
+func (c *cancellationApplyClient) Execute(io.Reader) (incusapply.Result, error) {
+	c.executed = true
+	c.cancel()
+	return incusapply.Result{}, nil
+}
+
+func TestApplyReturnsCancellationAfterNativeExecution(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	client := &cancellationApplyClient{cancel: cancel}
+	driver := New()
+	driver.newClient = func(incusapply.Options) applyClient { return client }
+	err := driver.Execute(ctx, json.RawMessage(`{"documents":[{"kind":"network","name":"example"}]}`), orchestration.ExecuteOptions{})
+	if !errors.Is(err, context.Canceled) || !client.executed {
+		t.Fatalf("native cancellation: err=%v executed=%t", err, client.executed)
+	}
+}
+
+func TestApplyReturnsCancellationAfterNativePlanning(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	client := &cancellationApplyClient{cancel: cancel}
+	driver := New()
+	driver.newClient = func(incusapply.Options) applyClient { return client }
+	err := driver.Execute(ctx, json.RawMessage(`{"documents":[{"kind":"network","name":"example"}]}`), orchestration.ExecuteOptions{DryRun:true})
+	if !errors.Is(err, context.Canceled) || !client.planned || client.executed {
+		t.Fatalf("planning cancellation: err=%v planned=%t executed=%t", err, client.planned, client.executed)
+	}
+}
