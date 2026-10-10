@@ -211,5 +211,5 @@ func readAggregatePlan(path string) (orchestration.Plan, error) {
 	if len(data) > 16<<20 {
 		return orchestration.Plan{}, fmt.Errorf("orchestration input exceeds 16 MiB")
 	}
-	return orchestration.ParsePlan(data)
+	return orchestration.ParsePlanStream(data)
 }
