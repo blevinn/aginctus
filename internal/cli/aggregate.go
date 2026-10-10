@@ -1,14 +1,14 @@
 package cli
 
 import (
-	"encoding/json"
 	"context"
-	"os"
-	"strings"
+	"encoding/json"
+	"fmt"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
-	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
