@@ -42,17 +42,22 @@ func planComposeRecreation(drift *ComposeDriftError, devices map[string]map[stri
 	return plan, nil
 }
 
+func rejectPersistentDisks(existingDevices map[string]map[string]string) error {
+	for name, device := range existingDevices {
+		if device["type"] == "disk" && device["path"] != "/" {
+			return fmt.Errorf("refuse automatic recreation: instance disk %q requires persistent-storage migration", name)
+		}
+	}
+	return nil
+}
+
 // recreateWithoutPersistentDisks performs a deliberately restricted replacement
 // lifecycle. The caller is responsible for checking exact ownership both during
 // preflight and again immediately before invoking it. It never requests volume
 // deletion. No action is taken unless no non-root disks are attached.
 func recreateWithoutPersistentDisks(ctx context.Context, existingDevices map[string]map[string]string, recheckOwnership, stop, remove, create func(context.Context) error) error {
 	if err := ctx.Err(); err != nil { return err }
-	for name, device := range existingDevices {
-		if device["type"] == "disk" && device["path"] != "/" {
-			return fmt.Errorf("refuse automatic recreation: instance disk %q requires persistent-storage migration", name)
-		}
-	}
+	if err := rejectPersistentDisks(existingDevices); err != nil { return err }
 	if err := recheckOwnership(ctx); err != nil {
 		return fmt.Errorf("refuse automatic recreation: ownership recheck: %w", err)
 	}
