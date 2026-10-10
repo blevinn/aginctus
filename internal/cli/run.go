@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
@@ -74,7 +75,7 @@ func Run(
 
 	switch commandArgs[0] {
 	case "doctor":
-		return runDoctor(ctx, stdout, stderr, incusClient)
+		return runDoctor(ctx, commandArgs[1:], stdout, stderr, incusClient)
 	case "config":
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
 	case "network":
@@ -155,14 +156,54 @@ func parseGlobalOptions(args []string) (config.Options, []string, error) {
 	return options, args, nil
 }
 
-func runDoctor(ctx context.Context, stdout, stderr io.Writer, incusClient IncusClient) int {
+type doctorHTTPSClient interface {
+	HTTPSAddress(context.Context) (string, error)
+}
+
+var setIncusHTTPSAddress = func(ctx context.Context, address string) error {
+	cmd := exec.CommandContext(ctx, "incus", "config", "set", "core.https_address="+address)
+	output, err := cmd.CombinedOutput()
+	if err != nil { return fmt.Errorf("incus config set: %w: %s", err, strings.TrimSpace(string(output))) }
+	return nil
+}
+
+func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer, incusClient IncusClient) int {
+	if len(args) > 1 || (len(args) == 1 && args[0] != "--fix") {
+		fmt.Fprintln(stderr, "Usage: aginctus doctor [--fix]")
+		return 2
+	}
+	fix := len(args) == 1
 	version, err := incusClient.ServerVersion(ctx)
 	if err != nil {
 		fmt.Fprintf(stderr, "incus daemon: unreachable: %v\n", err)
 		return 1
 	}
-
 	fmt.Fprintf(stdout, "incus daemon: reachable (%s)\n", version)
+	client, ok := incusClient.(doctorHTTPSClient)
+	if !ok {
+		fmt.Fprintln(stderr, "incus HTTPS listener: cannot inspect with this client")
+		return 1
+	}
+	address, err := client.HTTPSAddress(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "incus HTTPS listener: check failed: %v\n", err)
+		return 1
+	}
+	if address != "" {
+		fmt.Fprintf(stdout, "incus HTTPS listener: configured (%s)\n", address)
+		return 0
+	}
+	if !fix {
+		fmt.Fprintln(stderr, "incus HTTPS listener: absent (required by incus-compose image caching); run 'aginctus doctor --fix' to configure a loopback-only listener")
+		return 1
+	}
+	// Never implicitly expose the Incus management API on all host interfaces.
+	const loopback = "127.0.0.1:8443"
+	if err := setIncusHTTPSAddress(ctx, loopback); err != nil {
+		fmt.Fprintf(stderr, "incus HTTPS listener: remediation failed: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "incus HTTPS listener: configured (%s); verify image-cache connectivity in your Incus setup\n", loopback)
 	return 0
 }
 
@@ -468,7 +509,7 @@ Global options:
 Commands:
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
-  doctor            Check local Incus daemon connectivity
+  doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
   gateway validate  Validate the AI gateway deployment configuration
   gateway render    Render the AI gateway Compose model
   herdr client ensure    Create, reconcile, and bootstrap the Herdr client
