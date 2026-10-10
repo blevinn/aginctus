@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"sigs.k8s.io/yaml"
 	"strings"
-	"testing"
 	"sync"
+	"testing"
 )
 
 func TestRenderCompose(t *testing.T) {
@@ -285,4 +285,3 @@ func TestInitializeRuntimeEnvironmentConcurrentFirstUse(t *testing.T) {
 		}
 	}
 }
-
