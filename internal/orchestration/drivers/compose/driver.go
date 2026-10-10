@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"os"
 	"strings"
 
@@ -159,6 +160,20 @@ func verifyComposeInstanceOwnership(config map[string]string, project, instance 
 	return nil
 }
 
+// detectComposeInstanceDrift rejects changes the pinned Compose Ensure would
+// silently ignore. Missing extension keys are safe: Ensure adds them.
+func detectComposeInstanceDrift(desired map[string]string, desiredProfiles []string, actual map[string]string, actualProfiles []string) error {
+	for key, want := range desired {
+		if got, exists := actual[key]; exists && got != want {
+			return fmt.Errorf("configuration drift for %q: instance recreation or an explicit update is required", key)
+		}
+	}
+	if desiredProfiles != nil && !reflect.DeepEqual(desiredProfiles, actualProfiles) {
+		return fmt.Errorf("instance profile drift: explicit reconciliation required")
+	}
+	return nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -222,6 +237,24 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	order, err := p.ServiceOrder(false)
 	if err != nil {
 		return fmt.Errorf("order compose services for %q: %w", p.Name, err)
+	}
+
+	// Detect drift before any resource in this orchestration step is changed.
+	// The pinned upstream Ensure only fills missing keys; silently treating
+	// conflicting values as converged would be unsafe.
+	for _, service := range order {
+		for _, resource := range resources[service] {
+			instance, ok := resource.(*composeclient.Instance)
+			if !ok { continue }
+			existing, _, err := connection.GetInstance(ctx, composeclient.SanitizeProjectName(p.Name), instance.IncusName(), nil)
+			if err != nil {
+				if api.StatusErrorCheck(err, http.StatusNotFound) { continue }
+				return fmt.Errorf("inspect Compose instance %q before reconcile: %w", instance.IncusName(), err)
+			}
+			if err := detectComposeInstanceDrift(instance.Config.Extensions, instance.Config.Profiles, existing.Config, existing.Profiles); err != nil {
+				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+			}
+		}
 	}
 
 	runOptions := []composeclient.Option{composeclient.OptionCreate()}
