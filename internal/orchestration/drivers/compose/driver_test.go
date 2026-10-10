@@ -475,8 +475,12 @@ func TestStampComposeCommandsRejectsReservedMarker(t *testing.T) {
 }
 
 func TestSeedInstanceOwnershipExceptionIsNarrow(t *testing.T) {
-	if !isComposeImageSeed("ic-seed-abc") { t.Fatal("upstream image seed not identified") }
-	for _,name:=range []string{"app-1","ic-seed","custom-ic-seed-abc"} {
-		if isComposeImageSeed(name) { t.Fatalf("unexpected exemption %q",name) }
+	if !isComposeImageSeed("ic-seed-abc") {
+		t.Fatal("upstream image seed not identified")
+	}
+	for _, name := range []string{"app-1", "ic-seed", "custom-ic-seed-abc"} {
+		if isComposeImageSeed(name) {
+			t.Fatalf("unexpected exemption %q", name)
+		}
 	}
 }
