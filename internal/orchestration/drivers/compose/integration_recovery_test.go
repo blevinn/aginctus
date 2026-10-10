@@ -50,54 +50,74 @@ volumes:
 		t.Fatalf("first apply: %v", err)
 	}
 	select {
-	case <-ctx.Done(): t.Fatal(ctx.Err())
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
 	case <-time.After(2 * time.Second):
 	}
-	conn, err := iclient.NewConnection(&iclient.ConfigRemoteInfo{Name:"local", Addrs:[]string{"unix://"},Protocol:"incus"})
-	if err != nil {t.Fatal(err)}
-	names, err := conn.GetInstanceNames(ctx, project, nil)
-	if err != nil || len(names)!=1 {t.Fatalf("expected one instance: names=%v err=%v",names,err)}
-	name:=names[0]
-	fetchOwned := func(ctx context.Context) error {
-		inst,_,err:=conn.GetInstance(ctx,project,name,nil)
-		if err!=nil {return err}
-		return verifyComposeInstanceOwnership(inst.Config,project,name)
+	conn, err := iclient.NewConnection(&iclient.ConfigRemoteInfo{Name: "local", Addrs: []string{"unix://"}, Protocol: "incus"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	inst,_,err:=conn.GetInstance(ctx,project,name,nil)
-	if err!=nil {t.Fatal(err)}
+	names, err := conn.GetInstanceNames(ctx, project, nil)
+	if err != nil || len(names) != 1 {
+		t.Fatalf("expected one instance: names=%v err=%v", names, err)
+	}
+	name := names[0]
+	fetchOwned := func(ctx context.Context) error {
+		inst, _, err := conn.GetInstance(ctx, project, name, nil)
+		if err != nil {
+			return err
+		}
+		return verifyComposeInstanceOwnership(inst.Config, project, name)
+	}
+	inst, _, err := conn.GetInstance(ctx, project, name, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	runIncus := func(args ...string) func(context.Context) error {
 		return func(ctx context.Context) error {
-			cmd:=exec.CommandContext(ctx,"incus",args...)
-			out,err:=cmd.CombinedOutput()
-			if err!=nil {return fmt.Errorf("incus command failed: %w (%s)",err,strings.TrimSpace(string(out)))}
+			cmd := exec.CommandContext(ctx, "incus", args...)
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				return fmt.Errorf("incus command failed: %w (%s)", err, strings.TrimSpace(string(out)))
+			}
 			return nil
 		}
 	}
 	injected := errors.New("intentional replacement create failure")
 	err = recreateWithRetainedVolumes(ctx, inst.Devices, inst.Devices, fetchOwned,
-		runIncus("stop","--project",project,name),
-		runIncus("delete","--project",project,name),
-		func(context.Context) error {return injected},
+		runIncus("stop", "--project", project, name),
+		runIncus("delete", "--project", project, name),
+		func(context.Context) error { return injected },
 	)
 	var recovery *ComposeRecreationRecoveryError
-	if !errors.As(err,&recovery) || !errors.Is(err,injected) {
-		t.Fatalf("expected typed post-delete recovery: %v",err)
+	if !errors.As(err, &recovery) || !errors.Is(err, injected) {
+		t.Fatalf("expected typed post-delete recovery: %v", err)
 	}
-	if _,_,err:=conn.GetInstance(ctx,project,name,nil);err==nil {
+	if _, _, err := conn.GetInstance(ctx, project, name, nil); err == nil {
 		t.Fatal("old instance still present after injected create failure")
 	}
 	// Reapply desired state: the instance is missing, but its named volume
 	// must survive and the replacement command checks the sentinel bytes.
-	if err := run(compose); err != nil { t.Fatalf("reapply after injected failure: %v",err) }
+	if err := run(compose); err != nil {
+		t.Fatalf("reapply after injected failure: %v", err)
+	}
 	select {
-	case <-ctx.Done(): t.Fatal(ctx.Err())
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
 	case <-time.After(2 * time.Second):
 	}
-	replaced,_,err:=conn.GetInstance(ctx,project,name,nil)
-	if err!=nil {t.Fatal(err)}
-	if err:=verifyComposeInstanceOwnership(replaced.Config,project,name);err!=nil {t.Fatal(err)}
-	if replaced.StatusCode!=api.Running {
-		t.Fatalf("replacement not running (%s): persistent sentinel could not be verified; project=%s",replaced.Status,project)
+	replaced, _, err := conn.GetInstance(ctx, project, name, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err:=run(compose);err!=nil {t.Fatalf("post-recovery idempotence: %v",err)}
+	if err := verifyComposeInstanceOwnership(replaced.Config, project, name); err != nil {
+		t.Fatal(err)
+	}
+	if replaced.StatusCode != api.Running {
+		t.Fatalf("replacement not running (%s): persistent sentinel could not be verified; project=%s", replaced.Status, project)
+	}
+	if err := run(compose); err != nil {
+		t.Fatalf("post-recovery idempotence: %v", err)
+	}
 }
