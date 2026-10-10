@@ -377,7 +377,7 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 			config[key] = value
 		}
 		err = connection.CreateProject(ctx, api.ProjectsPost{
-			Name: projectName,
+			Name:       projectName,
 			ProjectPut: api.ProjectPut{Config: config},
 		})
 		if err != nil {

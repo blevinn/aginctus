@@ -23,11 +23,7 @@ let
   defaultHerdrImage = self.packages.${system}.herdr-client;
   defaultOpenCodeImage = self.packages.${system}.opencode-workload;
 
-  aginctusCommand =
-    if cfg.package == null then
-      "aginctus"
-    else
-      "${cfg.package}/bin/aginctus";
+  aginctusCommand = if cfg.package == null then "aginctus" else "${cfg.package}/bin/aginctus";
 
   configFile = jsonFormat.generate "aginctus-config.json" cfg.settings;
 
@@ -267,7 +263,9 @@ in
             set -eu
             ${aginctusCommand} --configuration-file ${configFile} network ensure
             ${aginctusCommand} --configuration-file ${configFile} herdr client ensure
-            ${lib.concatMapStringsSep "\n" (id: "${aginctusCommand} --configuration-file ${configFile} workload ${lib.escapeShellArg id} ensure") cfg.reconcile.workloads}
+            ${lib.concatMapStringsSep "\n" (
+              id: "${aginctusCommand} --configuration-file ${configFile} workload ${lib.escapeShellArg id} ensure"
+            ) cfg.reconcile.workloads}
           '';
         };
       };
