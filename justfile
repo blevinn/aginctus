@@ -23,4 +23,5 @@ modules:
 integration-test:
     test "${AGINCTUS_INCUS_INTEGRATION:-}" = "1" || { echo "Set AGINCTUS_INCUS_INTEGRATION=1 to enable Incus integration tests" >&2; exit 1; }
     test "${AGINCTUS_INCUS_DISPOSABLE:-}" = "YES" || { echo "Set AGINCTUS_INCUS_DISPOSABLE=YES only on a disposable Incus host" >&2; exit 1; }
-    go test ./internal/orchestration/drivers/compose -run '^TestIncusComposeReconciliationIntegration$' -count=1 -v -timeout 12m
+    go test ./internal/orchestration/drivers/compose -run '^TestIncusCompose.*Integration -count=1 -v -timeout 12m
+ -count=1 -v -timeout 12m
