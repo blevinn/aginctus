@@ -26,7 +26,11 @@ func TestIncusComposeReconciliationIntegration(t *testing.T) {
 	name := fmt.Sprintf("aginctus-it-%d", time.Now().UnixNano())
 	t.Logf("test project %s (retained for manual inspection/cleanup)", name)
 	composeDoc := func(image string) []byte {
-		return []byte(fmt.Sprintf("services:\\n  app:\\n    image: %s\\n    command: [\\\"sleep\\\", \\\"3600\\\"]\\n", image))
+		return []byte(fmt.Sprintf(`services:
+  app:
+    image: %s
+    command: ["sleep", "3600"]
+`, image))
 	}
 	run := func(image string, recreate bool) error {
 		return executeCompose(ctx, Config{Project:name, Compose:composeDoc(image), RecreateOnDrift:recreate},nil)
