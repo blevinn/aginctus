@@ -424,6 +424,9 @@ func runHerdr(
 		return 2
 	}
 	args = args[1:]
+	if len(args) > 0 && args[0] == "status" {
+		return runHerdrClientStatus(ctx, args[1:], stdout, stderr, effective)
+	}
 	if len(args) == 0 {
 		printHerdrClientUsage(stderr)
 		return 2
@@ -478,6 +481,7 @@ func runHerdr(
 func printHerdrClientUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] herdr client apply [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client remove [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] herdr client status")
 }
 
 func runWorkload(
@@ -486,6 +490,9 @@ func runWorkload(
 	stdout, stderr io.Writer,
 	effective *config.Config,
 ) int {
+	if len(args) > 0 && args[0] == "status" {
+		return runWorkloadStatus(ctx, args[1:], stdout, stderr, effective)
+	}
 	if len(args) == 1 && (args[0] == "ls" || args[0] == "list") {
 		for _, id := range workloadIDs(effective) {
 			fmt.Fprintln(stdout, id)
@@ -593,6 +600,7 @@ func printWorkloadUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] workload ls")
 	fmt.Fprintln(w, "       aginctus [global options] workload apply [name] [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] workload remove [name] [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] workload status [name]")
 }
 
 func printUsage(w io.Writer) {
@@ -618,12 +626,14 @@ Commands:
   gateway render    Render the AI gateway Compose model
   herdr client apply     Create, reconcile, and bootstrap the Herdr client
   herdr client remove    Delete the Herdr client container
+  herdr client status    Inspect the Herdr client instance
   network apply          Create or reconcile the configured management network
   network remove         Delete the configured management network
   network status         Inspect the configured management network
   workload ls            List configured workloads
   workload apply [NAME]  Reconcile one workload, or all configured workloads
   workload remove [NAME] Remove one workload, or all configured workloads
+  workload status [NAME] Inspect one or all configured workloads
   version           Print the Aginctus CLI version
   help              Show this help`)
 }
