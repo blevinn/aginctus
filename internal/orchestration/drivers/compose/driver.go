@@ -77,8 +77,8 @@ func (d *Driver) Execute(ctx context.Context, raw json.RawMessage, options orche
 func validationEnvironment() map[string]string {
 	return map[string]string{
 		"AGINCTUS_GATEWAY_POSTGRES_PASSWORD": "validation-placeholder",
-		"AGINCTUS_GATEWAY_MASTER_KEY": "validation-placeholder",
-		"AGINCTUS_GATEWAY_SALT_KEY": "validation-placeholder",
+		"AGINCTUS_GATEWAY_MASTER_KEY":        "validation-placeholder",
+		"AGINCTUS_GATEWAY_SALT_KEY":          "validation-placeholder",
 	}
 }
 
