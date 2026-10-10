@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"sigs.k8s.io/yaml"
 	"strings"
-	"sync"
 	"testing"
+	"sync"
 )
 
 func TestRenderCompose(t *testing.T) {
@@ -156,44 +156,53 @@ func TestInitializeRuntimeEnvironmentUsesProvidedSeedOnlyWhenMissing(t *testing.
 	}
 }
 
-func TestInitializeRuntimeEnvironmentConcurrentFirstUse(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	for _, name := range requiredRuntimeEnvironment {
-		t.Setenv(name, "")
-	}
-	const callers = 24
-	var wg sync.WaitGroup
-	begin := make(chan struct{})
-	results := make([]map[string]string, callers)
-	errs := make([]error, callers)
-	for i := range results {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			<-begin
-			results[i], errs[i] = (Spec{ID: "concurrent"}).InitializeRuntimeEnvironment()
-		}(i)
-	}
-	close(begin)
-	wg.Wait()
-	for i, err := range errs {
-		if err != nil {
-			t.Fatalf("caller %d failed: %v", i, err)
-		}
-		for _, key := range requiredRuntimeEnvironment {
-			if results[i][key] == "" || results[i][key] != results[0][key] {
-				t.Fatalf("caller %d got divergent value for %s", i, key)
+func TestGatewayIDRejectsTraversalAndSeparators(t *testing.T) {
+	for _, id := range []string{"../outside", ".", "..", "nested/path", "nested\\\\path", "/absolute", ""} {
+		t.Run(id, func(t *testing.T) {
+			spec := Spec{ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+			if err := spec.Validate(); err == nil {
+				t.Fatalf("accepted unsafe gateway ID %q", id)
 			}
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			if _, err := spec.InitializeRuntimeEnvironment(); err == nil {
+				t.Fatalf("initialized unsafe gateway ID %q", id)
+			}
+		})
+	}
+	for _, id := range []string{"local", "gateway-01", "gateway_01"} {
+		spec := Spec{ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+		if err := spec.Validate(); err != nil {
+			t.Fatalf("valid gateway ID %q rejected: %v", id, err)
 		}
 	}
-	persisted, err := (Spec{ID: "concurrent"}).InitializeRuntimeEnvironment()
-	if err != nil {
+}
+
+func TestGatewaySecretStateRejectsSymlinkAndLooseMode(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	dir := filepath.Join(state, "aginctus", "gateway", "local")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range requiredRuntimeEnvironment {
-		if persisted[key] != results[0][key] {
-			t.Fatalf("persisted %s differs from concurrent result", key)
-		}
+	path := filepath.Join(dir, "secrets.json")
+	outside := filepath.Join(state, "outside")
+	if err := os.WriteFile(outside, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted symlink secret state")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted loosely permissioned secret state")
 	}
 }
 
@@ -235,3 +244,45 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 		t.Fatalf("render and deploy Compose models differ:\\nrender=%s\\ndeploy=%s", renderJSON, deployJSON)
 	}
 }
+
+func TestInitializeRuntimeEnvironmentConcurrentFirstUse(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	for _, name := range requiredRuntimeEnvironment {
+		t.Setenv(name, "")
+	}
+	const callers = 24
+	var wg sync.WaitGroup
+	begin := make(chan struct{})
+	results := make([]map[string]string, callers)
+	errs := make([]error, callers)
+	for i := range results {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-begin
+			results[i], errs[i] = (Spec{ID: "concurrent"}).InitializeRuntimeEnvironment()
+		}(i)
+	}
+	close(begin)
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("caller %d failed: %v", i, err)
+		}
+		for _, key := range requiredRuntimeEnvironment {
+			if results[i][key] == "" || results[i][key] != results[0][key] {
+				t.Fatalf("caller %d got divergent value for %s", i, key)
+			}
+		}
+	}
+	persisted, err := (Spec{ID: "concurrent"}).InitializeRuntimeEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range requiredRuntimeEnvironment {
+		if persisted[key] != results[0][key] {
+			t.Fatalf("persisted %s differs from concurrent result", key)
+		}
+	}
+}
+

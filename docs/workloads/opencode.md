@@ -1,6 +1,6 @@
 # OpenCode workload
 
-Status: initial NixOS workload image and guest-side managed SSH authorization contract implemented; host-side credential delivery and trust reconciliation remain follow-up work.
+Status: OpenCode image and declarative workload instance lifecycle implemented; remote SSH registration, gateway credential delivery and runtime readiness remain integration work.
 
 ## Purpose
 
@@ -58,11 +58,9 @@ Until gateway credential delivery is implemented, this image only establishes th
 
 ## Lifecycle
 
-This PR intentionally does not add another bespoke `ensure` implementation.
+Run `aginctus workload dev ensure` to reconcile the configured management network and workload instance through the Apply driver, or `aginctus workload dev teardown` to delete only the workload instance. Use `--dry-run` to inspect actions, and see [workload lifecycle](lifecycle.md) for ownership and isolation rules.
 
-The declarative orchestration workstream will define how the image is instantiated, attached to the management network, given workspace storage, and provisioned with the Herdr SSH public key and gateway workload credential.
-
-The image itself is kept independent of those host-specific values so it remains reproducible and reusable.
+This lifecycle does not yet provision gateway workload credentials or complete runtime-specific readiness. The image remains independent of host-specific values.
 
 ## VM compatibility
 

@@ -71,6 +71,17 @@ func (c *Config) Bool(path string) (bool, error) {
 	return typed, nil
 }
 
+// Runtime gateway credentials are out-of-band inputs, not configuration keys.
+// Do not permit either environment mapping or explicit overrides to expose them.
+func isRuntimeSecretPath(path string) bool {
+	switch strings.ToLower(path) {
+	case "gateway.postgres.password", "gateway.master.key", "gateway.salt.key":
+		return true
+	default:
+		return false
+	}
+}
+
 type Loader struct {
 	SystemPath  string
 	UserPath    string
@@ -221,6 +232,9 @@ func mergeEnvironment(dst map[string]any, environment []string) error {
 		}
 
 		path := strings.ToLower(strings.ReplaceAll(suffix, "_", "."))
+		if isRuntimeSecretPath(path) {
+			continue
+		}
 		if err := setPath(dst, path, parseValue(value)); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
@@ -232,6 +246,9 @@ func mergeOverride(dst map[string]any, override string) error {
 	path, value, ok := strings.Cut(override, "=")
 	if !ok {
 		return fmt.Errorf("expected path=value")
+	}
+	if isRuntimeSecretPath(path) {
+		return fmt.Errorf("runtime gateway secret keys cannot be set through configuration")
 	}
 	return setPath(dst, path, parseValue(value))
 }
