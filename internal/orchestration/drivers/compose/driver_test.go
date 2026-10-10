@@ -198,3 +198,55 @@ func TestComposePrerequisitesPrecedeInstances(t *testing.T) {
 		t.Fatal("instances must remain in dependency-ordered service pass")
 	}
 }
+
+func TestComposeProjectOwnershipValidation(t *testing.T) {
+	project := "gateway-test"
+	valid := map[string]string{
+		ownershipManagedKey:    "true",
+		ownershipResourceKey:   "compose-project",
+		ownershipDeploymentKey: project,
+	}
+	if err := verifyComposeProjectOwnership(valid, project); err != nil {
+		t.Fatalf("owned project rejected: %v", err)
+	}
+	for name, changes := range map[string]map[string]string{
+		"unmarked":             {},
+		"wrong deployment":     {ownershipManagedKey: "true", ownershipResourceKey: "compose-project", ownershipDeploymentKey: "other"},
+		"wrong kind":           {ownershipManagedKey: "true", ownershipResourceKey: "compose-instance", ownershipDeploymentKey: project},
+		"wrong managed marker": {ownershipManagedKey: "false", ownershipResourceKey: "compose-project", ownershipDeploymentKey: project},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := verifyComposeProjectOwnership(changes, project); err == nil {
+				t.Fatal("accepted foreign project")
+			}
+		})
+	}
+}
+
+func TestComposeInstanceOwnershipValidation(t *testing.T) {
+	const project = "gateway-test"
+	valid := map[string]string{
+		ownershipManagedKey:    "true",
+		ownershipResourceKey:   "compose-instance",
+		ownershipDeploymentKey: project,
+	}
+	if err := verifyComposeInstanceOwnership(valid, project, "postgres-1"); err != nil {
+		t.Fatalf("owned instance rejected: %v", err)
+	}
+	cases := []struct {
+		name   string
+		config map[string]string
+	}{
+		{name: "unmarked", config: map[string]string{}},
+		{name: "wrong deployment", config: map[string]string{ownershipManagedKey: "true", ownershipResourceKey: "compose-instance", ownershipDeploymentKey: "other"}},
+		{name: "wrong kind", config: map[string]string{ownershipManagedKey: "true", ownershipResourceKey: "compose-project", ownershipDeploymentKey: project}},
+		{name: "missing deployment", config: map[string]string{ownershipManagedKey: "true", ownershipResourceKey: "compose-instance"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := verifyComposeInstanceOwnership(tc.config, project, "postgres-1"); err == nil {
+				t.Fatal("accepted foreign instance")
+			}
+		})
+	}
+}

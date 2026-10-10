@@ -5,19 +5,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
 	composeclient "github.com/lxc/incus-compose/client"
 	"github.com/lxc/incus-compose/iclient"
 	composeproject "github.com/lxc/incus-compose/project"
+	"github.com/lxc/incus/v7/shared/api"
 
 	"github.com/blevinn/aginctus/internal/orchestration"
 )
 
 const (
-	ownershipManagedKey  = "user.aginctus.managed"
-	ownershipResourceKey = "user.aginctus.resource"
+	ownershipManagedKey    = "user.aginctus.managed"
+	ownershipResourceKey   = "user.aginctus.resource"
+	ownershipDeploymentKey = "user.aginctus.deployment"
 )
 
 type Config struct {
@@ -128,6 +131,34 @@ func isComposePrerequisite(priority int) bool {
 	return priority < composeclient.PriorityInstance
 }
 
+func verifyComposeProjectOwnership(config map[string]string, project string) error {
+	expected := map[string]string{
+		ownershipManagedKey:    "true",
+		ownershipResourceKey:   "compose-project",
+		ownershipDeploymentKey: project,
+	}
+	for key, want := range expected {
+		if config[key] != want {
+			return fmt.Errorf("compose project %q is not owned by this deployment: %s ownership marker missing or mismatched; refusing adoption", project, key)
+		}
+	}
+	return nil
+}
+
+func verifyComposeInstanceOwnership(config map[string]string, project, instance string) error {
+	expected := map[string]string{
+		ownershipManagedKey:    "true",
+		ownershipResourceKey:   "compose-instance",
+		ownershipDeploymentKey: project,
+	}
+	for key, want := range expected {
+		if config[key] != want {
+			return fmt.Errorf("compose instance %q in project %q is not owned by this deployment: %s ownership marker missing or mismatched; refusing adoption", instance, project, key)
+		}
+	}
+	return nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -146,6 +177,28 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	}
 	if err := global.Connect(); err != nil {
 		return fmt.Errorf("connect incus-compose client: %w", explainComposeConnectionError(err))
+	}
+
+	connection, err := global.Connection()
+	if err != nil {
+		return fmt.Errorf("inspect Compose project ownership: %w", err)
+	}
+	existing, _, err := connection.GetProject(ctx, composeclient.SanitizeProjectName(p.Name))
+	if err == nil {
+		if err := verifyComposeProjectOwnership(existing.Config, p.Name); err != nil {
+			return err
+		}
+		instances, listErr := connection.GetInstances(ctx, composeclient.SanitizeProjectName(p.Name), nil)
+		if listErr != nil {
+			return fmt.Errorf("inspect Compose instances in project %q: %w", p.Name, listErr)
+		}
+		for _, instance := range instances {
+			if err := verifyComposeInstanceOwnership(instance.Config, p.Name, instance.Name); err != nil {
+				return err
+			}
+		}
+	} else if !api.StatusErrorCheck(err, http.StatusNotFound) {
+		return fmt.Errorf("inspect Compose project %q: %w", p.Name, err)
 	}
 
 	c, err := global.EnsureProject(
@@ -215,12 +268,14 @@ func loadProject(ctx context.Context, name, path string, environment map[string]
 		composeproject.LoadFiles([]string{path}),
 		composeproject.LoadName(name),
 		composeproject.LoadInstanceMarks(map[string]string{
-			ownershipManagedKey:  "true",
-			ownershipResourceKey: "compose-instance",
+			ownershipManagedKey:    "true",
+			ownershipResourceKey:   "compose-instance",
+			ownershipDeploymentKey: name,
 		}),
 		composeproject.LoadProjectMarks(map[string]string{
-			ownershipManagedKey:  "true",
-			ownershipResourceKey: "compose-project",
+			ownershipManagedKey:    "true",
+			ownershipResourceKey:   "compose-project",
+			ownershipDeploymentKey: name,
 		}),
 	}
 	if len(environment) > 0 {
