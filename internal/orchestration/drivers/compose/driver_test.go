@@ -306,3 +306,24 @@ func TestDetectComposeDeviceDrift(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectComposeImageDrift(t *testing.T) {
+	cases := []struct {
+		name, want, got string
+		drift bool
+	}{
+		{name: "same image", want: "docker.io/library/postgres:17-alpine", got: "docker.io/library/postgres:17-alpine"},
+		{name: "changed tag", want: "docker.io/library/postgres:18-alpine", got: "docker.io/library/postgres:17-alpine", drift: true},
+		{name: "changed repository", want: "docker.io/library/postgres:17-alpine", got: "docker.io/other/postgres:17-alpine", drift: true},
+		{name: "unknown original image", want: "docker.io/library/postgres:17-alpine", drift: true},
+		{name: "no image configured", got: "docker.io/library/postgres:17-alpine"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := detectComposeImageDrift(tc.want, tc.got)
+			if (err != nil) != tc.drift {
+				t.Fatalf("detectComposeImageDrift(%q, %q) = %v, want drift %t", tc.want, tc.got, err, tc.drift)
+			}
+		})
+	}
+}
