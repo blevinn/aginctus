@@ -282,23 +282,27 @@ func TestDetectComposeInstanceDrift(t *testing.T) {
 
 func TestDetectComposeDeviceDrift(t *testing.T) {
 	cases := []struct {
-		name string
-		desired map[string]map[string]string
-		actual map[string]map[string]string
+		name      string
+		desired   map[string]map[string]string
+		actual    map[string]map[string]string
 		wantDrift bool
 	}{
-		{name: "unchanged", desired:map[string]map[string]string{"data":{"type":"disk","source":"data","path":"/data"}},actual:map[string]map[string]string{"data":{"type":"disk","source":"data","path":"/data"}}},
-		{name: "missing device", desired:map[string]map[string]string{"data":{"type":"disk","path":"/data"}}, actual:map[string]map[string]string{},wantDrift:true},
-		{name: "changed device source", desired:map[string]map[string]string{"data":{"source":"new"}},actual:map[string]map[string]string{"data":{"source":"old"}},wantDrift:true},
-		{name: "changed device path", desired:map[string]map[string]string{"data":{"path":"/new"}},actual:map[string]map[string]string{"data":{"path":"/old"}},wantDrift:true},
-		{name: "extra device ignored",desired:map[string]map[string]string{},actual:map[string]map[string]string{"unmanaged":{"type":"disk"}}},
-		{name: "extra settings ignored",desired:map[string]map[string]string{"data":{"path":"/data"}},actual:map[string]map[string]string{"data":{"path":"/data","source":"other"}}},
+		{name: "unchanged", desired: map[string]map[string]string{"data": {"type": "disk", "source": "data", "path": "/data"}}, actual: map[string]map[string]string{"data": {"type": "disk", "source": "data", "path": "/data"}}},
+		{name: "missing device", desired: map[string]map[string]string{"data": {"type": "disk", "path": "/data"}}, actual: map[string]map[string]string{}, wantDrift: true},
+		{name: "changed device source", desired: map[string]map[string]string{"data": {"source": "new"}}, actual: map[string]map[string]string{"data": {"source": "old"}}, wantDrift: true},
+		{name: "changed device path", desired: map[string]map[string]string{"data": {"path": "/new"}}, actual: map[string]map[string]string{"data": {"path": "/old"}}, wantDrift: true},
+		{name: "extra device ignored", desired: map[string]map[string]string{}, actual: map[string]map[string]string{"unmanaged": {"type": "disk"}}},
+		{name: "extra settings ignored", desired: map[string]map[string]string{"data": {"path": "/data"}}, actual: map[string]map[string]string{"data": {"path": "/data", "source": "other"}}},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name,func(t *testing.T){
-			err:=detectComposeDeviceDrift(tc.desired,tc.actual)
-			if (err!=nil)!=tc.wantDrift {t.Fatalf("drift=%v, want %t",err,tc.wantDrift)}
-			if tc.wantDrift && strings.Contains(err.Error(),"old") {t.Fatalf("error leaked old device value: %v",err)}
+		t.Run(tc.name, func(t *testing.T) {
+			err := detectComposeDeviceDrift(tc.desired, tc.actual)
+			if (err != nil) != tc.wantDrift {
+				t.Fatalf("drift=%v, want %t", err, tc.wantDrift)
+			}
+			if tc.wantDrift && strings.Contains(err.Error(), "old") {
+				t.Fatalf("error leaked old device value: %v", err)
+			}
 		})
 	}
 }
