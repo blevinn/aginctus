@@ -2,8 +2,8 @@ package compose
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,7 +24,7 @@ const (
 	ownershipManagedKey    = "user.aginctus.managed"
 	ownershipResourceKey   = "user.aginctus.resource"
 	ownershipDeploymentKey = "user.aginctus.deployment"
-	ownershipCommandKey = "user.aginctus.command_sha256"
+	ownershipCommandKey    = "user.aginctus.command_sha256"
 )
 
 type Config struct {
@@ -287,10 +287,14 @@ func composeNeedsStart(resource composeclient.Resource) bool {
 func stampComposeCommands(config *composeclient.InstanceConfig) error {
 	encoded, err := json.Marshal(struct {
 		Entrypoint []string
-		Command []string
+		Command    []string
 	}{config.Entrypoint, config.Command})
-	if err != nil { return fmt.Errorf("encode Compose command: %w", err) }
-	if config.Extensions == nil { config.Extensions = map[string]string{} }
+	if err != nil {
+		return fmt.Errorf("encode Compose command: %w", err)
+	}
+	if config.Extensions == nil {
+		config.Extensions = map[string]string{}
+	}
 	if _, reserved := config.Extensions[ownershipCommandKey]; reserved {
 		return fmt.Errorf("reserved Compose command marker must not be set explicitly")
 	}
@@ -370,7 +374,9 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	for _, service := range order {
 		for _, resource := range resources[service] {
 			instance, ok := resource.(*composeclient.Instance)
-			if !ok { continue }
+			if !ok {
+				continue
+			}
 			if err := stampComposeCommands(&instance.Config); err != nil {
 				return fmt.Errorf("prepare Compose command marker for service %q: %w", service, err)
 			}
