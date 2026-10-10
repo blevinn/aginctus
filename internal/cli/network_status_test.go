@@ -38,7 +38,7 @@ func TestNetworkStatusLiveStateAndOwnership(t *testing.T) {
 				return []byte(tc.data), tc.err
 			}
 			var stdout, stderr bytes.Buffer
-			code := Run(context.Background(), []string{"network", "status"}, &stdout, &stderr, &fakeIncusClient{}, loader)
+			code := Run(context.Background(), []string{"--config=incus.management.network.name=aginctus-mgmt", "network", "status"}, &stdout, &stderr, &fakeIncusClient{}, loader)
 			if code != tc.code {
 				t.Fatalf("code = %d, want %d; stderr = %q", code, tc.code, stderr.String())
 			}
