@@ -201,6 +201,9 @@ func mergeJSON(dst map[string]any, data []byte) error {
 	if err := json.Unmarshal(data, &src); err != nil {
 		return err
 	}
+	if src == nil {
+		return fmt.Errorf("configuration document must be a JSON object, not null")
+	}
 	mergeMaps(dst, src)
 	return nil
 }
