@@ -366,12 +366,30 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	if err != nil {
 		return fmt.Errorf("inspect Compose project ownership: %w", err)
 	}
-	existing, _, err := connection.GetProject(ctx, composeclient.SanitizeProjectName(p.Name))
-	if err == nil {
+	// Perform the ownership lookup before calling upstream EnsureProject.
+	// Its create-on-missing fallback accepts concurrently created projects;
+	// instead, use the Incus create-only endpoint when initially missing.
+	projectName := composeclient.SanitizeProjectName(p.Name)
+	existing, _, err := connection.GetProject(ctx, projectName)
+	if api.StatusErrorCheck(err, http.StatusNotFound) {
+		config := api.ConfigMap{"features.profiles": "true"}
+		for key, value := range p.ClientConfig.XIncus {
+			config[key] = value
+		}
+		err = connection.CreateProject(ctx, api.ProjectsPost{
+			Name: projectName,
+			ProjectPut: api.ProjectPut{Config: config},
+		})
+		if err != nil {
+			return fmt.Errorf("create-only Compose project %q: refusing concurrent project adoption: %w", p.Name, err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("inspect Compose project %q: %w", p.Name, err)
+	} else {
 		if err := verifyComposeProjectOwnership(existing.Config, p.Name); err != nil {
 			return err
 		}
-		instances, listErr := connection.GetInstances(ctx, composeclient.SanitizeProjectName(p.Name), nil)
+		instances, listErr := connection.GetInstances(ctx, projectName, nil)
 		if listErr != nil {
 			return fmt.Errorf("inspect Compose instances in project %q: %w", p.Name, listErr)
 		}
@@ -380,17 +398,14 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 				return err
 			}
 		}
-	} else if !api.StatusErrorCheck(err, http.StatusNotFound) {
-		return fmt.Errorf("inspect Compose project %q: %w", p.Name, err)
 	}
-
-	c, err := global.EnsureProject(
-		p.Name,
-		composeclient.EnsureProjectWithCreate(),
-		composeclient.EnsureProjectWithConfig(p.ClientConfig.XIncus),
-	)
+	// Verify the persisted object before upstream Ensure can add any keys.
+	if err := verifyComposeDeploymentOwnership(ctx, connection, p.Name); err != nil {
+		return fmt.Errorf("pre-ensure Compose ownership check: %w", err)
+	}
+	c, err := global.EnsureProject(p.Name)
 	if err != nil {
-		return fmt.Errorf("ensure compose project %q: %w", p.Name, err)
+		return fmt.Errorf("open existing owned Compose project %q: %w", p.Name, err)
 	}
 	defer c.WarnError(c.Done, "compose client cleanup failed")
 
