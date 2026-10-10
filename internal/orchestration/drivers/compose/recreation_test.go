@@ -184,3 +184,36 @@ func TestMaterializeComposeRawDevices(t *testing.T) {
 		t.Fatalf("devices=%v error=%v", m, err)
 	}
 }
+
+func TestRecreationReportsRecoveryAfterDelete(t *testing.T) {
+	cause := errors.New("image creation unavailable")
+	var deleted bool
+	noop := func(context.Context) error { return nil }
+	err := recreateWithoutPersistentDisks(context.Background(), nil, noop, noop,
+		func(context.Context) error { deleted = true; return nil },
+		func(context.Context) error { return cause })
+	if !deleted {
+		t.Fatal("expected deletion before failure")
+	}
+	var recovery *ComposeRecreationRecoveryError
+	if !errors.As(err, &recovery) || !errors.Is(err, cause) {
+		t.Fatalf("expected typed recovery error preserving cause, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "persistent volumes") || !strings.Contains(err.Error(), "inspect") {
+		t.Fatalf("missing recovery guidance: %v", err)
+	}
+}
+
+func TestRecreationCancellationAfterDeleteRequiresRecovery(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	noop := func(context.Context) error { return nil }
+	created := false
+	err := recreateWithoutPersistentDisks(ctx, nil, noop, noop,
+		func(context.Context) error { cancel(); return nil },
+		func(context.Context) error { created = true; return nil })
+	var recovery *ComposeRecreationRecoveryError
+	if !errors.As(err, &recovery) || !errors.Is(err, context.Canceled) || created {
+		t.Fatalf("expected recovery state on post-delete cancellation, got err=%v created=%t", err, created)
+	}
+}

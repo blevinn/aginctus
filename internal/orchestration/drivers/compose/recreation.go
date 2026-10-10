@@ -8,6 +8,19 @@ import (
 	"strings"
 )
 
+// ComposeRecreationRecoveryError indicates that deletion completed but the
+// replacement was not confirmed. The original cause remains discoverable with
+// errors.Is/As; callers must not assume that the old instance still exists.
+type ComposeRecreationRecoveryError struct {
+	Cause error
+}
+
+func (e *ComposeRecreationRecoveryError) Error() string {
+	return fmt.Sprintf("old instance deleted; replacement not confirmed: %v; inspect the instance before retrying the same deployment; persistent volumes were not requested for deletion", e.Cause)
+}
+
+func (e *ComposeRecreationRecoveryError) Unwrap() error { return e.Cause }
+
 // ComposeRecreationPlan is a non-destructive inventory for replacing a
 // drifted instance. It never triggers stop, delete, or create operations.
 type ComposeRecreationPlan struct {
@@ -81,11 +94,15 @@ func recreateWithoutPersistentDisks(ctx context.Context, existingDevices map[str
 	if err := remove(ctx); err != nil {
 		return fmt.Errorf("delete owned instance without volumes: %w", err)
 	}
+	// Cancellation after deletion cannot bring the old root filesystem back.
+	// Report an explicit recovery state instead of suggesting the operation
+	// was rolled back. Reconciliation may be retried with the same desired
+	// specification after inspecting any partially created replacement.
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("instance removed; recreation canceled: %w", err)
+		return &ComposeRecreationRecoveryError{Cause: err}
 	}
 	if err := create(ctx); err != nil {
-		return fmt.Errorf("instance removed; recreation failed and manual recovery may be required: %w", err)
+		return &ComposeRecreationRecoveryError{Cause: err}
 	}
 	return nil
 }
