@@ -2,10 +2,10 @@ package gateway
 
 import (
 	"encoding/json"
-	"reflect"
-	"sigs.k8s.io/yaml"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sigs.k8s.io/yaml"
 	"strings"
 	"testing"
 )
@@ -180,15 +180,29 @@ func TestGatewaySecretStateRejectsSymlinkAndLooseMode(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", state)
 	dir := filepath.Join(state, "aginctus", "gateway", "local")
-	if err := os.MkdirAll(dir, 0o700); err != nil { t.Fatal(err) }
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(dir, "secrets.json")
 	outside := filepath.Join(state, "outside")
-	if err := os.WriteFile(outside, []byte("{}"), 0o600); err != nil { t.Fatal(err) }
-	if err := os.Symlink(outside, path); err != nil { t.Fatal(err) }
-	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil { t.Fatal("accepted symlink secret state") }
-	if err := os.Remove(path); err != nil { t.Fatal(err) }
-	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil { t.Fatal(err) }
-	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil { t.Fatal("accepted loosely permissioned secret state") }
+	if err := os.WriteFile(outside, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted symlink secret state")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted loosely permissioned secret state")
+	}
 }
 
 func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
