@@ -193,6 +193,22 @@ func detectComposeDeviceDrift(desired, actual map[string]map[string]string) erro
 	return nil
 }
 
+// A change to the source image alias is recreate-only with pinned incus-compose.
+// Comparing resolved Incus names avoids treating equivalent normalized OCI
+// references as different while preserving a fail-closed result on drift.
+func detectComposeImageDrift(want, got string) error {
+	if want == "" {
+		return nil
+	}
+	if got == "" {
+		return fmt.Errorf("existing instance has no image alias marker; cannot verify image convergence without recreation")
+	}
+	if want != got {
+		return fmt.Errorf("instance image drift: recreation required to apply changed image")
+	}
+	return nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -273,6 +289,19 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 					continue
 				}
 				return fmt.Errorf("inspect Compose instance %q before reconcile: %w", instance.IncusName(), err)
+			}
+			if instance.Config.Image != "" {
+				imageResource, err := c.Resource(composeclient.KindImage, instance.Config.Image, &composeclient.ImageConfig{})
+				if err != nil {
+					return fmt.Errorf("resolve desired image for service %q: %w", service, err)
+				}
+				image, ok := imageResource.(*composeclient.Image)
+				if !ok {
+					return fmt.Errorf("resolve desired image for service %q: unexpected resource type", service)
+				}
+				if err := detectComposeImageDrift(image.IncusName(), existing.Config["user.image_alias"]); err != nil {
+					return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
+				}
 			}
 			if err := detectComposeInstanceDrift(instance.Config.Extensions, instance.Config.Profiles, existing.Config, existing.Profiles); err != nil {
 				return fmt.Errorf("compose service %q instance %q: %w", service, instance.IncusName(), err)
