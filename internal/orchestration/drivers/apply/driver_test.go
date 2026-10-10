@@ -230,10 +230,11 @@ func TestPreflightRejectsInvalidLaterApplyBeforeFirstMutation(t *testing.T) {
 }
 
 type cancellationApplyClient struct {
-	cancel context.CancelFunc
-	planned bool
+	cancel   context.CancelFunc
+	planned  bool
 	executed bool
 }
+
 func (c *cancellationApplyClient) Plan(io.Reader) (incusapply.Preview, error) {
 	c.planned = true
 	c.cancel()
@@ -261,7 +262,7 @@ func TestApplyReturnsCancellationAfterNativePlanning(t *testing.T) {
 	client := &cancellationApplyClient{cancel: cancel}
 	driver := New()
 	driver.newClient = func(incusapply.Options) applyClient { return client }
-	err := driver.Execute(ctx, json.RawMessage(`{"documents":[{"kind":"network","name":"example"}]}`), orchestration.ExecuteOptions{DryRun:true})
+	err := driver.Execute(ctx, json.RawMessage(`{"documents":[{"kind":"network","name":"example"}]}`), orchestration.ExecuteOptions{DryRun: true})
 	if !errors.Is(err, context.Canceled) || !client.planned || client.executed {
 		t.Fatalf("planning cancellation: err=%v planned=%t executed=%t", err, client.planned, client.executed)
 	}
