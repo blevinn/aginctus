@@ -321,7 +321,7 @@ func verifyComposeDeploymentOwnership(ctx context.Context, connection *iclient.C
 		return fmt.Errorf("inspect Compose instances in project %q: %w", project, err)
 	}
 	for _, instance := range instances {
-		if err := verifyComposeInstanceOwnership(instance.Config, project, instance.Name); err != nil {
+		// The pinned incus-compose image preparer creates transient ic-seed-*\n		// instances while importing OCI images. These are not deployment\n		// services and carry no Aginctus ownership marker. Never adopt them.\n		if strings.HasPrefix(instance.Name, "ic-seed-") {\n			continue\n		}\n		if err := verifyComposeInstanceOwnership(instance.Config, project, instance.Name); err != nil {
 			return err
 		}
 	}
