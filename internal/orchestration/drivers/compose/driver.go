@@ -90,11 +90,10 @@ func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
 	return cfg, nil
 }
 
-
 func newComposeGlobalClient(ctx context.Context, newConnection func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error)) (*composeclient.GlobalClient, error) {
 	connection, err := newConnection(&iclient.ConfigRemoteInfo{
-		Name: "local",
-		Addrs: []string{"unix://"},
+		Name:     "local",
+		Addrs:    []string{"unix://"},
 		Protocol: "incus",
 	})
 	if err != nil {
