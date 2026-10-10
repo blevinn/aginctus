@@ -335,7 +335,11 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) != 1 {
+	if len(args) == 0 || len(args) > 2 {
+		printGatewayUsage(stderr)
+		return 2
+	}
+	if len(args) == 2 && (args[0] != "remove" || args[1] != "--force") {
 		printGatewayUsage(stderr)
 		return 2
 	}
@@ -347,6 +351,25 @@ func runGateway(
 	}
 
 	switch args[0] {
+	case "remove":
+		if err := spec.Remove(ctx, len(args) == 2); err != nil {
+			fmt.Fprintf(stderr, "gateway cleanup: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "gateway %q: gateway instances removed (persistent volumes retained)\n", spec.ID)
+		return 0
+	case "apply":
+		runtimeEnvironment, err := spec.InitializeRuntimeEnvironment()
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
+			return 1
+		}
+		if err := spec.Deploy(ctx, runtimeEnvironment); err != nil {
+			fmt.Fprintf(stderr, "gateway deployment: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "gateway %q: started (application readiness not verified)\n", spec.ID)
+		return 0
 	case "validate":
 		fmt.Fprintf(stdout, "gateway %q: configuration valid\n", spec.ID)
 		return 0
@@ -380,6 +403,8 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
 	fmt.Fprintln(w, "       aginctus [global options] gateway up")
+	fmt.Fprintln(w, "       aginctus [global options] gateway apply")
+	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
 }
 
 func runHerdr(
@@ -581,6 +606,8 @@ Commands:
   config get PATH   Print one effective configuration value
   doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
   gateway validate  Validate the AI gateway deployment configuration
+  gateway apply     Reconcile the AI gateway
+  gateway remove [--force] Remove gateway instances, preserving data volumes
   gateway render    Render the AI gateway Compose model
   herdr client apply     Create, reconcile, and bootstrap the Herdr client
   herdr client remove    Delete the Herdr client container
