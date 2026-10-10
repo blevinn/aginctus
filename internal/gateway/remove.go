@@ -28,15 +28,23 @@ type cleanupInstance struct {
 	Config map[string]string `json:"config"`
 }
 
-// Only the two known gateway services may be removed. The Compose naming
-// convention is project + service (+ optional replica number).
+// Only the two known gateway services may be removed. Incus Compose uses
+// service-1 names within its dedicated project, while older deployments may
+// have project-prefixed names. Never accept a broad prefix match.
 func gatewayServiceName(project, name string) bool {
-	return name == project+"-postgres" || name == project+"-litellm" ||
-		strings.HasPrefix(name, project+"-postgres-") && numericSuffix(name, project+"-postgres-") ||
-		strings.HasPrefix(name, project+"-litellm-") && numericSuffix(name, project+"-litellm-")
+	for _, service := range []string{"postgres", "litellm"} {
+		for _, prefix := range []string{service, project + "-" + service} {
+			if name == prefix || strings.HasPrefix(name, prefix+"-") && numericSuffix(name, prefix+"-") {
+				return true
+			}
+		}
+	}
+	return false
 }
+var numericInstanceSuffix = regexp.MustCompile(`^[1-9][0-9]*$`)
+
 func numericSuffix(name, prefix string) bool {
-	return regexp.MustCompile(`^[0-9]+$`).MatchString(strings.TrimPrefix(name, prefix))
+	return numericInstanceSuffix.MatchString(strings.TrimPrefix(name, prefix))
 }
 
 func validateGatewayCleanup(project string, p cleanupProject, instances []cleanupInstance, force bool) error {
