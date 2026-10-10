@@ -174,7 +174,7 @@ func TestEngineDoesNotStartLaterStepAfterCancellation(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
 	}
-	if len(result.Steps) != 1 || second.executions != 0 {
+	if len(result.Steps) != 0 || second.executions != 0 {
 		t.Fatalf("second executed: %#v", result)
 	}
 }
