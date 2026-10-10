@@ -89,6 +89,18 @@ func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
 	return cfg, nil
 }
 
+func runComposeServicesSequentially(ctx context.Context, order []string, run func(string) error) error {
+	for _, service := range order {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := run(service); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -129,19 +141,23 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		return fmt.Errorf("order compose services for %q: %w", p.Name, err)
 	}
 
-	stack := composeclient.NewStack(c, composeclient.StackFailFast())
-	stack.AddOrdered(order, resources)
-
-	runOptions := []composeclient.Option{
-		composeclient.OptionCreate(),
-		composeclient.OptionNoHealthd(),
-	}
-	if err := stack.ForAction(composeclient.ActionEnsure).Run(ctx, composeclient.ActionEnsure, runOptions...); err != nil {
-		return fmt.Errorf("ensure compose resources for %q: %w", p.Name, err)
-	}
-	startable := func(resource composeclient.Resource) bool { return resource.IsEnsured() }
-	if err := stack.ForActionF(composeclient.ActionStart, startable).Run(ctx, composeclient.ActionStart, runOptions...); err != nil {
-		return fmt.Errorf("start compose resources for %q: %w", p.Name, err)
+	runOptions := []composeclient.Option{composeclient.OptionCreate()}
+	for _, action := range []composeclient.Action{composeclient.ActionEnsure, composeclient.ActionStart} {
+		if err := runComposeServicesSequentially(ctx, order, func(service string) error {
+			for _, resource := range resources[service] {
+				if action == composeclient.ActionStart && !resource.IsEnsured() {
+					continue
+				}
+				stack := composeclient.NewStack(c, composeclient.StackWorkers(1))
+				stack.Add(resource)
+				if err := stack.ForAction(action).Run(ctx, action, runOptions...); err != nil {
+					return fmt.Errorf("service %q resource action %v: %w", service, action, err)
+				}
+			}
+			return nil
+		}); err != nil {
+			return fmt.Errorf("compose project %q action %v: %w", p.Name, action, err)
+		}
 	}
 	return nil
 }
