@@ -57,7 +57,7 @@ func (d *Driver) SupportsDryRun() bool {
 }
 
 func (d *Driver) Validate(raw json.RawMessage) error {
-	_, err := parseConfig(context.Background(), raw)
+	_, err := parseConfig(context.Background(), raw, validationEnvironment())
 	return err
 }
 
@@ -65,14 +65,24 @@ func (d *Driver) Execute(ctx context.Context, raw json.RawMessage, options orche
 	if options.DryRun {
 		return fmt.Errorf("compose driver does not support dry-run")
 	}
-	cfg, err := parseConfig(ctx, raw)
+	cfg, err := parseConfig(ctx, raw, d.environment)
 	if err != nil {
 		return err
 	}
 	return d.execute(ctx, cfg, d.environment)
 }
 
-func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
+// validationEnvironment substitutes non-secret, syntax-safe values only during
+// structural validation. Runtime execution receives real credentials separately.
+func validationEnvironment() map[string]string {
+	return map[string]string{
+		"AGINCTUS_GATEWAY_POSTGRES_PASSWORD": "validation-placeholder",
+		"AGINCTUS_GATEWAY_MASTER_KEY": "validation-placeholder",
+		"AGINCTUS_GATEWAY_SALT_KEY": "validation-placeholder",
+	}
+}
+
+func parseConfig(ctx context.Context, raw json.RawMessage, environment map[string]string) (Config, error) {
 	var cfg Config
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -92,7 +102,7 @@ func parseConfig(ctx context.Context, raw json.RawMessage) (Config, error) {
 	}
 	defer cleanup()
 
-	_, err = loadProject(ctx, cfg.Project, path, nil)
+	_, err = loadProject(ctx, cfg.Project, path, environment)
 	if err != nil {
 		return Config{}, fmt.Errorf("validate compose project %q: %w", cfg.Project, err)
 	}
