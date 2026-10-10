@@ -144,14 +144,19 @@ func TestEngineRejectsCancellationBeforeFirstStep(t *testing.T) {
 	driver := &fakeDriver{name: "apply", supportsDryRun: true}
 	engine := NewEngine(map[string]Driver{"apply": driver})
 	_, err := engine.Execute(ctx, testPlan(Step{ID: "first", Driver: "apply", Configuration: []byte(`{}`)}), ExecuteOptions{})
-	if !errors.Is(err, context.Canceled) { t.Fatalf("error = %v", err) }
-	if driver.executions != 0 { t.Fatal("driver ran after cancellation") }
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v", err)
+	}
+	if driver.executions != 0 {
+		t.Fatal("driver ran after cancellation")
+	}
 }
 
 type cancelingDriver struct {
 	fakeDriver
 	cancel context.CancelFunc
 }
+
 func (d *cancelingDriver) Execute(ctx context.Context, raw json.RawMessage, opts ExecuteOptions) error {
 	d.cancel()
 	return nil
@@ -166,6 +171,10 @@ func TestEngineDoesNotStartLaterStepAfterCancellation(t *testing.T) {
 		Step{ID: "first", Driver: "first", Configuration: []byte(`{}`)},
 		Step{ID: "second", Driver: "second", Configuration: []byte(`{}`)},
 	), ExecuteOptions{})
-	if !errors.Is(err, context.Canceled) { t.Fatalf("error = %v", err) }
-	if len(result.Steps) != 1 || second.executions != 0 { t.Fatalf("second executed: %#v", result) }
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v", err)
+	}
+	if len(result.Steps) != 1 || second.executions != 0 {
+		t.Fatalf("second executed: %#v", result)
+	}
 }
