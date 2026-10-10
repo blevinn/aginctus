@@ -198,3 +198,27 @@ func TestComposePrerequisitesPrecedeInstances(t *testing.T) {
 		t.Fatal("instances must remain in dependency-ordered service pass")
 	}
 }
+
+func TestComposeProjectOwnershipValidation(t *testing.T) {
+	project := "gateway-test"
+	valid := map[string]string{
+		ownershipManagedKey: "true",
+		ownershipResourceKey: "compose-project",
+		ownershipDeploymentKey: project,
+	}
+	if err := verifyComposeProjectOwnership(valid, project); err != nil {
+		t.Fatalf("owned project rejected: %v", err)
+	}
+	for name, changes := range map[string]map[string]string{
+		"unmarked": {},
+		"wrong deployment": {ownershipManagedKey: "true", ownershipResourceKey: "compose-project", ownershipDeploymentKey: "other"},
+		"wrong kind": {ownershipManagedKey: "true", ownershipResourceKey: "compose-instance", ownershipDeploymentKey: project},
+		"wrong managed marker": {ownershipManagedKey: "false", ownershipResourceKey: "compose-project", ownershipDeploymentKey: project},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := verifyComposeProjectOwnership(changes, project); err == nil {
+				t.Fatal("accepted foreign project")
+			}
+		})
+	}
+}
