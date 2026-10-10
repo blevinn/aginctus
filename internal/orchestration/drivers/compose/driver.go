@@ -160,16 +160,42 @@ func verifyComposeInstanceOwnership(config map[string]string, project, instance 
 	return nil
 }
 
+// ComposeDriftKind classifies reconciliation decisions without exposing values.
+type ComposeDriftKind string
+
+const (
+	ComposeDriftConfig   ComposeDriftKind = "config"
+	ComposeDriftProfiles ComposeDriftKind = "profiles"
+	ComposeDriftDevice   ComposeDriftKind = "device"
+	ComposeDriftImage    ComposeDriftKind = "image"
+)
+
+// ComposeDriftError identifies a change that the pinned upstream Compose
+// implementation cannot converge on an existing instance. Key names are
+// safe to print; old and new configuration values are deliberately omitted.
+type ComposeDriftError struct {
+	Kind   ComposeDriftKind
+	Key    string
+	Reason string
+}
+
+func (e *ComposeDriftError) Error() string {
+	if e.Key != "" {
+		return fmt.Sprintf("compose %s drift at %q: %s", e.Kind, e.Key, e.Reason)
+	}
+	return fmt.Sprintf("compose %s drift: %s", e.Kind, e.Reason)
+}
+
 // detectComposeInstanceDrift rejects changes the pinned Compose Ensure would
 // silently ignore. Missing extension keys are safe: Ensure adds them.
 func detectComposeInstanceDrift(desired map[string]string, desiredProfiles []string, actual map[string]string, actualProfiles []string) error {
 	for key, want := range desired {
 		if got, exists := actual[key]; exists && got != want {
-			return fmt.Errorf("configuration drift for %q: instance recreation or an explicit update is required", key)
+			return &ComposeDriftError{Kind: ComposeDriftConfig, Key: key, Reason: "instance recreation or an explicit update is required"}
 		}
 	}
 	if desiredProfiles != nil && !reflect.DeepEqual(desiredProfiles, actualProfiles) {
-		return fmt.Errorf("instance profile drift: explicit reconciliation required")
+		return &ComposeDriftError{Kind: ComposeDriftProfiles, Reason: "explicit reconciliation required"}
 	}
 	return nil
 }
@@ -182,11 +208,11 @@ func detectComposeDeviceDrift(desired, actual map[string]map[string]string) erro
 		if !exists {
 			// The pinned upstream Ensure does not add missing raw devices to
 			// existing instances, so absence is drift too.
-			return fmt.Errorf("device %q missing: explicit instance reconciliation required", name)
+			return &ComposeDriftError{Kind: ComposeDriftDevice, Key: name, Reason: "device missing; explicit instance reconciliation required"}
 		}
 		for key, want := range desiredValues {
 			if got, ok := current[key]; !ok || got != want {
-				return fmt.Errorf("device %q setting %q drift: explicit instance reconciliation required", name, key)
+				return &ComposeDriftError{Kind: ComposeDriftDevice, Key: name + "." + key, Reason: "explicit instance reconciliation required"}
 			}
 		}
 	}
@@ -201,10 +227,10 @@ func detectComposeImageDrift(want, got string) error {
 		return nil
 	}
 	if got == "" {
-		return fmt.Errorf("existing instance has no image alias marker; cannot verify image convergence without recreation")
+		return &ComposeDriftError{Kind: ComposeDriftImage, Reason: "missing recorded image alias; cannot verify convergence without recreation"}
 	}
 	if want != got {
-		return fmt.Errorf("instance image drift: recreation required to apply changed image")
+		return &ComposeDriftError{Kind: ComposeDriftImage, Reason: "recreation required to apply changed image"}
 	}
 	return nil
 }
@@ -213,10 +239,10 @@ func detectComposeImageDrift(want, got string) error {
 // has changed. The instance records the fingerprint it was launched from.
 func detectComposeImageFingerprintDrift(desiredFingerprint, actualFingerprint string) error {
 	if desiredFingerprint == "" || actualFingerprint == "" {
-		return fmt.Errorf("cannot verify instance base image fingerprint: explicit reconciliation required")
+		return &ComposeDriftError{Kind: ComposeDriftImage, Reason: "missing base image fingerprint; explicit reconciliation required"}
 	}
 	if !strings.EqualFold(desiredFingerprint, actualFingerprint) {
-		return fmt.Errorf("instance base image fingerprint drift: recreation required")
+		return &ComposeDriftError{Kind: ComposeDriftImage, Reason: "recreation required"}
 	}
 	return nil
 }
