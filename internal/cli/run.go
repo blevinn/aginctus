@@ -267,12 +267,11 @@ func runNetwork(
 		return 1
 	}
 
-	operation := "upsert"
+	var operation string
 	switch action {
 	case "apply", "ensure":
-		// "ensure" is retained as a compatibility alias.
+		operation = "upsert"
 	case "remove", "teardown":
-		// "teardown" is retained as a compatibility alias.
 		operation = "delete"
 	default:
 		printNetworkUsage(stderr)
@@ -410,12 +409,11 @@ func runHerdr(
 		return 1
 	}
 
-	operation := "upsert"
+	var operation string
 	switch args[0] {
 	case "apply", "ensure":
-		// "ensure" is retained as a compatibility alias.
+		operation = "upsert"
 	case "remove", "teardown":
-		// "teardown" is retained as a compatibility alias.
 		operation = "delete"
 	default:
 		printHerdrClientUsage(stderr)
