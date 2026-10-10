@@ -31,13 +31,8 @@ type Spec struct {
 }
 
 func FromConfig(effective *config.Config) (Spec, error) {
-	keys := []struct {
-		path string
-		dst  *string
-	}{}
-
 	spec := Spec{}
-	keys = []struct {
+	keys := []struct {
 		path string
 		dst  *string
 	}{
