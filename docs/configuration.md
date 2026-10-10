@@ -251,6 +251,6 @@ services.aginctus.reconcile = {
 };
 ```
 
-This reconciles the management network, Herdr client, and selected workloads after Incus and the image update units. It is disabled by default because reconciliation mutates Incus state.
+This reconciles the management network, Herdr client, and selected workloads only after Incus and any enabled image update services have succeeded. The services include the host `incus` executable in their systemd `PATH`. An image import failure prevents dependent reconciliation instead of allowing workloads to start against an outdated alias. Reconciliation is disabled by default because it mutates Incus state.
 
 The current module deliberately requires `services.aginctus.package` to be supplied by the caller. The flake already exports the guest image derivations, but the Go CLI does not yet have a reproducible Nix package output. That packaging work is the remaining piece required to make the module fully self-contained.
