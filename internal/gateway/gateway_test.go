@@ -2,10 +2,10 @@ package gateway
 
 import (
 	"encoding/json"
-	"reflect"
-	"sigs.k8s.io/yaml"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sigs.k8s.io/yaml"
 	"strings"
 	"testing"
 )
@@ -19,7 +19,7 @@ func TestRenderCompose(t *testing.T) {
 		NetworkIPv4NAT:     false,
 		NetworkIPv4Routing: false,
 		NetworkIPv6Address: "none",
-		LiteLLMImage:       "ghcr.io/berriai/litellm:v1.103.0",
+		LiteLLMImage:       "ghcr.io/berriai/litellm:v1.103.0-stable",
 		PostgresImage:      "docker.io/library/postgres:17-alpine",
 	}
 
@@ -30,7 +30,7 @@ func TestRenderCompose(t *testing.T) {
 
 	for _, want := range []string{
 		"name: aginctus-gateway",
-		"ghcr.io/berriai/litellm:v1.103.0",
+		"ghcr.io/berriai/litellm:v1.103.0-stable",
 		"docker.io/library/postgres:17-alpine",
 		"name: aginctus-mgmt",
 		"${AGINCTUS_GATEWAY_MASTER_KEY}",
@@ -57,7 +57,7 @@ func TestOrchestrationPlanOrdersNetworkBeforeComposeAndKeepsSecretReferences(t *
 		NetworkIPv4NAT:     false,
 		NetworkIPv4Routing: false,
 		NetworkIPv6Address: "none",
-		LiteLLMImage:       "ghcr.io/berriai/litellm:v1.103.0",
+		LiteLLMImage:       "ghcr.io/berriai/litellm:v1.103.0-stable",
 		PostgresImage:      "docker.io/library/postgres:17-alpine",
 	}
 
@@ -152,6 +152,56 @@ func TestInitializeRuntimeEnvironmentUsesProvidedSeedOnlyWhenMissing(t *testing.
 	}
 	if second["AGINCTUS_GATEWAY_MASTER_KEY"] != "seeded-value" {
 		t.Fatalf("persisted master key = %q, want original seed", second["AGINCTUS_GATEWAY_MASTER_KEY"])
+	}
+}
+
+func TestGatewayIDRejectsTraversalAndSeparators(t *testing.T) {
+	for _, id := range []string{"../outside", ".", "..", "nested/path", "nested\\\\path", "/absolute", ""} {
+		t.Run(id, func(t *testing.T) {
+			spec := Spec{ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+			if err := spec.Validate(); err == nil {
+				t.Fatalf("accepted unsafe gateway ID %q", id)
+			}
+			t.Setenv("XDG_STATE_HOME", t.TempDir())
+			if _, err := spec.InitializeRuntimeEnvironment(); err == nil {
+				t.Fatalf("initialized unsafe gateway ID %q", id)
+			}
+		})
+	}
+	for _, id := range []string{"local", "gateway-01", "gateway_01"} {
+		spec := Spec{ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+		if err := spec.Validate(); err != nil {
+			t.Fatalf("valid gateway ID %q rejected: %v", id, err)
+		}
+	}
+}
+
+func TestGatewaySecretStateRejectsSymlinkAndLooseMode(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	dir := filepath.Join(state, "aginctus", "gateway", "local")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "secrets.json")
+	outside := filepath.Join(state, "outside")
+	if err := os.WriteFile(outside, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted symlink secret state")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted loosely permissioned secret state")
 	}
 }
 
