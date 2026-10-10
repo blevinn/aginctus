@@ -307,6 +307,8 @@ func stampComposeCommands(config *composeclient.InstanceConfig) error {
 // instance, not merely the intended service names. Recheck after the upstream
 // project Ensure and before any subsequent instance actions so a collision
 // is rejected instead of silently being adopted on the next operation.
+func isComposeImageSeed(name string) bool { return strings.HasPrefix(name, "ic-seed-") }
+
 func verifyComposeDeploymentOwnership(ctx context.Context, connection *iclient.Connection, project string) error {
 	incusProject := composeclient.SanitizeProjectName(project)
 	existing, _, err := connection.GetProject(ctx, incusProject)
@@ -321,7 +323,7 @@ func verifyComposeDeploymentOwnership(ctx context.Context, connection *iclient.C
 		return fmt.Errorf("inspect Compose instances in project %q: %w", project, err)
 	}
 	for _, instance := range instances {
-		// The pinned incus-compose image preparer creates transient ic-seed-*\n		// instances while importing OCI images. These are not deployment\n		// services and carry no Aginctus ownership marker. Never adopt them.\n		if strings.HasPrefix(instance.Name, "ic-seed-") {\n			continue\n		}\n		if err := verifyComposeInstanceOwnership(instance.Config, project, instance.Name); err != nil {
+		// The pinned incus-compose image preparer creates transient ic-seed-*\n		// instances while importing OCI images. These are not deployment\n		// services and carry no Aginctus ownership marker. Never adopt them.\n		if isComposeImageSeed(instance.Name) {\n			continue\n		}\n		if err := verifyComposeInstanceOwnership(instance.Config, project, instance.Name); err != nil {
 			return err
 		}
 	}
