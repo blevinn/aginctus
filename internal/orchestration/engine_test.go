@@ -178,3 +178,21 @@ func TestEngineDoesNotStartLaterStepAfterCancellation(t *testing.T) {
 		t.Fatalf("second executed: %#v", result)
 	}
 }
+
+func TestEngineDoesNotReportCanceledStepAsSuccess(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	first := &cancelingDriver{cancel: cancel}
+	second := &fakeDriver{name: "second", supportsDryRun: true}
+	engine := NewEngine(map[string]Driver{"first": first, "second": second})
+	result, err := engine.Execute(ctx, testPlan(
+		Step{ID: "first", Driver: "first", Configuration: []byte(`{}`)},
+		Step{ID: "second", Driver: "second", Configuration: []byte(`{}`)},
+	), ExecuteOptions{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+	if len(result.Steps) != 0 || second.executions != 0 {
+		t.Fatalf("canceled step reported success or next step ran: %#v, calls=%d",result,second.executions)
+	}
+}
