@@ -108,3 +108,51 @@ func TestGatewayServiceNameIncusComposeNaming(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoveGatewayAlreadyAbsentIsNoop(t *testing.T) {
+ previous := runIncus
+ t.Cleanup(func(){runIncus=previous})
+ calls:=0
+ runIncus=func(_ context.Context,args ...string)([]byte,error){
+  calls++
+  if strings.Join(args," ")!="project list --format=json"{t.Fatalf("unexpected command: %v",args)}
+  return []byte(`[{"name":"default","config":{}}]`),nil
+ }
+ spec:=Spec{ID:"test",Project:"aginctus-gateway",Network:"test",LiteLLMImage:"litellm",PostgresImage:"postgres"}
+ for i:=0;i<2;i++ {if err:=spec.Remove(context.Background(),false);err!=nil{t.Fatalf("remove attempt %d: %v",i,err)}}
+ if calls!=2{t.Fatalf("expected two read-only project listings, got %d",calls)}
+}
+
+func TestRemoveGatewayDoesNotMaskInspectionErrors(t *testing.T) {
+ previous:=runIncus
+ t.Cleanup(func(){runIncus=previous})
+ spec:=Spec{ID:"test",Project:"aginctus-gateway",Network:"test",LiteLLMImage:"litellm",PostgresImage:"postgres"}
+ for _,tc:=range []struct{name string;data []byte;err error}{
+  {"daemon failure",nil,fmt.Errorf("daemon unreachable")},
+  {"invalid JSON",[]byte(`{`),nil},
+ } {
+  t.Run(tc.name,func(t *testing.T){
+   runIncus=func(context.Context,...string)([]byte,error){return tc.data,tc.err}
+   if err:=spec.Remove(context.Background(),false);err==nil{t.Fatal("inspection error was swallowed")}
+  })
+ }
+}
+
+func TestRemoveGatewayEmptyOwnedProjectIsNoop(t *testing.T) {
+ previous:=runIncus
+ t.Cleanup(func(){runIncus=previous})
+ project:="aginctus-gateway"
+ commands:=[]string{}
+ runIncus=func(_ context.Context,args ...string)([]byte,error){
+  commands=append(commands,strings.Join(args," "))
+  if args[0]=="project"{return json.Marshal([]cleanupProject{{Name:project,Config:map[string]string{
+   "user.aginctus.managed":"true","user.aginctus.resource":"compose-project","user.aginctus.deployment":project,
+  }}})}
+  if args[0]=="list"{return []byte("[]"),nil}
+  t.Fatalf("unexpected mutation: %v",args)
+  return nil,nil
+ }
+ spec:=Spec{ID:"test",Project:project,Network:"test",LiteLLMImage:"litellm",PostgresImage:"postgres"}
+ if err:=spec.Remove(context.Background(),false);err!=nil{t.Fatal(err)}
+ if len(commands)!=2{t.Fatalf("unexpected commands: %v",commands)}
+}
