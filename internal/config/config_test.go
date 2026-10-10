@@ -144,3 +144,37 @@ func writeFile(t *testing.T, path, content string) {
 		t.Fatalf("WriteFile(%q) error = %v", path, err)
 	}
 }
+
+func TestRejectNullConfigurationDocuments(t *testing.T) {
+	for _, source := range []string{"system", "user", "explicit"} {
+		t.Run(source, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			writeFile(t, path, "null")
+			loader := &Loader{}
+			options := Options{}
+			switch source {
+			case "system":
+				loader.SystemPath = path
+			case "user":
+				loader.UserPath = path
+			case "explicit":
+				options.ConfigurationFile = path
+			}
+			if _, err := loader.Load(options); err == nil {
+				t.Fatal("Load() accepted top-level null")
+			}
+		})
+	}
+}
+
+func TestRejectNonObjectConfigurationDocuments(t *testing.T) {
+	for _, document := range []string{"[]", "`" + "42" + "`", "true"} {
+		t.Run(document, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			writeFile(t, path, document)
+			if _, err := (&Loader{}).Load(Options{ConfigurationFile: path}); err == nil {
+				t.Fatalf("Load() accepted %s", document)
+			}
+		})
+	}
+}
