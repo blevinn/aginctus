@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -48,10 +50,38 @@ func TestAggregateApplyRenderDeterministicSharedNetwork(t *testing.T) {
 	}
 }
 
-func TestAggregateApplyRequiresRender(t *testing.T) {
+func TestAggregateApplyRejectsInvalidArguments(t *testing.T) {
 	var out, errOut bytes.Buffer
-	code := Run(context.Background(), []string{"apply"}, &out, &errOut, &fakeIncusClient{}, &fakeConfigLoader{})
-	if code != 2 || !strings.Contains(errOut.String(), "not implemented") {
+	code := Run(context.Background(), []string{"apply", "--invalid"}, &out, &errOut, &fakeIncusClient{}, &fakeConfigLoader{})
+	if code != 2 || !strings.Contains(errOut.String(), "Usage:") {
 		t.Fatalf("code = %d, stderr = %q", code, errOut.String())
+	}
+}
+
+func TestAggregateApplyFromRejectsMalformedFileWithoutExecution(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "plan.json")
+	if err := os.WriteFile(path, []byte(`{"apiVersion":"wrong"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errOut bytes.Buffer
+	code := Run(context.Background(), []string{"apply", "--from", path}, &out, &errOut, &fakeIncusClient{}, &fakeConfigLoader{})
+	if code != 1 || !strings.Contains(errOut.String(), "orchestration") {
+		t.Fatalf("code = %d, stderr = %q", code, errOut.String())
+	}
+}
+
+func TestAggregateApplyFromRejectsNonRegularFile(t *testing.T) {
+	if _, err := readAggregatePlan(t.TempDir()); err == nil {
+		t.Fatal("expected directory rejection")
+	}
+}
+
+func TestAggregateApplyFromRejectsTrailingDocuments(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "plan.json")
+	if err := os.WriteFile(path, []byte("{}\\n{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readAggregatePlan(path); err == nil {
+		t.Fatal("expected multi-document rejection")
 	}
 }
