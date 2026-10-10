@@ -122,7 +122,7 @@ ag.orchestration('workload-' + cfg.workload.id, steps)`,
 				"ipv4Routing": s.Network.IPv4Routing,
 				"ipv6Address": s.Network.IPv6Address,
 				"operation":   "upsert",
-				"force":       force,
+				"force":       false, // Workload force must not adopt the shared management network.
 			},
 			"workload": map[string]any{
 				"id":                s.ID,
