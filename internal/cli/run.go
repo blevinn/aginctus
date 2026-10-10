@@ -31,6 +31,11 @@ var executeManagementNetwork = func(ctx context.Context, spec managementnetwork.
 }
 
 var executeHerdrClient = func(ctx context.Context, spec herdrclient.Spec, options herdrclient.Options) error {
+	if options.Operation == "delete" && !options.DryRun {
+		if err := transitionHerdrClient(ctx, spec, "stop"); err != nil {
+			return fmt.Errorf("stop Herdr client before deletion: %w", err)
+		}
+	}
 	return spec.Execute(ctx, options)
 }
 
@@ -437,6 +442,27 @@ func runHerdr(
 	if len(args) > 0 && args[0] == "status" {
 		return runHerdrClientStatus(ctx, args[1:], stdout, stderr, effective)
 	}
+	if len(args) > 0 && (args[0] == "start" || args[0] == "stop") {
+		if len(args) != 1 {
+			printHerdrClientUsage(stderr)
+			return 2
+		}
+		spec, err := herdrclient.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
+			return 1
+		}
+		if err := transitionHerdrClient(ctx, spec, args[0]); err != nil {
+			fmt.Fprintf(stderr, "Herdr client %s: %v\n", args[0], err)
+			return 1
+		}
+		verb := "started"
+		if args[0] == "stop" {
+			verb = "stopped"
+		}
+		fmt.Fprintf(stdout, "Herdr client %q: %s\n", spec.Name, verb)
+		return 0
+	}
 	if len(args) == 0 {
 		printHerdrClientUsage(stderr)
 		return 2
@@ -492,6 +518,8 @@ func printHerdrClientUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] herdr client apply [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client remove [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client status")
+	fmt.Fprintln(w, "       aginctus [global options] herdr client start")
+	fmt.Fprintln(w, "       aginctus [global options] herdr client stop")
 }
 
 func runWorkload(
@@ -654,6 +682,8 @@ Commands:
   herdr client apply     Create, reconcile, and bootstrap the Herdr client
   herdr client remove    Delete the Herdr client container
   herdr client status    Inspect the Herdr client instance
+  herdr client start     Start the Herdr client
+  herdr client stop      Stop the Herdr client
   network apply          Create or reconcile the configured management network
   network remove         Delete the configured management network
   network status         Inspect the configured management network
