@@ -2,10 +2,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 mod build '.just/build.just'
 mod update '.just/update.just'
-
-fmt:
-    gofmt -w cmd internal
-    nix fmt
+mod fmt '.just/fmt.just'
 
 test:
     go test ./...
