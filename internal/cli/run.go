@@ -76,7 +76,7 @@ func Run(
 
 	switch commandArgs[0] {
 	case "apply":
-		return runAggregateApply(commandArgs[1:], stdout, stderr, effective)
+		return runAggregateApply(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "doctor":
 		return runDoctor(ctx, commandArgs[1:], stdout, stderr, incusClient)
 	case "images":
@@ -574,7 +574,9 @@ Global options:
   --configuration-file=path    Load an explicit JSON configuration file
 
 Commands:
+  apply             Deploy the complete configured orchestration
   apply --render    Print one deterministic JSON orchestration plan (no mutation)
+  apply --from FILE Deploy a validated JSON orchestration plan
   images list|ls    List local Incus images and aliases
   images update NAME PATH   Safely import an image from a Nix result directory
   config show       Print the effective merged configuration
