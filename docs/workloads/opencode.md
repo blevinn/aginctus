@@ -61,3 +61,11 @@ Until gateway credential delivery is implemented, this image only establishes th
 Run `aginctus workload dev ensure` to reconcile the configured management network and workload instance through the Apply driver, or `aginctus workload dev teardown` to delete only the workload instance. Use `--dry-run` to inspect actions, and see [workload lifecycle](lifecycle.md) for ownership and isolation rules.
 
 This lifecycle does not yet provision gateway workload credentials or complete runtime-specific readiness. The image remains independent of host-specific values.
+
+## VM compatibility
+
+The image built here is for Incus **containers**, not virtual machines.
+Changing `workloads.dev.isolation` to `vm` without replacing
+`workloads.dev.image.alias` with a VM-compatible Incus image will fail.
+For alternate images and supported isolation combinations, see
+[Workload lifecycle](lifecycle.md#isolation-and-image-compatibility).
