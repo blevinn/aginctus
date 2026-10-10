@@ -104,6 +104,7 @@ func TestRuntimeReconcileCreatesReachableSavedMachine(t *testing.T) {
 	var wroteKnownHosts bool
 	var probed bool
 	var added bool
+	staged := map[string]string{}
 
 	incus.run = func(instance string, command []string, stdin string) (incusadapter.InstanceExecResult, error) {
 		switch {
@@ -122,11 +123,19 @@ func TestRuntimeReconcileCreatesReachableSavedMachine(t *testing.T) {
 		case instance == "aginctus-herdr" && len(command) == 3 && equalCommand(command[:2], "test", "-f") && strings.Contains(command[2], "/known_hosts/"):
 			return incusadapter.InstanceExecResult{ExitCode: 1}, nil
 
-		case instance == "aginctus-herdr" && len(command) == 2 && command[0] == "tee" && strings.Contains(command[1], "/known_hosts/"):
-			if !strings.Contains(stdin, "aginctus-dev ssh-ed25519 HOSTKEY") {
-				t.Fatalf("known_hosts content = %q", stdin)
+		case instance == "aginctus-herdr" && len(command) == 2 && command[0] == "mktemp":
+			tmp := strings.Replace(command[1], "XXXXXX", "ABCDEF", 1)
+			return incusadapter.InstanceExecResult{Stdout: tmp + "\n"}, nil
+		case instance == "aginctus-herdr" && len(command) == 2 && command[0] == "tee":
+			staged[command[1]] = stdin
+			return incusadapter.InstanceExecResult{}, nil
+		case instance == "aginctus-herdr" && len(command) == 3 && command[0] == "mv":
+			if strings.Contains(command[2], "/known_hosts/") {
+				if !strings.Contains(staged[command[1]], "aginctus-dev ssh-ed25519 HOSTKEY") {
+					t.Fatalf("known_hosts content = %q", staged[command[1]])
+				}
+				wroteKnownHosts = true
 			}
-			wroteKnownHosts = true
 			return incusadapter.InstanceExecResult{}, nil
 
 		case instance == "aginctus-herdr" && equalCommand(command, "ssh", "aginctus-dev", "true"):
@@ -243,6 +252,25 @@ func TestRuntimeRevokeRemovesMachineBeforeAuthorization(t *testing.T) {
 	}
 }
 
+func TestRuntimeRevokeReportsIncompleteAuthorizationOnGuestFailure(t *testing.T) {
+	incus := ownedIncus()
+	incus.run = func(instance string, command []string, _ string) (incusadapter.InstanceExecResult, error) {
+		switch {
+		case instance == "aginctus-herdr" && equalCommand(command, "herdr", "machine", "list", "--json"):
+			return incusadapter.InstanceExecResult{Stdout: "[]\n"}, nil
+		case instance == "aginctus-dev" && equalCommand(command, "aginctus-ssh-authorize", "remove", "agent"):
+			return incusadapter.InstanceExecResult{}, errors.New("guest unavailable")
+		default:
+			return incusadapter.InstanceExecResult{}, nil
+		}
+	}
+
+	err := NewRuntime(incus).Revoke(context.Background(), remoteConfig())
+	if err == nil || !strings.Contains(err.Error(), "authorization revocation is incomplete") || !strings.Contains(err.Error(), "guest unavailable") {
+		t.Fatalf("Revoke() error = %v", err)
+	}
+}
+
 func TestPlanUsesInternalSSHAccessDriver(t *testing.T) {
 	spec := Spec{WorkloadID: "dev", ClientInstance: "aginctus-herdr", TargetInstance: "aginctus-dev", TargetAccount: "agent"}
 	plan, err := spec.Plan(sshaccess.Reconcile)
@@ -276,6 +304,7 @@ func TestRuntimeRejectsUnexpectedHostKeyChange(t *testing.T) {
 				Stdout: "generation\t1\nfingerprint\tSHA256:test\npublic_key\tssh-ed25519 AAAATEST aginctus:1\n",
 			}, nil
 		case instance == "aginctus-dev" && equalCommand(command, "aginctus-ssh-authorize", "reconcile", "agent"):
+			t.Fatal("authorization changed before host-key mismatch was rejected")
 			return incusadapter.InstanceExecResult{}, nil
 		case instance == "aginctus-dev" && equalCommand(command, "cat", "/etc/ssh/ssh_host_ed25519_key.pub"):
 			return incusadapter.InstanceExecResult{Stdout: "ssh-ed25519 NEWKEY workload\n"}, nil
