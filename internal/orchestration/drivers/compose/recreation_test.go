@@ -49,27 +49,29 @@ func TestPlanComposeRecreationRejectsAmbiguousStorage(t *testing.T) {
 
 func TestVerifyComposeRecreationVolumes(t *testing.T) {
 	existing := map[string]map[string]string{
-		"root":{"type":"disk","path":"/","pool":"default"},
-		"data":{"type":"disk","path":"/var/lib/postgresql/data","pool":"default","source":"postgres-data"},
-		"eth0":{"type":"nic","network":"default"},
+		"root": {"type": "disk", "path": "/", "pool": "default"},
+		"data": {"type": "disk", "path": "/var/lib/postgresql/data", "pool": "default", "source": "postgres-data"},
+		"eth0": {"type": "nic", "network": "default"},
 	}
 	cases := []struct {
-		name string
+		name        string
 		replacement map[string]map[string]string
-		wantError bool
+		wantError   bool
 	}{
-		{"preserves volume",map[string]map[string]string{"data":{"type":"disk","path":"/var/lib/postgresql/data","pool":"default","source":"postgres-data"}},false},
-		{"removes volume",map[string]map[string]string{},true},
-		{"changes source",map[string]map[string]string{"data":{"type":"disk","path":"/var/lib/postgresql/data","pool":"default","source":"different"}},true},
-		{"changes pool",map[string]map[string]string{"data":{"type":"disk","path":"/var/lib/postgresql/data","pool":"other","source":"postgres-data"}},true},
-		{"changes mount path",map[string]map[string]string{"data":{"type":"disk","path":"/data","pool":"default","source":"postgres-data"}},true},
+		{"preserves volume", map[string]map[string]string{"data": {"type": "disk", "path": "/var/lib/postgresql/data", "pool": "default", "source": "postgres-data"}}, false},
+		{"removes volume", map[string]map[string]string{}, true},
+		{"changes source", map[string]map[string]string{"data": {"type": "disk", "path": "/var/lib/postgresql/data", "pool": "default", "source": "different"}}, true},
+		{"changes pool", map[string]map[string]string{"data": {"type": "disk", "path": "/var/lib/postgresql/data", "pool": "other", "source": "postgres-data"}}, true},
+		{"changes mount path", map[string]map[string]string{"data": {"type": "disk", "path": "/data", "pool": "default", "source": "postgres-data"}}, true},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name,func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			err := verifyComposeRecreationVolumes(existing, tc.replacement)
-			if (err != nil) != tc.wantError {t.Fatalf("error=%v wantError=%t",err,tc.wantError)}
-			if err != nil && strings.Contains(err.Error(),"postgres-data") {
-				t.Fatalf("diagnostic leaked volume source: %v",err)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("error=%v wantError=%t", err, tc.wantError)
+			}
+			if err != nil && strings.Contains(err.Error(), "postgres-data") {
+				t.Fatalf("diagnostic leaked volume source: %v", err)
 			}
 		})
 	}
@@ -77,8 +79,10 @@ func TestVerifyComposeRecreationVolumes(t *testing.T) {
 
 func TestVerifyComposeRecreationVolumesRejectsAmbiguousExistingDisk(t *testing.T) {
 	err := verifyComposeRecreationVolumes(
-		map[string]map[string]string{"bind":{"type":"disk","path":"/data","source":"/host/data"}},
-		map[string]map[string]string{"bind":{"type":"disk","path":"/data","source":"/host/data"}},
+		map[string]map[string]string{"bind": {"type": "disk", "path": "/data", "source": "/host/data"}},
+		map[string]map[string]string{"bind": {"type": "disk", "path": "/data", "source": "/host/data"}},
 	)
-	if err == nil { t.Fatal("expected failure for non-volume disk") }
+	if err == nil {
+		t.Fatal("expected failure for non-volume disk")
+	}
 }
