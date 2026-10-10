@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	composeclient "github.com/lxc/incus-compose/client"
+	"github.com/lxc/incus-compose/iclient"
 	"reflect"
 	"strings"
 	"testing"
@@ -141,5 +143,58 @@ func TestComposeServiceExecutionStopsOnCancellation(t *testing.T) {
 	}
 	if !reflect.DeepEqual(visited, []string{"postgres"}) {
 		t.Fatalf("visited = %v", visited)
+	}
+}
+
+func TestComposeClientConstructionProvidesLocalConnection(t *testing.T) {
+	var called bool
+	client, err := newComposeGlobalClient(context.Background(), func(info *iclient.ConfigRemoteInfo) (*iclient.Connection, error) {
+		called = true
+		if info.Name != "local" || len(info.Addrs) != 1 || info.Addrs[0] != "unix://" {
+			t.Fatalf("unexpected connection info: %#v", info)
+		}
+		return iclient.NewConnection(info)
+	})
+	if err != nil || !called || client == nil {
+		t.Fatalf("newComposeGlobalClient() = %v, %v, called=%t", client, err, called)
+	}
+}
+
+func TestComposeClientConstructionRejectsConnectionError(t *testing.T) {
+	want := errors.New("unavailable socket")
+	client, err := newComposeGlobalClient(context.Background(), func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error) {
+		return nil, want
+	})
+	if client != nil || !errors.Is(err, want) {
+		t.Fatalf("newComposeGlobalClient() = %v, %v", client, err)
+	}
+}
+
+func TestExplainComposeConnectionError(t *testing.T) {
+	err := errors.New("the incus server is not listening on the network (core.https_address is not set)")
+	got := explainComposeConnectionError(err)
+	if !errors.Is(got, err) || !strings.Contains(got.Error(), "incus config get core.https_address") {
+		t.Fatalf("missing actionable connection diagnostic: %v", got)
+	}
+	other := errors.New("unrelated connection failure")
+	if got := explainComposeConnectionError(other); got != other {
+		t.Fatalf("unrelated error altered: %v", got)
+	}
+}
+
+func TestComposePrerequisitesPrecedeInstances(t *testing.T) {
+	for _, priority := range []int{
+		composeclient.PriorityProject,
+		composeclient.PriorityProfile,
+		composeclient.PriorityImage,
+		composeclient.PriorityNetwork,
+		composeclient.PriorityVolume,
+	} {
+		if !isComposePrerequisite(priority) {
+			t.Fatalf("priority %d should be a prerequisite", priority)
+		}
+	}
+	if isComposePrerequisite(composeclient.PriorityInstance) {
+		t.Fatal("instances must remain in dependency-ordered service pass")
 	}
 }

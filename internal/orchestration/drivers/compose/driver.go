@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	composeclient "github.com/lxc/incus-compose/client"
+	"github.com/lxc/incus-compose/iclient"
 	composeproject "github.com/lxc/incus-compose/project"
 
 	"github.com/blevinn/aginctus/internal/orchestration"
@@ -101,6 +103,31 @@ func runComposeServicesSequentially(ctx context.Context, order []string, run fun
 	return nil
 }
 
+func newComposeGlobalClient(ctx context.Context, newConnection func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error)) (*composeclient.GlobalClient, error) {
+	connection, err := newConnection(&iclient.ConfigRemoteInfo{
+		Name:     "local",
+		Addrs:    []string{"unix://"},
+		Protocol: "incus",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return composeclient.New(ctx, composeclient.ClientProvideConnection(connection)), nil
+}
+
+// Image caching copies images between Incus projects using pull mode. Even when
+// the primary connection uses the local Unix socket, Incus must offer HTTPS.
+func explainComposeConnectionError(err error) error {
+	if strings.Contains(err.Error(), "core.https_address is not set") {
+		return fmt.Errorf("%w; configure an appropriately restricted Incus HTTPS listener with `incus config set core.https_address=<host-address>:8443` and verify it using `incus config get core.https_address` (setting a listener on all interfaces may expose the daemon; review firewall and trust configuration first)", err)
+	}
+	return err
+}
+
+func isComposePrerequisite(priority int) bool {
+	return priority < composeclient.PriorityInstance
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -113,9 +140,12 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		return fmt.Errorf("load compose project %q: %w", cfg.Project, err)
 	}
 
-	global := composeclient.New(ctx)
+	global, err := newComposeGlobalClient(ctx, iclient.NewConnection)
+	if err != nil {
+		return fmt.Errorf("construct local Incus connection for Compose: %w", err)
+	}
 	if err := global.Connect(); err != nil {
-		return fmt.Errorf("connect incus-compose client: %w", err)
+		return fmt.Errorf("connect incus-compose client: %w", explainComposeConnectionError(err))
 	}
 
 	c, err := global.EnsureProject(
@@ -142,9 +172,27 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	}
 
 	runOptions := []composeclient.Option{composeclient.OptionCreate()}
+	// Instance resources depend on images, networks, profiles and volumes.
+	// Ensure prerequisites across *all* services before proceeding through
+	// the service dependency order; per-service stacks otherwise try to
+	// create an instance while its image has not yet been ensured.
+	prerequisites := composeclient.NewStack(c, composeclient.StackWorkers(1), composeclient.StackFailFast())
+	for _, service := range order {
+		for _, resource := range resources[service] {
+			if isComposePrerequisite(resource.Priority()) {
+				prerequisites.Add(resource)
+			}
+		}
+	}
+	if err := prerequisites.ForAction(composeclient.ActionEnsure).Run(ctx, composeclient.ActionEnsure, runOptions...); err != nil {
+		return fmt.Errorf("compose project %q ensure prerequisites: %w", p.Name, err)
+	}
 	for _, action := range []composeclient.Action{composeclient.ActionEnsure, composeclient.ActionStart} {
 		if err := runComposeServicesSequentially(ctx, order, func(service string) error {
 			for _, resource := range resources[service] {
+				if action == composeclient.ActionEnsure && isComposePrerequisite(resource.Priority()) {
+					continue // already ensured in the prerequisite pass
+				}
 				if action == composeclient.ActionStart && !resource.IsEnsured() {
 					continue
 				}
