@@ -313,6 +313,35 @@ func stampComposeCommands(config *composeclient.InstanceConfig) error {
 	return nil
 }
 
+func isComposeImageSeed(name string) bool { return strings.HasPrefix(name, "ic-seed-") }
+
+func verifyComposeDeploymentOwnership(ctx context.Context, connection *iclient.Connection, project string) error {
+	incusProject := composeclient.SanitizeProjectName(project)
+	existing, _, err := connection.GetProject(ctx, incusProject)
+	if err != nil {
+		return fmt.Errorf("inspect Compose project %q ownership: %w", project, err)
+	}
+	if err := verifyComposeProjectOwnership(existing.Config, project); err != nil {
+		return err
+	}
+	instances, err := connection.GetInstances(ctx, incusProject, nil)
+	if err != nil {
+		return fmt.Errorf("inspect Compose instances in project %q: %w", project, err)
+	}
+	for _, instance := range instances {
+		// The pinned incus-compose image preparer creates transient ic-seed-*
+		// instances while importing OCI images. These are not deployment
+		// services and carry no Aginctus ownership marker. Never adopt them.
+		if isComposeImageSeed(instance.Name) {
+			continue
+		}
+		if err := verifyComposeInstanceOwnership(instance.Config, project, instance.Name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
@@ -337,12 +366,30 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	if err != nil {
 		return fmt.Errorf("inspect Compose project ownership: %w", err)
 	}
-	existing, _, err := connection.GetProject(ctx, composeclient.SanitizeProjectName(p.Name))
-	if err == nil {
+	// Perform the ownership lookup before calling upstream EnsureProject.
+	// Its create-on-missing fallback accepts concurrently created projects;
+	// instead, use the Incus create-only endpoint when initially missing.
+	projectName := composeclient.SanitizeProjectName(p.Name)
+	existing, _, err := connection.GetProject(ctx, projectName)
+	if api.StatusErrorCheck(err, http.StatusNotFound) {
+		config := api.ConfigMap{"features.profiles": "true"}
+		for key, value := range p.ClientConfig.XIncus {
+			config[key] = value
+		}
+		err = connection.CreateProject(ctx, api.ProjectsPost{
+			Name: projectName,
+			ProjectPut: api.ProjectPut{Config: config},
+		})
+		if err != nil {
+			return fmt.Errorf("create-only Compose project %q: refusing concurrent project adoption: %w", p.Name, err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("inspect Compose project %q: %w", p.Name, err)
+	} else {
 		if err := verifyComposeProjectOwnership(existing.Config, p.Name); err != nil {
 			return err
 		}
-		instances, listErr := connection.GetInstances(ctx, composeclient.SanitizeProjectName(p.Name), nil)
+		instances, listErr := connection.GetInstances(ctx, projectName, nil)
 		if listErr != nil {
 			return fmt.Errorf("inspect Compose instances in project %q: %w", p.Name, listErr)
 		}
@@ -351,20 +398,22 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 				return err
 			}
 		}
-	} else if !api.StatusErrorCheck(err, http.StatusNotFound) {
-		return fmt.Errorf("inspect Compose project %q: %w", p.Name, err)
 	}
-
-	c, err := global.EnsureProject(
-		p.Name,
-		composeclient.EnsureProjectWithCreate(),
-		composeclient.EnsureProjectWithConfig(p.ClientConfig.XIncus),
-	)
+	// Verify the persisted object before upstream Ensure can add any keys.
+	if err := verifyComposeDeploymentOwnership(ctx, connection, p.Name); err != nil {
+		return fmt.Errorf("pre-ensure Compose ownership check: %w", err)
+	}
+	c, err := global.EnsureProject(p.Name)
 	if err != nil {
-		return fmt.Errorf("ensure compose project %q: %w", p.Name, err)
+		return fmt.Errorf("open existing owned Compose project %q: %w", p.Name, err)
 	}
 	defer c.WarnError(c.Done, "compose client cleanup failed")
 
+	// Upstream EnsureProject can encounter a concurrently created project.
+	// Verify what now exists before opening or ensuring child resources.
+	if err := verifyComposeDeploymentOwnership(ctx, connection, p.Name); err != nil {
+		return fmt.Errorf("post-ensure Compose ownership check: %w", err)
+	}
 	if err := c.Open(); err != nil {
 		return fmt.Errorf("open compose project %q: %w", p.Name, err)
 	}
