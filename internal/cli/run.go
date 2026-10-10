@@ -436,7 +436,10 @@ func runHerdr(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) == 0 || args[0] != "client" {
+	if len(args) == 0 {
+		return runHerdrConsole(ctx, nil, stdout, stderr, effective)
+	}
+	if args[0] != "client" {
 		printHerdrClientUsage(stderr)
 		return 2
 	}
@@ -682,6 +685,7 @@ Commands:
   gateway status    Inspect gateway project and service state
   gateway remove [--force] Remove gateway instances, preserving data volumes
   gateway render    Render the AI gateway Compose model
+  herdr                  Launch interactive Herdr in its client container
   herdr client apply     Create, reconcile, and bootstrap the Herdr client
   herdr client remove    Delete the Herdr client container
   herdr client status    Inspect the Herdr client instance
