@@ -63,3 +63,11 @@ This PR intentionally does not add another bespoke `ensure` implementation.
 The declarative orchestration workstream will define how the image is instantiated, attached to the management network, given workspace storage, and provisioned with the Herdr SSH public key and gateway workload credential.
 
 The image itself is kept independent of those host-specific values so it remains reproducible and reusable.
+
+## VM compatibility
+
+The image built here is for Incus **containers**, not virtual machines.
+Changing `workloads.dev.isolation` to `vm` without replacing
+`workloads.dev.image.alias` with a VM-compatible Incus image will fail.
+For alternate images and supported isolation combinations, see
+[Workload lifecycle](lifecycle.md#isolation-and-image-compatibility).
