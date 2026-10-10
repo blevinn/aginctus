@@ -1,6 +1,8 @@
 package config
 
 import (
+	"encoding/json"
+	"strings"
 	"os"
 	"path/filepath"
 	"testing"
@@ -142,6 +144,37 @@ func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", path, err)
+	}
+}
+
+func TestRuntimeGatewaySecretsExcludedFromConfig(t *testing.T) {
+	for _, suffix := range []string{"POSTGRES_PASSWORD", "MASTER_KEY", "SALT_KEY"} {
+		t.Run(suffix, func(t *testing.T) {
+			loader := &Loader{Environment: []string{"AGINCTUS_GATEWAY_" + suffix + "=sentinel-sensitive-value"}}
+			cfg, err := loader.Load(Options{})
+			if err != nil {
+				t.Fatalf("Load() = %v", err)
+			}
+			data, err := json.Marshal(cfg.Values())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(data), "sentinel-sensitive-value") {
+				t.Fatalf("runtime credential leaked into config")
+			}
+			path := "gateway." + strings.ToLower(strings.ReplaceAll(suffix, "_", "."))
+			if _, ok := cfg.Get(path); ok {
+				t.Fatalf("runtime credential path %q was exposed", path)
+			}
+		})
+	}
+}
+
+func TestRuntimeSecretOverridesRejected(t *testing.T) {
+	for _, path := range []string{"gateway.postgres.password", "gateway.master.key", "gateway.salt.key"} {
+		if _, err := (&Loader{}).Load(Options{Overrides: []string{path + "=sentinel-sensitive-value"}}); err == nil {
+			t.Fatalf("Load accepted runtime secret override %q", path)
+		}
 	}
 }
 
