@@ -98,11 +98,10 @@ func (b nativeBackend) Get(_ context.Context, pool, name string) (*api.StorageVo
 	return volume, err
 }
 func (b nativeBackend) Create(ctx context.Context, pool string, volume api.StorageVolumesPost) error {
-	op, err := b.server.CreateStoragePoolVolume(pool, volume)
-	if err != nil { return err }
-	// Incus's Operation.Wait blocks until the operation finishes. Check the
-	// caller context before the request and after completion.
-	if err := op.Wait(); err != nil { return err }
+	if err := ctx.Err(); err != nil { return err }
+	// The Incus client handles the volume creation request synchronously and
+	// returns only an error; there is no operation handle to wait on.
+	if err := b.server.CreateStoragePoolVolume(pool, volume); err != nil { return err }
 	return ctx.Err()
 }
 
