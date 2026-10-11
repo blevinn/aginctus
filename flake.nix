@@ -59,6 +59,14 @@
             ];
             text = builtins.readFile ./guest/ssh/client-identity.sh;
           };
+          sshMachineConfigHelper = pkgs.writeShellApplication {
+            name = "aginctus-ssh-machine-config";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.util-linux
+            ];
+            text = builtins.readFile ./guest/ssh/machine-config.sh;
+          };
           sshHostTrustHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-host-trust";
             runtimeInputs = [
@@ -104,7 +112,15 @@
                     pkgs.openssh
                     sshClientIdentityHelper
                     sshHostTrustHelper
+                    sshMachineConfigHelper
                   ];
+
+                  # Only the managed Herdr client consumes this guest-owned
+                  # persistent SSH config. All identity and host-key settings
+                  # are recorded under the protected state-system volume.
+                  programs.ssh.extraConfig = ''
+                    Include /var/lib/aginctus/ssh/machines/*.conf
+                  '';
 
                   environment.variables = {
                     XDG_CONFIG_HOME = "/var/lib/herdr/config";
