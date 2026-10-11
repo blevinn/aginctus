@@ -204,6 +204,7 @@ A consuming NixOS flake can import it with:
 
 ```nix
 {
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   inputs.aginctus.url = "github:blevinn/aginctus";
 
   outputs = { self, nixpkgs, aginctus, ... }: {
