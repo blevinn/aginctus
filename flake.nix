@@ -48,6 +48,15 @@
               wrapProgram "$out/bin/aginctus" --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.incus ]}"
             '';
           };
+          stateSystemBindHelper = pkgs.writeShellApplication {
+            name = "aginctus-state-system-bind";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.util-linux
+              pkgs.findutils
+            ];
+            text = builtins.readFile ./guest/state/bind-system.sh;
+          };
           sshClientIdentityHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-client-identity";
             runtimeInputs = [
@@ -81,7 +90,24 @@
                     herdrPackage
                     pkgs.openssh
                     sshClientIdentityHelper
+                    stateSystemBindHelper
                   ];
+
+                  # An absent or unsafe system volume blocks Herdr startup.
+                  # Runtime paths are bind-mounted only after the Incus volume
+                  # is available, before the managed Herdr server starts.
+                  systemd.services.aginctus-state-system = {
+                    description = "Bind Aginctus persistent system state";
+                    wantedBy = [ "multi-user.target" ];
+                    before = [ "herdr.service" ];
+                    after = [ "local-fs.target" ];
+                    requiresMountsFor = [ "/var/lib/aginctus/state/system" ];
+                    serviceConfig = {
+                      Type = "oneshot";
+                      RemainAfterExit = true;
+                      ExecStart = "${stateSystemBindHelper}/bin/aginctus-state-system-bind";
+                    };
+                  };
                   environment.variables = {
                     XDG_CONFIG_HOME = "/var/lib/herdr/config";
                     XDG_RUNTIME_DIR = "/run/herdr";
@@ -91,8 +117,12 @@
                   systemd.services.herdr = {
                     description = "Herdr headless server";
                     wantedBy = [ "multi-user.target" ];
-                    after = [ "network-online.target" ];
+                    after = [
+                      "network-online.target"
+                      "aginctus-state-system.service"
+                    ];
                     wants = [ "network-online.target" ];
+                    requires = [ "aginctus-state-system.service" ];
 
                     serviceConfig = {
                       Environment = [
