@@ -188,3 +188,52 @@ func TestTemporaryImageAliasLengthAndUniqueness(t *testing.T) {
 		t.Fatal("different nonces generated identical aliases")
 	}
 }
+
+func TestImageUpdateRestoresOldAliasWhenPromotionFails(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte("new-image")
+	for _, p := range []string{"metadata/image.tar.xz", "rootfs/image.squashfs"} {
+		full := filepath.Join(dir, p)
+		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sum := sha256.Sum256(append(append([]byte{}, data...), data...))
+	old := runIncusImage
+	t.Cleanup(func() { runIncusImage = old })
+	var actions [][]string
+	runIncusImage = func(_ context.Context, args ...string) ([]byte, error) {
+		actions = append(actions, append([]string(nil), args...))
+		if strings.Join(args, " ") == "image list --format json" {
+			return []byte(fmt.Sprintf(`[{"fingerprint":"%x","aliases":[]},{"fingerprint":"old","aliases":[{"name":"working"}]}]`, sum)), nil
+		}
+		if len(args) == 5 && args[0] == "image" && args[1] == "alias" &&
+			args[2] == "rename" && args[4] == "working" &&
+			strings.Contains(args[3], "-staged-") {
+			return nil, errors.New("promotion blocked")
+		}
+		return nil, nil
+	}
+	err := updateLocalImage(context.Background(), "working", dir)
+	if err == nil || !strings.Contains(err.Error(), "promote replacement") {
+		t.Fatalf("expected promotion failure, got %v", err)
+	}
+	if len(actions) != 6 {
+		t.Fatalf("expected list, stage, backup, promotion, restore, cleanup; got %v", actions)
+	}
+	stage := actions[1][3]
+	backup := actions[2][4]
+	if !strings.HasPrefix(stage, "working-staged-") ||
+		!strings.HasPrefix(backup, "working-previous-") ||
+		strings.Join(actions[2][:3], " ") != "image alias rename" ||
+		actions[2][3] != "working" ||
+		actions[3][3] != stage || actions[3][4] != "working" ||
+		actions[4][3] != backup || actions[4][4] != "working" ||
+		strings.Join(actions[5][:3], " ") != "image alias delete" ||
+		actions[5][3] != stage {
+		t.Fatalf("unexpected rollback sequence: %v", actions)
+	}
+}
