@@ -50,6 +50,18 @@ let
     path: lib.hasAttrByPath path cfg.settings
   ) forbiddenGatewaySecrets;
 
+  validImageAlias = alias:
+    builtins.stringLength alias <= 100
+    && builtins.match "[A-Za-z0-9][A-Za-z0-9_.-]*" alias != null;
+
+  enabledImageAliases =
+    lib.optional cfg.images.herdrClient.enable cfg.images.herdrClient.alias
+    ++ lib.optional cfg.images.opencodeWorkload.enable cfg.images.opencodeWorkload.alias;
+
+  unknownWorkloads = builtins.filter (
+    id: !(builtins.hasAttr id cfg.settings.workloads)
+  ) cfg.reconcile.workloads;
+
   configFile = jsonFormat.generate "aginctus-config.json" cfg.settings;
 
   imageUpdateService =
@@ -249,6 +261,18 @@ in
         message = "services.aginctus.settings cannot contain runtime gateway secrets: ${
           lib.concatStringsSep ", " (map (path: lib.concatStringsSep "." path) configuredSecretPaths)
         }. Provide these through the supported runtime credential mechanism instead.";
+      }
+      {
+        assertion = builtins.all validImageAlias enabledImageAliases;
+        message = "services.aginctus.images aliases must follow the Incus image alias format (1-100 ASCII letters, digits, periods, underscores, or hyphens; starting with a letter or digit).";
+      }
+      {
+        assertion = builtins.length (lib.unique enabledImageAliases) == builtins.length enabledImageAliases;
+        message = "Enabled Aginctus image imports must have distinct aliases.";
+      }
+      {
+        assertion = !cfg.reconcile.enable || unknownWorkloads == [ ];
+        message = "services.aginctus.reconcile.workloads contains unknown workload IDs: ${lib.concatStringsSep ", " unknownWorkloads}";
       }
     ];
 
