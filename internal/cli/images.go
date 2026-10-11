@@ -145,6 +145,17 @@ func localImages(ctx context.Context) ([]localImage, error) {
 	return images, nil
 }
 
+// temporaryImageAlias preserves the full nonce while keeping Incus aliases
+// within the same 100-character limit enforced for user-provided names.
+func temporaryImageAlias(name, role, nonce string) string {
+	suffix := "-" + role + "-" + nonce
+	maxPrefix := 100 - len(suffix)
+	if len(name) > maxPrefix {
+		name = name[:maxPrefix]
+	}
+	return name + suffix
+}
+
 func updateLocalImage(ctx context.Context, name, dir string) error {
 	if !validImageName(name) {
 		return fmt.Errorf("invalid image alias %q", name)
@@ -181,8 +192,8 @@ func updateLocalImage(ctx context.Context, name, dir string) error {
 		}
 	}
 	nonce := fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano())
-	stage := name + "-staged-" + nonce
-	backup := name + "-previous-" + nonce
+	stage := temporaryImageAlias(name, "staged", nonce)
+	backup := temporaryImageAlias(name, "previous", nonce)
 	if present {
 		_, err = runIncusImage(ctx, "image", "alias", "create", stage, fingerprint)
 	} else {
