@@ -204,6 +204,7 @@ A consuming NixOS flake can import it with:
 
 ```nix
 {
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   inputs.aginctus.url = "github:blevinn/aginctus";
 
   outputs = { self, nixpkgs, aginctus, ... }: {
@@ -212,6 +213,10 @@ A consuming NixOS flake can import it with:
       modules = [
         aginctus.nixosModules.default
         ({ pkgs, ... }: {
+          system.stateVersion = "26.05"; # Use your host's existing stateVersion.
+          networking.nftables.enable = true;
+          virtualisation.incus.enable = true;
+
           services.aginctus = {
             enable = true;
 
@@ -227,6 +232,12 @@ A consuming NixOS flake can import it with:
                 storage.pool = "default";
               };
             };
+
+            # Explicit opt-in: these commands change host Incus state.
+            reconcile = {
+              enable = true;
+              workloads = [ "dev" ];
+            };
           };
         })
       ];
@@ -237,7 +248,7 @@ A consuming NixOS flake can import it with:
 
 The module writes the declared settings to `/etc/aginctus/config.json`, preserving the same JSON shape and precedence semantics consumed by the CLI. Known settings are typed Nix options, while a freeform JSON layer allows newly introduced configuration keys to be represented without waiting for a module update. Runtime gateway secrets remain intentionally out of band. The module rejects `settings.gateway.postgres.password`, `settings.gateway.master.key`, and `settings.gateway.salt.key` (including keys introduced via the freeform JSON layer), since generated Nix store configuration is not an appropriate place for credentials. Continue to provide gateway credentials through the existing runtime mechanism; do not include them in Nix options.
 
-When enabled, the module defines oneshot image lifecycle units for the Herdr client and OpenCode workload images. Each unit imports the corresponding image derivation through `aginctus images update` and uses a restart trigger on that derivation, so a NixOS generation containing a new image causes the unit to run again.
+When enabled, the module defines oneshot image lifecycle units for the Herdr client and OpenCode workload images. Each unit imports the corresponding image derivation through `aginctus images update` and tracks both the image derivation and Aginctus CLI package, so changes to either input can cause the unit to run again.
 
 Optional boot reconciliation can be enabled with:
 
@@ -252,19 +263,7 @@ This reconciles the management network, Herdr client, and selected workloads onl
 
 The flake provides `packages.<system>.aginctus` (also `packages.<system>.default`) and the module selects that package by default. A consuming host can still override `services.aginctus.package` to pin or replace the CLI independently.
 
-**Before merging the CLI packaging PR:** replace the temporary `vendorHash = pkgs.lib.fakeHash` in `flake.nix` with the real fixed-output hash produced by a Nix build on a trusted Nix-capable host:
-
-```sh
-nix build .#aginctus --print-build-logs
-# Read the "got: sha256-..." value from the expected fixed-output hash mismatch.
-# Replace vendorHash with that exact hash, then re-run:
-nix build .#aginctus --print-build-logs
-nix run .#aginctus -- version
-nix flake check
-```
-
-Do not merge with the placeholder hash: the package will fail to build until it is replaced and validated.
-
+The CLI package uses a pinned `vendorHash` in the Aginctus flake. If a future Go dependency update changes the vendored module tree, regenerate the hash as part of that update and verify `nix build .#aginctus`. The initial fixed-output hash placeholder has already been resolved.
 
 ### Module evaluation checks
 
@@ -285,3 +284,21 @@ These triggers re-run the existing idempotent `network ensure`, `herdr client en
 ### Image-import service activation on CLI updates
 
 Each enabled image-import oneshot tracks both its image source derivation and the configured `services.aginctus.package` as restart triggers. Updating the CLI package in a NixOS generation therefore re-runs image import even if the source image derivation has not changed; the CLI's fingerprint check makes identical imports idempotent. These are image alias updates only: already-running Incus instances are not recreated.
+
+### NixOS integration acceptance checklist (issue #67)
+
+The flake exports `nixosModules.aginctus`/`nixosModules.default` and `packages.<system>.aginctus`/`packages.<system>.default`. The module exposes `services.aginctus.settings` as typed options for known configuration paths plus a freeform JSON-compatible namespace for other paths, and generates `/etc/aginctus/config.json`. Its known image services import image derivations through systemd, with restart triggers for image and CLI changes. Optional reconciliation waits for successful image services and is disabled by default. The module rejects configured runtime gateway secrets in Nix store settings.
+
+On a disposable x86_64-linux host, validate the implementation from the repository root:
+
+```sh
+nix build .#aginctus
+nix build .#checks.x86_64-linux.nixos-module
+nix flake check
+just check
+just test-nix
+```
+
+`just test-nix` boots disposable QEMU guests: one runs a real Incus daemon and tests imports, idempotency, alias replacement, and failed import handling; another tests systemd reconciliation ordering and failure gating with a recording CLI. This is heavier than the evaluation-only flake checks. The runner does not connect to the host's Incus daemon. On a production host, review the generated systemd units and enable reconciliation only after reviewing the Incus resources it will mutate.
+
+**Scope boundary:** Changing an image alias does not replace existing running instances. Instance rollout, data migration, health checks, and instance-level rollback require a separate explicit upgrade policy and are not part of issue #67.
