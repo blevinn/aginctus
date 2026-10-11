@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -113,23 +114,35 @@ func validImageName(name string) bool {
 	return imageNamePattern.MatchString(name)
 }
 
-func imageAliasExists(ctx context.Context, name string) (bool, error) {
+func imageFingerprint(metadata, rootfs string) (string, error) {
+	hash := sha256.New()
+	for _, path := range []string{metadata, rootfs} {
+		file, err := os.Open(path)
+		if err != nil {
+			return "", err
+		}
+		_, copyErr := io.Copy(hash, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return "", fmt.Errorf("hash %s: %w", path, copyErr)
+		}
+		if closeErr != nil {
+			return "", fmt.Errorf("close %s: %w", path, closeErr)
+		}
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+func localImages(ctx context.Context) ([]localImage, error) {
 	out, err := runIncusImage(ctx, "image", "list", "--format", "json")
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	var images []localImage
 	if err := json.Unmarshal(out, &images); err != nil {
-		return false, err
+		return nil, fmt.Errorf("parse Incus image list: %w", err)
 	}
-	for _, img := range images {
-		for _, a := range img.Aliases {
-			if a.Name == name {
-				return true, nil
-			}
-		}
-	}
-	return false, nil
+	return images, nil
 }
 
 func updateLocalImage(ctx context.Context, name, dir string) error {
@@ -144,17 +157,41 @@ func updateLocalImage(ctx context.Context, name, dir string) error {
 	if err != nil {
 		return err
 	}
+	fingerprint, err := imageFingerprint(metadata, rootfs)
+	if err != nil {
+		return fmt.Errorf("fingerprint image: %w", err)
+	}
+	images, err := localImages(ctx)
+	if err != nil {
+		return fmt.Errorf("inspect existing images: %w", err)
+	}
+	present := false
+	exists := false
+	for _, image := range images {
+		if image.Fingerprint == fingerprint {
+			present = true
+		}
+		for _, alias := range image.Aliases {
+			if alias.Name == name {
+				exists = true
+				if image.Fingerprint == fingerprint {
+					return nil // The intended image is already active.
+				}
+			}
+		}
+	}
 	nonce := fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano())
 	stage := name + "-staged-" + nonce
 	backup := name + "-previous-" + nonce
-	if _, err = runIncusImage(ctx, "image", "import", metadata, rootfs, "--alias", stage); err != nil {
-		return fmt.Errorf("import replacement: %w", err)
+	if present {
+		_, err = runIncusImage(ctx, "image", "alias", "create", stage, fingerprint)
+	} else {
+		_, err = runIncusImage(ctx, "image", "import", metadata, rootfs, "--alias", stage)
+	}
+	if err != nil {
+		return fmt.Errorf("stage replacement: %w", err)
 	}
 	defer func() { _, _ = runIncusImage(context.Background(), "image", "alias", "delete", stage) }()
-	exists, err := imageAliasExists(ctx, name)
-	if err != nil {
-		return err
-	}
 	moved := false
 	if exists {
 		if _, err = runIncusImage(ctx, "image", "alias", "rename", name, backup); err != nil {
