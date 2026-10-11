@@ -14,11 +14,11 @@ const testSSHHostKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII3xO5DA+NU/hp7fMjqf
 const testIPOutput = "2: eth0    inet 10.242.246.197/24 brd 10.242.246.255 scope global dynamic eth0\\n"
 
 func TestParseWorkloadHostKey(t *testing.T) {
-	key, err := parseWorkloadHostKey(testSSHHostKey+" root@nixos\n")
+	key, err := parseWorkloadHostKey(testSSHHostKey + " root@nixos\n")
 	if err != nil || key != testSSHHostKey {
 		t.Fatalf("host key=%q err=%v", key, err)
 	}
-	for _, input := range []string{"", "ssh-rsa AAAA host", "ssh-ed25519 malformed comment", testSSHHostKey+" extra words comment", "ssh-ed25519 AAAA host"} {
+	for _, input := range []string{"", "ssh-rsa AAAA host", "ssh-ed25519 malformed comment", testSSHHostKey + " extra words comment", "ssh-ed25519 AAAA host"} {
 		if _, err := parseWorkloadHostKey(input); err == nil {
 			t.Fatalf("accepted invalid host key %q", input)
 		}
@@ -51,7 +51,7 @@ func TestHerdrPinHostReconcilesAndProbesStrictly(t *testing.T) {
 		calls = append(calls, instance+":"+strings.Join(args, " "))
 		switch len(calls) {
 		case 1:
-			return testSSHHostKey+" root@nixos\n", 0, nil
+			return testSSHHostKey + " root@nixos\n", 0, nil
 		case 2:
 			return strings.ReplaceAll(testIPOutput, "\\n", "\n"), 0, nil
 		case 3:
@@ -60,15 +60,17 @@ func TestHerdrPinHostReconcilesAndProbesStrictly(t *testing.T) {
 			if stdin != testSSHHostKey+"\n" {
 				t.Fatalf("trust received unexpected public key: %q", stdin)
 			}
-			return "aginctus-dev "+testSSHHostKey+"\n", 0, nil
+			return "aginctus-dev " + testSSHHostKey + "\n", 0, nil
 		case 5:
-			return "aginctus-dev "+testSSHHostKey+"\n", 0, nil
+			return "aginctus-dev " + testSSHHostKey + "\n", 0, nil
 		case 6:
 			return herdrClientIdentity, 0, nil
 		case 7:
 			probe := strings.Join(args, " ")
 			for _, required := range []string{"StrictHostKeyChecking=yes", "IdentitiesOnly=yes", "IdentityAgent=none", "HostKeyAlias=aginctus-dev", "HostKeyAlgorithms=ssh-ed25519", "agent@10.242.246.197", "/identities/1/id_ed25519"} {
-				if !strings.Contains(probe, required) { t.Errorf("missing %s in %s", required, probe) }
+				if !strings.Contains(probe, required) {
+					t.Errorf("missing %s in %s", required, probe)
+				}
 			}
 			return "agent\n", 0, nil
 		}
@@ -87,18 +89,25 @@ func TestHerdrPinHostRejectsMismatchedExistingTrust(t *testing.T) {
 	calls := 0
 	herdrHostTrustGuestExec = func(_ context.Context, instance, stdin string, args ...string) (string, int, error) {
 		calls++
-		if stdin != "" { t.Fatal("attempt to overwrite existing pin") }
+		if stdin != "" {
+			t.Fatal("attempt to overwrite existing pin")
+		}
 		switch calls {
-		case 1: return testSSHHostKey+" root@nixos\n", 0, nil
-		case 2: return strings.ReplaceAll(testIPOutput, "\\n", "\n"), 0, nil
-		case 3: return "aginctus-dev ssh-ed25519 AAAA\n", 0, nil
+		case 1:
+			return testSSHHostKey + " root@nixos\n", 0, nil
+		case 2:
+			return strings.ReplaceAll(testIPOutput, "\\n", "\n"), 0, nil
+		case 3:
+			return "aginctus-dev ssh-ed25519 AAAA\n", 0, nil
 		}
 		t.Fatal("unexpected guest command")
 		return "", -1, nil
 	}
 	loader := authorizationLoader()
 	cfg, err := loader.Load(config.Options{})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	err = pinHerdrHost(context.Background(), cfg, "dev")
 	if err == nil || !strings.Contains(err.Error(), "pinned host key differs") || calls != 3 {
 		t.Fatalf("err=%v calls=%d", err, calls)
@@ -111,18 +120,25 @@ func TestHerdrPinHostFailsWhenStrictSSHBlocked(t *testing.T) {
 	herdrHostTrustGuestExec = func(_ context.Context, instance, stdin string, args ...string) (string, int, error) {
 		calls++
 		switch calls {
-		case 1: return testSSHHostKey+" root@nixos\n", 0, nil
-		case 2: return strings.ReplaceAll(testIPOutput, "\\n", "\n"), 0, nil
-		case 3, 4: return "aginctus-dev "+testSSHHostKey+"\n", 0, nil
-		case 5: return herdrClientIdentity, 0, nil
-		case 6: return "", 255, errors.New("ssh unreachable")
+		case 1:
+			return testSSHHostKey + " root@nixos\n", 0, nil
+		case 2:
+			return strings.ReplaceAll(testIPOutput, "\\n", "\n"), 0, nil
+		case 3, 4:
+			return "aginctus-dev " + testSSHHostKey + "\n", 0, nil
+		case 5:
+			return herdrClientIdentity, 0, nil
+		case 6:
+			return "", 255, errors.New("ssh unreachable")
 		}
 		t.Fatal("unexpected guest command")
 		return "", -1, nil
 	}
 	loader := authorizationLoader()
 	cfg, err := loader.Load(config.Options{})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	err = pinHerdrHost(context.Background(), cfg, "dev")
 	if err == nil || !strings.Contains(err.Error(), "strict SSH probe failed") {
 		t.Fatalf("err=%v calls=%d", err, calls)
