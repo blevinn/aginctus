@@ -114,7 +114,7 @@ func TestPlanForceOmitsHerdrOwnershipGuard(t *testing.T) {
 	}
 }
 
-func TestPlanUsesSeparatePersistentStateVolumes(t *testing.T) {
+func TestPlanUsesCanonicalSystemStateVolume(t *testing.T) {
 	plan, err := testSpec().Plan("upsert", false)
 	if err != nil {
 		t.Fatal(err)
@@ -133,12 +133,17 @@ func TestPlanUsesSeparatePersistentStateVolumes(t *testing.T) {
 	}
 	devices := apply.Documents[0].Devices
 	for name, want := range map[string]map[string]string{
-		"herdr_state": {"type": "disk", "pool": "default", "source": "aginctus-herdr-herdr-state", "path": "/var/lib/herdr"},
-		"ssh_state": {"type": "disk", "pool": "default", "source": "aginctus-herdr-ssh-state", "path": "/var/lib/aginctus/ssh"},
+		"state_system": {"type": "disk", "pool": "default", "source": "aginctus-herdr-state-system", "path": "/var/lib/aginctus/state/system"},
 	} {
 		if got := devices[name]; !reflect.DeepEqual(got, want) {
 			t.Errorf("%s: got %#v, want %#v", name, got, want)
 		}
+	}
+	if _, exists := devices["state_user"]; exists {
+		t.Fatal("Herdr client must not allocate an unused user-state volume")
+	}
+	if len(devices) != 3 {
+		t.Fatalf("unexpected device count (one state volume expected): %#v", devices)
 	}
 	if devices["root"]["path"] != "/" || devices["management"]["network"] != "aginctus-mgmt" {
 		t.Fatalf("lost root or management devices: %#v", devices)
@@ -154,7 +159,7 @@ func TestPlanDeleteRetainsStateDeviceDefinitionsWithoutDeletingVolumes(t *testin
 		t.Fatalf("expected only instance delete, got %#v", plan.Steps)
 	}
 	raw := string(plan.Steps[0].Configuration)
-	for _, name := range []string{"aginctus-herdr-herdr-state", "aginctus-herdr-ssh-state"} {
+	for _, name := range []string{"aginctus-herdr-state-system"} {
 		if !strings.Contains(raw, name) {
 			t.Fatalf("missing persistent volume reference: %s", name)
 		}
