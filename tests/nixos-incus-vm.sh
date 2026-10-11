@@ -65,6 +65,19 @@ pkgs.testers.runNixOSTest {
     assert before == after, f"unexpected fingerprint change: {before} -> {after}"
     machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name == \"aginctus-herdr-client\")] | length == 1'")
     machine.succeed("test -f /etc/aginctus/config.json")
+
+    # A malformed replacement must fail without disturbing the active alias.
+    # This exercises an Incus import error after artifact path validation,
+    # rather than a trivial CLI argument or missing-file error.
+    machine.succeed("mkdir -p /tmp/aginctus-invalid-image/metadata /tmp/aginctus-invalid-image/rootfs")
+    machine.succeed("printf 'invalid metadata' > /tmp/aginctus-invalid-image/metadata/broken.tar.xz")
+    machine.succeed("printf 'invalid rootfs' > /tmp/aginctus-invalid-image/rootfs/broken.squashfs")
+    machine.fail("${flake.packages.${system}.aginctus}/bin/aginctus --configuration-file /etc/aginctus/config.json images update aginctus-herdr-client /tmp/aginctus-invalid-image")
+    still_active = machine.succeed("incus image list --format json | jq -r '.[] | select(any(.aliases[]?; .name == \"aginctus-herdr-client\")) | .fingerprint'").strip()
+    assert still_active == before, f"failed update changed active alias: {before} -> {still_active}"
+    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name == \"aginctus-herdr-client\")] | length == 1'")
+    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name | startswith(\"aginctus-herdr-client-staged-\"))] | length == 0'")
+
   '';
 }
 NIX
@@ -74,4 +87,4 @@ echo 'Building and executing the disposable NixOS QEMU/Incus integration test...
 # Realizing the NixOS test derivation starts QEMU and executes testScript.
 nix build --impure --file "$workdir/test.nix" --print-build-logs --show-trace --out-link "$workdir/result" "$@"
 [[ -e "$workdir/result" ]] || { echo 'VM test did not produce a result' >&2; exit 1; }
-echo 'PASS: Incus image import and repeat update succeeded in disposable VM.'
+echo 'PASS: Incus image import, idempotent repeat update, and failed replacement preservation passed in disposable VM.'
