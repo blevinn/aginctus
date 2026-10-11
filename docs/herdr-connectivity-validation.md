@@ -73,6 +73,33 @@ go run ./cmd/aginctus herdr
 
 Inside Herdr, verify the intended managed workload is available and that a remote session can execute a harmless command. Record whether the session connects and exits cleanly. Do not disable `StrictHostKeyChecking`, use `ssh-keyscan` as an unauthenticated trust source, or copy the private identity to the host.
 
+
+## Deployed-host findings (2026-10-11)
+
+The first on-host validation confirmed an Aginctus-owned management bridge, a running Herdr client on its management subnet, a working Herdr 0.9.3 systemd service, and SSH identity generation 1. The bridge address did not respond to ICMP; successful neighbor discovery makes this an insufficient test of workload-to-workload SSH, and no NAT/routing or firewall change is justified by the ping result alone. The dev workload was absent but its reconciliation dry run succeeded.
+
+**CLI/server environment:** the Herdr systemd unit explicitly sets `XDG_CONFIG_HOME=/var/lib/herdr/config`, `XDG_RUNTIME_DIR=/run/herdr`, and `XDG_STATE_HOME=/var/lib/herdr`. Running `herdr status` directly under `incus exec` instead consults `/root/.config/herdr/herdr.sock` and reports the server absent, even though the service is active. With `XDG_CONFIG_HOME=/var/lib/herdr/config`, status correctly reports the active server with a compatible protocol. The `aginctus herdr` command also opened a window before the launcher fix, but that alone did not establish which socket/session it used. The updated launcher passes the managed environment explicitly.
+
+Validate the managed service and console context on the deployed host:
+
+```sh
+set -eu
+nix develop -c go test ./internal/cli ./internal/herdrclient
+nix develop -c go test ./...
+nix flake check
+incus exec aginctus-herdr --project default -- \
+  env XDG_CONFIG_HOME=/var/lib/herdr/config XDG_RUNTIME_DIR=/run/herdr \
+  XDG_STATE_HOME=/var/lib/herdr herdr status
+incus exec aginctus-herdr --project default -- \
+  env XDG_CONFIG_HOME=/var/lib/herdr/config XDG_RUNTIME_DIR=/run/herdr \
+  XDG_STATE_HOME=/var/lib/herdr herdr machine list
+# Interactive: after updating the local CLI to this PR, verify it opens
+# the managed server session and exits normally.
+nix develop -c go run ./cmd/aginctus herdr
+```
+
+The machine list currently has no saved SSH machines. A successful interactive window is **not** remote workload acceptance; deploy the workload and establish authorized SSH, pinned host keys, and remote machine registration before considering #120 complete.
+
 ## Reporting results
 
 Record the instance name, management network, workload name (if applicable), observed state and address, command exit statuses, and the precise failing stage. Redact secrets, tokens, private keys, and sensitive output. Distinguish:
