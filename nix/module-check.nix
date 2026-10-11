@@ -96,10 +96,15 @@ assert lib.hasInfix "gateway.master.key" (builtins.head secretAssertions).messag
 assert lib.hasInfix "gateway.salt.key" (builtins.head secretAssertions).message;
 assert settings.workloads.dev.runtime.type == "opencode";
 assert builtins.length (failedAginctusAssertions invalidAliases) == 2;
-assert lib.any (item: lib.hasInfix "alias format" item.message) (failedAginctusAssertions invalidAliases);
-assert lib.any (item: lib.hasInfix "distinct aliases" item.message) (failedAginctusAssertions invalidAliases);
+assert lib.any (item: lib.hasInfix "alias format" item.message) (
+  failedAginctusAssertions invalidAliases
+);
+assert lib.any (item: lib.hasInfix "distinct aliases" item.message) (
+  failedAginctusAssertions invalidAliases
+);
 assert builtins.length (failedAginctusAssertions duplicateAliases) == 1;
-assert lib.hasInfix "distinct aliases" (builtins.head (failedAginctusAssertions duplicateAliases)).message;
+assert lib.hasInfix "distinct aliases"
+  (builtins.head (failedAginctusAssertions duplicateAliases)).message;
 assert builtins.length (failedAginctusAssertions unknownReconcileWorkload) == 1;
 assert lib.hasInfix "missing"
   (builtins.head (failedAginctusAssertions unknownReconcileWorkload)).message;
