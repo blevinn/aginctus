@@ -39,9 +39,10 @@
             pname = "aginctus";
             version = "0.0.0-dev";
             src = ./.;
-            # Resolve against the lockfile with the command documented below.
-            # Do not merge while this placeholder remains.
-            vendorHash = "sha256-5vl4lxwU1vG7myXy+7ISScEI/uXfn0Rcj4xvpQNTz3o=";
+            # Recalculate after Go module graph changes. A stale hash can reuse
+            # an incompatible vendor tree even when go.mod is newer.
+            # Replace this temporary value with Nix's reported "got" hash.
+            vendorHash = pkgs.lib.fakeHash;
             subPackages = [ "./cmd/aginctus" ];
             nativeBuildInputs = [ pkgs.makeWrapper ];
             postInstall = ''
