@@ -281,3 +281,7 @@ NixOS evaluates image alias names before attempting a systemd import: each enabl
 When `services.aginctus.reconcile.enable = true`, the reconciliation oneshot is also restarted when the generated configuration, Aginctus CLI package, or any **enabled** image source derivation changes in a NixOS generation. It is ordered after and requires the enabled image-import units, so a failed import prevents the dependent reconciliation run. Disabled image sources do not trigger reconciliation. When reconciliation is disabled, no automatic ensure operations are added.
 
 These triggers re-run the existing idempotent `network ensure`, `herdr client ensure`, and selected `workload ensure` commands. They do **not** promise replacement of already-created Incus instances when an image alias points to a newer image; instance recreation requires a separate, explicit upgrade policy.
+
+### Image-import service activation on CLI updates
+
+Each enabled image-import oneshot tracks both its image source derivation and the configured `services.aginctus.package` as restart triggers. Updating the CLI package in a NixOS generation therefore re-runs image import even if the source image derivation has not changed; the CLI's fingerprint check makes identical imports idempotent. These are image alias updates only: already-running Incus instances are not recreated.
