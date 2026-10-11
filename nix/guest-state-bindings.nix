@@ -51,7 +51,7 @@ in
     description = "Prepare declared Aginctus persistent bind mounts";
     wantedBy = [ "multi-user.target" ];
     before = map (b: mountUnit b.target) bindings;
-    requiresMountsFor = lib.unique (map (b: rootFor b.class) bindings);
+    unitConfig.RequiresMountsFor = lib.unique (map (b: rootFor b.class) bindings);
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
