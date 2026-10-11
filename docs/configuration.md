@@ -274,3 +274,10 @@ The flake exposes a `checks.<system>.nixos-module` check, exercised by `nix flak
 ### Image lifecycle validation
 
 NixOS evaluates image alias names before attempting a systemd import: each enabled alias must satisfy Aginctus's Incus alias naming constraints (1–100 ASCII letters, digits, underscores, periods, or hyphens, beginning with an alphanumeric character), and enabled image imports must use distinct aliases. When reconciliation is enabled, every ID in `services.aginctus.reconcile.workloads` must exist under `services.aginctus.settings.workloads`. These checks reject configuration errors before mutating Incus state. They do not recreate running containers or imply that changing an image alias automatically upgrades an existing instance.
+
+
+### Reconciliation on NixOS generation changes
+
+When `services.aginctus.reconcile.enable = true`, the reconciliation oneshot is also restarted when the generated configuration, Aginctus CLI package, or any **enabled** image source derivation changes in a NixOS generation. It is ordered after and requires the enabled image-import units, so a failed import prevents the dependent reconciliation run. Disabled image sources do not trigger reconciliation. When reconciliation is disabled, no automatic ensure operations are added.
+
+These triggers re-run the existing idempotent `network ensure`, `herdr client ensure`, and selected `workload ensure` commands. They do **not** promise replacement of already-created Incus instances when an image alias points to a newer image; instance recreation requires a separate, explicit upgrade policy.
