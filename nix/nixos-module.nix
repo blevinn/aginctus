@@ -75,7 +75,10 @@ let
       after = [ "incus.service" ];
       requires = [ "incus.service" ];
       path = [ pkgs.incus ];
-      restartTriggers = [ source cfg.package ];
+      restartTriggers = [
+        source
+        cfg.package
+      ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;

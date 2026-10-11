@@ -109,11 +109,16 @@ assert builtins.length (failedAginctusAssertions unknownReconcileWorkload) == 1;
 assert lib.hasInfix "missing"
   (builtins.head (failedAginctusAssertions unknownReconcileWorkload)).message;
 assert imageUnit.serviceConfig.Type == "oneshot";
-assert imageUnit.restartTriggers == [ base.services.aginctus.images.herdrClient.source stub ];
-assert base.systemd.services.aginctus-image-opencode-workload.restartTriggers == [
-  base.services.aginctus.images.opencodeWorkload.source
-  stub
-];
+assert
+  imageUnit.restartTriggers == [
+    base.services.aginctus.images.herdrClient.source
+    stub
+  ];
+assert
+  base.systemd.services.aginctus-image-opencode-workload.restartTriggers == [
+    base.services.aginctus.images.opencodeWorkload.source
+    stub
+  ];
 assert builtins.elem pkgs.incus imageUnit.path;
 assert
   reconcile.restartTriggers == [
