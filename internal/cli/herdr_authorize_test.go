@@ -28,16 +28,16 @@ func authorizationLoader() *config.Loader {
 
 func TestParseHerdrPublicIdentity(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name  string
 		input string
 		valid bool
 	}{
 		{"valid", herdrClientIdentity, true},
 		{"missing", "generation\t1\n", false},
-		{"duplicate", herdrClientIdentity+"public_key\t"+herdrClientKey+"\n", false},
+		{"duplicate", herdrClientIdentity + "public_key\t" + herdrClientKey + "\n", false},
 		{"generation mismatch", strings.ReplaceAll(herdrClientIdentity, "generation\t1", "generation\t2"), false},
 		{"non-managed", strings.ReplaceAll(herdrClientIdentity, "aginctus:1", "human"), false},
-		{"extra field", herdrClientIdentity+"unexpected\tvalue\n", false},
+		{"extra field", herdrClientIdentity + "unexpected\tvalue\n", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			key, err := parseHerdrPublicIdentity(tc.input)
@@ -61,7 +61,9 @@ func TestHerdrAuthorizeAbsentKeyReconcilesAndVerifies(t *testing.T) {
 		calls = append(calls, call)
 		switch len(calls) {
 		case 1:
-			if instance != "aginctus-herdr" || call != "aginctus-herdr:aginctus-ssh-client-identity inspect" { t.Fatalf("identity call: %s", call) }
+			if instance != "aginctus-herdr" || call != "aginctus-herdr:aginctus-ssh-client-identity inspect" {
+				t.Fatalf("identity call: %s", call)
+			}
 			return herdrClientIdentity, 0, nil
 		case 2:
 			return "", 3, errors.New("not provisioned")
@@ -71,7 +73,7 @@ func TestHerdrAuthorizeAbsentKeyReconcilesAndVerifies(t *testing.T) {
 			}
 			return "", 0, nil
 		case 4:
-			return herdrClientKey+"\n", 0, nil
+			return herdrClientKey + "\n", 0, nil
 		}
 		t.Fatalf("unexpected extra call %s", call)
 		return "", 1, nil
@@ -89,10 +91,14 @@ func TestHerdrAuthorizeAlreadyInstalledDoesNotRewrite(t *testing.T) {
 	inspectIncusInstances = func(context.Context) ([]byte, error) { return []byte(ownedAuthorizationInstances), nil }
 	var calls [][]string
 	herdrAuthorizationGuestExec = func(_ context.Context, _ string, stdin string, args ...string) (string, int, error) {
-		if stdin != "" { t.Fatal("unexpected authorization mutation") }
+		if stdin != "" {
+			t.Fatal("unexpected authorization mutation")
+		}
 		calls = append(calls, args)
-		if len(calls) == 1 { return herdrClientIdentity, 0, nil }
-		return herdrClientKey+"\n", 0, nil
+		if len(calls) == 1 {
+			return herdrClientIdentity, 0, nil
+		}
+		return herdrClientKey + "\n", 0, nil
 	}
 	var out, stderr bytes.Buffer
 	got := Run(context.Background(), []string{"herdr", "authorize", "dev"}, &out, &stderr, &fakeIncusClient{}, authorizationLoader())
@@ -108,8 +114,12 @@ func TestHerdrAuthorizeRejectsUnexpectedExistingKey(t *testing.T) {
 	calls := 0
 	herdrAuthorizationGuestExec = func(_ context.Context, _ string, stdin string, args ...string) (string, int, error) {
 		calls++
-		if stdin != "" { t.Fatal("unexpected overwrite") }
-		if calls == 1 { return herdrClientIdentity, 0, nil }
+		if stdin != "" {
+			t.Fatal("unexpected overwrite")
+		}
+		if calls == 1 {
+			return herdrClientIdentity, 0, nil
+		}
 		return "ssh-ed25519 other aginctus:1\n", 0, nil
 	}
 	var out, stderr bytes.Buffer
