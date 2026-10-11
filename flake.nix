@@ -72,6 +72,20 @@
             inherit system;
             modules = [
               "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
+              (import ./nix/guest-state-bindings.nix {
+                bindings = [
+                  {
+                    class = "system";
+                    subdir = "herdr";
+                    target = "/var/lib/herdr";
+                  }
+                  {
+                    class = "system";
+                    subdir = "ssh";
+                    target = "/var/lib/aginctus/ssh";
+                  }
+                ];
+              })
               (
                 { ... }:
                 {
@@ -82,6 +96,7 @@
                     pkgs.openssh
                     sshClientIdentityHelper
                   ];
+
                   environment.variables = {
                     XDG_CONFIG_HOME = "/var/lib/herdr/config";
                     XDG_RUNTIME_DIR = "/run/herdr";
@@ -91,8 +106,16 @@
                   systemd.services.herdr = {
                     description = "Herdr headless server";
                     wantedBy = [ "multi-user.target" ];
-                    after = [ "network-online.target" ];
+                    after = [
+                      "network-online.target"
+                      "var-lib-herdr.mount"
+                      "var-lib-aginctus-ssh.mount"
+                    ];
                     wants = [ "network-online.target" ];
+                    requires = [
+                      "var-lib-herdr.mount"
+                      "var-lib-aginctus-ssh.mount"
+                    ];
 
                     serviceConfig = {
                       Environment = [

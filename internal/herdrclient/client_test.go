@@ -2,6 +2,7 @@ package herdrclient
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -110,5 +111,72 @@ func TestPlanForceOmitsHerdrOwnershipGuard(t *testing.T) {
 	}
 	if !cfg.RejectUnsupportedChanges {
 		t.Fatal("force plan disabled immutable-drift rejection")
+	}
+}
+
+func TestPlanUsesCanonicalSystemStateVolume(t *testing.T) {
+	plan, err := testSpec().Plan("upsert", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var apply struct {
+		Documents []struct {
+			Kind    string                       `json:"kind"`
+			Devices map[string]map[string]string `json:"devices"`
+		} `json:"documents"`
+	}
+	if err := json.Unmarshal(plan.Steps[1].Configuration, &apply); err != nil {
+		t.Fatalf("decode instance resource: %v", err)
+	}
+	if len(apply.Documents) != 1 || apply.Documents[0].Kind != "instance" {
+		t.Fatalf("unexpected instance documents: %#v", apply.Documents)
+	}
+	devices := apply.Documents[0].Devices
+	for name, want := range map[string]map[string]string{
+		"state_system": {"type": "disk", "pool": "default", "source": "aginctus-herdr-state-system", "path": "/var/lib/aginctus/state/system"},
+	} {
+		if got := devices[name]; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: got %#v, want %#v", name, got, want)
+		}
+	}
+	if _, exists := devices["state_user"]; exists {
+		t.Fatal("Herdr client must not allocate an unused user-state volume")
+	}
+	if len(devices) != 3 {
+		t.Fatalf("unexpected device count (one state volume expected): %#v", devices)
+	}
+	if devices["root"]["path"] != "/" || devices["management"]["network"] != "aginctus-mgmt" {
+		t.Fatalf("lost root or management devices: %#v", devices)
+	}
+}
+
+func TestPlanDeleteRetainsStateDeviceDefinitionsWithoutDeletingVolumes(t *testing.T) {
+	plan, err := testSpec().Plan("delete", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Steps) != 1 {
+		t.Fatalf("expected only instance delete, got %#v", plan.Steps)
+	}
+	raw := string(plan.Steps[0].Configuration)
+	for _, name := range []string{"aginctus-herdr-state-system"} {
+		if !strings.Contains(raw, name) {
+			t.Fatalf("missing persistent volume reference: %s", name)
+		}
+	}
+	// The Apply plan must not manage any storage volume resources; their
+	// deletion is an explicit, separately authorized operator action.
+	var cfg struct {
+		Documents []struct {
+			Kind string `json:"kind"`
+		} `json:"documents"`
+	}
+	if err := json.Unmarshal(plan.Steps[0].Configuration, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range cfg.Documents {
+		if d.Kind != "instance" {
+			t.Fatalf("unexpected resource kind %q", d.Kind)
+		}
 	}
 }

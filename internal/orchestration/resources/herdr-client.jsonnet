@@ -31,6 +31,12 @@ function(cfg)
             path: '/',
             pool: cfg.storagePool,
           },
+          state_system: {
+            type: 'disk',
+            pool: cfg.storagePool,
+            source: cfg.name + '-state-system',
+            path: '/var/lib/aginctus/state/system',
+          },
           management: {
             type: 'nic',
             network: cfg.managementNetwork,
