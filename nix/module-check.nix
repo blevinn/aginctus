@@ -51,7 +51,11 @@ let
   reconcile = withReconcile.systemd.services.aginctus-reconcile;
   noImagesReconcile = withoutImages.systemd.services.aginctus-reconcile;
 
-  secretAssertions = builtins.filter (item: !(item.assertion)) withForbiddenCredentials.assertions;
+  # NixOS may report other failed assertions for this deliberately minimal
+  # evaluation host. Select only the assertion owned by this module.
+  secretAssertions = builtins.filter (
+    item: !(item.assertion) && lib.hasPrefix "services.aginctus.settings cannot contain runtime gateway secrets:" item.message
+  ) withForbiddenCredentials.assertions;
   defaultPackage =
     (evaluate {
       services.aginctus.package = lib.mkForce self.packages.${system}.aginctus;
