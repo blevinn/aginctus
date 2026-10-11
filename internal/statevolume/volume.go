@@ -112,5 +112,17 @@ func EnsureSystem(ctx context.Context, pool, instance string) error {
 	server, err := incusclient.ConnectIncusUnixWithContext(ctx, "", &incusclient.ConnectionArgs{SkipGetServer: true})
 	if err != nil { return fmt.Errorf("connect Incus: %w", err) }
 	server = server.UseProject(Project)
+	// Do not create a new persistent volume for a colliding foreign instance.
+	existing, _, err := server.GetInstance(instance)
+	if err != nil && !api.StatusErrorCheck(err, http.StatusNotFound) {
+		return fmt.Errorf("inspect existing instance ownership: %w", err)
+	}
+	if err == nil {
+		if existing.Config["user.aginctus.managed"] != "true" ||
+			existing.Config["user.aginctus.resource"] != "infrastructure" ||
+			existing.Config["user.aginctus.role"] != "herdr-client" {
+			return fmt.Errorf("instance %q ownership conflict; refusing state volume", instance)
+		}
+	}
 	return Ensure(ctx, nativeBackend{server: server}, Volume{Pool: pool, Instance: instance, Class: "system"})
 }
