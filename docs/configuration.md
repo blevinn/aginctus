@@ -269,3 +269,8 @@ Do not merge with the placeholder hash: the package will fail to build until it 
 ### Module evaluation checks
 
 The flake exposes a `checks.<system>.nixos-module` check, exercised by `nix flake check`. It evaluates the NixOS module with a harmless CLI stub and verifies typed configuration defaults and overrides, image service configuration, and reconciliation dependencies both with and without image imports enabled. It does not start Incus or modify a host. Real-world service activation and CLI package builds still require separate validation.
+
+
+### Image lifecycle validation
+
+NixOS evaluates image alias names before attempting a systemd import: each enabled alias must satisfy Aginctus's Incus alias naming constraints (1–100 ASCII letters, digits, underscores, periods, or hyphens, beginning with an alphanumeric character), and enabled image imports must use distinct aliases. When reconciliation is enabled, every ID in `services.aginctus.reconcile.workloads` must exist under `services.aginctus.settings.workloads`. These checks reject configuration errors before mutating Incus state. They do not recreate running containers or imply that changing an image alias automatically upgrades an existing instance.
