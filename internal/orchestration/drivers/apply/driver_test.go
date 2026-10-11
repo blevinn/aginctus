@@ -291,6 +291,7 @@ type blockingContextApplyClient struct {
 	fakeApplyClient
 	started chan struct{}
 }
+
 func (c *blockingContextApplyClient) ExecuteContext(ctx context.Context, _ io.Reader) (incusapply.Result, error) {
 	close(c.started)
 	<-ctx.Done()
@@ -314,7 +315,7 @@ func TestApplyCancelsBlockedContextAwareExecution(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("blocked operation returned %v, expected cancellation", err)
 		}
-	case <-time.After(2*time.Second):
+	case <-time.After(2 * time.Second):
 		t.Fatal("Apply did not exit after cancellation")
 	}
 }
