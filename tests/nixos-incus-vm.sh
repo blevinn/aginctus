@@ -73,10 +73,10 @@ pkgs.testers.runNixOSTest {
     machine.succeed("printf 'invalid metadata' > /tmp/aginctus-invalid-image/metadata/broken.tar.xz")
     machine.succeed("printf 'invalid rootfs' > /tmp/aginctus-invalid-image/rootfs/broken.squashfs")
     machine.fail("${flake.packages.${system}.aginctus}/bin/aginctus --configuration-file /etc/aginctus/config.json images update aginctus-herdr-client /tmp/aginctus-invalid-image")
-    still_active = machine.succeed("incus image list --format json | jq -r '.[] | select(any(.aliases[]?; .name == \\"aginctus-herdr-client\\")) | .fingerprint'").strip()
+    still_active = machine.succeed("incus image list --format json | jq -r '.[] | select(any(.aliases[]?; .name == \"aginctus-herdr-client\")) | .fingerprint'").strip()
     assert still_active == before, f"failed update changed active alias: {before} -> {still_active}"
-    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name == \\"aginctus-herdr-client\\")] | length == 1'")
-    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name | startswith(\\"aginctus-herdr-client-staged-\\"))] | length == 0'")
+    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name == \"aginctus-herdr-client\")] | length == 1'")
+    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name | startswith(\"aginctus-herdr-client-staged-\"))] | length == 0'")
 
   '';
 }
