@@ -27,8 +27,8 @@ type Driver struct {
 }
 
 type applyClient interface {
-	Plan(io.Reader) (incusapply.Preview, error)
-	Execute(io.Reader) (incusapply.Result, error)
+	PlanContext(context.Context, io.Reader) (incusapply.Preview, error)
+	ExecuteContext(context.Context, io.Reader) (incusapply.Result, error)
 }
 
 var _ orchestration.Driver = (*Driver)(nil)
@@ -55,7 +55,7 @@ func (d *Driver) Validate(raw json.RawMessage) error {
 		return err
 	}
 	client := d.newClient(clientOptions(cfg))
-	if _, err := client.Plan(bytes.NewReader(stream)); err != nil {
+	if _, err := client.PlanContext(context.Background(), bytes.NewReader(stream)); err != nil {
 		return fmt.Errorf("preflight incus-apply resources: %w", err)
 	}
 	return nil
@@ -103,10 +103,10 @@ func (d *Driver) Execute(ctx context.Context, raw json.RawMessage, options orche
 		}
 		return nil
 	}
-	// The pinned native incus-apply client does not take a context. Do not
-	// claim in-flight interruption: report cancellation immediately after
-	// the blocking call, before a later orchestration step can begin.
-	_, executeErr := client.Execute(bytes.NewReader(stream))
+	// The dependency observes cancellation between resources and during
+	// supported native operation waits. Cancellation does not roll back
+	// an Incus mutation that already reached the server.
+	_, executeErr := client.ExecuteContext(ctx, bytes.NewReader(stream))
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("apply execution canceled (native operation may have completed): %w", err)
 	}
