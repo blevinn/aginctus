@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	incusapply "github.com/abiosoft/incus-apply/apply"
 
@@ -32,6 +33,24 @@ func (f *fakeApplyClient) Execute(reader io.Reader) (incusapply.Result, error) {
 	data, _ := io.ReadAll(reader)
 	f.input = string(data)
 	return incusapply.Result{}, nil
+}
+
+// Context-aware test doubles delegate to the original stubs, preserving
+// existing assertions about execution and preflight.
+func (f *fakeApplyClient) PlanContext(_ context.Context, reader io.Reader) (incusapply.Preview, error) {
+	return f.Plan(reader)
+}
+func (f *fakeApplyClient) ExecuteContext(_ context.Context, reader io.Reader) (incusapply.Result, error) {
+	return f.Execute(reader)
+}
+func (f *rejectedApplyClient) PlanContext(_ context.Context, reader io.Reader) (incusapply.Preview, error) {
+	return f.Plan(reader)
+}
+func (c *cancellationApplyClient) PlanContext(_ context.Context, reader io.Reader) (incusapply.Preview, error) {
+	return c.Plan(reader)
+}
+func (c *cancellationApplyClient) ExecuteContext(_ context.Context, reader io.Reader) (incusapply.Result, error) {
+	return c.Execute(reader)
 }
 
 func TestSupportsDryRun(t *testing.T) {
@@ -265,5 +284,37 @@ func TestApplyReturnsCancellationAfterNativePlanning(t *testing.T) {
 	err := driver.Execute(ctx, json.RawMessage(`{"documents":[{"kind":"network","name":"example"}]}`), orchestration.ExecuteOptions{DryRun: true})
 	if !errors.Is(err, context.Canceled) || !client.planned || client.executed {
 		t.Fatalf("planning cancellation: err=%v planned=%t executed=%t", err, client.planned, client.executed)
+	}
+}
+
+type blockingContextApplyClient struct {
+	fakeApplyClient
+	started chan struct{}
+}
+func (c *blockingContextApplyClient) ExecuteContext(ctx context.Context, _ io.Reader) (incusapply.Result, error) {
+	close(c.started)
+	<-ctx.Done()
+	return incusapply.Result{}, ctx.Err()
+}
+
+func TestApplyCancelsBlockedContextAwareExecution(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fake := &blockingContextApplyClient{started: make(chan struct{})}
+	driver := New()
+	driver.newClient = func(incusapply.Options) applyClient { return fake }
+	finished := make(chan error, 1)
+	go func() {
+		finished <- driver.Execute(ctx, json.RawMessage(`{"documents":[{"kind":"network","name":"example"}]}`), orchestration.ExecuteOptions{})
+	}()
+	<-fake.started
+	cancel()
+	select {
+	case err := <-finished:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("blocked operation returned %v, expected cancellation", err)
+		}
+	case <-time.After(2*time.Second):
+		t.Fatal("Apply did not exit after cancellation")
 	}
 }
