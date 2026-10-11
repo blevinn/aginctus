@@ -46,6 +46,32 @@ pkgs.testers.runNixOSTest {
     };
   };
 
+  nodes.reconcile = { pkgs, ... }: {
+    imports = [ flake.nixosModules.default ];
+    system.stateVersion = "26.05";
+    # Exercise service ordering without running an additional Incus daemon.
+    systemd.services.incus = {
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${pkgs.coreutils}/bin/true";
+      };
+    };
+    services.aginctus = {
+      enable = true;
+      package = pkgs.writeShellScriptBin "aginctus" ''
+        echo "$*" >> /var/log/aginctus-test-commands
+      '';
+      images.herdrClient = {
+        enable = true;
+        source = pkgs.runCommand "aginctus-test-image" { } "mkdir -p $out";
+      };
+      images.opencodeWorkload.enable = false;
+      reconcile.enable = true;
+    };
+  };
+
   testScript = ''
     start_all()
     machine.wait_for_unit("incus.service")
@@ -86,6 +112,23 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name | startswith(\"aginctus-herdr-client-previous-\"))] | length == 0'")
     machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name | startswith(\"aginctus-herdr-client-staged-\"))] | length == 0'")
 
+    # Test the systemd dependency graph with a recording CLI in the second VM.
+    reconcile.wait_for_unit("aginctus-reconcile.service")
+    reconcile.succeed("systemctl is-active --quiet aginctus-image-herdr-client.service")
+    commands = reconcile.succeed("cat /var/log/aginctus-test-commands").splitlines()
+    assert len(commands) == 3, f"unexpected commands: {commands!r}"
+    assert "images update" in commands[0], f"image import did not run first: {commands!r}"
+    assert "network ensure" in commands[1], f"missing network reconciliation: {commands!r}"
+    assert "herdr client ensure" in commands[2], f"missing Herdr reconciliation: {commands!r}"
+
+    # The required image unit must block reconciliation if unavailable.
+    reconcile.succeed("systemctl stop aginctus-reconcile.service")
+    reconcile.succeed("systemctl stop aginctus-image-herdr-client.service")
+    reconcile.succeed("systemctl mask --runtime aginctus-image-herdr-client.service")
+    reconcile.fail("systemctl start aginctus-reconcile.service")
+    commands_after = reconcile.succeed("cat /var/log/aginctus-test-commands").splitlines()
+    assert commands_after == commands, f"reconciliation ran despite failed dependency: {commands_after!r}"
+
     # A malformed replacement must fail without disturbing the active alias.
     # This exercises an Incus import error after artifact path validation,
     # rather than a trivial CLI argument or missing-file error.
@@ -107,4 +150,4 @@ echo 'Building and executing the disposable NixOS QEMU/Incus integration test...
 # Realizing the NixOS test derivation starts QEMU and executes testScript.
 nix build --impure --file "$workdir/test.nix" --print-build-logs --show-trace --out-link "$workdir/result" "$@"
 [[ -e "$workdir/result" ]] || { echo 'VM test did not produce a result' >&2; exit 1; }
-echo 'PASS: Incus image import, idempotent update, fingerprint reuse, valid replacement/restoration, and failed replacement preservation passed in disposable VM.'
+echo 'PASS: real Incus image lifecycle and systemd reconciliation dependency tests passed in disposable VMs.'
