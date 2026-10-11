@@ -59,6 +59,14 @@
             ];
             text = builtins.readFile ./guest/ssh/client-identity.sh;
           };
+          sshHostTrustHelper = pkgs.writeShellApplication {
+            name = "aginctus-ssh-host-trust";
+            runtimeInputs = [
+              pkgs.coreutils
+              pkgs.openssh
+            ];
+            text = builtins.readFile ./guest/ssh/host-trust.sh;
+          };
           sshAuthorizeHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-authorize";
             runtimeInputs = [
@@ -81,6 +89,7 @@
                     herdrPackage
                     pkgs.openssh
                     sshClientIdentityHelper
+                    sshHostTrustHelper
                   ];
                   environment.variables = {
                     XDG_CONFIG_HOME = "/var/lib/herdr/config";
