@@ -35,6 +35,6 @@ Enter the reproducible development environment with:
 nix develop
 ```
 
-See the [development guide](docs/development.md) for prerequisites, direnv setup, formatting, and Incus development notes.
+See the [development guide](docs/development.md) for prerequisites, direnv setup, formatting, and Incus development notes. For consuming the Aginctus flake as a NixOS module, see the [NixOS configuration and integration guide](docs/configuration.md#nixos-module), including a host example and validation commands.
 
 Automated coding agents must also follow [AGENTS.md](AGENTS.md).
