@@ -169,4 +169,11 @@ The first milestone does not require:
 - automatic internet-egress policy;
 - a stable configuration schema.
 
+Live, bidirectional **host** workspace sharing is also deferred to v0.2. A
+v0.1 coding demo may use a guest-local or provisioned test repository; the
+v0.1 milestone does not require an Incus host-directory mount, host workspace
+policy, or idmapped host-file ownership. See the
+[v0.2 milestone](0002-v0.2.md) and
+[workspace sharing design](../workspace-sharing.md).
+
 Those features should build on the boundaries proven here rather than block the first working environment.
