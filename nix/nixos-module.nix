@@ -268,7 +268,7 @@ in
       }
       {
         assertion = builtins.length (lib.unique enabledImageAliases) == builtins.length enabledImageAliases;
-        message = "Enabled Aginctus image imports must have distinct aliases.";
+        message = "services.aginctus.images enabled image imports must have distinct aliases.";
       }
       {
         assertion = !cfg.reconcile.enable || unknownWorkloads == [ ];
