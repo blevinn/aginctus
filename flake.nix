@@ -74,8 +74,16 @@
               "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
               (import ./nix/guest-state-bindings.nix {
                 bindings = [
-                  { class = "system"; subdir = "herdr"; target = "/var/lib/herdr"; }
-                  { class = "system"; subdir = "ssh"; target = "/var/lib/aginctus/ssh"; }
+                  {
+                    class = "system";
+                    subdir = "herdr";
+                    target = "/var/lib/herdr";
+                  }
+                  {
+                    class = "system";
+                    subdir = "ssh";
+                    target = "/var/lib/aginctus/ssh";
+                  }
                 ];
               })
               (
@@ -104,7 +112,10 @@
                       "var-lib-aginctus-ssh.mount"
                     ];
                     wants = [ "network-online.target" ];
-                    requires = [ "var-lib-herdr.mount" "var-lib-aginctus-ssh.mount" ];
+                    requires = [
+                      "var-lib-herdr.mount"
+                      "var-lib-aginctus-ssh.mount"
+                    ];
 
                     serviceConfig = {
                       Environment = [

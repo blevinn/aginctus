@@ -121,7 +121,7 @@ func TestPlanUsesCanonicalSystemStateVolume(t *testing.T) {
 	}
 	var apply struct {
 		Documents []struct {
-			Kind string `json:"kind"`
+			Kind    string                       `json:"kind"`
 			Devices map[string]map[string]string `json:"devices"`
 		} `json:"documents"`
 	}
@@ -167,10 +167,16 @@ func TestPlanDeleteRetainsStateDeviceDefinitionsWithoutDeletingVolumes(t *testin
 	// The Apply plan must not manage any storage volume resources; their
 	// deletion is an explicit, separately authorized operator action.
 	var cfg struct {
-		Documents []struct { Kind string `json:"kind"` } `json:"documents"`
+		Documents []struct {
+			Kind string `json:"kind"`
+		} `json:"documents"`
 	}
-	if err := json.Unmarshal(plan.Steps[0].Configuration, &cfg); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(plan.Steps[0].Configuration, &cfg); err != nil {
+		t.Fatal(err)
+	}
 	for _, d := range cfg.Documents {
-		if d.Kind != "instance" { t.Fatalf("unexpected resource kind %q", d.Kind) }
+		if d.Kind != "instance" {
+			t.Fatalf("unexpected resource kind %q", d.Kind)
+		}
 	}
 }
