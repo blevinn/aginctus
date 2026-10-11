@@ -31,17 +31,11 @@ function(cfg)
             path: '/',
             pool: cfg.storagePool,
           },
-          herdr_state: {
+          state_system: {
             type: 'disk',
             pool: cfg.storagePool,
-            source: cfg.name + '-herdr-state',
-            path: '/var/lib/herdr',
-          },
-          ssh_state: {
-            type: 'disk',
-            pool: cfg.storagePool,
-            source: cfg.name + '-ssh-state',
-            path: '/var/lib/aginctus/ssh',
+            source: cfg.name + '-state-system',
+            path: '/var/lib/aginctus/state/system',
           },
           management: {
             type: 'nic',
