@@ -95,7 +95,7 @@ func (d *Driver) Execute(ctx context.Context, raw json.RawMessage, options orche
 		return fmt.Errorf("apply step canceled before execution: %w", err)
 	}
 	if options.DryRun {
-		if _, err := client.Plan(bytes.NewReader(stream)); err != nil {
+		if _, err := client.PlanContext(ctx, bytes.NewReader(stream)); err != nil {
 			return fmt.Errorf("plan incus-apply resources: %w", err)
 		}
 		if err := ctx.Err(); err != nil {
