@@ -32,6 +32,13 @@ let
     services.aginctus.images.opencodeWorkload.enable = false;
     services.aginctus.reconcile.enable = true;
   };
+  withForbiddenCredentials = evaluate {
+    services.aginctus.settings.gateway = {
+      postgres.password = "must-not-be-stored";
+      master.key = "must-not-be-stored";
+      salt.key = "must-not-be-stored";
+    };
+  };
   withReconcile = evaluate {
     services.aginctus.reconcile = {
       enable = true;
@@ -44,6 +51,18 @@ let
   reconcile = withReconcile.systemd.services.aginctus-reconcile;
   noImagesReconcile = withoutImages.systemd.services.aginctus-reconcile;
 
+  # NixOS may report other failed assertions for this deliberately minimal
+  # evaluation host. Select only the assertion owned by this module.
+  secretAssertions = builtins.filter (
+    item:
+    !(item.assertion)
+    && lib.hasPrefix "services.aginctus.settings cannot contain runtime gateway secrets:" item.message
+  ) withForbiddenCredentials.assertions;
+  defaultPackage =
+    (evaluate {
+      services.aginctus.package = lib.mkForce self.packages.${system}.aginctus;
+    }).services.aginctus.package;
+
   expected = [
     "incus.service"
     "aginctus-image-herdr-client.service"
@@ -51,6 +70,11 @@ let
   ];
 in
 assert settings.incus.management.network.name == "integration-mgmt";
+assert defaultPackage == self.packages.${system}.aginctus;
+assert builtins.length secretAssertions == 1;
+assert lib.hasInfix "gateway.postgres.password" (builtins.head secretAssertions).message;
+assert lib.hasInfix "gateway.master.key" (builtins.head secretAssertions).message;
+assert lib.hasInfix "gateway.salt.key" (builtins.head secretAssertions).message;
 assert settings.workloads.dev.runtime.type == "opencode";
 assert imageUnit.serviceConfig.Type == "oneshot";
 assert builtins.elem pkgs.incus imageUnit.path;

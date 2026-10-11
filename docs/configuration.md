@@ -235,7 +235,7 @@ A consuming NixOS flake can import it with:
 }
 ```
 
-The module writes the declared settings to `/etc/aginctus/config.json`, preserving the same JSON shape and precedence semantics consumed by the CLI. Known settings are typed Nix options, while a freeform JSON layer allows newly introduced configuration keys to be represented without waiting for a module update. Runtime gateway secrets remain intentionally out of band and are not exposed as Nix configuration options.
+The module writes the declared settings to `/etc/aginctus/config.json`, preserving the same JSON shape and precedence semantics consumed by the CLI. Known settings are typed Nix options, while a freeform JSON layer allows newly introduced configuration keys to be represented without waiting for a module update. Runtime gateway secrets remain intentionally out of band. The module rejects `settings.gateway.postgres.password`, `settings.gateway.master.key`, and `settings.gateway.salt.key` (including keys introduced via the freeform JSON layer), since generated Nix store configuration is not an appropriate place for credentials. Continue to provide gateway credentials through the existing runtime mechanism; do not include them in Nix options.
 
 When enabled, the module defines oneshot image lifecycle units for the Herdr client and OpenCode workload images. Each unit imports the corresponding image derivation through `aginctus images update` and uses a restart trigger on that derivation, so a NixOS generation containing a new image causes the unit to run again.
 
