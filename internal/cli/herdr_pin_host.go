@@ -127,10 +127,21 @@ func pinHerdrHost(ctx context.Context, cfg *config.Config, id string) error {
 		return fmt.Errorf("verify pinned SSH host key: mismatch or unavailable")
 	}
 
+	clientIdentity, _, err := herdrHostTrustGuestExec(ctx, client.Name, "", "aginctus-ssh-client-identity", "inspect")
+	if err != nil {
+		return fmt.Errorf("inspect client SSH identity: %w", err)
+	}
+	clientKey, err := parseHerdrPublicIdentity(clientIdentity)
+	if err != nil {
+		return err
+	}
+	parts := strings.Split(clientKey, " aginctus:")
+	generation := parts[len(parts)-1]
+
 	// Strict verification is independent of ~/.ssh, system host files, and
 	// forwarded SSH agents. The private key is never copied to the host.
 	probe := []string{"ssh", "-F", "/dev/null",
-		"-i", "/var/lib/aginctus/ssh/identities/1/id_ed25519",
+		"-i", "/var/lib/aginctus/ssh/identities/" + generation + "/id_ed25519",
 		"-o", "IdentitiesOnly=yes",
 		"-o", "IdentityAgent=none",
 		"-o", "BatchMode=yes",
