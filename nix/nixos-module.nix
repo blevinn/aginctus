@@ -23,7 +23,7 @@ let
   defaultHerdrImage = self.packages.${system}.herdr-client;
   defaultOpenCodeImage = self.packages.${system}.opencode-workload;
 
-  aginctusCommand = if cfg.package == null then "aginctus" else "${cfg.package}/bin/aginctus";
+  aginctusCommand = "${cfg.package}/bin/aginctus";
 
   configFile = jsonFormat.generate "aginctus-config.json" cfg.settings;
 
@@ -152,12 +152,9 @@ in
     enable = mkEnableOption "Aginctus host integration";
 
     package = mkOption {
-      type = types.nullOr types.package;
-      default = null;
-      description = ''
-        Aginctus CLI package. This remains explicit until the flake exposes a
-        reproducible CLI package in addition to its guest image outputs.
-      '';
+      type = types.package;
+      default = self.packages.${system}.aginctus;
+      description = "Aginctus CLI package used by generated systemd units.";
     };
 
     settings = mkOption {
@@ -221,13 +218,6 @@ in
   };
 
   config = mkIf cfg.enable {
-    assertions = [
-      {
-        assertion = cfg.package != null;
-        message = "services.aginctus.package must be set while the CLI package output is not yet available from the flake";
-      }
-    ];
-
     environment.etc."aginctus/config.json".source = configFile;
 
     systemd.services =

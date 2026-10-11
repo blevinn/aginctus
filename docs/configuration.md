@@ -215,9 +215,6 @@ A consuming NixOS flake can import it with:
           services.aginctus = {
             enable = true;
 
-            # Temporary until Aginctus exposes a reproducible CLI package output.
-            package = pkgs.aginctus;
-
             settings = {
               incus.management.network.name = "aginctus-mgmt";
               infrastructure.herdr.storage.pool = "default";
@@ -253,7 +250,20 @@ services.aginctus.reconcile = {
 
 This reconciles the management network, Herdr client, and selected workloads only after Incus and any enabled image update services have succeeded. The services include the host `incus` executable in their systemd `PATH`. An image import failure prevents dependent reconciliation instead of allowing workloads to start against an outdated alias. Reconciliation is disabled by default because it mutates Incus state.
 
-The current module deliberately requires `services.aginctus.package` to be supplied by the caller. The flake already exports the guest image derivations, but the Go CLI does not yet have a reproducible Nix package output. That packaging work is the remaining piece required to make the module fully self-contained.
+The flake provides `packages.<system>.aginctus` (also `packages.<system>.default`) and the module selects that package by default. A consuming host can still override `services.aginctus.package` to pin or replace the CLI independently.
+
+**Before merging the CLI packaging PR:** replace the temporary `vendorHash = pkgs.lib.fakeHash` in `flake.nix` with the real fixed-output hash produced by a Nix build on a trusted Nix-capable host:
+
+```sh
+nix build .#aginctus --print-build-logs
+# Read the "got: sha256-..." value from the expected fixed-output hash mismatch.
+# Replace vendorHash with that exact hash, then re-run:
+nix build .#aginctus --print-build-logs
+nix run .#aginctus -- version
+nix flake check
+```
+
+Do not merge with the placeholder hash: the package will fail to build until it is replaced and validated.
 
 
 ### Module evaluation checks
