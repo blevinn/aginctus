@@ -61,6 +61,11 @@ pkgs.testers.runNixOSTest {
     services.aginctus = {
       enable = true;
       package = pkgs.writeShellScriptBin "aginctus" ''
+        if [ -e /run/aginctus-test-fail-image ]; then
+          case "$*" in
+            *"images update"*) exit 1 ;;
+          esac
+        fi
         echo "$*" >> /var/log/aginctus-test-commands
       '';
       images.herdrClient = {
@@ -121,10 +126,10 @@ pkgs.testers.runNixOSTest {
     assert "network ensure" in commands[1], f"missing network reconciliation: {commands!r}"
     assert "herdr client ensure" in commands[2], f"missing Herdr reconciliation: {commands!r}"
 
-    # The required image unit must block reconciliation if unavailable.
+    # An actual failed image-import dependency must block reconciliation.
     reconcile.succeed("systemctl stop aginctus-reconcile.service")
     reconcile.succeed("systemctl stop aginctus-image-herdr-client.service")
-    reconcile.succeed("systemctl mask --runtime aginctus-image-herdr-client.service")
+    reconcile.succeed("touch /run/aginctus-test-fail-image")
     reconcile.fail("systemctl start aginctus-reconcile.service")
     commands_after = reconcile.succeed("cat /var/log/aginctus-test-commands").splitlines()
     assert commands_after == commands, f"reconciliation ran despite failed dependency: {commands_after!r}"
