@@ -66,6 +66,14 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name == \"aginctus-herdr-client\")] | length == 1'")
     machine.succeed("test -f /etc/aginctus/config.json")
 
+    # Reuse already-imported image bytes under a second alias without
+    # attempting a duplicate Incus image import.
+    machine.succeed("${flake.packages.${system}.aginctus}/bin/aginctus --configuration-file /etc/aginctus/config.json images update aginctus-herdr-client-reused ${flake.packages.${system}.herdr-client}")
+    reused = machine.succeed("incus image list --format json | jq -r '.[] | select(any(.aliases[]?; .name == \"aginctus-herdr-client-reused\")) | .fingerprint'").strip()
+    assert reused == before, f"reused alias fingerprint differs: {before} -> {reused}"
+    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name == \"aginctus-herdr-client-reused\")] | length == 1'")
+
+
     # A malformed replacement must fail without disturbing the active alias.
     # This exercises an Incus import error after artifact path validation,
     # rather than a trivial CLI argument or missing-file error.
@@ -87,4 +95,4 @@ echo 'Building and executing the disposable NixOS QEMU/Incus integration test...
 # Realizing the NixOS test derivation starts QEMU and executes testScript.
 nix build --impure --file "$workdir/test.nix" --print-build-logs --show-trace --out-link "$workdir/result" "$@"
 [[ -e "$workdir/result" ]] || { echo 'VM test did not produce a result' >&2; exit 1; }
-echo 'PASS: Incus image import, idempotent repeat update, and failed replacement preservation passed in disposable VM.'
+echo 'PASS: Incus image import, idempotent update, fingerprint reuse, and failed replacement preservation passed in disposable VM.'
