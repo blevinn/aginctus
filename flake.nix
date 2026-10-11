@@ -41,7 +41,7 @@
             src = ./.;
             # Resolve against the lockfile with the command documented below.
             # Do not merge while this placeholder remains.
-            vendorHash = pkgs.lib.fakeHash;
+            vendorHash = "sha256-5vl4lxwU1vG7myXy+7ISScEI/uXfn0Rcj4xvpQNTz3o=";
             subPackages = [ "./cmd/aginctus" ];
             nativeBuildInputs = [ pkgs.makeWrapper ];
             postInstall = ''
