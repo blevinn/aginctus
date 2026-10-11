@@ -1,27 +1,48 @@
-# Replaceable Herdr client with persistent Incus state volumes
+# Canonical persistent container state: system and user
 
-**Status:** first incremental persistent-state slice. This PR attaches **pre-created** custom Incus storage volumes; it does not yet provision volumes automatically or perform a rolling migration of existing containers.
+**Status:** initial Aginctus implementation. This PR implements the `state-system` volume for the **Herdr client only**. The second, optional `state-user` class and bindings for agent runtimes are a subsequent workload PR. Existing clients must be explicitly reinitialized; in-place upgrades are not supported.
 
-## State boundary
+## Shared contract
 
-The Herdr client uses two custom volumes in the same configured storage pool as its root disk:
+Every managed container may have **zero, one, or two** independent custom Incus volumes:
 
-| Incus volume name (default client) | Guest mount | Persisted contents |
+| State class | Volume naming convention | Canonical guest mount | Intended ownership |
+| --- | --- | --- | --- |
+| `state-system` | `<instance>-state-system` | `/var/lib/aginctus/state/system` | Root; operating-system and managed service state |
+| `state-user` | `<instance>-state-user` | `/var/lib/aginctus/state/user` | Application/agent configuration and application data |
+
+Both classes are **optional**, chosen by the container's needs, not automatically created for every instance. A volume never contains executable NixOS image code. Workspaces and repositories belong to a separate workspace-sharing/storage policy, not implicitly in `state-user`.
+
+The Incus disk attachment is deliberately independent of application directories. The guest owns fixed, allowlisted bind mounts from subdirectories of the canonical mount to application paths; do **not** mount arbitrary user-configured host paths or trust a volume to choose destinations.
+
+Each volume must belong to one configured instance identity; no reuse across a different workload or user principal. The container rootfs and `/run` remain disposable. Volume deletion must be separately and explicitly authorized; deleting an instance does **not** delete its custom volumes.
+
+## First consumer: Herdr client system state
+
+The client requires **only** `<client-name>-state-system`, attached at `/var/lib/aginctus/state/system`.
+
+The guest `aginctus-state-system-bind` helper mounts only these fixed pairs:
+
+| Persistent subdirectory | Service path | Contents |
 | --- | --- | --- |
-| `aginctus-herdr-herdr-state` | `/var/lib/herdr` | Herdr server configuration and XDG state (including machines) |
-| `aginctus-herdr-ssh-state` | `/var/lib/aginctus/ssh` | Managed client private identity, generations, manifest, and pinned host trust |
+| `system/herdr/` | `/var/lib/herdr` | Herdr configuration, machine entries, XDG state |
+| `system/ssh/` | `/var/lib/aginctus/ssh` | Managed SSH private identity, generation manifest, pinned trust |
 
-The container root filesystem remains disposable. `/run/herdr`, including the server socket, is deliberately ephemeral. Workload filesystems, SSH server host keys and workspaces are **not** covered by these client volumes. A future workload volume policy must decide which workload paths survive replacement, particularly project workspace storage.
+The helper executes in a root-run, oneshot systemd unit ordered before and required by `herdr.service`. It fails if the canonical Incus volume is not mounted, if state paths are symlinks or unowned, or if a bind target already contains rootfs state; **no silent fallback to ephemeral state and no automatic migration**. The managed Herdr service cannot start successfully without this unit.
 
-The volumes use the configured `infrastructure.herdr.storage.pool` and deterministic names derived from `infrastructure.herdr.name`. They are never created with `force`, silently adopted, or deleted by `herdr client remove`. The Apply driver currently supports instance disk attachments but its native backend does **not** support custom storage-volume resources; provision the volumes separately before running `aginctus herdr client apply`.
+System-state volumes contain unencrypted SSH private key material. Restrict host, guest, snapshots, backups, and export access accordingly. Keep guest system-state subdirectories root-owned and mode 0700. A future user-state consumer must not grant the agent write access to system keys or trust.
 
-**Security:** the SSH state volume contains an unencrypted private SSH key protected by guest permissions. Protect Incus host access, backups, snapshots and volume exports accordingly. Never reuse a state volume for a different security principal. An unexpected identity mismatch must fail closed, not auto-regenerate.
+The two-class contract is reusable; this PR **does not yet attach user volumes to OpenCode workloads, bind OpenCode configuration, or persist workload SSH host keys**. Those require explicit guest directory and UID/GID design, startup ordering, and tests. This distinction matters when reinitializing the workload fleet.
 
-## Fresh fleet reinitialization (destructive)
+## Storage provisioning limitation
 
-The operator has explicitly chosen fleet reinitialization instead of in-place container upgrades. This runbook is intentionally staged and **must not** be run blindly: verify the storage pool, attached volumes, active workloads, and backup/revocation requirements before deleting anything.
+The embedded native `incus-apply` backend supports instance disk attachments, but not custom storage-volume creation. The volume must exist in the configured pool before `aginctus herdr client apply`. It must not be silently adopted from another principal. Automatic ownership checking and volume creation are follow-up work; currently the operator must inspect the pre-existing volume. Do not use `--force` to bypass this boundary.
 
-**First inspect** (read-only):
+## Fleet reinitialization (operator-approved, destructive)
+
+The old Herdr client stores its identity and trust inside the container rootfs. It **cannot** be upgraded in place to this arrangement. Do not delete the old guest without handling its active authorizations, Herdr sessions, and any rootfs data needing preservation.
+
+First inspect, without changing anything:
 
 ```sh
 incus list --project default
@@ -31,42 +52,43 @@ incus config show aginctus-herdr --project default --expanded
 incus exec aginctus-herdr --project default -- aginctus-ssh-client-identity inspect
 ```
 
-The below uses the default client name and the `default` storage pool. Substitute the actual configured pool and client name where different.
+These commands assume the configured storage pool is `default` and the client is `aginctus-herdr`. Confirm both from Aginctus configuration. Revoking an old key is essential before deleting its owner if target containers will be retained; alternately delete old target containers as part of the approved reinitialization. Back up any rootfs-only data you need before proceeding.
 
-1. Stop Herdr sessions and managed workloads; inventory their active authorizations. Treat the prior client identity as compromised/unavailable once the old rootfs is destroyed. Revoke previously authorized workload public keys or delete those workloads before activating a new key.
-2. On the old, disposable fleet, explicitly remove the old Aginctus-managed containers using the approved lifecycle commands. **This loses any state not on a separately retained volume.** Take backups or copy required user data before executing.
-3. Create two new empty custom volumes, then inspect ownership, content and attachment status:
+Only after choosing the reset, create the new, empty client volume:
 
 ```sh
-incus storage volume create default aginctus-herdr-herdr-state --project default
-incus storage volume create default aginctus-herdr-ssh-state --project default
+incus storage volume create default aginctus-herdr-state-system --project default
 incus storage volume list default --project default
 ```
 
-4. Import the desired, rebuilt Herdr image and create the client with `aginctus herdr client apply`. The new resource declares both disk devices and should fail if the volumes are missing. Verify mounts before generating keys or starting sensitive operations:
+Then deploy the rebuilt Herdr client image and recreate the client through the approved instance lifecycle. **Do not apply this changed resource to the existing rootfs-only container** and do not treat an immutable drift error as permission to force replacement.
+
+After recreation and *before* generating or authorizing credentials, inspect:
 
 ```sh
 incus config show aginctus-herdr --project default --expanded
-incus exec aginctus-herdr --project default -- findmnt /var/lib/herdr
-incus exec aginctus-herdr --project default -- findmnt /var/lib/aginctus/ssh
-incus exec aginctus-herdr --project default -- command -v aginctus-ssh-client-identity
+incus exec aginctus-herdr --project default -- mountpoint /var/lib/aginctus/state/system
+incus exec aginctus-herdr --project default -- mountpoint /var/lib/herdr
+incus exec aginctus-herdr --project default -- mountpoint /var/lib/aginctus/ssh
+incus exec aginctus-herdr --project default -- systemctl status aginctus-state-system.service
+incus exec aginctus-herdr --project default -- aginctus-ssh-client-identity inspect
 ```
 
-5. Reinitialize the SSH identity *inside the new client* with the existing helper, provision workload authorization through `aginctus herdr authorize dev`, and verify pinned host trust with `aginctus herdr pin-host dev` after the host firewall is corrected. **Do not reuse authorization from the discarded client key.** The `pin-host` command requires the updated image from PR #129 when it is merged and available.
+A fresh identity may not yet exist (inspect exit 3); create it with the existing guest helper and then rerun `aginctus herdr authorize dev`. Follow the strict host trust/probe path from PR #129 after that PR is merged and the host firewall is corrected. Do not treat authorization from the discarded SSH identity as valid.
 
-## Replacement / upgrade acceptance
+## Replacement test after initialization
 
-After the initial reinitialization, a later version of Aginctus should support this sequence without changing the volumes:
+The desired future replace-container workflow is:
 
-- record the currently active client SSH public fingerprint and verify both volumes are attached;
-- stop and remove **only the client instance**, not the custom volumes;
-- create the client instance from a newer image with the same two volumes attached;
-- confirm the private key, managed fingerprint, known_hosts and Herdr configuration survive, and runtime sockets are recreated normally;
-- verify no SSH authorization needs to rotate merely because the container image changes; restore and validate remote SSH and Herdr machine sessions.
+1. Confirm the client is owned, stop Herdr sessions, record public SSH fingerprint, check both the volume attachment and its state.
+2. Stop/remove **only** the container instance, keeping the state-system volume.
+3. Recreate the instance from the new NixOS image with the same canonical volume.
+4. Verify the systemd bind unit, persisted identity/fingerprint, pinned host keys and Herdr configuration; runtime sockets are recreated.
+5. Verify authenticated remote SSH and Herdr machine sessions with unchanged credentials.
 
-At present this is a **manual replacement acceptance path**, not an automatic image reconciliation guarantee. The pinned Apply backend rejects unsupported immutable image drift. A future explicit replacement command must add ownership, volume-attachment and identity validation, concurrent-operation locking, and rollback/recovery. Never use `--force` as a substitute for these checks.
+This PR makes the state layout possible, but does **not** implement atomic replacement orchestration or guarantees about conflicting concurrent operators. An explicit, ownership-checked replacement command and volume lifecycle management remain follow-ups.
 
-### Local validation
+## Validation
 
 ```sh
 git fetch origin
@@ -78,10 +100,10 @@ nix develop -c go test ./...
 nix flake check
 nix build .#herdr-client --no-link
 
-# Read-only plan rendering through the ordinary workflow:
+# Read-only render; do not apply against the old fleet.
 nix develop -c go run ./cmd/aginctus herdr client apply --dry-run
 ```
 
-**Expected:** the Herdr client instance resource declares separate disk devices at `/var/lib/herdr` and `/var/lib/aginctus/ssh`, and the device sources match the volume names. The plan contains no custom volume deletion action. Do not apply the changed plan to an existing rootfs-only client; existing device drift requires explicitly planned fleet reinitialization.
+The plan should contain a `state_system` disk device at `/var/lib/aginctus/state/system` with volume `aginctus-herdr-state-system`. It should **not** create a state-user volume for Herdr, attach directly to service directories, or delete custom volumes.
 
-This PR does not promise preservation of existing rootfs state in the legacy deployment. That state is intentionally retired as part of a coordinated, operator-approved fleet reset.
+No fleet reinitialization is performed by merging this PR. Confirm the new guest image boots and the bind unit succeeds on an expendable container before touching the production fleet.
