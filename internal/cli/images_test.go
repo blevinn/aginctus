@@ -194,8 +194,12 @@ func TestImageUpdateRestoresOldAliasWhenPromotionFails(t *testing.T) {
 	data := []byte("new-image")
 	for _, p := range []string{"metadata/image.tar.xz", "rootfs/image.squashfs"} {
 		full := filepath.Join(dir, p)
-		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil { t.Fatal(err) }
-		if err := os.WriteFile(full, data, 0600); err != nil { t.Fatal(err) }
+		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, data, 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	sum := sha256.Sum256(append(append([]byte{}, data...), data...))
 	old := runIncusImage
