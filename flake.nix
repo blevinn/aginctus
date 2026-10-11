@@ -41,8 +41,7 @@
             src = ./.;
             # Recalculate after Go module graph changes. A stale hash can reuse
             # an incompatible vendor tree even when go.mod is newer.
-            # Replace this temporary value with Nix's reported "got" hash.
-            vendorHash = pkgs.lib.fakeHash;
+            vendorHash = "sha256-ao0Q95mYJ8xWhKWwhBQsBjtdF8bWMAXRG+c/kNOZkSQ=";
             subPackages = [ "./cmd/aginctus" ];
             nativeBuildInputs = [ pkgs.makeWrapper ];
             postInstall = ''
