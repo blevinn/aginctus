@@ -71,7 +71,8 @@ let
     !(item.assertion)
     && lib.hasPrefix "services.aginctus.settings cannot contain runtime gateway secrets:" item.message
   ) withForbiddenCredentials.assertions;
-  failedAginctusAssertions = cfg:
+  failedAginctusAssertions =
+    cfg:
     builtins.filter (
       item: !(item.assertion) && lib.hasPrefix "services.aginctus." item.message
     ) cfg.assertions;
@@ -97,7 +98,8 @@ assert settings.workloads.dev.runtime.type == "opencode";
 assert builtins.length (failedAginctusAssertions invalidAliases) == 2;
 assert builtins.length (failedAginctusAssertions duplicateAliases) == 1;
 assert builtins.length (failedAginctusAssertions unknownReconcileWorkload) == 1;
-assert lib.hasInfix "missing" (builtins.head (failedAginctusAssertions unknownReconcileWorkload)).message;
+assert lib.hasInfix "missing"
+  (builtins.head (failedAginctusAssertions unknownReconcileWorkload)).message;
 assert imageUnit.serviceConfig.Type == "oneshot";
 assert builtins.elem pkgs.incus imageUnit.path;
 assert reconcile.requires == expected;

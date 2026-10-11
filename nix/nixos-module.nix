@@ -50,9 +50,9 @@ let
     path: lib.hasAttrByPath path cfg.settings
   ) forbiddenGatewaySecrets;
 
-  validImageAlias = alias:
-    builtins.stringLength alias <= 100
-    && builtins.match "[A-Za-z0-9][A-Za-z0-9_.-]*" alias != null;
+  validImageAlias =
+    alias:
+    builtins.stringLength alias <= 100 && builtins.match "[A-Za-z0-9][A-Za-z0-9_.-]*" alias != null;
 
   enabledImageAliases =
     lib.optional cfg.images.herdrClient.enable cfg.images.herdrClient.alias
