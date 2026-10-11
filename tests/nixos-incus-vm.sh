@@ -38,9 +38,9 @@ pkgs.testers.runNixOSTest {
     environment.systemPackages = [ pkgs.incus pkgs.jq ];
     services.aginctus = {
       enable = true;
-      package = flake.packages.\${system}.aginctus;
+      package = flake.packages.${system}.aginctus;
       images.herdrClient.enable = true;
-      images.herdrClient.source = flake.packages.\${system}.herdr-client;
+      images.herdrClient.source = flake.packages.${system}.herdr-client;
       images.opencodeWorkload.enable = false;
       reconcile.enable = false;
     };
