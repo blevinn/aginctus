@@ -39,6 +39,19 @@ let
       salt.key = "must-not-be-stored";
     };
   };
+  invalidAliases = evaluate {
+    services.aginctus.images.herdrClient.alias = "invalid alias";
+    services.aginctus.images.opencodeWorkload.alias = "invalid alias";
+  };
+  duplicateAliases = evaluate {
+    services.aginctus.images.opencodeWorkload.alias = "aginctus-herdr-client";
+  };
+  unknownReconcileWorkload = evaluate {
+    services.aginctus.reconcile = {
+      enable = true;
+      workloads = [ "missing" ];
+    };
+  };
   withReconcile = evaluate {
     services.aginctus.reconcile = {
       enable = true;
@@ -58,6 +71,11 @@ let
     !(item.assertion)
     && lib.hasPrefix "services.aginctus.settings cannot contain runtime gateway secrets:" item.message
   ) withForbiddenCredentials.assertions;
+  failedAginctusAssertions = cfg:
+    builtins.filter (
+      item: !(item.assertion) && lib.hasPrefix "services.aginctus." item.message
+    ) cfg.assertions;
+
   defaultPackage =
     (evaluate {
       services.aginctus.package = lib.mkForce self.packages.${system}.aginctus;
@@ -76,6 +94,10 @@ assert lib.hasInfix "gateway.postgres.password" (builtins.head secretAssertions)
 assert lib.hasInfix "gateway.master.key" (builtins.head secretAssertions).message;
 assert lib.hasInfix "gateway.salt.key" (builtins.head secretAssertions).message;
 assert settings.workloads.dev.runtime.type == "opencode";
+assert builtins.length (failedAginctusAssertions invalidAliases) == 2;
+assert builtins.length (failedAginctusAssertions duplicateAliases) == 1;
+assert builtins.length (failedAginctusAssertions unknownReconcileWorkload) == 1;
+assert lib.hasInfix "missing" (builtins.head (failedAginctusAssertions unknownReconcileWorkload)).message;
 assert imageUnit.serviceConfig.Type == "oneshot";
 assert builtins.elem pkgs.incus imageUnit.path;
 assert reconcile.requires == expected;
