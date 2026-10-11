@@ -306,6 +306,12 @@ in
           ++ lib.optional cfg.images.herdrClient.enable "aginctus-image-herdr-client.service"
           ++ lib.optional cfg.images.opencodeWorkload.enable "aginctus-image-opencode-workload.service";
           path = [ pkgs.incus ];
+          restartTriggers = [
+            configFile
+            cfg.package
+          ]
+          ++ lib.optional cfg.images.herdrClient.enable cfg.images.herdrClient.source
+          ++ lib.optional cfg.images.opencodeWorkload.enable cfg.images.opencodeWorkload.source;
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;

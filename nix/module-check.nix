@@ -110,6 +110,18 @@ assert lib.hasInfix "missing"
   (builtins.head (failedAginctusAssertions unknownReconcileWorkload)).message;
 assert imageUnit.serviceConfig.Type == "oneshot";
 assert builtins.elem pkgs.incus imageUnit.path;
+assert
+  reconcile.restartTriggers == [
+    withReconcile.environment.etc."aginctus/config.json".source
+    stub
+    withReconcile.services.aginctus.images.herdrClient.source
+    withReconcile.services.aginctus.images.opencodeWorkload.source
+  ];
+assert
+  noImagesReconcile.restartTriggers == [
+    withoutImages.environment.etc."aginctus/config.json".source
+    stub
+  ];
 assert reconcile.requires == expected;
 assert reconcile.after == expected;
 assert noImagesReconcile.requires == [ "incus.service" ];
