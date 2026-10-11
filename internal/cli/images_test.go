@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"fmt"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,8 +101,12 @@ func TestImageUpdateExistingFingerprintIsNoop(t *testing.T) {
 	data := []byte("test-image-data")
 	for _, p := range []string{"metadata/image.tar.xz", "rootfs/image.squashfs"} {
 		full := filepath.Join(dir, p)
-		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil { t.Fatal(err) }
-		if err := os.WriteFile(full, data, 0600); err != nil { t.Fatal(err) }
+		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, data, 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	sum := sha256.Sum256(append(append([]byte{}, data...), data...))
 	old := runIncusImage
@@ -110,11 +114,17 @@ func TestImageUpdateExistingFingerprintIsNoop(t *testing.T) {
 	calls := 0
 	runIncusImage = func(_ context.Context, args ...string) ([]byte, error) {
 		calls++
-		if strings.Join(args, " ") != "image list --format json" { t.Fatalf("unexpected mutation: %v", args) }
+		if strings.Join(args, " ") != "image list --format json" {
+			t.Fatalf("unexpected mutation: %v", args)
+		}
 		return []byte(fmt.Sprintf(`[{"fingerprint":"%x","aliases":[{"name":"working"}]}]`, sum)), nil
 	}
-	if err := updateLocalImage(context.Background(), "working", dir); err != nil { t.Fatal(err) }
-	if calls != 1 { t.Fatalf("expected one read-only Incus call; got %d", calls) }
+	if err := updateLocalImage(context.Background(), "working", dir); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected one read-only Incus call; got %d", calls)
+	}
 }
 
 func TestImageUpdateExistingFingerprintCreatesAlias(t *testing.T) {
@@ -122,8 +132,12 @@ func TestImageUpdateExistingFingerprintCreatesAlias(t *testing.T) {
 	data := []byte("image-data")
 	for _, p := range []string{"metadata/image.tar.xz", "rootfs/image.squashfs"} {
 		full := filepath.Join(dir, p)
-		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil { t.Fatal(err) }
-		if err := os.WriteFile(full, data, 0600); err != nil { t.Fatal(err) }
+		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, data, 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	sum := sha256.Sum256(append(append([]byte{}, data...), data...))
 	old := runIncusImage
@@ -136,7 +150,9 @@ func TestImageUpdateExistingFingerprintCreatesAlias(t *testing.T) {
 		}
 		return nil, nil
 	}
-	if err := updateLocalImage(context.Background(), "working", dir); err != nil { t.Fatal(err) }
+	if err := updateLocalImage(context.Background(), "working", dir); err != nil {
+		t.Fatal(err)
+	}
 	if len(calls) != 4 || !strings.HasPrefix(calls[1], "image alias create ") ||
 		!strings.HasPrefix(calls[2], "image alias rename ") ||
 		!strings.HasPrefix(calls[3], "image alias delete ") {
