@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -60,5 +61,17 @@ func TestHerdrConsolePropagatesExitFailure(t *testing.T) {
 	got := Run(context.Background(), []string{"herdr"}, &out, &stderr, &fakeIncusClient{}, loader)
 	if got != 1 || !strings.Contains(stderr.String(), "console exited") {
 		t.Fatalf("exit=%d stderr=%q", got, stderr.String())
+	}
+}
+
+func TestHerdrConsoleCommandUsesManagedServerContext(t *testing.T) {
+	cmd := herdrConsoleCommand(context.Background(), "aginctus-herdr")
+	want := []string{
+		"incus", "exec", "aginctus-herdr", "--project", "default", "--",
+		"env", "XDG_CONFIG_HOME=/var/lib/herdr/config", "XDG_RUNTIME_DIR=/run/herdr",
+		"XDG_STATE_HOME=/var/lib/herdr", "herdr",
+	}
+	if !reflect.DeepEqual(cmd.Args, want) {
+		t.Fatalf("command args = %#v, want %#v", cmd.Args, want)
 	}
 }

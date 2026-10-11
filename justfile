@@ -7,6 +7,11 @@ mod fmt '.just/fmt.just'
 test:
     go test ./...
 
+# Builds and runs a disposable QEMU VM with real Incus and the packaged CLI.
+# Unlike 'just test', this is a heavyweight integration check.
+test-nix *args:
+    bash tests/nixos-incus-vm.sh {{args}}
+
 vet:
     go vet ./...
 

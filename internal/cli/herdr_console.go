@@ -12,10 +12,19 @@ import (
 	"github.com/blevinn/aginctus/internal/herdrclient"
 )
 
+// herdrConsoleCommand aligns the CLI with the headless server systemd unit.
+// Incus exec does not inherit the unit environment; without these paths Herdr
+// can attach to a different root-owned session instead of the managed server.
+func herdrConsoleCommand(ctx context.Context, instance string) *exec.Cmd {
+	return exec.CommandContext(ctx, "incus", "exec", instance, "--project", "default", "--",
+		"env", "XDG_CONFIG_HOME=/var/lib/herdr/config", "XDG_RUNTIME_DIR=/run/herdr",
+		"XDG_STATE_HOME=/var/lib/herdr", "herdr")
+}
+
 // launchHerdrConsole runs an interactive command with the host terminal
 // attached. No shell is involved; the client identity stays in the guest.
 var launchHerdrConsole = func(ctx context.Context, instance string, stdin io.Reader, stdout, stderr io.Writer) error {
-	cmd := exec.CommandContext(ctx, "incus", "exec", instance, "--project", "default", "--", "herdr")
+	cmd := herdrConsoleCommand(ctx, instance)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
