@@ -7,6 +7,7 @@ import (
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 	"github.com/blevinn/aginctus/internal/orchestration"
+	"github.com/blevinn/aginctus/internal/statevolume"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 )
 
@@ -93,10 +94,21 @@ ag.orchestration('herdr-client', steps)`,
 	)
 }
 
+// provisionSystemState uses the local Incus API, independent of the host OS.
+// Injectable to test validation and mutation boundaries.
+var provisionSystemState = statevolume.EnsureSystem
+
 func (s Spec) Execute(ctx context.Context, options Options) error {
 	plan, err := s.Plan(options.Operation, options.Force)
 	if err != nil {
 		return err
+	}
+	// Provision only for a real upsert. Delete and dry-run preserve volumes,
+	// and no CLI-initiated volume creation occurs on read-only plans.
+	if !options.DryRun && (options.Operation == "" || options.Operation == "upsert") {
+		if err := provisionSystemState(ctx, s.StoragePool, s.Name); err != nil {
+			return fmt.Errorf("Herdr system state volume: %w", err)
+		}
 	}
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
 		"apply": applydriver.New(),
