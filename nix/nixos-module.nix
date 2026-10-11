@@ -25,6 +25,19 @@ let
 
   aginctusCommand = "${cfg.package}/bin/aginctus";
 
+  # The Go config loader treats these as runtime-only secrets, but the
+  # freeform options layer would otherwise allow them into the world-readable
+  # Nix store.
+  forbiddenGatewaySecrets = [
+    [ "gateway" "postgres" "password" ]
+    [ "gateway" "master" "key" ]
+    [ "gateway" "salt" "key" ]
+  ];
+
+  configuredSecretPaths = builtins.filter (
+    path: lib.hasAttrByPath path cfg.settings
+  ) forbiddenGatewaySecrets;
+
   configFile = jsonFormat.generate "aginctus-config.json" cfg.settings;
 
   imageUpdateService =
@@ -218,6 +231,13 @@ in
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = configuredSecretPaths == [ ];
+        message = "services.aginctus.settings cannot contain runtime gateway secrets: ${lib.concatStringsSep ", " (map (path: lib.concatStringsSep "." path) configuredSecretPaths)}. Provide these through the supported runtime credential mechanism instead.";
+      }
+    ];
+
     environment.etc."aginctus/config.json".source = configFile;
 
     systemd.services =
