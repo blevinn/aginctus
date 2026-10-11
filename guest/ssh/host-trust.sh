@@ -70,7 +70,7 @@ trap 'rm -f "$probe"' EXIT
 printf '%s\n' "${key_fields[0]} ${key_fields[1]}" > "$probe"
 ssh-keygen -lf "$probe" -E sha256 >/dev/null || die "invalid Ed25519 host key"
 
-mkdir -p -m 0700 "$root" "$trust"
+mkdir -p -- "$root" "$trust"
 chmod 0700 "$root" "$trust"
 check_existing
 tmp="$(mktemp "$trust/.known_hosts.XXXXXXXX")"
