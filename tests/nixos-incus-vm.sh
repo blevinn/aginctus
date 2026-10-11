@@ -74,6 +74,18 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name == \"aginctus-herdr-client-reused\")] | length == 1'")
 
 
+    # Promote a genuinely different valid image into the active alias, then
+    # restore the original. This exercises staging, backup, and promotion.
+    machine.succeed("${flake.packages.${system}.aginctus}/bin/aginctus --configuration-file /etc/aginctus/config.json images update aginctus-herdr-client ${flake.packages.${system}.opencode-workload}")
+    replacement = machine.succeed("incus image list --format json | jq -r '.[] | select(any(.aliases[]?; .name == \"aginctus-herdr-client\")) | .fingerprint'").strip()
+    assert len(replacement) >= 12 and replacement != before, f"image replacement did not change fingerprint: {before} -> {replacement}"
+    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name == \"aginctus-herdr-client\")] | length == 1'")
+    machine.succeed("${flake.packages.${system}.aginctus}/bin/aginctus --configuration-file /etc/aginctus/config.json images update aginctus-herdr-client ${flake.packages.${system}.herdr-client}")
+    restored = machine.succeed("incus image list --format json | jq -r '.[] | select(any(.aliases[]?; .name == \"aginctus-herdr-client\")) | .fingerprint'").strip()
+    assert restored == before, f"restoring original image failed: {before} -> {restored}"
+    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name | startswith(\"aginctus-herdr-client-previous-\"))] | length == 0'")
+    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name | startswith(\"aginctus-herdr-client-staged-\"))] | length == 0'")
+
     # A malformed replacement must fail without disturbing the active alias.
     # This exercises an Incus import error after artifact path validation,
     # rather than a trivial CLI argument or missing-file error.
@@ -95,4 +107,4 @@ echo 'Building and executing the disposable NixOS QEMU/Incus integration test...
 # Realizing the NixOS test derivation starts QEMU and executes testScript.
 nix build --impure --file "$workdir/test.nix" --print-build-logs --show-trace --out-link "$workdir/result" "$@"
 [[ -e "$workdir/result" ]] || { echo 'VM test did not produce a result' >&2; exit 1; }
-echo 'PASS: Incus image import, idempotent update, fingerprint reuse, and failed replacement preservation passed in disposable VM.'
+echo 'PASS: Incus image import, idempotent update, fingerprint reuse, valid replacement/restoration, and failed replacement preservation passed in disposable VM.'
