@@ -5,12 +5,12 @@ default flag="": (all flag)
 [no-cd]
 all flag="":
     @case '{{flag}}' in ''|--commit|--push) ;; *) echo 'Expected --commit or --push' >&2; exit 2 ;; esac
-    @before=$$(git rev-parse HEAD); \
+    @before=$(git rev-parse HEAD); \
       child_flag='{{flag}}'; \
-      if [[ "$$child_flag" == '--push' ]]; then child_flag='--commit'; fi; \
-      just fmt go "$$child_flag"; \
-      just fmt nix "$$child_flag"; \
-      if [[ '{{flag}}' == '--push' && "$$before" != "$$(git rev-parse HEAD)" ]]; then git push; fi
+      if [[ "$child_flag" == '--push' ]]; then child_flag='--commit'; fi; \
+      just fmt go "$child_flag"; \
+      just fmt nix "$child_flag"; \
+      if [[ '{{flag}}' == '--push' && "$before" != "$(git rev-parse HEAD)" ]]; then git push; fi
 
 [no-cd]
 go flag="":
