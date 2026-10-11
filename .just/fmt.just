@@ -2,24 +2,21 @@
 [no-cd]
 default flag="": (all flag)
 
+[private]
 [no-cd]
-all flag="":
+validate flag="":
     @case '{{flag}}' in ''|--commit|--push) ;; *) echo 'Expected --commit or --push' >&2; exit 2 ;; esac
-    @before=$(git rev-parse HEAD); \
-      child_flag='{{flag}}'; \
-      if [[ "$child_flag" == '--push' ]]; then child_flag='--commit'; fi; \
-      just fmt go "$child_flag"; \
-      just fmt nix "$child_flag"; \
-      if [[ '{{flag}}' == '--push' && "$before" != "$(git rev-parse HEAD)" ]]; then git push; fi
 
 [no-cd]
-go flag="":
-    @case '{{flag}}' in ''|--commit|--push) ;; *) echo 'Expected --commit or --push' >&2; exit 2 ;; esac
+all flag="": (validate flag) (go (if flag == "--push" { "--commit" } else { flag })) (nix (if flag == "--push" { "--commit" } else { flag }))
+    @if [[ '{{flag}}' == '--push' ]] && git rev-parse --verify '@{upstream}' >/dev/null 2>&1 && [[ -n "$(git log '@{upstream}..HEAD' --format=%s --grep='^just fmt \(go\|nix\)$')" ]]; then git push; fi
+
+[no-cd]
+go flag="": (validate flag)
     gofmt -w cmd internal
     @if [[ '{{flag}}' == '--commit' || '{{flag}}' == '--push' ]]; then git add .; if ! git diff --cached --quiet; then git commit -m 'just fmt go'; if [[ '{{flag}}' == '--push' ]]; then git push; fi; fi; fi
 
 [no-cd]
-nix flag="":
-    @case '{{flag}}' in ''|--commit|--push) ;; *) echo 'Expected --commit or --push' >&2; exit 2 ;; esac
+nix flag="": (validate flag)
     nix fmt
     @if [[ '{{flag}}' == '--commit' || '{{flag}}' == '--push' ]]; then git add .; if ! git diff --cached --quiet; then git commit -m 'just fmt nix'; if [[ '{{flag}}' == '--push' ]]; then git push; fi; fi; fi
