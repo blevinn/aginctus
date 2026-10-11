@@ -243,8 +243,12 @@ func TestImageUpdateReportsPromotionAndRollbackFailures(t *testing.T) {
 	data := []byte("replacement")
 	for _, p := range []string{"metadata/image.tar.xz", "rootfs/image.squashfs"} {
 		full := filepath.Join(dir, p)
-		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil { t.Fatal(err) }
-		if err := os.WriteFile(full, data, 0600); err != nil { t.Fatal(err) }
+		if err := os.MkdirAll(filepath.Dir(full), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, data, 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	sum := sha256.Sum256(append(append([]byte{}, data...), data...))
 	old := runIncusImage
@@ -257,8 +261,12 @@ func TestImageUpdateReportsPromotionAndRollbackFailures(t *testing.T) {
 		}
 		if len(args) == 5 && args[0] == "image" && args[1] == "alias" && args[2] == "rename" &&
 			args[4] == "working" {
-			if strings.Contains(args[3], "-staged-") { return nil, errors.New("promotion blocked") }
-			if strings.Contains(args[3], "-previous-") { return nil, errors.New("rollback blocked") }
+			if strings.Contains(args[3], "-staged-") {
+				return nil, errors.New("promotion blocked")
+			}
+			if strings.Contains(args[3], "-previous-") {
+				return nil, errors.New("rollback blocked")
+			}
 		}
 		return nil, nil
 	}
