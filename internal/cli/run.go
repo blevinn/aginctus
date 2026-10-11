@@ -442,6 +442,9 @@ func runHerdr(
 	if args[0] == "authorize" {
 		return runHerdrAuthorize(ctx, args[1:], stdout, stderr, effective)
 	}
+	if args[0] == "pin-host" {
+		return runHerdrPinHost(ctx, args[1:], stdout, stderr, effective)
+	}
 	if args[0] != "client" {
 		printHerdrClientUsage(stderr)
 		return 2
@@ -524,6 +527,7 @@ func runHerdr(
 
 func printHerdrClientUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] herdr authorize <workload-id>")
+	fmt.Fprintln(w, "       aginctus [global options] herdr pin-host <workload-id>")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client apply [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client remove [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client status")
