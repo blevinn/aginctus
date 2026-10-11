@@ -48,15 +48,6 @@
               wrapProgram "$out/bin/aginctus" --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.incus ]}"
             '';
           };
-          stateSystemBindHelper = pkgs.writeShellApplication {
-            name = "aginctus-state-system-bind";
-            runtimeInputs = [
-              pkgs.coreutils
-              pkgs.util-linux
-              pkgs.findutils
-            ];
-            text = builtins.readFile ./guest/state/bind-system.sh;
-          };
           sshClientIdentityHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-client-identity";
             runtimeInputs = [
@@ -81,6 +72,12 @@
             inherit system;
             modules = [
               "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
+              (import ./nix/guest-state-bindings.nix {
+                bindings = [
+                  { class = "system"; subdir = "herdr"; target = "/var/lib/herdr"; }
+                  { class = "system"; subdir = "ssh"; target = "/var/lib/aginctus/ssh"; }
+                ];
+              })
               (
                 { ... }:
                 {
@@ -90,24 +87,8 @@
                     herdrPackage
                     pkgs.openssh
                     sshClientIdentityHelper
-                    stateSystemBindHelper
                   ];
 
-                  # An absent or unsafe system volume blocks Herdr startup.
-                  # Runtime paths are bind-mounted only after the Incus volume
-                  # is available, before the managed Herdr server starts.
-                  systemd.services.aginctus-state-system = {
-                    description = "Bind Aginctus persistent system state";
-                    wantedBy = [ "multi-user.target" ];
-                    before = [ "herdr.service" ];
-                    after = [ "local-fs.target" ];
-                    requiresMountsFor = [ "/var/lib/aginctus/state/system" ];
-                    serviceConfig = {
-                      Type = "oneshot";
-                      RemainAfterExit = true;
-                      ExecStart = "${stateSystemBindHelper}/bin/aginctus-state-system-bind";
-                    };
-                  };
                   environment.variables = {
                     XDG_CONFIG_HOME = "/var/lib/herdr/config";
                     XDG_RUNTIME_DIR = "/run/herdr";
@@ -119,10 +100,11 @@
                     wantedBy = [ "multi-user.target" ];
                     after = [
                       "network-online.target"
-                      "aginctus-state-system.service"
+                      "var-lib-herdr.mount"
+                      "var-lib-aginctus-ssh.mount"
                     ];
                     wants = [ "network-online.target" ];
-                    requires = [ "aginctus-state-system.service" ];
+                    requires = [ "var-lib-herdr.mount" "var-lib-aginctus-ssh.mount" ];
 
                     serviceConfig = {
                       Environment = [
