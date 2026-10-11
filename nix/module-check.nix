@@ -52,9 +52,10 @@ let
   noImagesReconcile = withoutImages.systemd.services.aginctus-reconcile;
 
   secretAssertions = builtins.filter (item: !(item.assertion)) withForbiddenCredentials.assertions;
-  defaultPackage = (evaluate {
-    services.aginctus.package = lib.mkForce self.packages.${system}.aginctus;
-  }).services.aginctus.package;
+  defaultPackage =
+    (evaluate {
+      services.aginctus.package = lib.mkForce self.packages.${system}.aginctus;
+    }).services.aginctus.package;
 
   expected = [
     "incus.service"
