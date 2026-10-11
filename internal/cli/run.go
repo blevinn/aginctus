@@ -439,6 +439,9 @@ func runHerdr(
 	if len(args) == 0 {
 		return runHerdrConsole(ctx, nil, stdout, stderr, effective)
 	}
+	if args[0] == "authorize" {
+		return runHerdrAuthorize(ctx, args[1:], stdout, stderr, effective)
+	}
 	if args[0] != "client" {
 		printHerdrClientUsage(stderr)
 		return 2
@@ -520,7 +523,8 @@ func runHerdr(
 }
 
 func printHerdrClientUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] herdr client apply [--dry-run] [--force]")
+	fmt.Fprintln(w, "Usage: aginctus [global options] herdr authorize <workload-id>")
+	fmt.Fprintln(w, "       aginctus [global options] herdr client apply [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client remove [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client status")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client start")
