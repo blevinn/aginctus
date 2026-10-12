@@ -75,7 +75,7 @@ func (c *Config) Bool(path string) (bool, error) {
 // Do not permit either environment mapping or explicit overrides to expose them.
 func isRuntimeSecretPath(path string) bool {
 	switch strings.ToLower(path) {
-	case "gateway.postgres.password", "gateway.master.key", "gateway.salt.key":
+	case "gateway.postgres.password", "gateway.master.key", "gateway.salt.key", "gateway.upstream.api.key":
 		return true
 	default:
 		return false
