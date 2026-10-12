@@ -71,17 +71,27 @@ func verifySavedHerdrMachine(machines []savedHerdrMachine, label, target string)
 
 func registerHerdrMachine(ctx context.Context, cfg *config.Config, id string) error {
 	client, err := herdrclient.FromConfig(cfg)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	target, err := workload.FromConfig(cfg, id)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if target.Runtime != "opencode" || target.Isolation != "container" ||
 		!managedSSHHostAlias.MatchString(target.Name) || client.Name == target.Name {
 		return fmt.Errorf("Herdr registration requires a distinct managed OpenCode container")
 	}
 	instances, err := statusInstances(ctx)
-	if err != nil { return fmt.Errorf("inspect Incus ownership: %w", err) }
-	if err := requireRunningOwnedInstance(instances, client.Name, "infrastructure", "herdr-client", ""); err != nil { return err }
-	if err := requireRunningOwnedInstance(instances, target.Name, "workload", "agent-workload", target.ID); err != nil { return err }
+	if err != nil {
+		return fmt.Errorf("inspect Incus ownership: %w", err)
+	}
+	if err := requireRunningOwnedInstance(instances, client.Name, "infrastructure", "herdr-client", ""); err != nil {
+		return err
+	}
+	if err := requireRunningOwnedInstance(instances, target.Name, "workload", "agent-workload", target.ID); err != nil {
+		return err
+	}
 
 	// Never publish a machine until SSH host trust and authentication succeed.
 	if err := pinHerdrHost(ctx, cfg, id); err != nil {
@@ -89,22 +99,34 @@ func registerHerdrMachine(ctx context.Context, cfg *config.Config, id string) er
 	}
 
 	addressOutput, _, err := herdrMachineGuestExec(ctx, target.Name, "", "ip", "-4", "-o", "addr", "show", "dev", "eth0")
-	if err != nil { return fmt.Errorf("discover workload address: %w", err) }
+	if err != nil {
+		return fmt.Errorf("discover workload address: %w", err)
+	}
 	address, err := parseManagementAddress(addressOutput)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	rawIdentity, _, err := herdrMachineGuestExec(ctx, client.Name, "", "aginctus-ssh-client-identity", "inspect")
-	if err != nil { return fmt.Errorf("inspect persistent SSH identity: %w", err) }
+	if err != nil {
+		return fmt.Errorf("inspect persistent SSH identity: %w", err)
+	}
 	key, err := parseHerdrPublicIdentity(rawIdentity)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	generation := strings.TrimPrefix(strings.Fields(key)[2], "aginctus:")
-	if _, err := strconv.ParseUint(generation, 10, 64); err != nil { return fmt.Errorf("invalid identity generation: %w", err) }
+	if _, err := strconv.ParseUint(generation, 10, 64); err != nil {
+		return fmt.Errorf("invalid identity generation: %w", err)
+	}
 
 	alias := target.Name
 	// A missing config is installed once; an existing different config
 	// requires explicit operator recovery, never silent credential rotation.
 	_, code, err := herdrMachineGuestExec(ctx, client.Name, "", "aginctus-ssh-machine-config", "inspect", alias, address, generation)
 	if err != nil {
-		if code != 3 { return fmt.Errorf("inspect machine SSH config: %w", err) }
+		if code != 3 {
+			return fmt.Errorf("inspect machine SSH config: %w", err)
+		}
 		if _, _, err := herdrMachineGuestExec(ctx, client.Name, "", "aginctus-ssh-machine-config", "reconcile", alias, address, generation); err != nil {
 			return fmt.Errorf("write persistent SSH machine config: %w", err)
 		}
@@ -120,11 +142,17 @@ func registerHerdrMachine(ctx context.Context, cfg *config.Config, id string) er
 	}
 
 	raw, _, err := herdrMachineGuestExec(ctx, client.Name, "", "herdr", "machine", "list", "--json")
-	if err != nil { return fmt.Errorf("list saved Herdr machines: %w", err) }
+	if err != nil {
+		return fmt.Errorf("list saved Herdr machines: %w", err)
+	}
 	machines, err := parseSavedHerdrMachines(raw)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	exists, err := verifySavedHerdrMachine(machines, alias, alias)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if !exists {
 		if _, _, err := herdrMachineGuestExec(ctx, client.Name, "", "herdr", "machine", "add",
 			alias, "--label", alias, "--remote-session", "default"); err != nil {
@@ -132,12 +160,20 @@ func registerHerdrMachine(ctx context.Context, cfg *config.Config, id string) er
 		}
 	}
 	raw, _, err = herdrMachineGuestExec(ctx, client.Name, "", "herdr", "machine", "list", "--json")
-	if err != nil { return fmt.Errorf("verify saved Herdr machine: %w", err) }
+	if err != nil {
+		return fmt.Errorf("verify saved Herdr machine: %w", err)
+	}
 	machines, err = parseSavedHerdrMachines(raw)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	exists, err = verifySavedHerdrMachine(machines, alias, alias)
-	if err != nil { return err }
-	if !exists { return fmt.Errorf("Herdr machine was not saved") }
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("Herdr machine was not saved")
+	}
 	return nil
 }
 
