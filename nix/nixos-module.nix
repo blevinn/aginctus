@@ -44,6 +44,12 @@ let
       "salt"
       "key"
     ]
+    [
+      "gateway"
+      "upstream"
+      "api"
+      "key"
+    ]
   ];
 
   configuredSecretPaths = builtins.filter (
