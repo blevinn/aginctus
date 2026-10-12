@@ -1,6 +1,6 @@
 # Aginctus OAuth gateway runtime and credential handoff design
 
-Status: **proposed, not implemented**. Tracks #171 and is layered after PR #175 (storage) and PR #170 (host OAuth). The Responses adapter is #172. This document deliberately does **not** authorize token import or any new mounted service.
+Status: **proposed, not implemented**. Tracks #171 and is layered after PR #175 (storage) and PR #170 (host OAuth). The Responses adapter is #172. LiteLLM is the **mandatory workload-facing inference ingress** in both API-key and OpenAI/OAuth modes. v0.1 may share a static workload gateway key; dedicated workload identities and fine-grained authorization are deferred to v0.2. This document deliberately does **not** authorize token import or any new mounted service.
 
 ## Problem and trust boundaries
 
@@ -33,10 +33,31 @@ custom Incus volume. LiteLLM and PostgreSQL must not be given this volume.
    Mount by explicit custom-volume name from the correct storage pool with
    strict existing ownership markers, not a host bind mount. Configure
    explicit restrictive file/directory ownership and reject symlinks.
-4. **OpenCode**: sees a private Aginctus inference endpoint and an
-   Aginctus-scoped credential, **never an OpenAI OAuth bearer or refresh token**.
-5. **LiteLLM/PostgreSQL**: remain an optional API-key provider path; no direct
-   access to SIWC state.
+4. **OpenCode / Hermes**: connect **only to LiteLLM's private inference endpoint** using a static Aginctus-managed LiteLLM credential in v0.1 (a shared key is acceptable). They never receive an OpenAI OAuth bearer or refresh token. Static keys are not proof of a distinct workload identity, and this deployment must not claim per-workload isolation.
+5. **LiteLLM/PostgreSQL**: LiteLLM is the **single mandatory workload ingress** for both API-key and OAuth inference. It checks its v0.1 gateway key and routes a configured model alias to the internal OAuth Responses adapter. LiteLLM itself must not receive the SIWC access or refresh tokens; PostgreSQL remains confined to LiteLLM's own persistence.
+6. **Adapter ingress**: accept inference only from the LiteLLM service over a separate private connection with independently provisioned service-to-service authentication; never infer trust from a client-provided account header or solely from network reachability. This internal credential is **not** the static workload key. Enforce explicit configured consent/account selection server-side and reject any direct workload requests.
+
+## Workload authentication scope and routing
+
+The public *within Aginctus* model path for v0.1 is:
+
+```text
+OpenCode/Hermes
+  │ private gateway URL + static LiteLLM key
+  ▼
+LiteLLM (sole workload ingress and stable client API)
+  ├── standard provider adapter → external API-key provider
+  └── configured OAuth model route → internal authenticated Responses adapter
+                                  → credential owner → OpenAI Responses API
+```
+
+A single static LiteLLM key may be shared by managed workloads in v0.1. Treat it as a basic access barrier only: possession does **not** establish workload identity or per-workload accountability. Do not build an elaborate Aginctus-issued per-workload key registry, principal mapping, rotation protocol, or workload-specific grants in v0.1. Those are v0.2 concerns. The managed secret must nevertheless not appear in generated Nix closures, published Compose/Jsonnet plans, or logs; distribute it using the existing protected runtime provisioning mechanism and enforce private networking.
+
+The OAuth adapter must distinguish its caller from arbitrary workloads by a **separate internal service credential and private listener**. Restrict direct adapter access, and choose the specific consented OAuth account using trusted server-side configuration, not arbitrary `account_id`, headers, or model aliases supplied by the request. With static workload credentials, an authorization policy cannot truthfully attribute calls to individual workloads: expose only a consciously approved *shared v0.1 account scope* and document that all holders of the shared key may use it. If this scope is too broad for consent/policy, disable OAuth inference rather than suggest artificial isolation.
+
+LiteLLM compatibility is a **required pre-implementation spike**: demonstrate that the pinned LiteLLM version can authenticate an incoming request and forward a streaming `/v1/responses` call to a configured internal backend while preserving required request fields, SSE events, tool calls and terminal completion. If ordinary model routing, custom providers, or passthrough cannot do so safely, implement a *LiteLLM plugin/custom-provider integration* or explicitly revise this design; do **not** quietly bypass LiteLLM or inject an OAuth bearer into a generic API-key provider.
+
+A static key is acceptable for v0.1 deployment, **not** for the internal host-to-gateway refresh-token handoff. Its stronger ownership, identity and replay requirements below remain unchanged.
 
 ## Handoff state machine
 
@@ -102,7 +123,7 @@ an untrusted service port into the management bridge is not acceptable.
 ## Gateway orchestration changes required
 
 - Introduce a separate OAuth daemon image derivation and immutable deployment
-  settings. Keep the daemon distinct from LiteLLM/PostgreSQL.
+  settings. Keep the daemon distinct from LiteLLM/PostgreSQL; it is an **internal LiteLLM backend**, not a competing workload gateway.
 - Add a preflight volume Ensure step before its Compose service, with no
   credentials in the generated plan. The storage pool and gateway ID must
   match the provisioned volume. Do not rely on Compose silently adopting an
@@ -113,6 +134,7 @@ an untrusted service port into the management bridge is not acceptable.
   configured gateway daemon receives provider egress, following the
   independent egress design from PR #160; preserve the existing Herdr/
   OpenCode isolation.
+- Configure LiteLLM as the only workload-facing ingress, a single static gateway key for v0.1, explicit OAuth model routing, and separate authenticated LiteLLM-to-adapter transport; the adapter is not exposed to workloads. Verify streaming Responses compatibility before serving live requests.
 - `gateway render`, `gateway validate`, `gateway status`, and aggregate
   `apply --render` must clearly distinguish **declared**, **provisioned**,
   **mounted**, **authenticated**, and **inference-ready** conditions.
@@ -139,8 +161,8 @@ an untrusted service port into the management bridge is not acceptable.
    a single authorized refresh; use a controlled mock OIDC/token endpoint.
 6. Test local-only logout, remote revocation failures, gateway inaccessible,
    account switching, and later reconnection. Do not mask a remote failure.
-7. Do not claim end-to-end readiness until #172 tests an authorized
-   account's streamed Responses completion and OpenCode behavior.
+7. Confirm ordinary workload access to the OAuth adapter is rejected even when the workload knows the v0.1 LiteLLM shared key; only LiteLLM's separate backend identity is accepted. Confirm no claims of per-workload attribution from shared keys.
+8. Validate LiteLLM's authenticated Responses passthrough, SSE events, tool-call fidelity, and incomplete-stream handling against the pinned version. Do not claim end-to-end readiness until #172 tests an authorized account's streamed Responses completion and OpenCode behavior.
 
 ## Sequencing / merge strategy
 
@@ -150,7 +172,8 @@ an untrusted service port into the management bridge is not acceptable.
 - **This design PR**: freeze the ownership protocol and runtime boundary.
 - **Runtime follow-up**: build a dedicated daemon image and mount, then
   secure handoff, ownership tests, and Incus smoke testing.
-- **#172**: OAuth-specific Responses adapter and restricted OpenCode routing.
+- **#172**: OAuth-specific Responses adapter connected **behind LiteLLM**; gateway compatibility spike, static shared key in v0.1.
+- **v0.2**: dedicated per-workload LiteLLM identities/keys, policy bindings, issuance and rotation.
 
 Do not merge the design alone as completion of #171 and do not instruct users
 to place OAuth tokens in the Incus volume manually.
