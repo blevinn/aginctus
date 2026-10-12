@@ -94,6 +94,7 @@ assert builtins.length secretAssertions == 1;
 assert lib.hasInfix "gateway.postgres.password" (builtins.head secretAssertions).message;
 assert lib.hasInfix "gateway.master.key" (builtins.head secretAssertions).message;
 assert lib.hasInfix "gateway.salt.key" (builtins.head secretAssertions).message;
+assert lib.hasInfix "gateway.upstream.api.key" (builtins.head secretAssertions).message;
 assert settings.workloads.dev.runtime.type == "opencode";
 assert builtins.length (failedAginctusAssertions invalidAliases) == 2;
 assert lib.any (item: lib.hasInfix "alias format" item.message) (
