@@ -1,8 +1,8 @@
 package gateway
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -48,7 +48,7 @@ func TestRenderCompose(t *testing.T) {
 }
 
 func TestValidateRejectsEmptyImage(t *testing.T) {
-	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",ID: "local", Project: "gateway", Network: "mgmt", PostgresImage: "postgres"}
+	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini", ID: "local", Project: "gateway", Network: "mgmt", PostgresImage: "postgres"}
 	if err := spec.Validate(); err == nil {
 		t.Fatal("Validate() error = nil, want error")
 	}
@@ -109,7 +109,7 @@ func TestInitializeRuntimeEnvironmentGeneratesAndPersistsMissingSecrets(t *testi
 		t.Setenv(name, "")
 	}
 
-	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",ID: "local"}
+	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini", ID: "local"}
 	first, err := spec.InitializeRuntimeEnvironment()
 	if err != nil {
 		t.Fatalf("InitializeRuntimeEnvironment() error = %v", err)
@@ -145,7 +145,7 @@ func TestInitializeRuntimeEnvironmentUsesProvidedSeedOnlyWhenMissing(t *testing.
 	}
 	t.Setenv("AGINCTUS_GATEWAY_MASTER_KEY", "seeded-value")
 
-	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",ID: "local"}
+	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini", ID: "local"}
 	first, err := spec.InitializeRuntimeEnvironment()
 	if err != nil {
 		t.Fatalf("InitializeRuntimeEnvironment() error = %v", err)
@@ -167,7 +167,7 @@ func TestInitializeRuntimeEnvironmentUsesProvidedSeedOnlyWhenMissing(t *testing.
 func TestGatewayIDRejectsTraversalAndSeparators(t *testing.T) {
 	for _, id := range []string{"../outside", ".", "..", "nested/path", "nested\\\\path", "/absolute", ""} {
 		t.Run(id, func(t *testing.T) {
-			spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+			spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini", ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
 			if err := spec.Validate(); err == nil {
 				t.Fatalf("accepted unsafe gateway ID %q", id)
 			}
@@ -178,7 +178,7 @@ func TestGatewayIDRejectsTraversalAndSeparators(t *testing.T) {
 		})
 	}
 	for _, id := range []string{"local", "gateway-01", "gateway_01"} {
-		spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+		spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini", ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
 		if err := spec.Validate(); err != nil {
 			t.Fatalf("valid gateway ID %q rejected: %v", id, err)
 		}
@@ -345,14 +345,22 @@ func TestGatewayEgressPlanAndModelArePrivate(t *testing.T) {
 		LiteLLMImage: "litellm", PostgresImage: "postgres",
 	}
 	plan, err := spec.OrchestrationPlan()
-	if err != nil { t.Fatal(err) }
-	if len(plan.Steps) != 3 { t.Fatalf("steps=%d",len(plan.Steps)) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Steps) != 3 {
+		t.Fatalf("steps=%d", len(plan.Steps))
+	}
 	egress := string(plan.Steps[1].Configuration)
 	for _, want := range []string{"gateway-egress-network", "aginctus-egress", "\"ipv4.nat\":\"true\""} {
-		if !strings.Contains(egress,want) { t.Fatalf("egress missing %q: %s",want,egress) }
+		if !strings.Contains(egress, want) {
+			t.Fatalf("egress missing %q: %s", want, egress)
+		}
 	}
 	compose := string(plan.Steps[2].Configuration)
-	for _, want := range []string{"aginctus-egress","aginctus-mgmt","os.environ/OPENAI_API_KEY","AGINCTUS_GATEWAY_UPSTREAM_API_KEY"} {
-		if !strings.Contains(compose,want) { t.Fatalf("compose missing %q",want) }
+	for _, want := range []string{"aginctus-egress", "aginctus-mgmt", "os.environ/OPENAI_API_KEY", "AGINCTUS_GATEWAY_UPSTREAM_API_KEY"} {
+		if !strings.Contains(compose, want) {
+			t.Fatalf("compose missing %q", want)
+		}
 	}
 }
