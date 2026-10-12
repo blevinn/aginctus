@@ -77,6 +77,9 @@ func login(ctx context.Context, output io.Writer, registerNew bool) error {
 	if err != nil {
 		return err
 	}
+	if err := withAccountLock(dir, func() error { return migrateLegacyLocked(dir) }); err != nil {
+		return err
+	}
 	var existing *Session
 	if !registerNew {
 		existing, err = activeSession(dir)
