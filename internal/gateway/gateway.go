@@ -199,7 +199,7 @@ services:
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        printf '%s\\n' 'model_list:' '  - model_name: aginctus-default' '    litellm_params:' '      model: {{.ProviderModel}}' '      api_key: os.environ/OPENAI_API_KEY' > /tmp/aginctus-litellm.yaml
+        printf '%s\n' 'model_list:' '  - model_name: aginctus-default' '    litellm_params:' '      model: {{.ProviderModel}}' '      api_key: os.environ/OPENAI_API_KEY' > /tmp/aginctus-litellm.yaml
         exec litellm --config /tmp/aginctus-litellm.yaml --port 4000
     environment:
       DATABASE_URL: postgresql://litellm:${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}@postgres:5432/litellm
