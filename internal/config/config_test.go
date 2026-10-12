@@ -171,7 +171,7 @@ func TestRuntimeGatewaySecretsExcludedFromConfig(t *testing.T) {
 }
 
 func TestRuntimeSecretOverridesRejected(t *testing.T) {
-	for _, path := range []string{"gateway.postgres.password", "gateway.master.key", "gateway.salt.key"} {
+	for _, path := range []string{"gateway.postgres.password", "gateway.master.key", "gateway.salt.key", "gateway.upstream.api.key"} {
 		if _, err := (&Loader{}).Load(Options{Overrides: []string{path + "=sentinel-sensitive-value"}}); err == nil {
 			t.Fatalf("Load accepted runtime secret override %q", path)
 		}
