@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const savedMachineJSON = `[{"label":"aginctus-dev","ssh_target":"aginctus-dev","remote_session":"default"}]`
+const savedMachineJSON = `[{"id":"f0c701c3964b56693a681125d10da643","label":"aginctus-dev","target":"aginctus-dev","session":"default","enabled":true,"selected":false}]`
 
 func TestParseSavedHerdrMachines(t *testing.T) {
 	entries, err := parseSavedHerdrMachines("[]")
