@@ -213,35 +213,42 @@ func Refresh(ctx context.Context,out io.Writer)error{
    fmt.Fprintln(out,"Access token remains current (local expiry check only)")
    return nil
   }
-  form:=url.Values{
-   "grant_type":{"refresh_token"},"client_id":{s.ClientID},
-   "refresh_token":{s.RefreshToken},"resource":{resource},
-  }
-  request,err:=http.NewRequestWithContext(ctx,http.MethodPost,tokenURL,strings.NewReader(form.Encode()))
-  if err!=nil{return err}
-  request.Header.Set("Content-Type","application/x-www-form-urlencoded")
-  res,err:=(&http.Client{Timeout:15*time.Second}).Do(request)
-  if err!=nil{return fmt.Errorf("OpenAI refresh request: %w",err)}
-  defer res.Body.Close()
-  if res.StatusCode!=200{return fmt.Errorf("OpenAI refresh failed (HTTP %d); session preserved",res.StatusCode)}
-  var tokens tokenReply
-  if err:=json.NewDecoder(io.LimitReader(res.Body,64<<10)).Decode(&tokens);err!=nil{return errors.New("invalid OpenAI refresh response")}
-  if tokens.AccessToken=="" || tokens.RefreshToken=="" || !strings.EqualFold(tokens.TokenType,"Bearer") || tokens.ExpiresIn<=0{
-   return errors.New("incomplete OpenAI token refresh response")
-  }
-  scopes:=strings.Fields(tokens.Scope)
-  if len(scopes)>0{
-   allowed:=false
-   for _,scope:=range scopes{if scope=="chatgpt.tokens.use.direct"{allowed=true}}
-   if !allowed{return errors.New("refreshed access was not granted direct ChatGPT usage scope")}
-  }
-  s.AccessToken=tokens.AccessToken;s.RefreshToken=tokens.RefreshToken;s.ExpiresIn=tokens.ExpiresIn
-  s.TokenType=tokens.TokenType;s.SavedAt=time.Now().UTC()
-  if tokens.IDToken!="" { s.IDToken=tokens.IDToken }
-  if len(scopes)>0{s.Scopes=scopes}
+  if err:=refreshSession(ctx,&http.Client{Timeout:15*time.Second},tokenURL,s);err!=nil{return err}
   // Persist the rotating refresh token atomically under the account lock.
   if err:=persistAccount(dir,s);err!=nil{return err}
   fmt.Fprintln(out,"OpenAI OAuth session refreshed and saved")
   return nil
  })
+}
+
+func refreshSession(ctx context.Context,client *http.Client,endpoint string,s *Session)error{
+ if s.ClientID=="" || s.RefreshToken==""{return errors.New("refresh requires an issued client and renewable session")}
+ form:=url.Values{
+  "grant_type":{"refresh_token"},"client_id":{s.ClientID},
+  "refresh_token":{s.RefreshToken},"resource":{resource},
+ }
+ request,err:=http.NewRequestWithContext(ctx,http.MethodPost,endpoint,strings.NewReader(form.Encode()))
+ if err!=nil{return err}
+ request.Header.Set("Content-Type","application/x-www-form-urlencoded")
+ res,err:=client.Do(request)
+ if err!=nil{return fmt.Errorf("OpenAI refresh request: %w",err)}
+ defer res.Body.Close()
+ if res.StatusCode!=200{return fmt.Errorf("OpenAI refresh failed (HTTP %d); previous session preserved",res.StatusCode)}
+ var tokens tokenReply
+ if err:=json.NewDecoder(io.LimitReader(res.Body,64<<10)).Decode(&tokens);err!=nil{return errors.New("invalid OpenAI refresh response")}
+ if tokens.AccessToken=="" || tokens.RefreshToken=="" || !strings.EqualFold(tokens.TokenType,"Bearer") || tokens.ExpiresIn<=0{
+  return errors.New("incomplete OpenAI token refresh response")
+ }
+ scopes:=strings.Fields(tokens.Scope)
+ if len(scopes)>0{
+  allowed:=false
+  for _,scope:=range scopes{if scope=="chatgpt.tokens.use.direct"{allowed=true}}
+  if !allowed{return errors.New("refreshed access was not granted direct ChatGPT usage scope")}
+ }
+ // No new ID token is substituted until its signature and claims can be
+ // independently validated; the original verified identity is retained.
+ s.AccessToken=tokens.AccessToken;s.RefreshToken=tokens.RefreshToken;s.ExpiresIn=tokens.ExpiresIn
+ s.TokenType=tokens.TokenType;s.SavedAt=time.Now().UTC()
+ if len(scopes)>0{s.Scopes=scopes}
+ return nil
 }
