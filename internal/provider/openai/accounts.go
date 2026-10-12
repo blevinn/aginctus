@@ -74,6 +74,26 @@ func selectAccount(dir,id string) error {
  return atomicWrite(filepath.Join(dir,"active-account"),[]byte(id+"\n"))
 }
 
+// migrateLegacyLocked transfers the single-session record from early PR #170
+// without discarding its client registration. Caller must hold .account.lock.
+func migrateLegacyLocked(dir string)error{
+ legacy,err:=loadSession(dir)
+ if errors.Is(err,os.ErrNotExist){return nil}
+ if err!=nil{return err}
+ if legacy.ClientID=="" || legacy.Subject==""{return errors.New("cannot migrate incomplete legacy OAuth registration")}
+ id:=accountID(legacy)
+ path,err:=accountPath(dir,id)
+ if err!=nil{return err}
+ if _,err:=readProtected(path);errors.Is(err,os.ErrNotExist){
+  if err:=persistAccount(dir,legacy);err!=nil{return err}
+ }else if err!=nil{return err}
+ if _,err:=activeAccountID(dir);errors.Is(err,os.ErrNotExist){
+  if err:=selectAccount(dir,id);err!=nil{return err}
+ }else if err!=nil{return err}
+ // Delete only after the credential record and active pointer are durable.
+ return os.Remove(filepath.Join(dir,"session.json"))
+}
+
 func activeSession(dir string)(*Session,error){
  id,err:=activeAccountID(dir)
  if err==nil{return readAccount(dir,id)}
@@ -147,13 +167,17 @@ func Status(out io.Writer)error{
 func Select(id string)error{
  dir,err:=stateDirectory()
  if err!=nil{return err}
- return withAccountLock(dir,func()error{return selectAccount(dir,id)})
+ return withAccountLock(dir,func()error{
+  if err:=migrateLegacyLocked(dir);err!=nil{return err}
+  return selectAccount(dir,id)
+ })
 }
 
 func Logout(ctx context.Context,out io.Writer)error{
  dir,err:=stateDirectory()
  if err!=nil{return err}
  return withAccountLock(dir,func()error{
+  if err:=migrateLegacyLocked(dir);err!=nil{return err}
   id,err:=activeAccountID(dir)
   if err!=nil{return err}
   s,err:=readAccount(dir,id)
