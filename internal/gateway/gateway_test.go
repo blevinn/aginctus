@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 )
 
 func TestRenderCompose(t *testing.T) {
-	spec := Spec{
+	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",
 		ID:                 "local",
 		Project:            "aginctus-gateway",
 		Network:            "aginctus-mgmt",
@@ -35,6 +36,9 @@ func TestRenderCompose(t *testing.T) {
 		"ghcr.io/berriai/litellm:v1.103.0-stable",
 		"docker.io/library/postgres:17-alpine",
 		"name: aginctus-mgmt",
+		"name: aginctus-egress",
+		"aginctus-default",
+		"OPENAI_API_KEY",
 		"${AGINCTUS_GATEWAY_MASTER_KEY}",
 	} {
 		if !strings.Contains(rendered, want) {
@@ -44,14 +48,14 @@ func TestRenderCompose(t *testing.T) {
 }
 
 func TestValidateRejectsEmptyImage(t *testing.T) {
-	spec := Spec{ID: "local", Project: "gateway", Network: "mgmt", PostgresImage: "postgres"}
+	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",ID: "local", Project: "gateway", Network: "mgmt", PostgresImage: "postgres"}
 	if err := spec.Validate(); err == nil {
 		t.Fatal("Validate() error = nil, want error")
 	}
 }
 
 func TestOrchestrationPlanOrdersNetworkBeforeComposeAndKeepsSecretReferences(t *testing.T) {
-	spec := Spec{
+	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",
 		ID:                 "local",
 		Project:            "aginctus-gateway",
 		Network:            "aginctus-mgmt",
@@ -67,14 +71,17 @@ func TestOrchestrationPlanOrdersNetworkBeforeComposeAndKeepsSecretReferences(t *
 	if err != nil {
 		t.Fatalf("OrchestrationPlan() error = %v", err)
 	}
-	if len(plan.Steps) != 2 {
+	if len(plan.Steps) != 3 {
 		t.Fatalf("plan steps = %#v", plan.Steps)
 	}
 	if plan.Steps[0].ID != "management-network" || plan.Steps[0].Driver != "apply" {
 		t.Fatalf("first plan step = %#v", plan.Steps[0])
 	}
-	if plan.Steps[1].ID != "gateway" || plan.Steps[1].Driver != "compose" {
+	if plan.Steps[1].ID != "gateway-egress-network" || plan.Steps[1].Driver != "apply" {
 		t.Fatalf("second plan step = %#v", plan.Steps[1])
+	}
+	if plan.Steps[2].ID != "gateway" || plan.Steps[2].Driver != "compose" {
+		t.Fatalf("third plan step = %#v", plan.Steps[2])
 	}
 	networkConfiguration := string(plan.Steps[0].Configuration)
 	for _, want := range []string{"aginctus-mgmt", "10.42.0.1/24", "user.aginctus.managed", "management-network"} {
@@ -82,7 +89,7 @@ func TestOrchestrationPlanOrdersNetworkBeforeComposeAndKeepsSecretReferences(t *
 			t.Fatalf("network configuration missing %q: %s", want, networkConfiguration)
 		}
 	}
-	configuration := string(plan.Steps[1].Configuration)
+	configuration := string(plan.Steps[2].Configuration)
 	for _, want := range []string{
 		"aginctus-gateway",
 		`${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}`,
@@ -102,7 +109,7 @@ func TestInitializeRuntimeEnvironmentGeneratesAndPersistsMissingSecrets(t *testi
 		t.Setenv(name, "")
 	}
 
-	spec := Spec{ID: "local"}
+	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",ID: "local"}
 	first, err := spec.InitializeRuntimeEnvironment()
 	if err != nil {
 		t.Fatalf("InitializeRuntimeEnvironment() error = %v", err)
@@ -138,7 +145,7 @@ func TestInitializeRuntimeEnvironmentUsesProvidedSeedOnlyWhenMissing(t *testing.
 	}
 	t.Setenv("AGINCTUS_GATEWAY_MASTER_KEY", "seeded-value")
 
-	spec := Spec{ID: "local"}
+	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",ID: "local"}
 	first, err := spec.InitializeRuntimeEnvironment()
 	if err != nil {
 		t.Fatalf("InitializeRuntimeEnvironment() error = %v", err)
@@ -160,7 +167,7 @@ func TestInitializeRuntimeEnvironmentUsesProvidedSeedOnlyWhenMissing(t *testing.
 func TestGatewayIDRejectsTraversalAndSeparators(t *testing.T) {
 	for _, id := range []string{"../outside", ".", "..", "nested/path", "nested\\\\path", "/absolute", ""} {
 		t.Run(id, func(t *testing.T) {
-			spec := Spec{ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+			spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
 			if err := spec.Validate(); err == nil {
 				t.Fatalf("accepted unsafe gateway ID %q", id)
 			}
@@ -171,7 +178,7 @@ func TestGatewayIDRejectsTraversalAndSeparators(t *testing.T) {
 		})
 	}
 	for _, id := range []string{"local", "gateway-01", "gateway_01"} {
-		spec := Spec{ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+		spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",ID: id, Project: "gateway", Network: "mgmt", LiteLLMImage: "litellm", PostgresImage: "postgres"}
 		if err := spec.Validate(); err != nil {
 			t.Fatalf("valid gateway ID %q rejected: %v", id, err)
 		}
@@ -208,7 +215,7 @@ func TestGatewaySecretStateRejectsSymlinkAndLooseMode(t *testing.T) {
 }
 
 func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
-	spec := Spec{
+	spec := Spec{EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",
 		ID: "parity", Project: "gateway-parity", Network: "management-parity",
 		NetworkIPv4Address: "10.42.0.1/24", NetworkIPv6Address: "none",
 		LiteLLMImage: "example/litellm:custom", PostgresImage: "example/postgres:custom",
@@ -230,13 +237,13 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan.Steps) != 2 {
+	if len(plan.Steps) != 3 {
 		t.Fatalf("plan steps = %d", len(plan.Steps))
 	}
 	var config struct {
 		Compose map[string]any `json:"compose"`
 	}
-	if err := json.Unmarshal(plan.Steps[1].Configuration, &config); err != nil {
+	if err := json.Unmarshal(plan.Steps[2].Configuration, &config); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(renderModel, config.Compose) {
@@ -316,5 +323,36 @@ func TestGatewayAcceptsSafeCredentialSeed(t *testing.T) {
 	}
 	if values["AGINCTUS_GATEWAY_POSTGRES_PASSWORD"] != "AZaz09_-safe" {
 		t.Fatal("valid seed changed unexpectedly")
+	}
+}
+
+func TestGatewayProviderRequiresRuntimeCredential(t *testing.T) {
+	spec := Spec{
+		ID: "local", Project: "gateway-test", Network: "aginctus-mgmt",
+		EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",
+		LiteLLMImage: "litellm", PostgresImage: "postgres",
+	}
+	if err := spec.Deploy(context.Background(), map[string]string{}); err == nil ||
+		!strings.Contains(err.Error(), "upstream API credential missing") {
+		t.Fatalf("missing upstream key not rejected: %v", err)
+	}
+}
+
+func TestGatewayEgressPlanAndModelArePrivate(t *testing.T) {
+	spec := Spec{
+		ID: "local", Project: "gateway-test", Network: "aginctus-mgmt",
+		EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini",
+		LiteLLMImage: "litellm", PostgresImage: "postgres",
+	}
+	plan, err := spec.OrchestrationPlan()
+	if err != nil { t.Fatal(err) }
+	if len(plan.Steps) != 3 { t.Fatalf("steps=%d",len(plan.Steps)) }
+	egress := string(plan.Steps[1].Configuration)
+	for _, want := range []string{"gateway-egress-network", "aginctus-egress", "\"ipv4.nat\":\"true\""} {
+		if !strings.Contains(egress,want) { t.Fatalf("egress missing %q: %s",want,egress) }
+	}
+	compose := string(plan.Steps[2].Configuration)
+	for _, want := range []string{"aginctus-egress","aginctus-mgmt","os.environ/OPENAI_API_KEY","AGINCTUS_GATEWAY_UPSTREAM_API_KEY"} {
+		if !strings.Contains(compose,want) { t.Fatalf("compose missing %q",want) }
 	}
 }
