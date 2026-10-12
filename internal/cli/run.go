@@ -355,8 +355,26 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) == 4 && args[0] == "provider" && args[1] == "openai" && args[2] == "auth" && args[3] == "--oauth" {
-		if err := openaiOAuth.Login(ctx, stdout); err != nil {
+	if len(args) >= 3 && args[0] == "provider" && args[1] == "openai" && args[2] == "auth" {
+		var err error
+		switch {
+		case len(args) == 4 && args[3] == "--oauth":
+			err = openaiOAuth.Login(ctx, stdout)
+		case len(args) == 5 && args[3] == "--oauth" && args[4] == "--new":
+			err = openaiOAuth.LoginNew(ctx, stdout)
+		case len(args) == 4 && args[3] == "status":
+			err = openaiOAuth.Status(stdout)
+		case len(args) == 4 && args[3] == "refresh":
+			err = openaiOAuth.Refresh(ctx, stdout)
+		case len(args) == 4 && args[3] == "logout":
+			err = openaiOAuth.Logout(ctx, stdout)
+		case len(args) == 5 && args[3] == "select":
+			err = openaiOAuth.Select(args[4])
+		default:
+			printGatewayUsage(stderr)
+			return 2
+		}
+		if err != nil {
 			fmt.Fprintf(stderr, "OpenAI OAuth: %v\n", err)
 			return 1
 		}
@@ -429,7 +447,8 @@ func runGateway(
 }
 
 func printGatewayUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] gateway provider openai auth --oauth")
+	fmt.Fprintln(w, "Usage: aginctus [global options] gateway provider openai auth --oauth [--new]")
+	fmt.Fprintln(w, "       aginctus [global options] gateway provider openai auth status|refresh|logout|select ID")
 	fmt.Fprintln(w, "       aginctus [global options] gateway validate")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
 	fmt.Fprintln(w, "       aginctus [global options] gateway up")
@@ -701,7 +720,8 @@ Commands:
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
-  gateway provider openai auth --oauth  Authorize the current host user with ChatGPT OAuth
+  gateway provider openai auth --oauth [--new]  Authorize a saved/new ChatGPT account
+  gateway provider openai auth status|refresh|logout|select ID  Manage host OAuth state
   gateway validate  Validate the AI gateway deployment configuration
   gateway apply     Reconcile the AI gateway
   gateway status    Inspect gateway project and service state
