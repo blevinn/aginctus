@@ -37,6 +37,7 @@ let
       postgres.password = "must-not-be-stored";
       master.key = "must-not-be-stored";
       salt.key = "must-not-be-stored";
+      upstream.api.key = "must-not-be-stored";
     };
   };
   invalidAliases = evaluate {
