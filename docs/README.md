@@ -10,6 +10,7 @@ This directory contains project documentation that is too detailed or long-lived
 - [SSH bootstrap workflow](ssh-bootstrap-workflow.md) — concrete invocation and data flow between the Herdr client identity helper, Aginctus host process, and workload authorization helper.
 - [AI gateway design](ai-gateway.md) — single-operator LiteLLM deployment, inference and MCP policy, CLI authentication flows, and MVP acceptance criteria.
 - [Locally hosted LLMs](local-llms.md) — proposed managed Incus model-serving lifecycle with persistent shared model storage, gateway integration, isolation, compatibility, and acceptance criteria.
+- [Native Incus reconciliation migration plan](native-incus-reconciliation.md) — staged post-v0.1 transition away from Apply/Compose, without v0.2 completion pressure.
 - [Declarative orchestration design](orchestration.md) — Jsonnet-generated execution plans with direct Go integration for incus-apply and incus-compose.
 - [Milestone 1: Herdr console over managed workloads](milestones/0001-herdr-console.md) — the first usable vertical slice and its success criteria.
 - [v0.2 milestone: controlled workload access](milestones/0002-v0.2.md) — network segmentation and live host workspace sharing release goals.
@@ -22,6 +23,7 @@ This directory contains project documentation that is too detailed or long-lived
 ## Architecture decision records
 
 - [ADR 0001: Use a dedicated Herdr client container with SSH-managed targets](adr/0001-herdr-client-topology.md)
+- [ADR 0002: Evolve toward Aginctus-native Incus reconciliation](adr/0002-native-incus-reconciliation.md)
 
 ## Documentation structure
 
