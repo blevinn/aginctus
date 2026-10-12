@@ -53,7 +53,7 @@ func TestRemoveGatewayForceRepairsOnlyConfiguredProject(t *testing.T) {
 			return nil, nil
 		}
 	}
-	spec := Spec{ID: "test", Project: "aginctus-gateway", Network: "test", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+	spec := Spec{ID: "test", Project: "aginctus-gateway", Network: "test", EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini", LiteLLMImage: "litellm", PostgresImage: "postgres"}
 	if err := spec.Remove(context.Background(), true); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestRemoveGatewayFailurePreventsWrites(t *testing.T) {
 		writes++
 		return nil, fmt.Errorf("unexpected mutation")
 	}
-	spec := Spec{ID: "test", Project: "aginctus-gateway", Network: "test", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+	spec := Spec{ID: "test", Project: "aginctus-gateway", Network: "test", EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini", LiteLLMImage: "litellm", PostgresImage: "postgres"}
 	if err := spec.Remove(context.Background(), true); err == nil || writes != 0 {
 		t.Fatalf("failure = %v, mutations = %d", err, writes)
 	}
@@ -120,7 +120,7 @@ func TestRemoveGatewayAlreadyAbsentIsNoop(t *testing.T) {
 		}
 		return []byte(`[{"name":"default","config":{}}]`), nil
 	}
-	spec := Spec{ID: "test", Project: "aginctus-gateway", Network: "test", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+	spec := Spec{ID: "test", Project: "aginctus-gateway", Network: "test", EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini", LiteLLMImage: "litellm", PostgresImage: "postgres"}
 	for i := 0; i < 2; i++ {
 		if err := spec.Remove(context.Background(), false); err != nil {
 			t.Fatalf("remove attempt %d: %v", i, err)
@@ -134,7 +134,7 @@ func TestRemoveGatewayAlreadyAbsentIsNoop(t *testing.T) {
 func TestRemoveGatewayDoesNotMaskInspectionErrors(t *testing.T) {
 	previous := runIncus
 	t.Cleanup(func() { runIncus = previous })
-	spec := Spec{ID: "test", Project: "aginctus-gateway", Network: "test", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+	spec := Spec{ID: "test", Project: "aginctus-gateway", Network: "test", EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini", LiteLLMImage: "litellm", PostgresImage: "postgres"}
 	for _, tc := range []struct {
 		name string
 		data []byte
@@ -170,7 +170,7 @@ func TestRemoveGatewayEmptyOwnedProjectIsNoop(t *testing.T) {
 		t.Fatalf("unexpected mutation: %v", args)
 		return nil, nil
 	}
-	spec := Spec{ID: "test", Project: project, Network: "test", LiteLLMImage: "litellm", PostgresImage: "postgres"}
+	spec := Spec{ID: "test", Project: project, Network: "test", EgressNetwork: "aginctus-egress", ProviderModel: "openai/gpt-4o-mini", LiteLLMImage: "litellm", PostgresImage: "postgres"}
 	if err := spec.Remove(context.Background(), false); err != nil {
 		t.Fatal(err)
 	}
