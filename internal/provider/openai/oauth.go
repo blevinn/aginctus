@@ -64,7 +64,11 @@ type oauthCallback struct {
 	Code, ClientID, Error string
 }
 
-func Login(ctx context.Context, output io.Writer) error {
+func Login(ctx context.Context, output io.Writer) error { return login(ctx,output,false) }
+
+func LoginNew(ctx context.Context, output io.Writer) error { return login(ctx,output,true) }
+
+func login(ctx context.Context, output io.Writer, registerNew bool) error {
 	dir, err := stateDirectory()
 	if err != nil {
 		return err
@@ -73,9 +77,12 @@ func Login(ctx context.Context, output io.Writer) error {
 	if err != nil {
 		return err
 	}
-	existing, err := loadSession(dir)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	var existing *Session
+	if !registerNew {
+		existing, err = activeSession(dir)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
@@ -120,6 +127,8 @@ func Login(ctx context.Context, output io.Writer) error {
 	}
 	if existing == nil {
 		params.Set("agent_name_hint", "Aginctus")
+	} else if existing.Email != "" {
+		params.Set("login_hint", existing.Email)
 	}
 	address := authURL + "?" + params.Encode()
 
@@ -236,7 +245,10 @@ func Login(ctx context.Context, output io.Writer) error {
 		RefreshToken: tokens.RefreshToken, TokenType: tokens.TokenType,
 		ExpiresIn: tokens.ExpiresIn, Scopes: strings.Fields(tokens.Scope), SavedAt: time.Now().UTC(),
 	}
-	if err := saveSession(dir, &session); err != nil {
+	if err := withAccountLock(dir, func() error {
+		if err := persistAccount(dir, &session); err != nil { return err }
+		return selectAccount(dir, accountID(&session))
+	}); err != nil {
 		return err
 	}
 	fmt.Fprintln(output, "Aginctus OpenAI OAuth authorization saved securely for the current user.")
