@@ -2,6 +2,10 @@ package openai
 
 import (
  "bytes"
+ "context"
+ "encoding/json"
+ "net/http"
+ "net/http/httptest"
  "os"
  "path/filepath"
  "strings"
@@ -75,4 +79,46 @@ func TestLogoutWithoutTokensPreservesAccountRegistration(t *testing.T) {
  if err!=nil{t.Fatal(err)}
  if actual.ClientID!=s.ClientID || actual.Subject!=s.Subject {t.Fatal("logout discarded registration")}
  if !strings.Contains(out.String(),"revocation confirmed"){t.Fatal("local-only logout with no token not acknowledged")}
+}
+
+func TestOAuthRefreshRotatesTokenAndPreservesVerifiedIdentity(t *testing.T) {
+ server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  if r.Method!="POST"{t.Errorf("method %s",r.Method)}
+  if err:=r.ParseForm();err!=nil{t.Error(err)}
+  if r.Form.Get("grant_type")!="refresh_token" ||
+     r.Form.Get("client_id")!="oaiapp_test" ||
+     r.Form.Get("refresh_token")!="old_refresh" ||
+     r.Form.Get("resource")!=resource {
+     t.Errorf("invalid refresh form: %v",r.Form)
+  }
+  w.Header().Set("Content-Type","application/json")
+  _=json.NewEncoder(w).Encode(tokenReply{
+    AccessToken:"new_access", RefreshToken:"new_refresh",
+    IDToken:"UNVERIFIED_ID_TOKEN_SHOULD_NOT_BE_SAVED",
+    TokenType:"Bearer",ExpiresIn:3600,Scope:"offline_access chatgpt.tokens.use.direct",
+  })
+ }))
+ defer server.Close()
+ s:=&Session{ClientID:"oaiapp_test",Subject:"sub",IDToken:"verified-original",RefreshToken:"old_refresh"}
+ if err:=refreshSession(context.Background(),server.Client(),server.URL,s);err!=nil{t.Fatal(err)}
+ if s.RefreshToken!="new_refresh" || s.AccessToken!="new_access" || s.IDToken!="verified-original" {
+  t.Fatal("refresh rotation or verified identity preservation failed")
+ }
+}
+
+func TestOAuthRefreshFailuresDoNotMutateSession(t *testing.T){
+ for _,body:=range []string{
+  `{"access_token":"x","token_type":"Bearer","expires_in":3600}`,
+  `{"access_token":"x","refresh_token":"y","token_type":"Bearer","expires_in":3600,"scope":"openid"}`,
+ } {
+  server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+    w.Header().Set("Content-Type","application/json")
+    _,_=w.Write([]byte(body))
+  }))
+  s:=&Session{ClientID:"oaiapp_test",Subject:"sub",RefreshToken:"old_refresh"}
+  err:=refreshSession(context.Background(),server.Client(),server.URL,s)
+  server.Close()
+  if err==nil{t.Fatalf("accepted invalid token response %s",body)}
+  if s.RefreshToken!="old_refresh" || s.AccessToken!=""{t.Fatal("invalid refresh replaced credentials")}
+ }
 }
