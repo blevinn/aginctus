@@ -354,6 +354,13 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 4 && args[0] == "provider" && args[1] == "openai" && args[2] == "auth" && args[3] == "--oauth" {
+		if err := openaiOAuth.Login(ctx, stdout); err != nil {
+			fmt.Fprintf(stderr, "OpenAI OAuth: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 	if len(args) == 0 || len(args) > 2 {
 		printGatewayUsage(stderr)
 		return 2
@@ -421,7 +428,8 @@ func runGateway(
 }
 
 func printGatewayUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
+	fmt.Fprintln(w, "Usage: aginctus [global options] gateway provider openai auth --oauth")
+	fmt.Fprintln(w, "       aginctus [global options] gateway validate")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
 	fmt.Fprintln(w, "       aginctus [global options] gateway up")
 	fmt.Fprintln(w, "       aginctus [global options] gateway apply")
@@ -692,6 +700,7 @@ Commands:
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
+  gateway provider openai auth --oauth  Authorize the current host user with ChatGPT OAuth
   gateway validate  Validate the AI gateway deployment configuration
   gateway apply     Reconcile the AI gateway
   gateway status    Inspect gateway project and service state
