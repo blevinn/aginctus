@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"syscall"
 	"text/template"
 
@@ -24,6 +25,8 @@ type Spec struct {
 	ID                 string
 	Project            string
 	Network            string
+	EgressNetwork      string
+	ProviderModel      string
 	NetworkIPv4Address string
 	NetworkIPv4NAT     bool
 	NetworkIPv4Routing bool
@@ -39,6 +42,8 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		dst  *string
 	}{
 		{"gateway.id", &spec.ID},
+		{"gateway.egress.network.name", &spec.EgressNetwork},
+		{"gateway.provider.model", &spec.ProviderModel},
 		{"gateway.compose.project", &spec.Project},
 		{"incus.management.network.name", &spec.Network},
 		{"incus.management.network.ipv4.address", &spec.NetworkIPv4Address},
@@ -71,12 +76,18 @@ func FromConfig(effective *config.Config) (Spec, error) {
 	return spec, nil
 }
 
+var gatewayModelPattern = regexp.MustCompile(`^openai/[A-Za-z0-9._-]+$`)
+
 var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 func (s Spec) Validate() error {
 	switch {
 	case !gatewayIDPattern.MatchString(s.ID):
 		return fmt.Errorf("gateway id %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.ID)
+	case !gatewayIDPattern.MatchString(s.EgressNetwork) || s.EgressNetwork == s.Network:
+		return fmt.Errorf("gateway egress network must be distinct and valid")
+	case !gatewayModelPattern.MatchString(s.ProviderModel):
+		return fmt.Errorf("gateway provider model must be an OpenAI-compatible model identifier")
 	case s.Project == "":
 		return fmt.Errorf("gateway compose project must not be empty")
 	case s.Network == "":
@@ -107,13 +118,20 @@ services:
     image: {{.LiteLLMImage}}
     depends_on:
       - postgres
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        printf '%s\n' 'model_list:' '  - model_name: aginctus-default' '    litellm_params:' '      model: {{.ProviderModel}}' '      api_key: os.environ/OPENAI_API_KEY' > /tmp/aginctus-litellm.yaml
+        exec litellm --config /tmp/aginctus-litellm.yaml --port 4000
     environment:
       DATABASE_URL: postgresql://litellm:${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}@postgres:5432/litellm
       LITELLM_MASTER_KEY: ${AGINCTUS_GATEWAY_MASTER_KEY}
       LITELLM_SALT_KEY: ${AGINCTUS_GATEWAY_SALT_KEY}
+      OPENAI_API_KEY: ${AGINCTUS_GATEWAY_UPSTREAM_API_KEY}
       STORE_MODEL_IN_DB: "True"
     networks:
       - management
+      - egress
 
 volumes:
   gateway-postgres: {}
@@ -122,6 +140,9 @@ networks:
   management:
     external: true
     name: {{.Network}}
+  egress:
+    external: true
+    name: {{.EgressNetwork}}
 `))
 
 func (s Spec) RenderCompose() (string, error) {
@@ -134,6 +155,8 @@ func (s Spec) RenderCompose() (string, error) {
 	}
 	return out.String(), nil
 }
+
+var safeUpstreamSecret = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 var safeGatewaySecret = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
@@ -154,8 +177,10 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 	return generator.Evaluate(
 		"import 'aginctus/gateway.jsonnet'",
 		map[string]any{
-			"id":      s.ID,
-			"project": s.Project,
+			"id":            s.ID,
+			"project":       s.Project,
+			"egressNetwork": s.EgressNetwork,
+			"providerModel": s.ProviderModel,
 			"network": map[string]any{
 				"name":        s.Network,
 				"ipv4Address": s.NetworkIPv4Address,
@@ -239,6 +264,12 @@ func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
 	for _, name := range requiredRuntimeEnvironment {
 		result[name] = values[name]
 	}
+	if key := os.Getenv("AGINCTUS_GATEWAY_UPSTREAM_API_KEY"); key != "" {
+		if !safeUpstreamSecret.MatchString(key) {
+			return nil, fmt.Errorf("invalid upstream API key format (value omitted)")
+		}
+		result["AGINCTUS_GATEWAY_UPSTREAM_API_KEY"] = key
+	}
 	return result, nil
 }
 
@@ -318,6 +349,9 @@ func writeSecretState(path string, values map[string]string) error {
 }
 
 func (s Spec) Deploy(ctx context.Context, runtimeEnvironment map[string]string) error {
+	if strings.TrimSpace(runtimeEnvironment["AGINCTUS_GATEWAY_UPSTREAM_API_KEY"]) == "" {
+		return fmt.Errorf("upstream API credential missing: set AGINCTUS_GATEWAY_UPSTREAM_API_KEY in the gateway deployment environment")
+	}
 	plan, err := s.OrchestrationPlan()
 	if err != nil {
 		return err

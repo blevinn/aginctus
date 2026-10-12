@@ -75,7 +75,7 @@ func (c *Config) Bool(path string) (bool, error) {
 // Do not permit either environment mapping or explicit overrides to expose them.
 func isRuntimeSecretPath(path string) bool {
 	switch strings.ToLower(path) {
-	case "gateway.postgres.password", "gateway.master.key", "gateway.salt.key":
+	case "gateway.postgres.password", "gateway.master.key", "gateway.salt.key", "gateway.upstream.api.key":
 		return true
 	default:
 		return false
@@ -130,6 +130,14 @@ func (l *Loader) Load(options Options) (*Config, error) {
 var defaults = map[string]any{
 	"gateway": map[string]any{
 		"id": "local",
+		"provider": map[string]any{
+			"model": "openai/gpt-4o-mini",
+		},
+		"egress": map[string]any{
+			"network": map[string]any{
+				"name": "aginctus-egress",
+			},
+		},
 		"compose": map[string]any{
 			"project": "aginctus-gateway",
 		},
