@@ -352,7 +352,7 @@ func TestGatewayEgressPlanAndModelArePrivate(t *testing.T) {
 		t.Fatalf("steps=%d", len(plan.Steps))
 	}
 	egress := string(plan.Steps[1].Configuration)
-	for _, want := range []string{"gateway-egress-network", "aginctus-egress", "\"ipv4.nat\":\"true\""} {
+	for _, want := range []string{"gateway-egress-network", "aginctus-egress", "\"ipv4.nat\": \"true\""} {
 		if !strings.Contains(egress, want) {
 			t.Fatalf("egress missing %q: %s", want, egress)
 		}
