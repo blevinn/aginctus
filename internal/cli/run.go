@@ -13,6 +13,7 @@ import (
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
+	openaiOAuth "github.com/blevinn/aginctus/internal/provider/openai"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
