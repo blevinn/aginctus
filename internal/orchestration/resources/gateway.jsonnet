@@ -47,7 +47,7 @@ ag.orchestration(cfg.id, [
           depends_on: ['postgres'],
           entrypoint: ['/bin/sh', '-ec'],
           command: [
-            "printf '%s\\\\n' 'model_list:' '  - model_name: aginctus-default' '    litellm_params:' '      model: " + cfg.providerModel + "' '      api_key: os.environ/OPENAI_API_KEY' > /tmp/aginctus-litellm.yaml\\nexec litellm --config /tmp/aginctus-litellm.yaml --port 4000",
+            "printf '%s\\n' 'model_list:' '  - model_name: aginctus-default' '    litellm_params:' '      model: " + cfg.providerModel + "' '      api_key: os.environ/OPENAI_API_KEY' > /tmp/aginctus-litellm.yaml\nexec litellm --config /tmp/aginctus-litellm.yaml --port 4000",
           ],
           environment: {
             OPENAI_API_KEY: '${AGINCTUS_GATEWAY_UPSTREAM_API_KEY}',
