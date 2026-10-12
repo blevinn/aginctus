@@ -64,9 +64,9 @@ type oauthCallback struct {
 	Code, ClientID, Error string
 }
 
-func Login(ctx context.Context, output io.Writer) error { return login(ctx,output,false) }
+func Login(ctx context.Context, output io.Writer) error { return login(ctx, output, false) }
 
-func LoginNew(ctx context.Context, output io.Writer) error { return login(ctx,output,true) }
+func LoginNew(ctx context.Context, output io.Writer) error { return login(ctx, output, true) }
 
 func login(ctx context.Context, output io.Writer, registerNew bool) error {
 	dir, err := stateDirectory()
@@ -249,7 +249,9 @@ func login(ctx context.Context, output io.Writer, registerNew bool) error {
 		ExpiresIn: tokens.ExpiresIn, Scopes: strings.Fields(tokens.Scope), SavedAt: time.Now().UTC(),
 	}
 	if err := withAccountLock(dir, func() error {
-		if err := persistAccount(dir, &session); err != nil { return err }
+		if err := persistAccount(dir, &session); err != nil {
+			return err
+		}
 		return selectAccount(dir, accountID(&session))
 	}); err != nil {
 		return err
