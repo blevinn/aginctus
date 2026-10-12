@@ -21,6 +21,8 @@ import (
     "os/exec"
     "path/filepath"
     "strings"
+    "sync/atomic"
+    "syscall"
     "time"
 )
 
@@ -109,19 +111,18 @@ func Login(ctx context.Context, output io.Writer) error {
 
     callback := make(chan oauthCallback, 1)
     server := &http.Server{ReadHeaderTimeout: 5*time.Second}
-    handled := false
+    var handled atomic.Bool
     mux := http.NewServeMux()
     mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
         if r.Method != http.MethodGet || r.URL.Path != callbackPath {
             http.Error(w,"invalid callback",http.StatusBadRequest);return
         }
-        if handled {
-            http.Error(w,"authorization callback already received",http.StatusConflict);return
-        }
         if r.URL.Query().Get("state") != state {
             http.Error(w,"invalid authorization state",http.StatusBadRequest);return
         }
-        handled = true
+        if !handled.CompareAndSwap(false,true) {
+            http.Error(w,"authorization callback already received",http.StatusConflict);return
+        }
         c := oauthCallback{
             Code:r.URL.Query().Get("code"),
             ClientID:r.URL.Query().Get("client_id"),
@@ -261,9 +262,14 @@ func readProtected(path string) ([]byte,error) {
     if !stat.Mode().IsRegular() || stat.Mode().Perm()&0077 != 0 {
         return nil,errors.New("OAuth state must be a regular file with owner-only permissions")
     }
-    f,err := os.OpenFile(path,os.O_RDONLY,0)
+    f,err := os.OpenFile(path,os.O_RDONLY|syscall.O_NOFOLLOW,0)
     if err != nil{return nil,err}
     defer f.Close()
+    opened,err:=f.Stat()
+    if err!=nil{return nil,err}
+    if !opened.Mode().IsRegular() || opened.Mode().Perm()&0077!=0 {
+        return nil,errors.New("OAuth state changed while opening")
+    }
     return io.ReadAll(io.LimitReader(f,1<<20))
 }
 
@@ -359,5 +365,3 @@ func verifyIDToken(ctx context.Context,client *http.Client,token,clientID,nonce 
 }
 func decodeRaw(s string) []byte {b,_:=base64.RawURLEncoding.DecodeString(s);return b}
 
-// x509 and sha512 imports are intentionally avoided until support for
-// additional algorithm families is needed.
