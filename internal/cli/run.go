@@ -358,15 +358,21 @@ func runGateway(
 ) int {
 	if len(args) == 4 && args[0] == "provider" && args[1] == "openai" && args[2] == "storage" && args[3] == "ensure" {
 		id, err := effective.String("gateway.id")
-		if err != nil { fmt.Fprintf(stderr, "gateway storage: %v\n", err); return 1 }
-		pool, err := effective.String("gateway.oauth.storage.pool")
-		if err != nil { fmt.Fprintf(stderr, "gateway storage: %v\n", err); return 1 }
-		volume := statevolume.OAuthCredentials{GatewayID:id,Pool:pool}
-		if err:=statevolume.EnsureOAuthCredentialsOnHost(ctx,volume);err!=nil{
-			fmt.Fprintf(stderr, "gateway storage: %v\n",err)
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway storage: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(stdout,"OAuth credential volume %q: ready (no credentials imported; not mounted)\n",volume.Name())
+		pool, err := effective.String("gateway.oauth.storage.pool")
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway storage: %v\n", err)
+			return 1
+		}
+		volume := statevolume.OAuthCredentials{GatewayID: id, Pool: pool}
+		if err := statevolume.EnsureOAuthCredentialsOnHost(ctx, volume); err != nil {
+			fmt.Fprintf(stderr, "gateway storage: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "OAuth credential volume %q: ready (no credentials imported; not mounted)\n", volume.Name())
 		return 0
 	}
 	if len(args) >= 3 && args[0] == "provider" && args[1] == "openai" && args[2] == "auth" {
