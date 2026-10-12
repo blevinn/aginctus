@@ -158,7 +158,7 @@ func Status(out io.Writer)error{
     condition="access token present (not remotely verified)"
    }
   }
-  fmt.Fprintf(out,"%s %s %s %s\n",marker,id[:12],s.Email,condition)
+  fmt.Fprintf(out,"%s %s %s %s\n",marker,id,s.Email,condition)
  }
  fmt.Fprintln(out,"Gateway provisioning: not configured")
  return nil
