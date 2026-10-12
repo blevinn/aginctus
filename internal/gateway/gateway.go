@@ -108,7 +108,7 @@ services:
     environment:
       POSTGRES_DB: litellm
       POSTGRES_USER: litellm
-      POSTGRES_PASSWORD: \${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}
     volumes:
       - gateway-postgres:/var/lib/postgresql/data
     networks:
@@ -124,10 +124,10 @@ services:
         printf '%s\n' 'model_list:' '  - model_name: aginctus-default' '    litellm_params:' '      model: {{.ProviderModel}}' '      api_key: os.environ/OPENAI_API_KEY' > /tmp/aginctus-litellm.yaml
         exec litellm --config /tmp/aginctus-litellm.yaml --port 4000
     environment:
-      DATABASE_URL: postgresql://litellm:\${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}@postgres:5432/litellm
-      LITELLM_MASTER_KEY: \${AGINCTUS_GATEWAY_MASTER_KEY}
-      LITELLM_SALT_KEY: \${AGINCTUS_GATEWAY_SALT_KEY}
-      OPENAI_API_KEY: \${AGINCTUS_GATEWAY_UPSTREAM_API_KEY}
+      DATABASE_URL: postgresql://litellm:${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}@postgres:5432/litellm
+      LITELLM_MASTER_KEY: ${AGINCTUS_GATEWAY_MASTER_KEY}
+      LITELLM_SALT_KEY: ${AGINCTUS_GATEWAY_SALT_KEY}
+      OPENAI_API_KEY: ${AGINCTUS_GATEWAY_UPSTREAM_API_KEY}
       STORE_MODEL_IN_DB: "True"
     networks:
       - management
