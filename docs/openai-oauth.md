@@ -34,6 +34,11 @@ $XDG_STATE_HOME/aginctus/providers/openai/
 ```
 
 With the normal default of `~/.local/state/aginctus/providers/openai/`.
+On first subsequent authentication or account-management operation, an earlier
+single-session `session.json` record is migrated under the per-account store
+and the legacy secret copy is retired. This migration is protected by the
+account lock and is designed to be idempotent.
+
 Credential records are under `accounts/<sha256(client_id + NUL + subject)>.json`,
 with an owner-only `active-account` pointer. Use `auth --oauth --new` to
 register another account; the ordinary `--oauth` flow reauthorizes the
