@@ -122,3 +122,14 @@ func TestOAuthRefreshFailuresDoNotMutateSession(t *testing.T){
   if s.RefreshToken!="old_refresh" || s.AccessToken!=""{t.Fatal("invalid refresh replaced credentials")}
  }
 }
+
+func TestOAuthLegacySessionMigrationRetiresOldSecretCopy(t *testing.T){
+ dir:=t.TempDir()
+ legacy:=&Session{ClientID:"oaiapp_legacy",Subject:"sub_legacy",RefreshToken:"old-refresh",Issuer:issuer}
+ if err:=saveSession(dir,legacy);err!=nil{t.Fatal(err)}
+ if err:=withAccountLock(dir,func()error{return migrateLegacyLocked(dir)});err!=nil{t.Fatal(err)}
+ actual,err:=activeSession(dir)
+ if err!=nil || actual.RefreshToken!=legacy.RefreshToken{t.Fatal("legacy credential was lost during migration")}
+ if _,err:=os.Lstat(filepath.Join(dir,"session.json"));!os.IsNotExist(err){t.Fatal("legacy token file not removed")}
+ if err:=withAccountLock(dir,func()error{return migrateLegacyLocked(dir)});err!=nil{t.Fatal("repeat migration must be idempotent",err)}
+}
