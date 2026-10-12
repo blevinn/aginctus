@@ -104,8 +104,6 @@ func Login(ctx context.Context, output io.Writer) error {
     }
     if existing == nil {
         params.Set("agent_name_hint", "Aginctus")
-    } else if existing.IDToken != "" {
-        params.Set("id_token_hint", existing.IDToken)
     }
     address := authURL+"?"+params.Encode()
 
@@ -141,7 +139,9 @@ func Login(ctx context.Context, output io.Writer) error {
     fmt.Fprintln(output,address)
     // A missing graphical session is normal on headless NixOS hosts; the URL
     // above can be opened manually on the same host.
-    _ = exec.Command("xdg-open",address).Start()
+    if opener:=exec.Command("xdg-open",address); opener.Start()==nil {
+        go func(){_ = opener.Wait()}()
+    }
 
     timeout, cancel := context.WithTimeout(ctx,5*time.Minute)
     defer cancel()
@@ -214,6 +214,9 @@ func stateDirectory() (string,error) {
     }
     dir := filepath.Join(base,"aginctus","providers","openai")
     if err := os.MkdirAll(dir,0700); err != nil { return "",err }
+    info,err:=os.Lstat(dir)
+    if err!=nil{return "",err}
+    if !info.IsDir() {return "",errors.New("OAuth state path must be a non-symlink directory")}
     if err := os.Chmod(dir,0700); err != nil { return "",err }
     return dir,nil
 }
