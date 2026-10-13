@@ -11,17 +11,17 @@ import (
 	"github.com/blevinn/aginctus/internal/statevolume"
 )
 
-func TestGatewayOAuthStorageEnsure(t *testing.T) {
+func TestGatewayCredentialStorageEnsure(t *testing.T) {
 	loader := &config.Loader{}
 	effective, err := loader.Load(config.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	original := ensureOAuthStorage
-	t.Cleanup(func() { ensureOAuthStorage = original })
+	original := ensureCredentialStorage
+	t.Cleanup(func() { ensureCredentialStorage = original })
 	calls := 0
-	ensureOAuthStorage = func(_ context.Context, v statevolume.OAuthCredentials) error {
+	ensureCredentialStorage = func(_ context.Context, v statevolume.GatewayCredentials) error {
 		calls++
 		if v.Pool != "default" || v.GatewayID != "local" {
 			t.Fatalf("unexpected volume: %#v", v)
@@ -29,17 +29,17 @@ func TestGatewayOAuthStorageEnsure(t *testing.T) {
 		return nil
 	}
 	var out, errs bytes.Buffer
-	if got := runGateway(context.Background(), []string{"oauth-storage", "ensure"}, &out, &errs, nil, effective); got != 0 {
+	if got := runGateway(context.Background(), []string{"credential-storage", "ensure"}, &out, &errs, nil, effective); got != 0 {
 		t.Fatalf("exit %d: %s", got, errs.String())
 	}
 	if calls != 1 || !strings.Contains(out.String(), "unmounted") {
 		t.Fatalf("calls=%d output=%q", calls, out.String())
 	}
 
-	ensureOAuthStorage = func(context.Context, statevolume.OAuthCredentials) error { return errors.New("foreign volume") }
+	ensureCredentialStorage = func(context.Context, statevolume.GatewayCredentials) error { return errors.New("foreign volume") }
 	out.Reset()
 	errs.Reset()
-	if got := runGateway(context.Background(), []string{"oauth-storage", "ensure"}, &out, &errs, nil, effective); got != 1 || !strings.Contains(errs.String(), "foreign volume") {
+	if got := runGateway(context.Background(), []string{"credential-storage", "ensure"}, &out, &errs, nil, effective); got != 1 || !strings.Contains(errs.String(), "foreign volume") {
 		t.Fatalf("unexpected error behavior: exit=%d error=%q", got, errs.String())
 	}
 }
