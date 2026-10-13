@@ -357,7 +357,13 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
+	if len(args) == 4 && args[0] == "chatgpt" && args[1] == "model" && args[2] == "render" {
+        rendered, err := gateway.ChatGPTModelRegistration("aginctus-chatgpt", args[3])
+        if err != nil { fmt.Fprintf(stderr, "ChatGPT model: %v\n", err); return 1 }
+        fmt.Fprintln(stdout, string(rendered))
+        return 0
+    }
+    if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
 		id, err := effective.String("gateway.id")
 		if err != nil {
 			fmt.Fprintf(stderr, "gateway credential storage gateway ID: %v\n", err)
@@ -450,6 +456,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
+	fmt.Fprintln(w, "       aginctus [global options] gateway chatgpt model render <chatgpt/model>")
 }
 
 func runHerdr(
@@ -720,6 +727,7 @@ Commands:
   gateway status    Inspect gateway project and service state
   gateway remove [--force] Remove gateway instances, preserving data volumes
   gateway render    Render the AI gateway Compose model
+  gateway chatgpt model render MODEL  Render native LiteLLM Responses model registration
   gateway credential-storage ensure  Create/verify dedicated unmounted gateway credential volume
   herdr                  Launch interactive Herdr in its client container
   herdr client apply     Create, reconcile, and bootstrap the Herdr client
