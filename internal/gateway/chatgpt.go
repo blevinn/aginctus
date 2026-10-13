@@ -27,7 +27,7 @@ import (
 // volume and explicit enrollment have been validated.
 func ChatGPTModelRegistration(alias, model string) ([]byte, error) {
 	safe := regexp.MustCompile()
-	if !safe.MatchString(alias) || strings.Contains(alias, "/") {
+	if !safe.MatchString(alias) && !(strings.Count(alias, "/") == 1 && strings.HasPrefix(alias, "chatgpt/") && safe.MatchString(strings.TrimPrefix(alias, "chatgpt/"))) {
 		return nil, fmt.Errorf("invalid model name")
 	}
 	if !strings.HasPrefix(model, "chatgpt/") || !safe.MatchString(strings.TrimPrefix(model, "chatgpt/")) {
