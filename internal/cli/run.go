@@ -13,6 +13,8 @@ import (
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
+	openaiOAuth "github.com/blevinn/aginctus/internal/provider/openai"
+	"github.com/blevinn/aginctus/internal/statevolume"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -354,6 +356,50 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 4 && args[0] == "provider" && args[1] == "openai" && args[2] == "storage" && args[3] == "ensure" {
+		id, err := effective.String("gateway.id")
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway storage: %v\n", err)
+			return 1
+		}
+		pool, err := effective.String("gateway.oauth.storage.pool")
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway storage: %v\n", err)
+			return 1
+		}
+		volume := statevolume.OAuthCredentials{GatewayID: id, Pool: pool}
+		if err := statevolume.EnsureOAuthCredentialsOnHost(ctx, volume); err != nil {
+			fmt.Fprintf(stderr, "gateway storage: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "OAuth credential volume %q: ready (no credentials imported; not mounted)\n", volume.Name())
+		return 0
+	}
+	if len(args) >= 3 && args[0] == "provider" && args[1] == "openai" && args[2] == "auth" {
+		var err error
+		switch {
+		case len(args) == 4 && args[3] == "--oauth":
+			err = openaiOAuth.Login(ctx, stdout)
+		case len(args) == 5 && args[3] == "--oauth" && args[4] == "--new":
+			err = openaiOAuth.LoginNew(ctx, stdout)
+		case len(args) == 4 && args[3] == "status":
+			err = openaiOAuth.Status(stdout)
+		case len(args) == 4 && args[3] == "refresh":
+			err = openaiOAuth.Refresh(ctx, stdout)
+		case len(args) == 4 && args[3] == "logout":
+			err = openaiOAuth.Logout(ctx, stdout)
+		case len(args) == 5 && args[3] == "select":
+			err = openaiOAuth.Select(args[4])
+		default:
+			printGatewayUsage(stderr)
+			return 2
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "OpenAI OAuth: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 	if len(args) == 0 || len(args) > 2 {
 		printGatewayUsage(stderr)
 		return 2
@@ -421,7 +467,10 @@ func runGateway(
 }
 
 func printGatewayUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
+	fmt.Fprintln(w, "Usage: aginctus [global options] gateway provider openai storage ensure")
+	fmt.Fprintln(w, "       aginctus [global options] gateway provider openai auth --oauth [--new]")
+	fmt.Fprintln(w, "       aginctus [global options] gateway provider openai auth status|refresh|logout|select ID")
+	fmt.Fprintln(w, "       aginctus [global options] gateway validate")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
 	fmt.Fprintln(w, "       aginctus [global options] gateway up")
 	fmt.Fprintln(w, "       aginctus [global options] gateway apply")
@@ -692,6 +741,9 @@ Commands:
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
+  gateway provider openai storage ensure  Create owned persistent OAuth credential storage
+  gateway provider openai auth --oauth [--new]  Authorize a saved/new ChatGPT account
+  gateway provider openai auth status|refresh|logout|select ID  Manage host OAuth state
   gateway validate  Validate the AI gateway deployment configuration
   gateway apply     Reconcile the AI gateway
   gateway status    Inspect gateway project and service state
