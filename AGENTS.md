@@ -30,6 +30,10 @@ Every PR description must also include:
 - **Full validation instructions** for non-documentation-only PRs in a fenced code block, with the commands and any prerequisites or manual checks needed to validate the entire PR. Update this block as the PR evolves; do not replace it with only incremental or partial checks. Documentation-only PRs are exempt. More granular, partial validation steps may be supplied in chat during multi-step investigations.
 - **An extended squash-merge commit message** in a fenced code block, ready to copy and paste for the final merge. Keep it accurate as changes are added or revised.
 
+When working interactively with a human, also provide the next actionable validation steps directly in chat, in addition to maintaining the complete validation instructions and current state in the PR description. Keep chat steps focused on what the human should run or inspect next; update them as validation proceeds.
+
+Open PRs as ready for review by default, not as drafts. Use draft status only when the PR is genuinely not ready for review or consideration for merging; mark it ready promptly once that blocker is resolved.
+
 If a user supplies validation output, update the PR description to reflect the **current known validation state**, distinguishing confirmed passes, outstanding failures, pending checks, and checks not personally run. Keep this as a current snapshot, not a running history of earlier validation attempts; remove stale results when superseded. Do not claim validation passed merely because instructions were provided.
 
 Apply appropriate GitHub labels and milestones to issues and PRs where possible, following the repository's existing taxonomy. Use release milestones for version targets rather than recreating version labels; avoid assigning an unconfirmed target. Update metadata when scope or targeting changes.
