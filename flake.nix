@@ -260,6 +260,10 @@
                       User = "aginctus-oauth";
                       Group = "aginctus-oauth";
                       WorkingDirectory = "/var/lib/aginctus/oauth";
+                      ExecStartPre = [
+                        "+${pkgs.coreutils}/bin/chown aginctus-oauth:aginctus-oauth /var/lib/aginctus/oauth"
+                        "+${pkgs.coreutils}/bin/chmod 0700 /var/lib/aginctus/oauth"
+                      ];
                       ExecStart = "${oauthGatewayDaemon}/bin/aginctus-oauth-gateway";
                       Restart = "on-failure";
                       NoNewPrivileges = true;
