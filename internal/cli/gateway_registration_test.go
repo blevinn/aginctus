@@ -10,6 +10,7 @@ import (
 )
 
 func TestGatewayRegistrationDryRun(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	cfg, err := (&config.Loader{}).Load(config.Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -23,7 +24,8 @@ func TestGatewayRegistrationDryRun(t *testing.T) {
 		{[]string{"provider", "chatgpt", "register", "--alias=personal", "--dry-run"}, "\"alias\": \"personal\"", 0},
 		{[]string{"model", "chatgpt/gpt-6-sol", "register", "--dry-run"}, "\"mode\": \"responses\"", 0},
 		{[]string{"model", "coding", "register", "--source=chatgpt/gpt-6-sol", "--provider=chatgpt", "--dry-run"}, "\"model_name\": \"coding\"", 0},
-		{[]string{"provider", "chatgpt", "register"}, "not implemented", 2},
+		{[]string{"provider", "chatgpt", "register"}, "registered locally", 0},
+		{[]string{"provider", "chatgpt", "register"}, "already registered", 0},
 		{[]string{"model", "chatgpt/gpt-6-sol", "register"}, "not implemented", 2},
 		{[]string{"model", "bad", "register", "--source=openai/gpt-5", "--dry-run"}, "only the default", 2},
 	}
