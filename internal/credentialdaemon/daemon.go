@@ -23,14 +23,14 @@ func FromConfig(c *config.Config) (Spec,error) {
  } {
   value,err:=c.String(field.key);if err!=nil{return Spec{},err};*field.dest=value
  }
- s.Name="aginctus-gateway-"+s.GatewayID+"-credentials"
+ s.Name="aginctus-gateway-"+s.GatewayID+"-credential-daemon"
  s.ImageAlias="aginctus-oauth-gateway"
  return s,s.Validate()
 }
 func (s Spec) Validate() error {
  if err:=(statevolume.GatewayCredentials{Pool:s.Pool,GatewayID:s.GatewayID}).Validate();err!=nil{return err}
  if s.ManagementNetwork==""||s.EgressNetwork==""||s.ManagementNetwork==s.EgressNetwork{return fmt.Errorf("credential daemon requires distinct management and egress networks")}
- if s.Name!="aginctus-gateway-"+s.GatewayID+"-credentials"||s.ImageAlias!="aginctus-oauth-gateway"{return fmt.Errorf("unsupported credential daemon identity or image")}
+ if s.Name!="aginctus-gateway-"+s.GatewayID+"-credential-daemon"||s.ImageAlias!="aginctus-oauth-gateway"{return fmt.Errorf("unsupported credential daemon identity or image")}
  return nil
 }
 func (s Spec) Plan() (orchestration.Plan,error) {
