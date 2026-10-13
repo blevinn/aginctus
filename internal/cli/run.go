@@ -348,7 +348,7 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network status")
 }
 
-var ensureOAuthStorage = statevolume.EnsureOAuthCredentialsOnHost
+var ensureCredentialStorage = statevolume.EnsureGatewayCredentialsOnHost
 
 func runGateway(
 	ctx context.Context,
@@ -357,23 +357,23 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) == 2 && args[0] == "oauth-storage" && args[1] == "ensure" {
+	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
 		id, err := effective.String("gateway.id")
 		if err != nil {
-			fmt.Fprintf(stderr, "OAuth storage gateway ID: %v\n", err)
+			fmt.Fprintf(stderr, "gateway credential storage gateway ID: %v\n", err)
 			return 1
 		}
-		pool, err := effective.String("gateway.oauth.storage.pool")
+		pool, err := effective.String("gateway.credentials.storage.pool")
 		if err != nil {
-			fmt.Fprintf(stderr, "OAuth storage pool: %v\n", err)
+			fmt.Fprintf(stderr, "gateway credential storage pool: %v\n", err)
 			return 1
 		}
-		v := statevolume.OAuthCredentials{Pool: pool, GatewayID: id}
-		if err := ensureOAuthStorage(ctx, v); err != nil {
-			fmt.Fprintf(stderr, "OAuth storage: %v\n", err)
+		v := statevolume.GatewayCredentials{Pool: pool, GatewayID: id}
+		if err := ensureCredentialStorage(ctx, v); err != nil {
+			fmt.Fprintf(stderr, "gateway credential storage: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "OAuth credential volume %q: ready (unmounted; no credentials imported)\n", v.Name())
+		fmt.Fprintf(stdout, "gateway credential volume %q: ready (unmounted; no credentials imported)\n", v.Name())
 		return 0
 	}
 	if len(args) == 0 || len(args) > 2 {
@@ -449,7 +449,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway apply")
 	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
-	fmt.Fprintln(w, "       aginctus [global options] gateway oauth-storage ensure")
+	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
 }
 
 func runHerdr(
@@ -720,7 +720,7 @@ Commands:
   gateway status    Inspect gateway project and service state
   gateway remove [--force] Remove gateway instances, preserving data volumes
   gateway render    Render the AI gateway Compose model
-  gateway oauth-storage ensure  Create/verify dedicated unmounted OAuth credential volume
+  gateway credential-storage ensure  Create/verify dedicated unmounted gateway credential volume
   herdr                  Launch interactive Herdr in its client container
   herdr client apply     Create, reconcile, and bootstrap the Herdr client
   herdr client remove    Delete the Herdr client container
