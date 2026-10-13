@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/credentialdaemon"
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
@@ -357,7 +358,14 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
+	if len(args) == 2 && args[0] == "credential-daemon" && args[1] == "apply" {
+        spec, err := credentialdaemon.FromConfig(effective)
+        if err != nil { fmt.Fprintf(stderr, "credential daemon configuration: %v\n", err); return 1 }
+        if err := spec.Apply(ctx); err != nil { fmt.Fprintf(stderr, "credential daemon: %v\n", err); return 1 }
+        fmt.Fprintf(stdout, "credential daemon %q: reconciled (inference disabled; check guest service)\n", spec.Name)
+        return 0
+    }
+    if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
 		id, err := effective.String("gateway.id")
 		if err != nil {
 			fmt.Fprintf(stderr, "gateway credential storage gateway ID: %v\n", err)
@@ -450,6 +458,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
+	fmt.Fprintln(w, "       aginctus [global options] gateway credential-daemon apply")
 }
 
 func runHerdr(
