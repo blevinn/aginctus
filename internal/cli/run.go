@@ -357,6 +357,65 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) > 0 && (args[0] == "provider" || args[0] == "model") {
+		if len(args) < 3 || args[2] != "register" {
+			printGatewayUsage(stderr)
+			return 2
+		}
+		kind, name := args[0], args[1]
+		provider, source, alias, dryRun := "", "", "", false
+		for _, arg := range args[3:] {
+			switch {
+			case arg == "--dry-run":
+				dryRun = true
+			case strings.HasPrefix(arg, "--alias=") && kind == "provider":
+				alias = strings.TrimPrefix(arg, "--alias=")
+			case strings.HasPrefix(arg, "--provider=") && kind == "model":
+				provider = strings.TrimPrefix(arg, "--provider=")
+			case strings.HasPrefix(arg, "--source=") && kind == "model":
+				source = strings.TrimPrefix(arg, "--source=")
+			default:
+				fmt.Fprintf(stderr, "unknown or invalid registration option %q\n", arg)
+				return 2
+			}
+		}
+		if !dryRun {
+			fmt.Fprintln(stderr, "registration is not implemented; use --dry-run to inspect the proposal")
+			return 2
+		}
+		var rendered []byte
+		var err error
+		if kind == "provider" {
+			if name != "chatgpt" {
+				fmt.Fprintln(stderr, "only chatgpt provider is supported")
+				return 2
+			}
+			if alias == "" {
+				alias = name
+			}
+			rendered, err = gateway.ChatGPTProviderRegistration(alias)
+		} else {
+			if source == "" {
+				source = name
+			}
+			if provider == "" {
+				if strings.HasPrefix(source, "chatgpt/") {
+					provider = "chatgpt"
+				}
+			}
+			if provider != "chatgpt" {
+				fmt.Fprintln(stderr, "only the default chatgpt provider is supported in this preview")
+				return 2
+			}
+			rendered, err = gateway.ChatGPTModelRegistration(name, source)
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway registration preview: %v\n", err)
+			return 2
+		}
+		fmt.Fprintln(stdout, string(rendered))
+		return 0
+	}
 	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
 		id, err := effective.String("gateway.id")
 		if err != nil {
@@ -450,6 +509,8 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
+	fmt.Fprintln(w, "       aginctus [global options] gateway provider chatgpt register [--alias=NAME] --dry-run")
+	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME register [--provider=chatgpt] [--source=chatgpt/MODEL] --dry-run")
 }
 
 func runHerdr(
@@ -720,6 +781,7 @@ Commands:
   gateway status    Inspect gateway project and service state
   gateway remove [--force] Remove gateway instances, preserving data volumes
   gateway render    Render the AI gateway Compose model
+  gateway chatgpt model render MODEL  Render native LiteLLM Responses model registration
   gateway credential-storage ensure  Create/verify dedicated unmounted gateway credential volume
   herdr                  Launch interactive Herdr in its client container
   herdr client apply     Create, reconcile, and bootstrap the Herdr client
