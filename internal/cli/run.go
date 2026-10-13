@@ -13,6 +13,7 @@ import (
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
+	"github.com/blevinn/aginctus/internal/statevolume"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -354,8 +355,21 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) == 0 || len(args) > 2 {
-		printGatewayUsage(stderr)
+	if len(args) == 2 && args[0] == "oauth-storage" && args[1] == "ensure" {
+        id, err := effective.String("gateway.id")
+        if err != nil { fmt.Fprintf(stderr, "OAuth storage gateway ID: %v\n", err); return 1 }
+        pool, err := effective.String("gateway.oauth.storage.pool")
+        if err != nil { fmt.Fprintf(stderr, "OAuth storage pool: %v\n", err); return 1 }
+        v := statevolume.OAuthCredentials{Pool: pool, GatewayID: id}
+        if err := statevolume.EnsureOAuthCredentialsOnHost(ctx, v); err != nil {
+            fmt.Fprintf(stderr, "OAuth storage: %v\n", err)
+            return 1
+        }
+        fmt.Fprintf(stdout, "OAuth credential volume %q: ready (unmounted; no credentials imported)\n", v.Name())
+        return 0
+    }
+    if len(args) == 0 || len(args) > 2 {
+        printGatewayUsage(stderr)
 		return 2
 	}
 	if len(args) == 2 && (args[0] != "remove" || args[1] != "--force") {
@@ -427,6 +441,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway apply")
 	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
+	fmt.Fprintln(w, "       aginctus [global options] gateway oauth-storage ensure")
 }
 
 func runHerdr(
@@ -697,6 +712,7 @@ Commands:
   gateway status    Inspect gateway project and service state
   gateway remove [--force] Remove gateway instances, preserving data volumes
   gateway render    Render the AI gateway Compose model
+  gateway oauth-storage ensure  Create/verify dedicated unmounted OAuth credential volume
   herdr                  Launch interactive Herdr in its client container
   herdr client apply     Create, reconcile, and bootstrap the Herdr client
   herdr client remove    Delete the Herdr client container
