@@ -60,6 +60,11 @@ func TestLoopbackOnly(t *testing.T) {
 }
 func TestStateDirPermissionsAndSymlinks(t *testing.T) {
 	path := t.TempDir()
+	// Go's TempDir permissions can vary with parent and umask settings.
+	// Establish the valid security precondition explicitly before testing it.
+	if err := os.Chmod(path, 0700); err != nil {
+		t.Fatal(err)
+	}
 	if err := CheckStateDir(path); err != nil {
 		t.Fatal(err)
 	}
@@ -71,6 +76,9 @@ func TestStateDirPermissionsAndSymlinks(t *testing.T) {
 	}
 	if err := os.Chmod(path, 0700); err != nil {
 		t.Fatal(err)
+	}
+	if err := CheckStateDir(path); err != nil {
+		t.Fatalf("corrected permissions should pass: %v", err)
 	}
 	link := filepath.Join(t.TempDir(), "oauth")
 	if err := os.Symlink(path, link); err != nil {
