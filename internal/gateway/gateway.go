@@ -24,6 +24,7 @@ type Spec struct {
 	ID                 string
 	Project            string
 	Network            string
+	EgressNetwork      string
 	NetworkIPv4Address string
 	NetworkIPv4NAT     bool
 	NetworkIPv4Routing bool
@@ -39,6 +40,7 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		dst  *string
 	}{
 		{"gateway.id", &spec.ID},
+		{"gateway.egress.network.name", &spec.EgressNetwork},
 		{"gateway.compose.project", &spec.Project},
 		{"incus.management.network.name", &spec.Network},
 		{"incus.management.network.ipv4.address", &spec.NetworkIPv4Address},
@@ -77,6 +79,8 @@ func (s Spec) Validate() error {
 	switch {
 	case !gatewayIDPattern.MatchString(s.ID):
 		return fmt.Errorf("gateway id %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.ID)
+	case s.EgressNetwork != "" && (!gatewayIDPattern.MatchString(s.EgressNetwork) || s.EgressNetwork == s.Network):
+		return fmt.Errorf("gateway egress network must be a valid and distinct bridge name")
 	case s.Project == "":
 		return fmt.Errorf("gateway compose project must not be empty")
 	case s.Network == "":
@@ -114,7 +118,8 @@ services:
       STORE_MODEL_IN_DB: "True"
     networks:
       - management
-
+{{if .EgressNetwork}}      - egress
+{{end}}
 volumes:
   gateway-postgres: {}
 
@@ -122,7 +127,10 @@ networks:
   management:
     external: true
     name: {{.Network}}
-`))
+{{if .EgressNetwork}}  egress:
+    external: true
+    name: {{.EgressNetwork}}
+{{end}}`))
 
 func (s Spec) RenderCompose() (string, error) {
 	if err := s.Validate(); err != nil {
@@ -155,6 +163,7 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 		"import 'aginctus/gateway.jsonnet'",
 		map[string]any{
 			"id":      s.ID,
+			"egressNetwork": s.EgressNetwork,
 			"project": s.Project,
 			"network": map[string]any{
 				"name":        s.Network,
