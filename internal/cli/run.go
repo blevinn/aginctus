@@ -381,27 +381,38 @@ func runGateway(
 			}
 		}
 		if !dryRun {
-            if kind != "provider" {
-                fmt.Fprintln(stderr, "model registration is not implemented; use --dry-run")
-                return 2
-            }
-            if name != "chatgpt" {
-                fmt.Fprintln(stderr, "only chatgpt provider is supported")
-                return 2
-            }
-            if alias == "" { alias = name }
-            if _, err := gateway.ChatGPTProviderRegistration(alias); err != nil {
-                fmt.Fprintf(stderr, "gateway provider: %v\n", err)
-                return 2
-            }
-            path, err := providerregistry.DefaultPath()
-            if err != nil {fmt.Fprintf(stderr,"provider registry path: %v\n",err);return 1}
-            changed, err := providerregistry.Register(path,providerregistry.Provider{Type:name,Alias:alias})
-            if err != nil {fmt.Fprintf(stderr,"register provider: %v\n",err);return 1}
-            if changed {fmt.Fprintf(stdout,"provider %q (%s): registered locally (authentication pending)\n",alias,name)
-            } else {fmt.Fprintf(stdout,"provider %q (%s): already registered (authentication pending)\n",alias,name)}
-            return 0
-        }
+			if kind != "provider" {
+				fmt.Fprintln(stderr, "model registration is not implemented; use --dry-run")
+				return 2
+			}
+			if name != "chatgpt" {
+				fmt.Fprintln(stderr, "only chatgpt provider is supported")
+				return 2
+			}
+			if alias == "" {
+				alias = name
+			}
+			if _, err := gateway.ChatGPTProviderRegistration(alias); err != nil {
+				fmt.Fprintf(stderr, "gateway provider: %v\n", err)
+				return 2
+			}
+			path, err := providerregistry.DefaultPath()
+			if err != nil {
+				fmt.Fprintf(stderr, "provider registry path: %v\n", err)
+				return 1
+			}
+			changed, err := providerregistry.Register(path, providerregistry.Provider{Type: name, Alias: alias})
+			if err != nil {
+				fmt.Fprintf(stderr, "register provider: %v\n", err)
+				return 1
+			}
+			if changed {
+				fmt.Fprintf(stdout, "provider %q (%s): registered locally (authentication pending)\n", alias, name)
+			} else {
+				fmt.Fprintf(stdout, "provider %q (%s): already registered (authentication pending)\n", alias, name)
+			}
+			return 0
+		}
 		var rendered []byte
 		var err error
 		if kind == "provider" {
