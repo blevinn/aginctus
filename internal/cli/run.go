@@ -358,12 +358,15 @@ func runGateway(
 	effective *config.Config,
 ) int {
 	if len(args) == 4 && args[0] == "chatgpt" && args[1] == "model" && args[2] == "render" {
-        rendered, err := gateway.ChatGPTModelRegistration("aginctus-chatgpt", args[3])
-        if err != nil { fmt.Fprintf(stderr, "ChatGPT model: %v\n", err); return 1 }
-        fmt.Fprintln(stdout, string(rendered))
-        return 0
-    }
-    if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
+		rendered, err := gateway.ChatGPTModelRegistration("aginctus-chatgpt", args[3])
+		if err != nil {
+			fmt.Fprintf(stderr, "ChatGPT model: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(rendered))
+		return 0
+	}
+	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
 		id, err := effective.String("gateway.id")
 		if err != nil {
 			fmt.Fprintf(stderr, "gateway credential storage gateway ID: %v\n", err)
