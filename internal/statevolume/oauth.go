@@ -73,7 +73,7 @@ func EnsureGatewayCredentials(ctx context.Context, backend Backend, v GatewayCre
 	req := api.StorageVolumesPost{
 		Name: v.Name(), Type: "custom", ContentType: "filesystem",
 		StorageVolumePut: api.StorageVolumePut{
-			Description: "Aginctus gateway gateway credentials (no direct workload access)",
+			Description: "Aginctus gateway credential-manager state (no direct workload access)",
 			Config:      v.markers(),
 		},
 	}
