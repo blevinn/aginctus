@@ -10,7 +10,7 @@ import (
  "github.com/blevinn/aginctus/internal/statevolume"
 )
 
-func sample()Spec{return Spec{GatewayID:"local",Name:"aginctus-gateway-local-credentials",ImageAlias:"aginctus-oauth-gateway",Pool:"default",ManagementNetwork:"aginctus-mgmt",EgressNetwork:"aginctus-egress"}}
+func sample()Spec{return Spec{GatewayID:"local",Name:"aginctus-gateway-local-credential-daemon",ImageAlias:"aginctus-oauth-gateway",Pool:"default",ManagementNetwork:"aginctus-mgmt",EgressNetwork:"aginctus-egress"}}
 func TestPlanExclusiveCredentialMount(t *testing.T){
  p,err:=sample().Plan();if err!=nil{t.Fatal(err)}
  if len(p.Steps)!=1{t.Fatalf("steps=%d",len(p.Steps))}
