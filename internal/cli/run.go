@@ -348,6 +348,8 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network status")
 }
 
+var ensureOAuthStorage = statevolume.EnsureOAuthCredentialsOnHost
+
 func runGateway(
 	ctx context.Context,
 	args []string,
@@ -361,7 +363,7 @@ func runGateway(
         pool, err := effective.String("gateway.oauth.storage.pool")
         if err != nil { fmt.Fprintf(stderr, "OAuth storage pool: %v\n", err); return 1 }
         v := statevolume.OAuthCredentials{Pool: pool, GatewayID: id}
-        if err := statevolume.EnsureOAuthCredentialsOnHost(ctx, v); err != nil {
+        if err := ensureOAuthStorage(ctx, v); err != nil {
             fmt.Fprintf(stderr, "OAuth storage: %v\n", err)
             return 1
         }
