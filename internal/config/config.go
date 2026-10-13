@@ -130,6 +130,9 @@ func (l *Loader) Load(options Options) (*Config, error) {
 var defaults = map[string]any{
 	"gateway": map[string]any{
 		"id": "local",
+		"egress": map[string]any{
+			"network": map[string]any{"name": "aginctus-egress"},
+		},
 		"compose": map[string]any{
 			"project": "aginctus-gateway",
 		},
