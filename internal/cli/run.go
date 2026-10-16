@@ -350,6 +350,7 @@ func printNetworkUsage(w io.Writer) {
 }
 
 var ensureCredentialStorage = statevolume.EnsureGatewayCredentialsOnHost
+var attachGatewayCredentials = gateway.AttachCredentialVolume
 
 func runGateway(
 	ctx context.Context,
@@ -358,6 +359,31 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "attach" {
+		id, err := effective.String("gateway.id")
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway id: %v\n", err)
+			return 1
+		}
+		project, err := effective.String("gateway.compose.project")
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway Compose project: %v\n", err)
+			return 1
+		}
+		pool, err := effective.String("gateway.credentials.storage.pool")
+		if err != nil {
+			fmt.Fprintf(stderr, "credential storage pool: %v\n", err)
+			return 1
+		}
+		spec := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
+		if err := attachGatewayCredentials(ctx, spec); err != nil {
+			fmt.Fprintf(stderr, "credential attachment: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "private credential volume attached exclusively to LiteLLM in Compose project %q (OAuth not activated)\n", project)
+		return 0
+	}
+
 	if len(args) > 0 && args[0] == "provider" && (len(args) == 2 && args[1] == "list" || len(args) == 3 && args[2] == "show") {
 		path, err := providerregistry.DefaultPath()
 		if err != nil {
@@ -565,6 +591,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
+	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider chatgpt register [--alias=NAME] [--dry-run]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider list")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider ALIAS show")

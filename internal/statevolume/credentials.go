@@ -11,17 +11,19 @@ import (
 )
 
 // GatewayCredentials describes dedicated credential-manager-owned
-// gateway state storage. This storage must NOT be attached to LiteLLM,
-// PostgreSQL, the Herdr client, or agent workloads.
+// gateway state storage. When explicitly provisioned for native ChatGPT,
+// only the LiteLLM instance may receive the private volume. It must never
+// be attached to PostgreSQL, the Herdr client, or workloads.
 type GatewayCredentials struct {
 	Pool      string
 	GatewayID string
+	Project   string // Empty selects the legacy default Incus project.
 }
 
 var gatewayID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
 func (v GatewayCredentials) Validate() error {
-	if !safeName.MatchString(v.Pool) || !gatewayID.MatchString(v.GatewayID) {
+	if !safeName.MatchString(v.Pool) || !gatewayID.MatchString(v.GatewayID) || (v.Project != "" && !safeName.MatchString(v.Project)) {
 		return fmt.Errorf("unsafe gateway credential volume pool or gateway ID")
 	}
 	return nil
@@ -97,7 +99,11 @@ func EnsureGatewayCredentialsOnHost(ctx context.Context, v GatewayCredentials) e
 	if err != nil {
 		return fmt.Errorf("connect local Incus for gateway credential storage: %w", err)
 	}
-	server = server.UseProject(Project)
+	project := v.Project
+	if project == "" {
+		project = Project
+	}
+	server = server.UseProject(project)
 	// Do not permit a similarly named foreign project/resource to become
 	// the destination for secrets once the gateway service is introduced.
 	_, _, err = server.GetStoragePoolVolume(v.Pool, "custom", v.Name())
