@@ -57,15 +57,32 @@ func TestRegistryLockFailsClosed(t *testing.T) {
 }
 
 func TestLoadPrivateRegistry(t *testing.T) {
- path:=filepath.Join(t.TempDir(),"registry","providers.json")
- reg,err:=Load(path);if err!=nil||len(reg.Providers)!=0{t.Fatalf("missing: %#v %v",reg,err)}
- if _,err:=Register(path,Provider{Type:"chatgpt",Alias:"personal"});err!=nil{t.Fatal(err)}
- reg,err=Load(path);if err!=nil||len(reg.Providers)!=1||reg.Providers[0].Alias!="personal"{t.Fatalf("read: %#v %v",reg,err)}
- if err:=os.Chmod(path,0644);err!=nil{t.Fatal(err)}
- if _,err:=Load(path);err==nil{t.Fatal("insecure file accepted")}
+	path := filepath.Join(t.TempDir(), "registry", "providers.json")
+	reg, err := Load(path)
+	if err != nil || len(reg.Providers) != 0 {
+		t.Fatalf("missing: %#v %v", reg, err)
+	}
+	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "personal"}); err != nil {
+		t.Fatal(err)
+	}
+	reg, err = Load(path)
+	if err != nil || len(reg.Providers) != 1 || reg.Providers[0].Alias != "personal" {
+		t.Fatalf("read: %#v %v", reg, err)
+	}
+	if err := os.Chmod(path, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("insecure file accepted")
+	}
 }
 func TestLoadRejectsSymlink(t *testing.T) {
- dir:=t.TempDir();path:=filepath.Join(dir,"providers.json")
- if err:=os.Symlink("missing",path);err!=nil{t.Fatal(err)}
- if _,err:=Load(path);err==nil{t.Fatal("symlink accepted")}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "providers.json")
+	if err := os.Symlink("missing", path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("symlink accepted")
+	}
 }
