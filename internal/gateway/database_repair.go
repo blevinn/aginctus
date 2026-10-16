@@ -60,6 +60,24 @@ func reconcileDatabaseInstance(inst *api.Instance, project string) (api.Instance
     return put, changed, nil
 }
 
+// InspectLiteLLMDatabaseHost only reports whether an owned guest uses the
+// expected hostname. It never returns or prints the secret-bearing URL.
+func InspectLiteLLMDatabaseHost(ctx context.Context, project string) (bool, error) {
+    if !gatewayIDPattern.MatchString(project) || project == "default" { return false, fmt.Errorf("invalid gateway Compose project") }
+    conn, err := incusclient.ConnectIncusUnixWithContext(ctx, "", &incusclient.ConnectionArgs{SkipGetServer:true})
+    if err != nil { return false, fmt.Errorf("connect to Incus for gateway diagnosis: %w",err) }
+    p, _, err := conn.GetProject(project)
+    if err != nil { return false, fmt.Errorf("inspect gateway project: %w",err) }
+    if p.Config["user.aginctus.managed"] != "true" || p.Config["user.aginctus.resource"] != "compose-project" || p.Config["user.aginctus.deployment"] != project { return false,fmt.Errorf("gateway Compose project ownership mismatch") }
+    instance, _, err := conn.UseProject(project).GetInstance(liteLLMServiceInstance)
+    if err != nil { return false,fmt.Errorf("inspect LiteLLM instance: %w",err) }
+    if err := ownedLiteLLM(instance, project); err != nil { return false,err }
+    if instance.Config["user.label.incus-compose.service"] != "litellm" { return false,fmt.Errorf("unexpected Compose service identity") }
+    _, needsRepair, err := reconcileDatabaseURL(instance.Config["environment.DATABASE_URL"])
+    if err != nil { return false,err }
+    return needsRepair,nil
+}
+
 // RepairLiteLLMDatabaseHost is intentionally a one-time, narrowly scoped
 // in-place edit. It neither starts a guest nor reconciles other environment
 // variables, and leaves attached volumes and gateway secrets untouched.
