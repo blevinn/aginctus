@@ -111,3 +111,52 @@ func Register(path string, p Provider) (bool, error) {
 	}
 	return true, nil
 }
+
+// Load reads only nonsecret provider identities and never initializes state.
+// A missing registry is treated as an empty configuration.
+func Load(path string) (Registry, error) {
+	empty := Registry{Providers: []Provider{}}
+	if !filepath.IsAbs(path) {
+		return empty, fmt.Errorf("registry path must be absolute")
+	}
+	dir := filepath.Dir(path)
+	info, err := os.Lstat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return empty, nil
+	}
+	if err != nil {
+		return empty, err
+	}
+	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		return empty, fmt.Errorf("provider state directory must be private")
+	}
+	info, err = os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return empty, nil
+	}
+	if err != nil {
+		return empty, err
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+		return empty, fmt.Errorf("provider registry must be a private regular file")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return empty, err
+	}
+	var result Registry
+	if err := json.Unmarshal(data, &result); err != nil {
+		return empty, fmt.Errorf("decode provider registry: %w", err)
+	}
+	seen := map[string]bool{}
+	for _, p := range result.Providers {
+		if p.Type != "chatgpt" || !safeAlias.MatchString(p.Alias) || seen[p.Alias] {
+			return empty, fmt.Errorf("invalid or duplicate provider registry entry")
+		}
+		seen[p.Alias] = true
+	}
+	if result.Providers == nil {
+		result.Providers = []Provider{}
+	}
+	return result, nil
+}

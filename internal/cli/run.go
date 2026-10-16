@@ -358,6 +358,32 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) > 0 && args[0] == "provider" && (len(args) == 2 && args[1] == "list" || len(args) == 3 && args[2] == "show") {
+		path, err := providerregistry.DefaultPath()
+		if err != nil {
+			fmt.Fprintf(stderr, "provider registry path: %v\n", err)
+			return 1
+		}
+		reg, err := providerregistry.Load(path)
+		if err != nil {
+			fmt.Fprintf(stderr, "read provider registry: %v\n", err)
+			return 1
+		}
+		if args[1] == "list" {
+			for _, p := range reg.Providers {
+				fmt.Fprintf(stdout, "%s\t%s\t%s\n", p.Alias, p.Type, "authentication pending")
+			}
+			return 0
+		}
+		for _, p := range reg.Providers {
+			if p.Alias == args[1] {
+				fmt.Fprintf(stdout, "provider %q (%s): registered locally (authentication pending)\n", p.Alias, p.Type)
+				return 0
+			}
+		}
+		fmt.Fprintf(stderr, "provider alias %q is not registered\n", args[1])
+		return 1
+	}
 	if len(args) > 0 && (args[0] == "provider" || args[0] == "model") {
 		if len(args) < 3 || args[2] != "register" {
 			printGatewayUsage(stderr)
@@ -540,6 +566,8 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider chatgpt register [--alias=NAME] [--dry-run]")
+	fmt.Fprintln(w, "       aginctus [global options] gateway provider list")
+	fmt.Fprintln(w, "       aginctus [global options] gateway provider ALIAS show")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME register [--provider=chatgpt] [--source=chatgpt/MODEL] --dry-run")
 }
 

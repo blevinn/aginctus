@@ -40,3 +40,23 @@ func TestGatewayRegistrationDryRun(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderListAndShow(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	cfg, err := (&config.Loader{}).Load(config.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := func(args []string, want string, status int) {
+		t.Helper()
+		var out, errs bytes.Buffer
+		got := runGateway(context.Background(), args, &out, &errs, nil, cfg)
+		if got != status || !strings.Contains(out.String()+errs.String(), want) {
+			t.Fatalf("%v got %d out %q err %q", args, got, out.String(), errs.String())
+		}
+	}
+	check([]string{"provider", "personal", "show"}, "not registered", 1)
+	check([]string{"provider", "chatgpt", "register", "--alias=personal"}, "registered locally", 0)
+	check([]string{"provider", "list"}, "personal", 0)
+	check([]string{"provider", "personal", "show"}, "authentication pending", 0)
+}
