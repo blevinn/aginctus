@@ -52,6 +52,8 @@ func reconcileDatabaseInstance(inst *api.Instance, project string) (api.Instance
         return api.InstancePut{}, false, err
     }
     put := inst.Writable()
+    put.Config = make(map[string]string, len(inst.Config))
+    for key, value := range inst.Config { put.Config[key] = value }
     if changed {
         put.Config["environment.DATABASE_URL"] = corrected
     }
