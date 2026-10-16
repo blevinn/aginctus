@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"strings"
 
 	"github.com/blevinn/aginctus/internal/statevolume"
 	incusclient "github.com/lxc/incus/v7/client"
@@ -139,7 +138,3 @@ func PrepareCredentialStorage(ctx context.Context, a CredentialAttachment) error
 	return nil
 }
 
-// A compile-time reminder that no provider alias, token or credential-file
-// content is passed to the guest shell. Do not replace the fixed script with
-// user-supplied arguments.
-var _ = strings.TrimSpace
