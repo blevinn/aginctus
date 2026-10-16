@@ -17,7 +17,7 @@ import (
 type GatewayCredentials struct {
 	Pool      string
 	GatewayID string
-	Project string // Empty selects the legacy default Incus project.
+	Project   string // Empty selects the legacy default Incus project.
 }
 
 var gatewayID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
@@ -100,7 +100,9 @@ func EnsureGatewayCredentialsOnHost(ctx context.Context, v GatewayCredentials) e
 		return fmt.Errorf("connect local Incus for gateway credential storage: %w", err)
 	}
 	project := v.Project
-	if project == "" { project = Project }
+	if project == "" {
+		project = Project
+	}
 	server = server.UseProject(project)
 	// Do not permit a similarly named foreign project/resource to become
 	// the destination for secrets once the gateway service is introduced.
