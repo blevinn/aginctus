@@ -350,6 +350,7 @@ func printNetworkUsage(w io.Writer) {
 }
 
 var ensureCredentialStorage = statevolume.EnsureGatewayCredentialsOnHost
+var repairLiteLLMDatabaseHost = gateway.RepairLiteLLMDatabaseHost
 var attachGatewayCredentials = gateway.AttachCredentialVolume
 
 func runGateway(
@@ -359,6 +360,24 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+    if len(args) == 2 && args[0] == "database" && args[1] == "repair-hostname" {
+        project, err := effective.String("gateway.compose.project")
+        if err != nil {
+            fmt.Fprintf(stderr, "gateway project: %v\n", err)
+            return 1
+        }
+        changed, err := repairLiteLLMDatabaseHost(ctx, project)
+        if err != nil {
+            fmt.Fprintf(stderr, "gateway database hostname repair: %v\n", err)
+            return 1
+        }
+        if changed {
+            fmt.Fprintln(stdout, "LiteLLM database hostname updated to postgres-1 (instance remains stopped)")
+        } else {
+            fmt.Fprintln(stdout, "LiteLLM database hostname already correct (instance remains stopped)")
+        }
+        return 0
+    }
 	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "attach" {
 		id, err := effective.String("gateway.id")
 		if err != nil {
@@ -592,6 +611,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
+	fmt.Fprintln(w, "       aginctus [global options] gateway database repair-hostname")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider chatgpt register [--alias=NAME] [--dry-run]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider list")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider ALIAS show")
