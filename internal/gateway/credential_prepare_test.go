@@ -17,9 +17,9 @@ func preparationFixtures() (*api.Instance, *api.StorageVolume, CredentialAttachm
 	vol := &api.StorageVolume{
 		Name: a.volume().Name(), Type: "custom", ContentType: "filesystem",
 		StorageVolumePut: api.StorageVolumePut{Config: map[string]string{
-			"user.aginctus.managed": "true",
+			"user.aginctus.managed":  "true",
 			"user.aginctus.resource": "gateway-credentials",
-			"user.aginctus.gateway": "local",
+			"user.aginctus.gateway":  "local",
 		}},
 		UsedBy: []string{"/1.0/instances/litellm-1?project=aginctus-gateway"},
 	}
@@ -40,21 +40,37 @@ func TestCredentialPreparationTargetAcceptsPrivateMountedRootRuntime(t *testing.
 
 func TestCredentialPreparationTargetFailsClosed(t *testing.T) {
 	cases := []struct {
-		name string
+		name   string
 		change func(*api.Instance, *api.StorageVolume, *CredentialAttachment)
 	}{
-		{"mount missing", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) { delete(i.ExpandedDevices, credentialDevice) }},
-		{"wrong mount", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) { i.ExpandedDevices[credentialDevice]["source"] = "foreign" }},
-		{"extra duplicate mount", func(i *api.Instance, _ *api.StorageVolume, a *CredentialAttachment) { i.ExpandedDevices["other"] = map[string]string{"type":"disk", "pool":a.Pool,"source":a.volume().Name(),"path":"/secret-copy"} }},
-		{"wrong instance ownership", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) { i.Config["user.aginctus.managed"] = "false" }},
-		{"foreign consumer", func(_ *api.Instance, v *api.StorageVolume, _ *CredentialAttachment) { v.UsedBy = append(v.UsedBy, "/1.0/instances/postgres-1?project=aginctus-gateway") }},
+		{"mount missing", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) {
+			delete(i.ExpandedDevices, credentialDevice)
+		}},
+		{"wrong mount", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) {
+			i.ExpandedDevices[credentialDevice]["source"] = "foreign"
+		}},
+		{"extra duplicate mount", func(i *api.Instance, _ *api.StorageVolume, a *CredentialAttachment) {
+			i.ExpandedDevices["other"] = map[string]string{"type": "disk", "pool": a.Pool, "source": a.volume().Name(), "path": "/secret-copy"}
+		}},
+		{"wrong instance ownership", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) {
+			i.Config["user.aginctus.managed"] = "false"
+		}},
+		{"foreign consumer", func(_ *api.Instance, v *api.StorageVolume, _ *CredentialAttachment) {
+			v.UsedBy = append(v.UsedBy, "/1.0/instances/postgres-1?project=aginctus-gateway")
+		}},
 		{"volume unreferenced", func(_ *api.Instance, v *api.StorageVolume, _ *CredentialAttachment) { v.UsedBy = nil }},
-		{"volume ownership invalid", func(_ *api.Instance, v *api.StorageVolume, _ *CredentialAttachment) { v.Config["user.aginctus.gateway"] = "other" }},
+		{"volume ownership invalid", func(_ *api.Instance, v *api.StorageVolume, _ *CredentialAttachment) {
+			v.Config["user.aginctus.gateway"] = "other"
+		}},
 		{"stopped guest", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) { i.Status = "Stopped" }},
 		{"unexpected uid", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) { i.Config["oci.uid"] = "1000" }},
 		{"unexpected gid", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) { i.Config["oci.gid"] = "1000" }},
-		{"alternate token dir", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) { i.Config["environment.CHATGPT_TOKEN_DIR"] = "/root/.config/litellm/chatgpt" }},
-		{"alternate auth file", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) { i.Config["environment.CHATGPT_AUTH_FILE"] = "other.json" }},
+		{"alternate token dir", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) {
+			i.Config["environment.CHATGPT_TOKEN_DIR"] = "/root/.config/litellm/chatgpt"
+		}},
+		{"alternate auth file", func(i *api.Instance, _ *api.StorageVolume, _ *CredentialAttachment) {
+			i.Config["environment.CHATGPT_AUTH_FILE"] = "other.json"
+		}},
 		{"unsafe project", func(_ *api.Instance, _ *api.StorageVolume, a *CredentialAttachment) { a.ComposeProject = "default" }},
 	}
 	for _, tc := range cases {

@@ -137,4 +137,3 @@ func PrepareCredentialStorage(ctx context.Context, a CredentialAttachment) error
 	}
 	return nil
 }
-
