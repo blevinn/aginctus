@@ -94,10 +94,10 @@ func RepairLiteLLMDatabaseHost(ctx context.Context, project string) (bool, error
     }
     op, err := client.UpdateInstance(liteLLMServiceInstance, put, etag)
     if err != nil {
-        return false, fmt.Errorf("update LiteLLM hostname: %w", err)
+        return false, fmt.Errorf("Incus rejected LiteLLM hostname-only update (details suppressed to protect credential values)")
     }
     if err := op.WaitContext(ctx); err != nil {
-        return false, fmt.Errorf("wait for LiteLLM hostname update: %w", err)
+        return false, fmt.Errorf("LiteLLM hostname update operation failed (details suppressed to protect credential values)")
     }
     return true, nil
 }
