@@ -50,6 +50,9 @@ func TestAttachmentFailsClosedOnOwnershipAndCollisions(t *testing.T){
  inst=ownedInstance()
  inst.ExpandedDevices[credentialDevice]=map[string]string{"type":"disk","path":credentialMountPath,"source":"foreign"}
  if _,err:=plannedCredentialDevice(inst,a);err==nil{t.Fatal("accepted modified credential disk")}
+ inst=ownedInstance()
+ inst.ExpandedDevices["duplicate"]=map[string]string{"type":"disk","path":"/other","pool":a.Pool,"source":a.volume().Name()}
+ if _,err:=plannedCredentialDevice(inst,a);err==nil{t.Fatal("accepted duplicate private volume mount")}
 }
 func TestAttachmentRejectsForeignConsumers(t *testing.T){
  good:="/1.0/instances/litellm-1?project=aginctus-gateway"
