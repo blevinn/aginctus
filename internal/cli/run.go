@@ -199,9 +199,9 @@ func runDoctorGateway(ctx context.Context, args []string, stdout, stderr io.Writ
         return 2
     }
     project, err := effective.String("gateway.compose.project")
-    if err != nil { fmt.Fprintf(stderr, "gateway project: %v\\n", err); return 1 }
+    if err != nil { fmt.Fprintf(stderr, "gateway project: %v\n", err); return 1 }
     needsRepair, err := inspectLiteLLMDatabaseHost(ctx, project)
-    if err != nil { fmt.Fprintf(stderr, "gateway diagnosis: %v\\n",err); return 1 }
+    if err != nil { fmt.Fprintf(stderr, "gateway diagnosis: %v\n",err); return 1 }
     if !needsRepair {
         fmt.Fprintln(stdout, "gateway LiteLLM database hostname: correct (postgres-1)")
         return 0
@@ -211,7 +211,7 @@ func runDoctorGateway(ctx context.Context, args []string, stdout, stderr io.Writ
         return 1
     }
     changed, err := repairLiteLLMDatabaseHost(ctx, project)
-    if err != nil { fmt.Fprintf(stderr, "gateway database hostname repair: %v\\n",err); return 1 }
+    if err != nil { fmt.Fprintf(stderr, "gateway database hostname repair: %v\n",err); return 1 }
     if changed { fmt.Fprintln(stdout, "gateway LiteLLM database hostname: repaired to postgres-1 (instance remains stopped)") } else { fmt.Fprintln(stdout, "gateway LiteLLM database hostname: already correct (instance remains stopped)") }
     return 0
 }
