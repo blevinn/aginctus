@@ -94,7 +94,9 @@ func Run(
 	case "apply":
 		return runAggregateApply(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "doctor":
-		if len(commandArgs) > 1 && commandArgs[1] == "gateway" { return runDoctorGateway(ctx, commandArgs[2:], stdout, stderr, effective) }
+		if len(commandArgs) > 1 && commandArgs[1] == "gateway" {
+			return runDoctorGateway(ctx, commandArgs[2:], stdout, stderr, effective)
+		}
 		return runDoctor(ctx, commandArgs[1:], stdout, stderr, incusClient)
 	case "images":
 		return runImages(ctx, commandArgs[1:], stdout, stderr)
@@ -194,26 +196,39 @@ var setIncusHTTPSAddress = func(ctx context.Context, address string) error {
 var inspectLiteLLMDatabaseHost = gateway.InspectLiteLLMDatabaseHost
 
 func runDoctorGateway(ctx context.Context, args []string, stdout, stderr io.Writer, effective *config.Config) int {
-    if len(args) > 1 || (len(args) == 1 && args[0] != "--fix") {
-        fmt.Fprintln(stderr, "Usage: aginctus doctor gateway [--fix]")
-        return 2
-    }
-    project, err := effective.String("gateway.compose.project")
-    if err != nil { fmt.Fprintf(stderr, "gateway project: %v\n", err); return 1 }
-    needsRepair, err := inspectLiteLLMDatabaseHost(ctx, project)
-    if err != nil { fmt.Fprintf(stderr, "gateway diagnosis: %v\n",err); return 1 }
-    if !needsRepair {
-        fmt.Fprintln(stdout, "gateway LiteLLM database hostname: correct (postgres-1)")
-        return 0
-    }
-    if len(args) == 0 {
-        fmt.Fprintln(stderr, "gateway LiteLLM database hostname: legacy postgres name detected; run 'aginctus doctor gateway --fix' to repair the stopped instance")
-        return 1
-    }
-    changed, err := repairLiteLLMDatabaseHost(ctx, project)
-    if err != nil { fmt.Fprintf(stderr, "gateway database hostname repair: %v\n",err); return 1 }
-    if changed { fmt.Fprintln(stdout, "gateway LiteLLM database hostname: repaired to postgres-1 (instance remains stopped)") } else { fmt.Fprintln(stdout, "gateway LiteLLM database hostname: already correct (instance remains stopped)") }
-    return 0
+	if len(args) > 1 || (len(args) == 1 && args[0] != "--fix") {
+		fmt.Fprintln(stderr, "Usage: aginctus doctor gateway [--fix]")
+		return 2
+	}
+	project, err := effective.String("gateway.compose.project")
+	if err != nil {
+		fmt.Fprintf(stderr, "gateway project: %v\n", err)
+		return 1
+	}
+	needsRepair, err := inspectLiteLLMDatabaseHost(ctx, project)
+	if err != nil {
+		fmt.Fprintf(stderr, "gateway diagnosis: %v\n", err)
+		return 1
+	}
+	if !needsRepair {
+		fmt.Fprintln(stdout, "gateway LiteLLM database hostname: correct (postgres-1)")
+		return 0
+	}
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "gateway LiteLLM database hostname: legacy postgres name detected; run 'aginctus doctor gateway --fix' to repair the stopped instance")
+		return 1
+	}
+	changed, err := repairLiteLLMDatabaseHost(ctx, project)
+	if err != nil {
+		fmt.Fprintf(stderr, "gateway database hostname repair: %v\n", err)
+		return 1
+	}
+	if changed {
+		fmt.Fprintln(stdout, "gateway LiteLLM database hostname: repaired to postgres-1 (instance remains stopped)")
+	} else {
+		fmt.Fprintln(stdout, "gateway LiteLLM database hostname: already correct (instance remains stopped)")
+	}
+	return 0
 }
 
 func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer, incusClient IncusClient) int {
