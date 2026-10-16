@@ -75,13 +75,15 @@ func volumeExclusivity(v *api.StorageVolume, project string) error {
 func plannedCredentialDevice(instance *api.Instance, a CredentialAttachment) (bool,error) {
     if err:=ownedLiteLLM(instance,a.ComposeProject);err!=nil{return false,err}
     desired:=a.device()
+    alreadyAttached:=false
     for name,existing:=range instance.ExpandedDevices {
         if name==credentialDevice {
             for key,value:=range desired {
                 if existing[key]!=value { return false,fmt.Errorf("credential device has unexpected configuration") }
             }
             if len(existing)!=len(desired) {return false,fmt.Errorf("credential device includes unexpected settings")}
-            return false,nil // already attached
+            alreadyAttached=true
+            continue
         }
         // Reject duplicate mounts of the same secret-bearing volume even
         // at a different path in the same guest.
@@ -96,7 +98,7 @@ func plannedCredentialDevice(instance *api.Instance, a CredentialAttachment) (bo
             return false,fmt.Errorf("credential mount path overlaps existing device")
         }
     }
-    return true,nil
+    return !alreadyAttached,nil
 }
 
 // AttachCredentialVolume explicitly adds a private device to an existing
