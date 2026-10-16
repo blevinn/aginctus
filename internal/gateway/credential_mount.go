@@ -83,6 +83,12 @@ func plannedCredentialDevice(instance *api.Instance, a CredentialAttachment) (bo
             if len(existing)!=len(desired) {return false,fmt.Errorf("credential device includes unexpected settings")}
             return false,nil // already attached
         }
+        // Reject duplicate mounts of the same secret-bearing volume even
+        // at a different path in the same guest.
+        if existing["type"]=="disk" && existing["pool"]==a.Pool &&
+            existing["source"]==a.volume().Name() {
+            return false,fmt.Errorf("credential volume already mounted through an unexpected device")
+        }
         // No other device may own or shadow the token directory.
         path:=existing["path"]
         if path==credentialMountPath || (path!="/" && path!="" &&
