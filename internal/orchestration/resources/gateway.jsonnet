@@ -48,7 +48,7 @@ ag.orchestration(cfg.id,
           image: cfg.litellmImage,
           depends_on: ['postgres'],
           environment: {
-            DATABASE_URL: 'postgresql://litellm:${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}@postgres:5432/litellm',
+            DATABASE_URL: 'postgresql://litellm:${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}@postgres-1:5432/litellm',
             LITELLM_MASTER_KEY: '${AGINCTUS_GATEWAY_MASTER_KEY}',
             LITELLM_SALT_KEY: '${AGINCTUS_GATEWAY_SALT_KEY}',
             STORE_MODEL_IN_DB: 'True',
