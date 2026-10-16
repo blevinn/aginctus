@@ -36,6 +36,7 @@ func TestRenderCompose(t *testing.T) {
 		"docker.io/library/postgres:17-alpine",
 		"name: aginctus-mgmt",
 		"${AGINCTUS_GATEWAY_MASTER_KEY}",
+		"@postgres-1:5432/litellm",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("rendered compose missing %q:\n%s", want, rendered)
@@ -88,6 +89,7 @@ func TestOrchestrationPlanOrdersNetworkBeforeComposeAndKeepsSecretReferences(t *
 		`${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}`,
 		`${AGINCTUS_GATEWAY_MASTER_KEY}`,
 		`${AGINCTUS_GATEWAY_SALT_KEY}`,
+		`@postgres-1:5432/litellm`,
 	} {
 		if !strings.Contains(configuration, want) {
 			t.Fatalf("configuration missing %q: %s", want, configuration)
