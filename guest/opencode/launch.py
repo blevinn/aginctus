@@ -35,7 +35,7 @@ def load(directory):
         raise ValueError("invalid gateway model alias")
     if protocol not in ("responses", "chat-completions"):
         raise ValueError("unsupported gateway protocol")
-    info = key_path.stat()
+    info = key_path.lstat()
     if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077:
         raise ValueError("workload-key must be a private regular file (mode 0600)")
     key = key_path.read_text(encoding="utf-8").strip()
