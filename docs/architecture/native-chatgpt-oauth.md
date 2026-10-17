@@ -55,6 +55,36 @@ Replace `OPERATOR_VERIFIED_MODEL` only after independently checking account enti
 
 The model registry is `${XDG_STATE_HOME:-$HOME/.local/state}/aginctus/gateway/models.json` (0700 parent, 0600 file), separate from `providers.json`. It validates aliases, requires a previously registered ChatGPT provider alias, serializes writes, rejects suspicious files and duplicate conflicting registrations, and provides read-only inspection. The records are nonsecret **intent**, not deployed routes; downstream #123 must receive only a separately authorized workload-facing alias and LiteLLM key. #124 must verify the alias against a *real terminal Responses event*, not registration success. This stage does not add a new public listener or modify gateway networks.
 
+### Render the registered model intent for review (not activation)
+
+Once a provider identity and an alias have been recorded, inspect the exact
+nonsecret LiteLLM Responses model definition the alias would require:
+
+```sh
+aginctus gateway model coding render
+```
+
+The output is a single JSON model entry with `model_name`, a
+`litellm_params.model` value of the registered `chatgpt/...` source, and
+`model_info.mode: "responses"`. This resolves the **stored** alias, rather
+than accepting a new source at render time, and never modifies a gateway,
+token store, Incus resource, or local registry. The command prints a
+separate stderr reminder that authentication and gateway activation remain
+pending.
+
+LiteLLM v1.103.0 currently uses one native credential directory and auth
+record for all `chatgpt/` routes. Accordingly, route rendering fails closed
+unless **exactly one** ChatGPT provider identity exists locally and the model
+references that identity; multiple local provider aliases cannot safely imply
+multiple upstream accounts. This is a limit of the current deployment
+architecture, not a restriction on recording nonsecret intentions.
+
+**Do not submit the rendered JSON to LiteLLM's model registration API yet.**
+This command does not check whether the upstream model is entitled, whether
+the chosen account is authorized to perform autonomous inference, or whether
+native token refresh/streaming is safe. The explicit activation and live
+acceptance gates below still apply.
+
 ### Activation blockers verified against pinned LiteLLM v1.103.0
 
 The upstream `litellm/llms/chatgpt/authenticator.py` implementation directly rewrites `auth.json` via `open(..., "w")`, does not implement interprocess locking or atomic token replacement, and can trigger device-code login as a side effect of model resolution. It also embeds some upstream error details in exception messages. Consequently **do not enable `CHATGPT_TOKEN_DIR`, configure an active `chatgpt/` route, or run live OAuth yet**, even after #217 prepares a private file. A later, explicitly reviewed activation must enforce one refresh owner, safe persistence, token-safe errors, and a controlled authorization boundary, ideally through a confirmed compatible upstream release rather than a duplicate OAuth implementation.
