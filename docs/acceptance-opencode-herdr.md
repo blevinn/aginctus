@@ -74,14 +74,14 @@ Use the configured Herdr client instance name in place of `aginctus-herdr` if ov
 
 ## Managed guest helper in this branch
 
-`scripts/acceptance/guest-owned.py` now supplies the stage and cleanup actions via authenticated `incus exec aginctus-dev -- runuser -u agent -- python3 -c ...`. It creates a **new empty** workspace directory under `/home/agent/aginctus-acceptance` with a private run-ID marker. Cleanup refuses directories with unexpected files and will never delete the existing Herdr workspace `w1`. The guest runs as `agent`, and the host never receives any SSH private key.
+`scripts/acceptance/guest-owned.py` now supplies the stage and cleanup actions via authenticated `incus exec aginctus-dev -- runuser -u agent -- /bin/sh -c ...`. It creates a **new empty** workspace directory under `/home/agent/aginctus-acceptance` with a private run-ID marker. Cleanup refuses directories with unexpected files and will never delete the existing Herdr workspace `w1`. The guest runs as `agent`, and the host never receives any SSH private key.
 
-The smoke defaults to this helper for staging and cleanup. The helper assumes `python3` exists in the workload and the `agent` home is writable; confirm both in the pilot before opt-in. `AGINCTUS_ACCEPTANCE_WORKLOAD` can select an explicitly reviewed instance if the workload name differs. The helper is intended **only for the empty workspace smoke** and does not yet stage a coding fixture. Cleanup failures require manual investigation; do not forcibly remove unexpected content.
+The smoke defaults to this helper for staging and cleanup. The helper requires `/bin/sh`, `stat`, `find`, `mkdir`, `chmod`, `rm`, and `rmdir` in the workload; check these and the `agent` home before opt-in. `AGINCTUS_ACCEPTANCE_WORKLOAD` can select an explicitly reviewed instance if the workload name differs. The helper is intended **only for the empty workspace smoke** and does not yet stage a coding fixture. Cleanup failures require manual investigation; do not forcibly remove unexpected content.
 
 Before mutating the pilot, perform read-only checks:
 
 ```sh
-nix develop -c incus exec aginctus-dev -- runuser -u agent -- python3 --version
+nix develop -c incus exec aginctus-dev -- runuser -u agent -- /bin/sh -c 'command -v stat && command -v find && command -v mkdir && command -v chmod && command -v rm && command -v rmdir'
 nix develop -c incus exec aginctus-dev -- runuser -u agent -- test -d /home/agent
 nix develop -c incus exec aginctus-herdr -- herdr --machine aginctus-dev workspace list
 ```
@@ -96,3 +96,5 @@ nix develop -c python3 scripts/acceptance/herdr-smoke.py
 ```
 
 Do not run this if there are previously unreviewed failed runs with the same IDs. Inspect newly created resources after each failure. This still does not verify actual agent lifecycle.
+
+Pilot 2026-10-17: `python3` was missing inside `aginctus-dev`; the initial opt-in smoke failed without establishing a remote lifecycle result. The helper now uses a fixed POSIX shell program. Repeat guest prerequisite and deterministic checks before attempting the smoke again.
