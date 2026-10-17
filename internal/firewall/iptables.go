@@ -25,6 +25,9 @@ func Render(policy *Policy) (string, error) {
 		subnet == nil || !subnet.Contains(ip) || err != nil {
 		return "", fmt.Errorf("invalid owned-bridge firewall policy")
 	}
+	// Our jump may be ahead of the host conntrack-invalid filter. Do not
+	// accept INVALID packets even when they match DNS/DHCP ports.
+	transaction += "-A " + Chain + " -m conntrack --ctstate INVALID -j RETURN\n"
 	for _, protocol := range []string{"udp", "tcp"} {
 		transaction += fmt.Sprintf("-A %s -i %s -s %s -d %s -p %s --dport 53 -j ACCEPT\n",
 			Chain, policy.Interface, policy.Subnet, policy.Address, protocol)
