@@ -85,6 +85,30 @@ the chosen account is authorized to perform autonomous inference, or whether
 native token refresh/streaming is safe. The explicit activation and live
 acceptance gates below still apply.
 
+### Read-only credential attachment audit
+
+Once the owned gateway Compose project and credential volume have been created,
+run the following on the trusted NixOS host using its local Incus socket:
+
+```sh
+aginctus gateway credential-storage audit
+```
+
+This **does not create a volume or attach a device**. It checks the actual
+Incus project ownership markers and isolated storage feature, the owned
+`litellm-1` instance and exact `/var/lib/aginctus/chatgpt` disk mapping,
+the custom volume's ownership/type and its Incus-reported `UsedBy` consumer
+list. A pass requires **exactly one** consumer: `litellm-1` in the
+Aginctus-managed Compose project, not a profile, PostgreSQL, another instance
+or another project. Missing objects and ambiguous metadata fail closed.
+
+The audit can inspect a **stopped** guest. It neither opens the volume's files
+nor logs credentials; it cannot prove `auth.json` permissions, LiteLLM
+process/workers, crash-safe refresh, user consent, backend readiness or an
+authenticated inference response. Thus a pass is **not** permission to enable
+`CHATGPT_TOKEN_DIR` or a `chatgpt/` model. Guest file preparation is #217;
+the independent gateway database and firewall work remains under #219/#220.
+
 ### Activation blockers verified against pinned LiteLLM v1.103.0
 
 The upstream `litellm/llms/chatgpt/authenticator.py` implementation directly rewrites `auth.json` via `open(..., "w")`, does not implement interprocess locking or atomic token replacement, and can trigger device-code login as a side effect of model resolution. It also embeds some upstream error details in exception messages. Consequently **do not enable `CHATGPT_TOKEN_DIR`, configure an active `chatgpt/` route, or run live OAuth yet**, even after #217 prepares a private file. A later, explicitly reviewed activation must enforce one refresh owner, safe persistence, token-safe errors, and a controlled authorization boundary, ideally through a confirmed compatible upstream release rather than a duplicate OAuth implementation.
