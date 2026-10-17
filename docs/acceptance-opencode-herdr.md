@@ -98,3 +98,17 @@ nix develop -c python3 scripts/acceptance/herdr-smoke.py
 Do not run this if there are previously unreviewed failed runs with the same IDs. Inspect newly created resources after each failure. This still does not verify actual agent lifecycle.
 
 Pilot 2026-10-17: `python3` was missing inside `aginctus-dev`; the initial opt-in smoke failed without establishing a remote lifecycle result. The helper now uses a fixed POSIX shell program. Repeat guest prerequisite and deterministic checks before attempting the smoke again.
+
+## Opt-in real agent lifecycle (separate from workspace smoke)
+
+After the workspace-only smoke has passed, run a further pilot test **only if OpenCode runtime readiness has been independently verified**. The following starts a real OpenCode agent in each newly owned disposable pane, checks Herdr's agent inspection API, attempts an interrupt, and closes only the recorded workspace:
+
+```sh
+AGINCTUS_ACCEPTANCE_HERDR_SMOKE=I_UNDERSTAND \
+AGINCTUS_ACCEPTANCE_HERDR_AGENT_SMOKE=I_UNDERSTAND \
+AGINCTUS_ACCEPTANCE_HERDR_MACHINE=aginctus-dev \
+AGINCTUS_ACCEPTANCE_HERDR_SMOKE_ROOT=/home/agent/aginctus-acceptance \
+nix develop -c python3 scripts/acceptance/herdr-smoke.py
+```
+
+Adding `AGINCTUS_ACCEPTANCE_HERDR_AGENT_PROMPT=I_UNDERSTAND` additionally sends a minimal no-file-change prompt and runs a bounded wait. **Do not opt into prompting until the gateway workload key, model selection, and private inference endpoint are verified**; agent readiness alone is not proof of inference. This agent test is still unvalidated against the pilot. The non-root guest cleanup refuses unexpected files, so if OpenCode writes persistent files under the disposable cwd, a failed cleanup should be inspected manually. Neither the test nor the operator should remove unrelated resources, including `w1`.
