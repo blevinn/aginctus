@@ -40,6 +40,7 @@ def main():
         "model": "mock-alias",
         "key": key,
     })
+    helper = "/run/current-system/sw/bin/aginctus-opencode-gateway-provision"
     try:
         # No profiles and no network device: cannot contact a model provider.
         incus("init", opts.image, name, "--project", project,
@@ -47,7 +48,7 @@ def main():
         created = True
         incus("start", name, "--project", project)
         incus("exec", name, "--project", project, "--",
-              "aginctus-opencode-gateway-provision", input_data=payload)
+              helper, input_data=payload)
 
         # No credential value is read back or displayed. The shell script has
         # fixed text, contains no secrets, and checks metadata and safe config.
@@ -66,7 +67,7 @@ grep -Fq '"protocol": "responses"' "$dir/gateway.json"
 grep -Fq '"endpoint": "http://10.42.40.12:4000/v1"' "$dir/gateway.json"
 '''
         incus("exec", name, "--project", project, "--",
-              "sh", "-c", verification)
+              "/bin/sh", "-c", verification)
 
         # Verify invalid payload cannot replace a successfully installed key.
         bad_payload = json.dumps({
@@ -76,12 +77,12 @@ grep -Fq '"endpoint": "http://10.42.40.12:4000/v1"' "$dir/gateway.json"
         })
         bad = subprocess.run(
             ["incus", "exec", name, "--project", project, "--",
-             "aginctus-opencode-gateway-provision"],
+             helper],
             input=bad_payload, text=True, capture_output=True, timeout=120,
         )
         if bad.returncode == 0:
             raise RuntimeError("guest accepted invalid model")
-        incus("exec", name, "--project", project, "--", "sh", "-c", verification)
+        incus("exec", name, "--project", project, "--", "/bin/sh", "-c", verification)
         print("PASS: disposable offline Incus guest accepted stdin provisioning, "
               "enforced private files, and rejected invalid input")
     finally:
