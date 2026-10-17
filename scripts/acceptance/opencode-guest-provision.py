@@ -50,7 +50,7 @@ def main():
         # Probe the imported image *before* passing even a disposable key.
         # Use a fixed, nonsecret script; never echo file contents.
         probe = """set -eu
-printf 'PID1='; cat /proc/1/comm
+if IFS= read -r pid1 < /proc/1/comm; then printf 'PID1=%s\\n' "$pid1"; else printf 'PID1=unavailable\\n'; fi
 for path in /run/current-system/sw/bin/aginctus-opencode-gateway-provision /nix/var/nix/profiles/system/sw/bin/aginctus-opencode-gateway-provision /run/current-system /nix/var/nix/profiles/system /etc/os-release /etc/systemd/system /sbin/init; do
   if [ -e "$path" ]; then printf 'EXISTS %s\\n' "$path"; else printf 'MISSING %s\\n' "$path"; fi
 done
