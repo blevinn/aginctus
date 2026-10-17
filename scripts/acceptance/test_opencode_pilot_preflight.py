@@ -60,7 +60,7 @@ class PreflightTests(unittest.TestCase):
     def test_readonly_command_failures_are_redacted(self):
         import subprocess
         with patch.object(module.subprocess, "run", side_effect=subprocess.CalledProcessError(1, ["incus"])):
-            with self.assertRaisesRegex(RuntimeError, "read-only command failed"):
+            with self.assertRaisesRegex(RuntimeError, "read-only query failed"):
                 module.run("incus", "query", "test")
 
 if __name__ == "__main__":
