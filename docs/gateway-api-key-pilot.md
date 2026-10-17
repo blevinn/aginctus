@@ -9,8 +9,9 @@ The pinned LiteLLM version is v1.103.0: confirm the actual pilot's
 
 1. On the pilot, confirm PostgreSQL, guest DNS, LiteLLM application readiness
    and gateway-only egress per docs/firewall-pilot-validation.md.
-   LiteLLM was last observed **Stopped**. Do not run this registrar before
-   it is running and application-ready; never use gateway apply as a repair.
+   On the refreshed pilot, both guests were Running and LiteLLM
+   `/health/liveliness` and `/health/readiness` returned HTTP 200 on
+   2026-10-17. Reconfirm before live use; never use gateway apply as a repair.
 2. Select an explicit provider/model that the operator is authorized to call
    with an independently obtained API key (not ChatGPT subscription OAuth).
    Confirm the chosen upstream supports Responses when needed for OpenCode.
@@ -80,11 +81,99 @@ that the stream originated from an upstream provider.
 Herdr/OpenCode end-to-end acceptance. This registrar does not touch native
 ChatGPT OAuth, its token volume, or the other sessions' branches.
 
+## OpenCode Go pilot: native Responses endpoint
+
+The operator selected **OpenCode Go** for #122 (2026-10-17), rather than a
+direct OpenAI provider account. The canonical
+[OpenCode Go documentation](https://opencode.ai/v2/docs/console/go/)
+publishes native Responses at
+`https://opencode.ai/inference/go/openai/v1/responses`
+for `gpt-6-luna`, `gpt-5.6-luna`, `grok-4.7` and the supported
+Muse Spark contributor models. This registrar now has a **fixed**
+`--provider opencode-go` route for precisely those Responses-capable
+model identifiers. The value stored as `litellm_params.api_base` is
+`https://opencode.ai/inference/go/openai/v1`; the model stored as
+`litellm_params.model` has the LiteLLM `openai/` provider prefix.
+Other OpenCode Go models use different protocols and are rejected in
+this native Responses-only pilot path. There is no arbitrary upstream
+URL parameter or provider hostname override.
+
+The default provider is still `openai`. That branch retains the original
+behavior and does not add an API base to its model definition.
+
+**Preferred initial pilot:** registered alias `aginctus-go-pilot`
+maps to LiteLLM model `openai/gpt-6-luna`. This is the upstream
+model ID `gpt-6-luna`, **not** the OpenCode UI model selector
+`opencode-go/gpt-6-luna` (the latter is a client-side provider/model
+identifier). The provider model list can change; verify in the
+OpenCode Console before mutation.
+
+A **non-network preview** against the previously observed private
+gateway IPv4 (rediscover it before live use):
+
+```sh
+nix develop -c python3 scripts/gateway/register-openai-model.py \
+  --endpoint http://10.144.44.70:4000 \
+  --provider opencode-go \
+  --alias aginctus-go-pilot \
+  --source openai/gpt-6-luna
+```
+
+Only after the user has an authorized OpenCode Go subscription and API
+key, confirmed the selected model and account entitlements, and approved
+this specific LiteLLM model-registry mutation:
+
+```sh
+# The key is an already populated owner-only 0600 regular file,
+# outside Git, the Nix store, and shell history.
+nix develop -c python3 scripts/gateway/register-openai-model.py \
+  --endpoint http://10.144.44.70:4000 \
+  --provider opencode-go \
+  --alias aginctus-go-pilot \
+  --source openai/gpt-6-luna \
+  --upstream-key-file /absolute/private/opencode-go.key \
+  --apply
+```
+
+The new route never calls the upstream on dry-run or registration.
+Successful registry lookup proves *only* that LiteLLM stored the alias.
+
+### Required live Go compatibility gate — before claiming #122 complete
+
+OpenCode Go states it is designed for coding-agent traffic and that
+clients should send a real identifying `User-Agent` and a **stable**
+`x-opencode-session` value for each conversation. OpenCode warns about
+proxy/client session-header omissions. LiteLLM may recompose upstream
+requests and headers; **neither the registrar nor its tests prove that
+the pinned v1.103.0 upstream request preserves those headers**. Do not
+spoof OpenCode's identity or silently mint a new session ID per request.
+The actual model call requires operator-controlled inspection of safe
+gateway-side header **presence and continuity** (never Authorization,
+provider keys, or prompt bodies), along with provider-side request
+confirmation. A missing session header is a compatibility problem for
+a follow-on slice, not permission to bypass the proxy or claim
+successful acceptance.
+
+For the real test, issue a temporary LiteLLM alias-scoped virtual key
+using `docs/gateway-workload-key-pilot.md`, then use
+`docs/gateway-inference-smoke.md` with this real alias. The smoke
+utility currently sends a single challenge request and does **not**
+independently prove the Go session-header contract or ordinary coding
+traffic. Follow-up #123 must validate true OpenCode session identity
+end-to-end. Since the Go subscription has provider-managed usage
+limits, do not assume LiteLLM's internal $1 virtual-key budget
+accurately models provider credits unless cost accounting has been
+confirmed. Keep the selected account's own usage controls in place.
+
+No native ChatGPT OAuth, added network permissions, gateway restart,
+public listener, Go subscription checkout or billable inference
+belongs to this opt-in model-registration PR.
+
 ## Full validation
 
 ~~~sh
 git fetch origin
-git switch feat/122-api-key-model-registration
+git switch feat/122-opencode-go-registration
 git pull --ff-only
 nix develop -c python3 -m unittest discover \
   -s scripts/gateway -p 'test_register_openai_model.py' -v
