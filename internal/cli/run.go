@@ -359,6 +359,7 @@ func printNetworkUsage(w io.Writer) {
 
 var ensureCredentialStorage = statevolume.EnsureGatewayCredentialsOnHost
 var attachGatewayCredentials = gateway.AttachCredentialVolume
+var prepareGatewayCredentials = gateway.PrepareCredentialStorage
 
 func runGateway(
 	ctx context.Context,
@@ -367,7 +368,7 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "attach" {
+	if len(args) == 2 && args[0] == "credential-storage" && (args[1] == "attach" || args[1] == "prepare") {
 		id, err := effective.String("gateway.id")
 		if err != nil {
 			fmt.Fprintf(stderr, "gateway id: %v\n", err)
@@ -384,11 +385,19 @@ func runGateway(
 			return 1
 		}
 		spec := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
-		if err := attachGatewayCredentials(ctx, spec); err != nil {
-			fmt.Fprintf(stderr, "credential attachment: %v\n", err)
+		if args[1] == "attach" {
+			if err := attachGatewayCredentials(ctx, spec); err != nil {
+				fmt.Fprintf(stderr, "credential attachment: %v\n", err)
+				return 1
+			}
+			fmt.Fprintf(stdout, "private credential volume attached exclusively to LiteLLM in Compose project %q (OAuth not activated)\n", project)
+			return 0
+		}
+		if err := prepareGatewayCredentials(ctx, spec); err != nil {
+			fmt.Fprintf(stderr, "credential preparation: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "private credential volume attached exclusively to LiteLLM in Compose project %q (OAuth not activated)\n", project)
+		fmt.Fprintf(stdout, "LiteLLM ChatGPT credential directory prepared privately in Compose project %q (token directory not activated; OAuth not initiated)\n", project)
 		return 0
 	}
 
@@ -600,6 +609,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
+	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage prepare")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider chatgpt register [--alias=NAME] [--dry-run]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider list")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider ALIAS show")

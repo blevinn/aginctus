@@ -18,13 +18,15 @@ aginctus gateway credential-storage attach
 
 Requires an existing owned `litellm-1` guest under the configured Compose project, matching `user.aginctus.managed=true`, `user.aginctus.resource=compose-instance` and `user.aginctus.deployment=<project>`. The private volume is created in that project if missing, ownership-checked, and required to have no consumers except the intended LiteLLM instance. The only added disk device is `aginctus_chatgpt_credentials` at `/var/lib/aginctus/chatgpt`. Disk mutation is concurrency-protected with the instance ETag. Repeating the command is idempotent; collisions or foreign ownership fail closed.
 
-This command **does not** change the service environment, set `CHATGPT_TOKEN_DIR`, import tokens, run a login, or activate an inference route. Before using the mount for authentication, a separate increment must prove the guest's runtime user can write to the mounted directory, adjust private ownership safely, and configure LiteLLM to point its native authenticator there. Do not manually copy host OAuth state or perform device-code authentication before those preconditions are met.
+This command **does not** change the service environment, set `CHATGPT_TOKEN_DIR`, import tokens, run a login, or activate an inference route. Before using the mount for authentication, use the explicit private-directory preparation described below; a later increment will configure LiteLLM to point its native authenticator there. Do not manually copy host OAuth state or perform device-code authentication before those preconditions are met.
 
 ## Read-only host preflight
 
 ```sh
 incus project show aginctus-gateway
-incus --project aginctus-gateway config show litellm-1 --expanded
+incus --project aginctus-gateway config device show litellm-1
+incus --project aginctus-gateway config get litellm-1 user.aginctus.resource
+incus --project aginctus-gateway config get litellm-1 user.aginctus.deployment
 incus --project default storage volume show default aginctus-gateway-local-credentials
 ```
 
@@ -34,8 +36,25 @@ The project must show `features.storage.volumes: "true"`. Absence of `aginctus-g
 
 ```sh
 nix develop -c go run ./cmd/aginctus gateway credential-storage attach
-incus --project aginctus-gateway config show litellm-1 --expanded
+incus --project aginctus-gateway config device show litellm-1
+incus --project aginctus-gateway config get litellm-1 user.aginctus.resource
+incus --project aginctus-gateway config get litellm-1 user.aginctus.deployment
 incus --project aginctus-gateway storage volume show default aginctus-gateway-local-credentials
 ```
 
-Expected: only `litellm-1` references the project-local volume, not PostgreSQL or any workload. **Do not log in or store credentials yet.** Avoid `incus-compose down --volumes` for managed credential storage. The next increment will test actual writable directory ownership and safely enable `CHATGPT_TOKEN_DIR`.
+Expected: only `litellm-1` references the project-local volume, not PostgreSQL or any workload. **Do not log in or store credentials yet.** Avoid `incus-compose down --volumes` for managed credential storage. The next increment will activate the native `CHATGPT_TOKEN_DIR` after private-directory preparation.
+
+
+## Prepare native ChatGPT credential storage (explicit guest mutation)
+
+LiteLLM v1.103.0 creates native `auth.json` using `open(path, "w")` without setting explicit file permissions. Aginctus therefore needs a mode-0700 directory and an existing mode-0600 `auth.json` **before first login**. An empty `{}` record is precreated only when the file does not exist; on repeat, the command checks file mode/ownership without reading or changing contents.
+
+Run after the exclusive attachment has been validated:
+
+```sh
+nix develop -c go run ./cmd/aginctus gateway credential-storage prepare
+```
+
+This checks the Aginctus-owned Compose project and credential volume, verifies that LiteLLM alone uses it, confirms the pinned OCI runtime UID/GID are root, tightens the volume root mode, checks the existing auth file if present, and checks guest write access with an automatically removed empty test file. All guest output is discarded; errors never echo token material. It does not set `CHATGPT_TOKEN_DIR`, restart the gateway, initiate OAuth, or read existing tokens.
+
+Do not copy credentials, manually alter Incus devices, or inspect `auth.json`. Use `incus config device show` and selected `incus config get` keys rather than `incus config show --expanded`, which exposes gateway secrets in environment values. The following increment will activate `CHATGPT_TOKEN_DIR=/var/lib/aginctus/chatgpt` with a controlled LiteLLM restart after successful preparation.
