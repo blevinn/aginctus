@@ -156,8 +156,7 @@ NIX
 # disposable NixOS VM before the existing native-nftables Incus lifecycle test.
 # The iptables test intentionally uses a fixture; NixOS Incus requires nftables.
 echo 'Building and executing the disposable NixOS iptables firewall check...'
-nix build '.#checks.x86_64-linux.firewall-iptables-integration' \\
-  --no-link --print-build-logs --show-trace "$@"
+nix build '.#checks.x86_64-linux.firewall-iptables-integration' --no-link --print-build-logs --show-trace "$@"
 echo 'PASS: iptables firewall integration check completed.'
 
 export AGINCTUS_VM_REPO="$repo"
