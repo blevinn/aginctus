@@ -243,6 +243,12 @@ in
       };
     };
 
+    firewall.enable = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Reconcile ownership-scoped Incus DNS/DHCP INPUT exceptions (iptables-nft backend).";
+    };
+
     reconcile = {
       enable = mkOption {
         type = types.bool;
@@ -259,6 +265,10 @@ in
 
   config = mkIf cfg.enable {
     assertions = [
+      {
+        assertion = !cfg.firewall.enable || (config.networking.firewall.enable && !config.networking.nftables.enable);
+        message = "services.aginctus.firewall requires networking.firewall.enable=true and networking.nftables.enable=false; native nftables is unsupported in v0.1.";
+      }
       {
         assertion = configuredSecretPaths == [ ];
         message = "services.aginctus.settings cannot contain runtime gateway secrets: ${
@@ -279,9 +289,53 @@ in
       }
     ];
 
+    # Attach inside NixOS's nixos-fw decision chain ahead of its final
+    # reject, not in builtin INPUT where it could bypass host policies.
+    networking.firewall.extraCommands = lib.mkIf cfg.firewall.enable ''
+      iptables -N AGINCTUS_INPUT 2>/dev/null || iptables -F AGINCTUS_INPUT
+      iptables -C nixos-fw -j AGINCTUS_INPUT 2>/dev/null || iptables -I nixos-fw 1 -j AGINCTUS_INPUT
+      # On Incus errors the empty chain must remain fail-closed.
+      ${aginctusCommand} --configuration-file ${configFile} network firewall reconcile || true
+    '';
+    networking.firewall.extraPackages = lib.mkIf cfg.firewall.enable [ pkgs.nftables ];
+    networking.firewall.extraStopCommands = lib.mkIf cfg.firewall.enable ''
+      iptables -D nixos-fw -j AGINCTUS_INPUT 2>/dev/null || true
+      iptables -F AGINCTUS_INPUT 2>/dev/null || true
+      iptables -X AGINCTUS_INPUT 2>/dev/null || true
+    '';
+
     environment.etc."aginctus/config.json".source = configFile;
 
+    systemd.timers.aginctus-firewall-reconcile = lib.mkIf cfg.firewall.enable {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "15s";
+        OnUnitActiveSec = "30s";
+        Unit = "aginctus-firewall-reconcile.service";
+      };
+    };
+
     systemd.services =
+      lib.optionalAttrs cfg.firewall.enable {
+        aginctus-firewall-reconcile = {
+          description = "Reconcile Aginctus-owned Incus guest-to-host DNS/DHCP policy";
+          wantedBy = [ "multi-user.target" ];
+          after = [ "incus.service" "firewall.service" ];
+          wants = [ "incus.service" "firewall.service" ];
+          path = [ pkgs.iptables pkgs.nftables pkgs.incus ];
+          serviceConfig = {
+            Type = "oneshot";
+            User = "root";
+            NoNewPrivileges = true;
+            PrivateTmp = true;
+            ProtectHome = true;
+            CapabilityBoundingSet = [ "CAP_NET_ADMIN" ];
+            AmbientCapabilities = [ "CAP_NET_ADMIN" ];
+            ExecStart = "${aginctusCommand} --configuration-file ${configFile} network firewall reconcile";
+          };
+        };
+      }
+      //
       lib.optionalAttrs cfg.images.herdrClient.enable {
         aginctus-image-herdr-client = imageUpdateService {
           alias = cfg.images.herdrClient.alias;
