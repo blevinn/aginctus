@@ -393,6 +393,16 @@ func runGateway(
 		return 0
 	}
 
+	if len(args) == 3 && args[0] == "model" && args[2] == "render" {
+		definition, err := renderRegisteredChatGPTModel(args[1])
+		if err != nil {
+			fmt.Fprintf(stderr, "render registered ChatGPT model: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(definition))
+		fmt.Fprintln(stderr, "model definition rendered for review only; gateway routing and OAuth remain inactive")
+		return 0
+	}
 	if len(args) > 0 && args[0] == "model" && (len(args) == 2 && args[1] == "list" || len(args) == 3 && args[2] == "show") {
 		path, err := modelregistry.DefaultPath()
 		if err != nil {
@@ -676,6 +686,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME register [--provider=ALIAS] [--source=chatgpt/MODEL] [--dry-run]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model list")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME show")
+	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME render  (read-only, not activated)")
 }
 
 func runHerdr(
