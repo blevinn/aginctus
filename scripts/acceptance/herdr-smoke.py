@@ -19,6 +19,9 @@ def call(*args):
     except (OSError, subprocess.SubprocessError):
         raise RuntimeError("read-only Herdr check failed") from None
 
+def python_helper(path):
+    return bool(path) and Path(path).is_file()
+
 def main():
     if os.environ.get("AGINCTUS_ACCEPTANCE_HERDR_SMOKE") != "I_UNDERSTAND":
         raise RuntimeError("explicit Herdr smoke opt-in is required")
@@ -55,10 +58,10 @@ def main():
             # No implicit fabricated staging signal: the operator-supplied helper
             # must verify or stage this exact identity and path first.
             helper = env.get("AGINCTUS_ACCEPTANCE_HERDR_STAGE", str(Path(__file__).with_name("guest-owned.py")))
-            if not helper or not Path(helper).is_file():
+            if not python_helper(helper):
                 raise RuntimeError("reviewed per-run guest staging helper required")
             cleanup = env.get("AGINCTUS_ACCEPTANCE_HERDR_CLEANUP", str(Path(__file__).with_name("guest-owned.py")))
-            if not cleanup or not Path(cleanup).is_file():
+            if not python_helper(cleanup):
                 raise RuntimeError("reviewed per-run guest cleanup helper required")
             try:
                 step = "stage"
