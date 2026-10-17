@@ -81,35 +81,98 @@ func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, 
 	return 0
 }
 
-// reconcileFirewalld changes only a plain Aginctus chain and a jump *inside*
-// firewalld's authoritative INPUT chain. No new base chain is created.
+// reconcileFirewalld uses firewalld's own D-Bus management client. Its
+// nftables table has the owner flag: CAP_NET_ADMIN cannot safely modify it
+// through nft. The declarative zone has a DROP target and no permanent grants.
 func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config) int {
-	input, err := firewallCommand(ctx, "", "nft", "-a", "list", "chain", "inet", "firewalld", "filter_INPUT")
-	if err != nil || !strings.Contains(input, "hook input") || !strings.Contains(input, "reject") {
-		fmt.Fprintln(stderr, "unsupported firewalld layout: effective filter_INPUT/reject not verified")
+	run := func(args ...string) (string, error) {
+		output, err := firewallCommand(ctx, "", "firewall-cmd", args...)
+		return strings.TrimSpace(output), err
+	}
+	fail := func(message string) int {
+		fmt.Fprintln(stderr, message)
 		return 1
 	}
-	_, chainErr := firewallCommand(ctx, "", "nft", "list", "chain", "inet", "firewalld", firewall.FirewalldChain)
-	hasChain := chainErr == nil
-	hasHook := strings.Contains(input, "jump "+firewall.FirewalldChain)
-	p, discoveryErr := deriveFirewallPolicy(ctx, cfg)
-	var authorized *firewall.Policy
-	if discoveryErr == nil {
-		authorized = &p
+
+	zones, err := run("--get-zones")
+	if err != nil || !containsWord(zones, firewall.FirewalldZone) {
+		return fail("Aginctus-managed firewalld zone is missing; activate the NixOS module")
 	}
-	transaction, err := firewall.RenderFirewalld(authorized, hasChain, hasHook)
+	zone := "--zone=" + firewall.FirewalldZone
+	target, err := run(zone, "--get-target")
+	if err != nil || target != "DROP" {
+		return fail("Aginctus firewalld zone must have the DROP target")
+	}
+	// We own this dedicated zone. Refuse unexpected runtime configuration
+	// instead of accidentally extending somebody else's host exceptions.
+	for _, flag := range []string{"--list-services", "--list-ports", "--list-sources", "--list-protocols", "--list-forward-ports"} {
+		output, err := run(zone, flag)
+		if err != nil || output != "" {
+			return fail("Aginctus firewalld zone contains unexpected permissions")
+		}
+	}
+	current, err := run(zone, "--list-rich-rules")
 	if err != nil {
-		fmt.Fprintln(stderr, "firewalld hook ownership/state invalid")
-		return 1
+		return fail("cannot inspect Aginctus firewalld rich rules")
 	}
-	if _, err := firewallCommand(ctx, transaction, "nft", "-f", "-"); err != nil {
-		fmt.Fprintln(stderr, "atomic firewalld-owned INPUT reconciliation failed")
-		return 1
+	// Remove previous exceptions *before* evaluating the fresh bridge, so
+	// deleting or disowning the network closes existing permissions.
+	for _, rule := range strings.Split(current, "\n") {
+		if rule == "" {
+			continue
+		}
+		if _, err := run(zone, "--remove-rich-rule="+rule); err != nil {
+			return fail("cannot clear stale Aginctus firewalld exceptions")
+		}
 	}
+
+	owned, discoveryErr := deriveFirewallPolicy(ctx, cfg)
 	if discoveryErr != nil {
-		fmt.Fprintf(stderr, "Aginctus firewalld DNS/DHCP exceptions cleared (fail closed): %v\n", discoveryErr)
+		fmt.Fprintf(stderr, "Aginctus firewalld exceptions cleared (fail closed): %v\n", discoveryErr)
 		return 1
 	}
-	fmt.Fprintf(stdout, "firewalld INPUT policy reconciled for verified bridge %q (DNS/DHCP only)\n", p.Interface)
+	rules, err := firewall.FirewalldRules(&owned)
+	if err != nil {
+		return fail("invalid owned-bridge firewalld policy")
+	}
+	interfaces, err := run(zone, "--list-interfaces")
+	if err != nil {
+		return fail("cannot inspect Aginctus firewalld interface bindings")
+	}
+	for _, iface := range strings.Fields(interfaces) {
+		if iface != owned.Interface {
+			return fail("Aginctus firewalld zone binds an unexpected interface; exceptions remain cleared")
+		}
+	}
+	// Add the narrow permissions before binding the verified bridge. The
+	// zone is dedicated to Aginctus; no non-owned ingress is admitted.
+	for _, rule := range rules {
+		if _, err := run(zone, "--add-rich-rule="+rule); err != nil {
+			// Best-effort rollback of any partial additions. The DROP zone
+			// remains in effect even if the D-Bus backend is unavailable.
+			for _, prior := range rules {
+				_, _ = run(zone, "--remove-rich-rule="+prior)
+			}
+			return fail("cannot install Aginctus firewalld DNS/DHCP permissions")
+		}
+	}
+	if !containsWord(interfaces, owned.Interface) {
+		if _, err := run(zone, "--add-interface="+owned.Interface); err != nil {
+			for _, rule := range rules {
+				_, _ = run(zone, "--remove-rich-rule="+rule)
+			}
+			return fail("cannot bind verified Incus bridge to Aginctus firewalld zone")
+		}
+	}
+	fmt.Fprintf(stdout, "firewalld zone reconciled for verified bridge %q (DNS/DHCP only)\n", owned.Interface)
 	return 0
+}
+
+func containsWord(words, target string) bool {
+	for _, word := range strings.Fields(words) {
+		if word == target {
+			return true
+		}
+	}
+	return false
 }
