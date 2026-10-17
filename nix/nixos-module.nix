@@ -277,9 +277,7 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion =
-          !cfg.firewall.enable
-          || validFirewalldZone;
+        assertion = !cfg.firewall.enable || validFirewalldZone;
         message = "services.aginctus.settings.firewall.zone must begin with aginctus-, use only lowercase letters, digits and hyphens, and be no more than 17 characters long.";
       }
       {
@@ -287,7 +285,9 @@ in
           !cfg.firewall.enable
           || (
             config.networking.firewall.enable
-            && (if firewalldBackend then config.networking.nftables.enable else !config.networking.nftables.enable)
+            && (
+              if firewalldBackend then config.networking.nftables.enable else !config.networking.nftables.enable
+            )
           );
         message = "services.aginctus.firewall requires enabled host filtering with nftables for firewalld or iptables-nft for the non-firewalld NixOS backend.";
       }
@@ -333,15 +333,17 @@ in
     # Only this empty, DROP-by-default zone is permanent. Verified bridge
     # bindings and narrow exceptions are installed at runtime by the service;
     # firewalld reloads remove them until the next reconciliation.
-    environment.etc."firewalld/zones/${cfg.settings.firewall.zone}.xml" = lib.mkIf (cfg.firewall.enable && firewalldBackend && validFirewalldZone) {
-      text = ''
-        <?xml version="1.0" encoding="utf-8"?>
-        <zone target="DROP">
-          <short>Aginctus DNS/DHCP</short>
-          <description>Runtime-only permissions for one Incus-owned management bridge.</description>
-        </zone>
-      '';
-    };
+    environment.etc."firewalld/zones/${cfg.settings.firewall.zone}.xml" =
+      lib.mkIf (cfg.firewall.enable && firewalldBackend && validFirewalldZone)
+        {
+          text = ''
+            <?xml version="1.0" encoding="utf-8"?>
+            <zone target="DROP">
+              <short>Aginctus DNS/DHCP</short>
+              <description>Runtime-only permissions for one Incus-owned management bridge.</description>
+            </zone>
+          '';
+        };
 
     environment.etc."aginctus/config.json".source = configFile;
 
@@ -373,7 +375,8 @@ in
             pkgs.iptables
             pkgs.nftables
             pkgs.incus
-          ] ++ lib.optional firewalldBackend pkgs.firewalld;
+          ]
+          ++ lib.optional firewalldBackend pkgs.firewalld;
           serviceConfig = {
             Type = "oneshot";
             User = "root";
@@ -400,7 +403,9 @@ in
                 exit 1
               ''}"
             );
-            ExecStart = "${aginctusCommand} --configuration-file ${configFile} --config firewall.backend=${if firewalldBackend then "firewalld" else "iptables-nft"} network firewall reconcile";
+            ExecStart = "${aginctusCommand} --configuration-file ${configFile} --config firewall.backend=${
+              if firewalldBackend then "firewalld" else "iptables-nft"
+            } network firewall reconcile";
           };
         };
       }

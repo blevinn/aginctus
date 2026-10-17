@@ -57,17 +57,20 @@ let
     services.firewalld.enable = true;
     services.aginctus.settings.firewall.zone = "aginctus-vm";
   };
-  invalidFirewalldZones = map (
-    zone:
-    evaluate {
-      services.aginctus.settings.firewall.zone = zone;
-    }
-  ) [
-    "trusted"
-    "aginctus-TooLong"
-    "aginctus-abcdefghijkl"
-    "../danger"
-  ];
+  invalidFirewalldZones =
+    map
+      (
+        zone:
+        evaluate {
+          services.aginctus.settings.firewall.zone = zone;
+        }
+      )
+      [
+        "trusted"
+        "aginctus-TooLong"
+        "aginctus-abcdefghijkl"
+        "../danger"
+      ];
   withReconcile = evaluate {
     services.aginctus.reconcile = {
       enable = true;
@@ -108,7 +111,8 @@ assert settings.incus.management.network.name == "integration-mgmt";
 assert settings.firewall.zone == "aginctus-dns";
 assert builtins.hasAttr "firewalld/zones/aginctus-vm.xml" withCustomZone.environment.etc;
 assert builtins.all (
-  cfg: lib.any (item: lib.hasInfix "settings.firewall.zone" item.message) (failedAginctusAssertions cfg)
+  cfg:
+  lib.any (item: lib.hasInfix "settings.firewall.zone" item.message) (failedAginctusAssertions cfg)
 ) invalidFirewalldZones;
 assert defaultPackage == self.packages.${system}.aginctus;
 assert builtins.length secretAssertions == 1;
