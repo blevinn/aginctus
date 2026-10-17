@@ -30,7 +30,7 @@ type gatewayDiscoveryInstance struct {
 	Status          string                       `json:"status"`
 	Config          map[string]string            `json:"config"`
 	ExpandedDevices map[string]map[string]string `json:"expanded_devices"`
-	State  struct {
+	State           struct {
 		Network map[string]struct {
 			Addresses []struct {
 				Family  string `json:"family"`
@@ -95,6 +95,7 @@ func discoverGatewayIPv4(data []byte, project, managementNetwork string) (string
 	}
 	return "", errors.New("LiteLLM management IPv4 unavailable")
 }
+
 func readWorkloadKey(path string) (string, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
