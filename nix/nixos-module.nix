@@ -267,7 +267,9 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion = !cfg.firewall.enable || (config.networking.firewall.enable && (firewalldBackend || !config.networking.nftables.enable));
+        assertion =
+          !cfg.firewall.enable
+          || (config.networking.firewall.enable && (firewalldBackend || !config.networking.nftables.enable));
         message = "services.aginctus.firewall requires enabled host filtering and supports firewalld-nft or NixOS iptables-nft, not NixOS native nftables alone.";
       }
       {
@@ -298,7 +300,9 @@ in
       # On Incus errors the empty chain must remain fail-closed.
       ${aginctusCommand} --configuration-file ${configFile} network firewall reconcile || true
     '';
-    networking.firewall.extraPackages = lib.mkIf (cfg.firewall.enable && !firewalldBackend) [ pkgs.nftables ];
+    networking.firewall.extraPackages = lib.mkIf (cfg.firewall.enable && !firewalldBackend) [
+      pkgs.nftables
+    ];
     networking.firewall.extraStopCommands = lib.mkIf (cfg.firewall.enable && !firewalldBackend) ''
       iptables -D nixos-fw -j AGINCTUS_INPUT 2>/dev/null || true
       iptables -F AGINCTUS_INPUT 2>/dev/null || true
@@ -321,9 +325,21 @@ in
         aginctus-firewall-reconcile = {
           description = "Reconcile Aginctus-owned Incus guest-to-host DNS/DHCP policy";
           wantedBy = [ "multi-user.target" ];
-          after = [ "incus.service" "firewall.service" ] ++ lib.optional firewalldBackend "firewalld.service";
-          wants = [ "incus.service" "firewall.service" ] ++ lib.optional firewalldBackend "firewalld.service";
-          path = [ pkgs.iptables pkgs.nftables pkgs.incus ];
+          after = [
+            "incus.service"
+            "firewall.service"
+          ]
+          ++ lib.optional firewalldBackend "firewalld.service";
+          wants = [
+            "incus.service"
+            "firewall.service"
+          ]
+          ++ lib.optional firewalldBackend "firewalld.service";
+          path = [
+            pkgs.iptables
+            pkgs.nftables
+            pkgs.incus
+          ];
           serviceConfig = {
             Type = "oneshot";
             User = "root";
@@ -336,8 +352,7 @@ in
           };
         };
       }
-      //
-      lib.optionalAttrs cfg.images.herdrClient.enable {
+      // lib.optionalAttrs cfg.images.herdrClient.enable {
         aginctus-image-herdr-client = imageUpdateService {
           alias = cfg.images.herdrClient.alias;
           source = cfg.images.herdrClient.source;
