@@ -74,7 +74,14 @@ nix flake check
 nix build .#opencode-workload --no-link
 ```
 
-The synthetic HTTP server asserts `POST /v1/responses`, a bearer key, model selection and a tool-call response. It uses a fake OpenCode executable to inspect the actual runtime environment; this does **not** establish that pinned OpenCode 1.15.10 or LiteLLM has been exercised.
+The unit tests use a fake OpenCode executable and a synthetic tool-call response to exercise launcher mechanics. Additionally, exercise the actual **flake-pinned** OpenCode binary (not the pilot guest) against a synthetic streaming SSE Responses server:
+
+```sh
+OPENCODE_PATH="$(nix build .#opencode-runtime --no-link --print-out-paths)/bin/opencode"
+nix shell nixpkgs#python3 --command python3 guest/opencode/test_real_runtime.py "$OPENCODE_PATH"
+```
+
+The separate integration test runs the actual pinned CLI via the launcher in an isolated temporary HOME, with a disposable loopback mock. It asserts an authenticated `POST /v1/responses`, the configured model, and terminal streamed text consumption; no external model or gateway is needed. This is an **operator validation step**, not a claim that it passed. The test does not yet prove real LiteLLM interoperability or model-driven filesystem tools (see #172).
 
 ## Final pilot-host validation (after #122, #172 and #220)
 
