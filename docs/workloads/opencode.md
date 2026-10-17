@@ -29,7 +29,7 @@ The `.#opencode-workload` flake target produces an Incus metadata tarball and sq
 Import or replace the local development image alias with:
 
 ```sh
-just opencode-workload-image-update
+just update image opencode-workload
 ```
 
 The image is imported as:
@@ -152,7 +152,7 @@ OpenCode image containing the provisioning helper:
 
 ```sh
 just build opencode-workload
-just opencode-workload-image-update
+just update image opencode-workload
 nix shell nixpkgs#python3 --command python3 \
   scripts/acceptance/opencode-guest-provision.py --pool default
 ```
