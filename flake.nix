@@ -314,6 +314,9 @@
           firewall-iptables-integration = import ./nix/firewall-iptables-test.nix {
             inherit self nixpkgs system;
           };
+          firewall-firewalld-integration = import ./nix/firewall-firewalld-test.nix {
+            inherit self nixpkgs system;
+          };
         }
       );
 
