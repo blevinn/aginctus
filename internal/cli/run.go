@@ -369,6 +369,9 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) >= 2 && args[0] == "responses" && args[1] == "verify" {
+		return verifyGatewayResponsesStream(args[2:], stdout, stderr)
+	}
 	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "audit" {
 		id, err := effective.String("gateway.id")
 		if err != nil {
@@ -713,6 +716,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway model list")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME show")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME render  (read-only, not activated)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway responses verify [--require-function-call] < stream.sse")
 }
 
 func runHerdr(
@@ -984,6 +988,7 @@ Commands:
   gateway validate  Validate the AI gateway deployment configuration
   gateway apply     Reconcile the AI gateway
   gateway status    Inspect gateway project and service state
+  gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
   gateway remove [--force] Remove gateway instances, preserving data volumes
   gateway render    Render the AI gateway Compose model
   gateway chatgpt model render MODEL  Render native LiteLLM Responses model registration
