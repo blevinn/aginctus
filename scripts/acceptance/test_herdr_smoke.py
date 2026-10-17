@@ -1,6 +1,8 @@
 import importlib.util
 import os
 import json
+import tempfile
+import os.path
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -10,6 +12,14 @@ smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
 
 class SmokeSafetyTests(unittest.TestCase):
+    def test_python_helper_need_not_be_executable(self):
+        with tempfile.TemporaryDirectory() as temp:
+            helper = Path(temp) / "helper.py"
+            helper.write_text("pass\\n")
+            helper.chmod(0o600)
+            self.assertTrue(smoke.python_helper(str(helper)))
+            self.assertFalse(smoke.python_helper(str(helper) + ".missing"))
+
     def test_opt_in_required_before_external_commands(self):
         with patch.dict(os.environ, {"AGINCTUS_ACCEPTANCE_HERDR_SMOKE": ""}), patch.object(smoke, "call") as call:
             with self.assertRaisesRegex(RuntimeError, "opt-in"):
