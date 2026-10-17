@@ -19,6 +19,11 @@ class ReadinessTests(unittest.TestCase):
             return CONFIG
         return "10.42.40.4 litellm.internal\n"
 
+    def test_phase_error_suppresses_subprocess_detail(self):
+        with self.assertRaisesRegex(RuntimeError, "readiness phase failed: credential metadata") as caught:
+            mod.stage("credential metadata", lambda: (_ for _ in ()).throw(RuntimeError("token secret")))
+        self.assertNotIn("secret", str(caught.exception))
+
     def test_valid_readonly_metadata(self):
         with patch.object(mod, "guest", side_effect=self.fake) as guest:
             self.assertEqual(mod.check(), "approved-model")
