@@ -61,8 +61,6 @@ func TestSelectFirewallBackendDuringRestart(t *testing.T) {
 	for _, tc := range []struct {
 		name, ruleset, requested, selected, wantError string
 	}{
-		{"explicit native ready", "table inet nixos-fw {", "nixos-nft", "nixos-nft", ""},
-		{"explicit native startup gap", "", "nixos-nft", "", "not ready"},
 		{"explicit firewalld ready", "table inet firewalld {", "firewalld", "firewalld", ""},
 		{"explicit firewalld startup gap", "table ip filter {", "firewalld", "", "not ready"},
 		{"explicit firewalld no tables", "", "firewalld", "", "not ready"},
@@ -72,7 +70,7 @@ func TestSelectFirewallBackendDuringRestart(t *testing.T) {
 		{"explicit iptables rejects native nftables", "table inet nixos-fw {", "iptables-nft", "", "conflicts"},
 		{"auto firewalld", "table inet firewalld {", "", "firewalld", ""},
 		{"auto iptables", "table ip filter {", "", "iptables-nft", ""},
-		{"auto native nftables", "table inet nixos-fw {", "", "nixos-nft", ""},
+		{"auto native nftables", "table inet nixos-fw {", "", "", "native nftables"},
 		{"unknown backend", "", "bypass", "", "unsupported"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

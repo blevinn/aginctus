@@ -124,7 +124,9 @@ func selectFirewallBackend(ruleset, requested string) (string, error) {
 			return "firewalld", nil
 		}
 		if nixosPresent {
-			return "nixos-nft", nil
+			// Systemd explicitly pins the native backend. Automatic selection
+			// must not authorize host mutation on an incidental table match.
+			return "", fmt.Errorf("NixOS native nftables backend requires an explicit backend selection")
 		}
 		return "iptables-nft", nil
 	default:

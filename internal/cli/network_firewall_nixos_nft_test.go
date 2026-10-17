@@ -85,3 +85,25 @@ func TestNativeNftMissingInputHookNeverMutates(t *testing.T){
         t.Fatalf("exit=%d",got)
     }
 }
+
+func TestNativeNftBackendRequiresExplicitSelection(t *testing.T) {
+	for _, tc := range []struct {
+		ruleset, requested, want, wantError string
+	}{
+		{"table inet nixos-fw {", "nixos-nft", "nixos-nft", ""},
+		{"", "nixos-nft", "", "not ready"},
+		{"table inet nixos-fw {", "", "", "explicit"},
+		{"table inet firewalld {", "nixos-nft", "", "not ready"},
+	} {
+		got, err := selectFirewallBackend(tc.ruleset, tc.requested)
+		if got != tc.want {
+			t.Errorf("got backend %q, want %q", got, tc.want)
+		}
+		if tc.wantError == "" && err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if tc.wantError != "" && (err == nil || !strings.Contains(err.Error(), tc.wantError)) {
+			t.Errorf("error %v does not mention %q", err, tc.wantError)
+		}
+	}
+}
