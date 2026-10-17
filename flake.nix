@@ -340,20 +340,23 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
+          herdrCli = herdr.packages.${system}.herdr;
         in
         {
           default = pkgs.mkShell {
-            packages = with pkgs; [
-              git
-              go
-              incus
-              jq
-              just
-              nixfmt
-              python3
-              shellcheck
-              shfmt
-            ];
+            packages =
+              (with pkgs; [
+                git
+                go
+                incus
+                jq
+                just
+                nixfmt
+                python3
+                shellcheck
+                shfmt
+              ])
+              ++ [ herdrCli ];
 
             shellHook = ''
               echo "Aginctus development shell"
