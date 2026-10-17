@@ -49,14 +49,14 @@ def main():
             helper = env.get("AGINCTUS_ACCEPTANCE_HERDR_STAGE", "")
             if not helper or not Path(helper).is_file() or not os.access(helper, os.X_OK):
                 raise RuntimeError("reviewed per-run guest staging helper required")
-            subprocess.run([helper, str(base), identity, guest], check=True, timeout=60,
-                           capture_output=True, text=True)
-            env["AGINCTUS_ACCEPTANCE_GUEST_STAGED"] = identity
             cleanup = env.get("AGINCTUS_ACCEPTANCE_HERDR_CLEANUP", "")
             if not cleanup or not Path(cleanup).is_file() or not os.access(cleanup, os.X_OK):
                 raise RuntimeError("reviewed per-run guest cleanup helper required")
             opened = False
             try:
+                subprocess.run([helper, str(base), identity, guest], check=True, timeout=60,
+                               capture_output=True, text=True)
+                env["AGINCTUS_ACCEPTANCE_GUEST_STAGED"] = identity
                 subprocess.run([sys.executable, str(fixture), "open", str(base), identity],
                                env=env, check=True, timeout=180, capture_output=True, text=True)
                 opened = True
