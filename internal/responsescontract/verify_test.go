@@ -34,7 +34,7 @@ func TestVerifyResponsesTerminalCompletionAndFunctionCall(t *testing.T) {
 func TestVerifyResponsesRejectsFailuresWithoutLeakingPayload(t *testing.T) {
 	failed := "event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\"}}\n\n"
 	incomplete := "event: response.incomplete\ndata: {\"type\":\"response.incomplete\",\"response\":{\"status\":\"incomplete\"}}\n\n"
-	invalidCall := strings.Replace(callDone, "\\"call_id\\":\\"call-1\\"", "\\"call_id\\":\\"\\"", 1)
+	invalidCall := strings.Replace(callDone, "call-1", "", 1)
 	leak := "SECRET_DO_NOT_PRINT"
 	cases := []struct {
 		name   string
