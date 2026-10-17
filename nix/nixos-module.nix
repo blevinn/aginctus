@@ -288,7 +288,10 @@ in
           || (
             config.networking.firewall.enable
             && (
-              if firewalldBackend || nativeNftBackend then config.networking.nftables.enable else !config.networking.nftables.enable
+              if firewalldBackend || nativeNftBackend then
+                config.networking.nftables.enable
+              else
+                !config.networking.nftables.enable
             )
           );
         message = "services.aginctus.firewall requires enabled host filtering with nftables for firewalld/NixOS-native or iptables-nft for the iptables backend.";
@@ -333,9 +336,11 @@ in
     # NixOS native nftables declares a normal, empty child chain within the
     # authoritative NixOS table and adds its call from input-allow. Never
     # create a separate accepting nftables input base chain.
-    networking.nftables.tables."nixos-fw".content = lib.mkIf (cfg.firewall.enable && nativeNftBackend) ''
-      chain aginctus_dns_input { }
-    '';
+    networking.nftables.tables."nixos-fw".content =
+      lib.mkIf (cfg.firewall.enable && nativeNftBackend)
+        ''
+          chain aginctus_dns_input { }
+        '';
     networking.firewall.extraInputRules = lib.mkIf (cfg.firewall.enable && nativeNftBackend) ''
       jump aginctus_dns_input comment "aginctus:guest-host-dns-dhcp"
     '';
@@ -418,7 +423,12 @@ in
               ''}"
             );
             ExecStart = "${aginctusCommand} --configuration-file ${configFile} --config firewall.backend=${
-              if firewalldBackend then "firewalld" else if nativeNftBackend then "nixos-nft" else "iptables-nft"
+              if firewalldBackend then
+                "firewalld"
+              else if nativeNftBackend then
+                "nixos-nft"
+              else
+                "iptables-nft"
             } network firewall reconcile";
           };
         };

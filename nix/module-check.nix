@@ -129,9 +129,11 @@ assert lib.hasInfix "AGINCTUS_INPUT" base.networking.firewall.extraCommands;
 assert !(lib.hasInfix "AGINCTUS_INPUT" firewalldHost.networking.firewall.extraCommands);
 assert builtins.elem "firewalld.service"
   firewalldHost.systemd.services.aginctus-firewall-reconcile.after;
-assert lib.hasInfix "chain aginctus_dns_input" nativeNftHost.networking.nftables.tables."nixos-fw".content;
+assert lib.hasInfix "chain aginctus_dns_input"
+  nativeNftHost.networking.nftables.tables."nixos-fw".content;
 assert lib.hasInfix "jump aginctus_dns_input" nativeNftHost.networking.firewall.extraInputRules;
-assert builtins.elem "nftables.service" nativeNftHost.systemd.services.aginctus-firewall-reconcile.after;
+assert builtins.elem "nftables.service"
+  nativeNftHost.systemd.services.aginctus-firewall-reconcile.after;
 
 assert lib.hasInfix "aginctus-firewall-reconcile.service"
   withReconcile.systemd.services.aginctus-reconcile.script;
