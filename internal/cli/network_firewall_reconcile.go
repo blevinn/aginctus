@@ -90,7 +90,6 @@ func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, 
 	return 0
 }
 
-
 func selectFirewallBackend(ruleset, requested string) (string, error) {
 	firewalldPresent := strings.Contains(ruleset, "table inet firewalld")
 	nixosPresent := strings.Contains(ruleset, "table inet nixos-fw")
