@@ -269,8 +269,11 @@ in
       {
         assertion =
           !cfg.firewall.enable
-          || (config.networking.firewall.enable && (firewalldBackend || !config.networking.nftables.enable));
-        message = "services.aginctus.firewall requires enabled host filtering and supports firewalld-nft or NixOS iptables-nft, not NixOS native nftables alone.";
+          || (
+            config.networking.firewall.enable
+            && (if firewalldBackend then config.networking.nftables.enable else !config.networking.nftables.enable)
+          );
+        message = "services.aginctus.firewall requires enabled host filtering with nftables for firewalld or iptables-nft for the non-firewalld NixOS backend.";
       }
       {
         assertion = configuredSecretPaths == [ ];
