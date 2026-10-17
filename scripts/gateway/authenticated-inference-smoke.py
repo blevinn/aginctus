@@ -154,9 +154,11 @@ def verify_sse(data, expected_marker):
         if typ == "response.output_text.done" and isinstance(obj.get("text"), str):
             seen_output |= expected_marker in obj["text"]
         if typ == "response.output_item.done" and isinstance(obj.get("item"), dict):
-            for part in obj["item"].get("content", []):
-                if isinstance(part, dict) and part.get("type") == "output_text":
-                    seen_output |= expected_marker in str(part.get("text", ""))
+            content = obj["item"].get("content")
+            if isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "output_text" and isinstance(part.get("text"), str):
+                        seen_output |= expected_marker in part["text"]
         if typ == "response.completed":
             if not isinstance(obj.get("response"), dict) or obj["response"].get("status") != "completed":
                 raise SmokeError("Responses terminal state is not completed")
