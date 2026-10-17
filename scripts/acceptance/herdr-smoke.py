@@ -40,6 +40,7 @@ def main():
         raise RuntimeError("required managed Herdr machine is not registered and enabled")
     fixture = Path(__file__).with_name("herdr-lifecycle.py")
     for iteration in range(2):
+        step = "prepare"
         identity = PREFIX + secrets.token_hex(4)
         # This cwd must pre-exist on the guest, so creating unique paths requires
         # a reviewed out-of-band staging mechanism. Do not create arbitrary paths.
@@ -60,15 +61,21 @@ def main():
             if not cleanup or not Path(cleanup).is_file() or not os.access(cleanup, os.X_OK):
                 raise RuntimeError("reviewed per-run guest cleanup helper required")
             try:
+                step = "stage"
                 subprocess.run([sys.executable, helper, "stage", str(base), identity, guest], check=True, timeout=60,
                                capture_output=True, text=True)
                 env["AGINCTUS_ACCEPTANCE_GUEST_STAGED"] = identity
+                step = "create"
                 subprocess.run([sys.executable, str(fixture), "open", str(base), identity],
                                env=env, check=True, timeout=180, capture_output=True, text=True)
                 state = json.loads((base.parent / ".herdr-owned.json").read_text())
+                step = "inspect"
                 response = json.loads(call("incus", "exec", client, "--", "herdr", "--machine", machine, "workspace", "get", state["workspace_id"]))
                 if not isinstance(response, dict) or "result" not in response:
                     raise RuntimeError("workspace inspect response missing")
+            except (RuntimeError, OSError, subprocess.SubprocessError, ValueError, KeyError, json.JSONDecodeError):
+                print(f"FAIL: Herdr smoke iteration {iteration+1}, phase {step} (details suppressed)", file=sys.stderr)
+                raise
             finally:
                 if (base.parent / ".herdr-owned.json").exists():
                     subprocess.run([sys.executable, str(fixture), "close", str(base), identity],
