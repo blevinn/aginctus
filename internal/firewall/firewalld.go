@@ -6,8 +6,6 @@ import (
 	"regexp"
 )
 
-const DefaultFirewalldZone = "aginctus-dns"
-
 // Firewalld limits zone file names to 17 characters. Limit the configurable
 // name to an Aginctus namespace to avoid accidentally managing an unrelated
 // host zone such as "trusted" or "public".
