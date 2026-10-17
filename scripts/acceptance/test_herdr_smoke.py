@@ -20,6 +20,13 @@ class SmokeSafetyTests(unittest.TestCase):
             self.assertTrue(smoke.python_helper(str(helper)))
             self.assertFalse(smoke.python_helper(str(helper) + ".missing"))
 
+    def test_agent_mode_is_separate_opt_in(self):
+        with patch.dict(os.environ, {"AGINCTUS_ACCEPTANCE_HERDR_SMOKE": "",
+                                     "AGINCTUS_ACCEPTANCE_HERDR_AGENT_SMOKE": "I_UNDERSTAND"}):
+            with patch.object(smoke, "call") as call, self.assertRaisesRegex(RuntimeError, "opt-in"):
+                smoke.main()
+            call.assert_not_called()
+
     def test_opt_in_required_before_external_commands(self):
         with patch.dict(os.environ, {"AGINCTUS_ACCEPTANCE_HERDR_SMOKE": ""}), patch.object(smoke, "call") as call:
             with self.assertRaisesRegex(RuntimeError, "opt-in"):
