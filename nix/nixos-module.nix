@@ -88,6 +88,12 @@ let
     };
 
   knownSettingsOptions = {
+    firewall.zone = mkOption {
+      type = types.str;
+      default = "aginctus-dns";
+      description = "Dedicated firewalld zone to manage for the selected Aginctus profile (max 17 characters, aginctus- prefix).";
+    };
+
     gateway = {
       id = mkOption {
         type = types.str;
@@ -270,6 +276,15 @@ in
         assertion =
           !cfg.firewall.enable
           || (
+            builtins.stringLength cfg.settings.firewall.zone <= 17
+            && builtins.match "aginctus-[a-z0-9][a-z0-9-]*" cfg.settings.firewall.zone != null
+          );
+        message = "services.aginctus.settings.firewall.zone must begin with aginctus-, use only lowercase letters, digits and hyphens, and be no more than 17 characters long.";
+      }
+      {
+        assertion =
+          !cfg.firewall.enable
+          || (
             config.networking.firewall.enable
             && (if firewalldBackend then config.networking.nftables.enable else !config.networking.nftables.enable)
           );
@@ -317,7 +332,7 @@ in
     # Only this empty, DROP-by-default zone is permanent. Verified bridge
     # bindings and narrow exceptions are installed at runtime by the service;
     # firewalld reloads remove them until the next reconciliation.
-    environment.etc."firewalld/zones/aginctus-dns.xml" = lib.mkIf (cfg.firewall.enable && firewalldBackend) {
+    environment.etc."firewalld/zones/${cfg.settings.firewall.zone}.xml" = lib.mkIf (cfg.firewall.enable && firewalldBackend) {
       text = ''
         <?xml version="1.0" encoding="utf-8"?>
         <zone target="DROP">
