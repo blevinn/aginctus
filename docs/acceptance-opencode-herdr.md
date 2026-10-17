@@ -24,3 +24,39 @@ just check
 ```
 
 Live Herdr execution remains opt-in and **is not established by these test doubles**. Further live work must implement protected fixture transport/verification, real runtime key provisioning, credential checks and independent gateway-side inference correlation, without logging secrets or allowing direct-provider fallback.
+
+## Real pilot lifecycle smoke (required before merge)
+
+The new `scripts/acceptance/herdr-smoke.py` runs **two actual remote workspace create/get/close cycles** through the saved Herdr machine profile. It requires explicit opt-in and reviewed guest directory staging and cleanup commands. It does **not** run an agent or inference. Importantly, no operator should set a fabricated `AGINCTUS_ACCEPTANCE_GUEST_STAGED` value without checking actual guest readiness.
+
+First inspect the pinned pilot version and command contract:
+
+```sh
+nix develop -c bash -c 'command -v herdr || echo "Herdr CLI not on PATH"'
+herdr --version
+herdr machine status '<reviewed-profile>' --json
+herdr workspace create --help
+herdr workspace get --help
+herdr workspace close --help
+herdr agent start --help
+herdr agent wait --help
+```
+
+Provide two small, executable, operator-reviewed programs:
+
+- `AGINCTUS_ACCEPTANCE_HERDR_STAGE`: accepts `LOCAL_WORKSPACE RUN_ID GUEST_PATH`; ensures the dedicated guest-local directory is **new**, exists, is owned by agent, and is safe to use; should fail on collisions. Do not rewrite or mount user paths.
+- `AGINCTUS_ACCEPTANCE_HERDR_CLEANUP`: same arguments; removes **only** the resource matching the supplied owned RUN_ID and GUEST_PATH, with verified ownership. Must be safe after a partial stage. It must not remove other guest directories or persistent volumes.
+
+Then:
+
+```sh
+export AGINCTUS_ACCEPTANCE_HERDR_SMOKE=I_UNDERSTAND
+export AGINCTUS_ACCEPTANCE_HERDR_MACHINE='<reviewed-profile>'
+export AGINCTUS_ACCEPTANCE_HERDR_SMOKE_ROOT=/home/agent/aginctus-acceptance
+export AGINCTUS_ACCEPTANCE_HERDR_STAGE=/absolute/path/to/reviewed-stage
+export AGINCTUS_ACCEPTANCE_HERDR_CLEANUP=/absolute/path/to/reviewed-cleanup
+nix develop -c python3 scripts/acceptance/herdr-smoke.py
+```
+
+Review the Herdr workspace list afterwards and confirm that neither run left a workspace or a guest directory. This only establishes remote workspace operations, not the full `agent start/prompt/wait/stop` contract. A separate real agent-lifecycle run is still required before regarding #233 as a validated real lifecycle integration. Do **not** merge solely on mocked lifecycle assertions.
+
