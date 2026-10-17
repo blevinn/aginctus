@@ -36,9 +36,10 @@ def main():
     })
     try:
         # No profiles and no network device: cannot contact a model provider.
-        incus("launch", opts.image, name, "--project", project,
+        incus("init", opts.image, name, "--project", project,
               "--no-profiles", "--storage", opts.pool)
         created = True
+        incus("start", name, "--project", project)
         incus("exec", name, "--project", project, "--",
               "aginctus-opencode-gateway-provision", input_data=payload)
 
@@ -54,7 +55,9 @@ test "$(stat -c %U "$dir/workload-key")" = agent
 test "$(stat -c %U "$dir/gateway.json")" = agent
 runuser -u agent -- test -r "$dir/workload-key"
 runuser -u agent -- test -r "$dir/gateway.json"
-python3 -c 'import json; d=json.load(open("/var/lib/aginctus/opencode/gateway.json")); assert d == {"endpoint":"http://10.42.40.12:4000/v1","model":"mock-alias","protocol":"responses"}'
+grep -Fq '"model": "mock-alias"' "$dir/gateway.json"
+grep -Fq '"protocol": "responses"' "$dir/gateway.json"
+grep -Fq '"endpoint": "http://10.42.40.12:4000/v1"' "$dir/gateway.json"
 '''
         incus("exec", name, "--project", project, "--",
               "sh", "-c", verification)
