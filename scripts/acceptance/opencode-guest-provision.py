@@ -12,11 +12,17 @@ import sys
 import uuid
 
 
-def incus(*args, input_data=None):
-    return subprocess.run(
-        ["incus", *args], input=input_data, text=True,
-        capture_output=True, check=True, timeout=120,
-    )
+def incus(operation, *args, input_data=None):
+    try:
+        return subprocess.run(
+            ["incus", operation, *args], input=input_data, text=True,
+            capture_output=True, check=True, timeout=120,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        # The tool's stderr may contain credential-bearing stdin. Report only
+        # the operation and exit code, never raw command output or payload.
+        code = getattr(exc, "returncode", "timeout")
+        raise RuntimeError(f"Incus {operation} failed (status {code})") from None
 
 
 def main():
@@ -82,7 +88,7 @@ grep -Fq '"endpoint": "http://10.42.40.12:4000/v1"' "$dir/gateway.json"
         if created:
             try:
                 incus("delete", name, "--project", project, "--force")
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            except RuntimeError:
                 print("WARNING: disposable test instance cleanup failed: " + name,
                       file=sys.stderr)
                 raise
@@ -91,6 +97,6 @@ grep -Fq '"endpoint": "http://10.42.40.12:4000/v1"' "$dir/gateway.json"
 if __name__ == "__main__":
     try:
         main()
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        # Never include process stderr, which might echo stdin on failures.
-        sys.exit("FAIL: Incus command failed; inspect instance status without printing secrets")
+    except RuntimeError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
+        sys.exit(1)
