@@ -336,17 +336,19 @@
         in
         {
           default = pkgs.mkShell {
-            packages = (with pkgs; [
-              git
-              go
-              incus
-              jq
-              just
-              nixfmt
-              python3
-              shellcheck
-              shfmt
-            ]) ++ [ herdrCli ];
+            packages =
+              (with pkgs; [
+                git
+                go
+                incus
+                jq
+                just
+                nixfmt
+                python3
+                shellcheck
+                shfmt
+              ])
+              ++ [ herdrCli ];
 
             shellHook = ''
               echo "Aginctus development shell"
