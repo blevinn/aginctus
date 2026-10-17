@@ -9,20 +9,7 @@ import (
 // Firewalld limits zone file names to 17 characters. Limit the configurable
 // name to an Aginctus namespace to avoid accidentally managing an unrelated
 // host zone such as "trusted" or "public".
-var firewalldZoneName = regexp.MustCompile(`^aginctus-[a-z0-9][a-z0-9-]*package firewall
-
-import (
-	"fmt"
-	"net"
-	"regexp"
-)
-
-// FirewalldZone is installed declaratively by the NixOS module. Its DROP
-// target, empty permanent permissions and absence of permanent interfaces
-// are security invariants. Runtime exceptions belong exclusively to Aginctus.
-const FirewalldZone = "aginctus-dns"
-
-)
+var firewalldZoneName = regexp.MustCompile(`^aginctus-[a-z0-9][a-z0-9-]*$`)
 
 func ValidateFirewalldZone(name string) error {
 	if len(name) > 17 || !firewalldZoneName.MatchString(name) {
