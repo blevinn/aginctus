@@ -35,7 +35,7 @@ func TestGatewayResponsesVerifyFromStdin(t *testing.T) {
 		t.Fatalf("unsupported activation option accepted: %d %q", code, message)
 	}
 	secret := "SECRET_RESPONSE_PAYLOAD"
-	gatewayResponsesInput = strings.NewReader("data: "+secret+"\n\n")
+	gatewayResponsesInput = strings.NewReader("data: " + secret + "\n\n")
 	if code, out, message := run("responses", "verify"); code != 1 ||
 		out != "" || strings.Contains(message, secret) || !strings.Contains(message, "contract") {
 		t.Fatalf("invalid stream leaked payload or passed: code=%d out=%q err=%q", code, out, message)

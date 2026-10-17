@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	created = "event: response.created\ndata: {\"type\":\"response.created\"}\n\n"
+	created  = "event: response.created\ndata: {\"type\":\"response.created\"}\n\n"
 	finished = "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"
 	callDone = "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\",\"call_id\":\"call-1\",\"name\":\"edit_file\",\"arguments\":\"{}\"}}\n\n"
 )
@@ -43,23 +43,23 @@ func TestVerifyResponsesRejectsFailuresWithoutLeakingPayload(t *testing.T) {
 	}{
 		{"empty stream", "", false},
 		{"missing terminal", created, false},
-		{"done without terminal", created+"data: [DONE]\n\n", false},
-		{"failed event", created+failed, false},
-		{"incomplete event", created+incomplete, false},
+		{"done without terminal", created + "data: [DONE]\n\n", false},
+		{"failed event", created + failed, false},
+		{"incomplete event", created + incomplete, false},
 		{"wrong completion status", "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"in_progress\"}}\n\n", false},
 		{"truncated JSON", "event: response.completed\ndata: {\"type\":\n\n", false},
-		{"event payload mismatch", "event: response.completed\ndata: {\"type\":\"response.created\"}\n\n"+finished, false},
-		{"duplicate completion", finished+finished, false},
-		{"event after completion", finished+created, false},
-		{"function item incomplete", invalidCall+finished, true},
-		{"no tool event", created+finished, true},
-		{"duplicate completed function call", callDone+callDone+finished, true},
-		{"nonobject function arguments", strings.Replace(callDone, "{}", "null", 1)+finished, true},
-		{"unknown SSE field", "authorization: Bearer "+leak+"\n\n"+finished, false},
-		{"unexpected data marker", "data: [DONE]\n\n"+finished, false},
-		{"unexpected event type", "data: {\"type\":\"error\",\"detail\":\""+leak+"\"}\n\n"+finished, false},
-		{"malformed credentials", "data: "+leak+"\n\n", false},
-		{"unbounded line", "data: "+strings.Repeat("x", (1<<20)+10)+"\n\n", false},
+		{"event payload mismatch", "event: response.completed\ndata: {\"type\":\"response.created\"}\n\n" + finished, false},
+		{"duplicate completion", finished + finished, false},
+		{"event after completion", finished + created, false},
+		{"function item incomplete", invalidCall + finished, true},
+		{"no tool event", created + finished, true},
+		{"duplicate completed function call", callDone + callDone + finished, true},
+		{"nonobject function arguments", strings.Replace(callDone, "{}", "null", 1) + finished, true},
+		{"unknown SSE field", "authorization: Bearer " + leak + "\n\n" + finished, false},
+		{"unexpected data marker", "data: [DONE]\n\n" + finished, false},
+		{"unexpected event type", "data: {\"type\":\"error\",\"detail\":\"" + leak + "\"}\n\n" + finished, false},
+		{"malformed credentials", "data: " + leak + "\n\n", false},
+		{"unbounded line", "data: " + strings.Repeat("x", (1<<20)+10) + "\n\n", false},
 		{"unbounded stream", strings.Repeat(": "+strings.Repeat("x", 8192)+"\n", 1100), false},
 	}
 	for _, tc := range cases {
