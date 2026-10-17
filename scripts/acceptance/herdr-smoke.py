@@ -55,10 +55,10 @@ def main():
             # No implicit fabricated staging signal: the operator-supplied helper
             # must verify or stage this exact identity and path first.
             helper = env.get("AGINCTUS_ACCEPTANCE_HERDR_STAGE", str(Path(__file__).with_name("guest-owned.py")))
-            if not helper or not Path(helper).is_file() or not os.access(helper, os.X_OK):
+            if not helper or not Path(helper).is_file():
                 raise RuntimeError("reviewed per-run guest staging helper required")
             cleanup = env.get("AGINCTUS_ACCEPTANCE_HERDR_CLEANUP", str(Path(__file__).with_name("guest-owned.py")))
-            if not cleanup or not Path(cleanup).is_file() or not os.access(cleanup, os.X_OK):
+            if not cleanup or not Path(cleanup).is_file():
                 raise RuntimeError("reviewed per-run guest cleanup helper required")
             try:
                 step = "stage"
