@@ -100,7 +100,8 @@ Read-only:
 
 ```sh
 sudo firewall-cmd --get-zones
-sudo firewall-cmd --zone=aginctus-dns --get-target
+sudo firewall-cmd --permanent --zone=aginctus-dns --get-target
+sudo firewall-cmd --zone=aginctus-dns --list-all
 sudo firewall-cmd --zone=aginctus-dns --list-interfaces
 sudo firewall-cmd --zone=aginctus-dns --list-rich-rules
 sudo nft -a list chain inet firewalld filter_INPUT
