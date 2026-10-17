@@ -247,7 +247,7 @@ in
     firewall.enable = mkOption {
       type = types.bool;
       default = true;
-      description = "Reconcile ownership-scoped Incus DNS/DHCP INPUT exceptions (iptables-nft backend).";
+      description = "Reconcile ownership-scoped Incus DNS/DHCP exceptions with the NixOS iptables-nft or firewalld backend.";
     };
 
     reconcile = {
@@ -309,6 +309,21 @@ in
       iptables -X AGINCTUS_INPUT 2>/dev/null || true
     '';
 
+    # Firewalld owns its nftables table (flags owner,persist), so Aginctus
+    # must use firewall-cmd/D-Bus instead of editing that table directly.
+    # Only this empty, DROP-by-default zone is permanent. Verified bridge
+    # bindings and narrow exceptions are installed at runtime by the service;
+    # firewalld reloads remove them until the next reconciliation.
+    environment.etc."firewalld/zones/aginctus-dns.xml" = lib.mkIf (cfg.firewall.enable && firewalldBackend) {
+      text = ''
+        <?xml version="1.0" encoding="utf-8"?>
+        <zone target="DROP">
+          <short>Aginctus DNS/DHCP</short>
+          <description>Runtime-only permissions for one Incus-owned management bridge.</description>
+        </zone>
+      '';
+    };
+
     environment.etc."aginctus/config.json".source = configFile;
 
     systemd.timers.aginctus-firewall-reconcile = lib.mkIf cfg.firewall.enable {
@@ -339,7 +354,7 @@ in
             pkgs.iptables
             pkgs.nftables
             pkgs.incus
-          ];
+          ] ++ lib.optional firewalldBackend pkgs.firewalld;
           serviceConfig = {
             Type = "oneshot";
             User = "root";
