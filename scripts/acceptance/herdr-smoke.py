@@ -52,6 +52,9 @@ def main():
             subprocess.run([helper, str(base), identity, guest], check=True, timeout=60,
                            capture_output=True, text=True)
             env["AGINCTUS_ACCEPTANCE_GUEST_STAGED"] = identity
+            cleanup = env.get("AGINCTUS_ACCEPTANCE_HERDR_CLEANUP", "")
+            if not cleanup or not Path(cleanup).is_file() or not os.access(cleanup, os.X_OK):
+                raise RuntimeError("reviewed per-run guest cleanup helper required")
             opened = False
             try:
                 subprocess.run([sys.executable, str(fixture), "open", str(base), identity],
@@ -65,7 +68,8 @@ def main():
                 if opened:
                     subprocess.run([sys.executable, str(fixture), "close", str(base), identity],
                                    env=env, check=True, timeout=180, capture_output=True, text=True)
-                # The guest directory remains for a reviewed owned cleanup helper.
+                subprocess.run([cleanup, str(base), identity, guest], check=True, timeout=60,
+                               capture_output=True, text=True)
             print(f"PASS: remote Herdr workspace create/get/close, iteration {iteration+1}")
     print("NOT VERIFIED: OpenCode agent, guest task execution, gateway inference, and credentials")
 
