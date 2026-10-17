@@ -96,7 +96,7 @@ func TestRegistryRejectsInsecureAndConcurrentState(t *testing.T) {
 	if _, err := Register(path, m); err == nil {
 		t.Fatal("accepted existing transaction lock")
 	}
-	if err := os.Remove(path+".lock"); err != nil {
+	if err := os.Remove(path + ".lock"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Register(path, m); err != nil {
