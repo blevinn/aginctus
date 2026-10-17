@@ -174,6 +174,10 @@
             exec ${pkgs.python3}/bin/python3 ${./guest/opencode/launch.py} ${pkgs.opencode}/bin/opencode "$@"
           '';
 
+          gatewayProvisionHelper = pkgs.writeShellScriptBin "aginctus-opencode-gateway-provision" ''
+            exec ${pkgs.python3}/bin/python3 ${./guest/opencode/provision.py}
+          '';
+
           opencodeWorkloadSystem = nixpkgs.lib.nixosSystem {
             inherit system;
             modules = [
@@ -193,6 +197,7 @@
                     herdrPackage
                     pkgs.git
                     aginctusOpenCode
+                    gatewayProvisionHelper
                     pkgs.openssh
                     sshAuthorizeHelper
                   ];
@@ -323,6 +328,9 @@
             inherit self nixpkgs system;
           };
           firewall-firewalld-integration = import ./nix/firewall-firewalld-test.nix {
+            inherit self nixpkgs system;
+          };
+          firewall-nixos-nft-integration = import ./nix/firewall-nixos-nft-test.nix {
             inherit self nixpkgs system;
           };
         }

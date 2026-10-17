@@ -14,6 +14,7 @@ func TestRenderDNSDHCPOnly(t *testing.T) {
 	for _, want := range []string{
 		":AGINCTUS_INPUT - [0:0]",
 		"-F AGINCTUS_INPUT",
+		"-A AGINCTUS_INPUT -m conntrack --ctstate INVALID -j RETURN",
 		"-i renamed-bridge -s 10.1.2.0/24 -d 10.1.2.1 -p udp --dport 53 -j ACCEPT",
 		"-i renamed-bridge -s 10.1.2.0/24 -d 10.1.2.1 -p tcp --dport 53 -j ACCEPT",
 		"-i renamed-bridge -p udp --sport 68 --dport 67 -j ACCEPT",
@@ -21,6 +22,9 @@ func TestRenderDNSDHCPOnly(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s", want)
 		}
+	}
+	if strings.Index(got, "--ctstate INVALID -j RETURN") >= strings.Index(got, "--dport 53 -j ACCEPT") {
+		t.Fatal("INVALID guard must precede DNS allowances")
 	}
 	for _, forbidden := range []string{"FORWARD", "POSTROUTING", "MASQUERADE", "--dport 22"} {
 		if strings.Contains(got, forbidden) {

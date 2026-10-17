@@ -13,6 +13,7 @@ import (
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
+	"github.com/blevinn/aginctus/internal/modelregistry"
 	"github.com/blevinn/aginctus/internal/providerregistry"
 	"github.com/blevinn/aginctus/internal/statevolume"
 	"github.com/blevinn/aginctus/internal/workload"
@@ -359,6 +360,7 @@ func printNetworkUsage(w io.Writer) {
 
 var ensureCredentialStorage = statevolume.EnsureGatewayCredentialsOnHost
 var attachGatewayCredentials = gateway.AttachCredentialVolume
+var auditGatewayCredentials = gateway.AuditCredentialAttachment
 
 func runGateway(
 	ctx context.Context,
@@ -367,6 +369,33 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) >= 2 && args[0] == "responses" && args[1] == "verify" {
+		return verifyGatewayResponsesStream(args[2:], stdout, stderr)
+	}
+	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "audit" {
+		id, err := effective.String("gateway.id")
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway id: %v\n", err)
+			return 1
+		}
+		project, err := effective.String("gateway.compose.project")
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway Compose project: %v\n", err)
+			return 1
+		}
+		pool, err := effective.String("gateway.credentials.storage.pool")
+		if err != nil {
+			fmt.Fprintf(stderr, "credential storage pool: %v\n", err)
+			return 1
+		}
+		spec := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
+		if err := auditGatewayCredentials(ctx, spec); err != nil {
+			fmt.Fprintf(stderr, "credential attachment audit: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "credential volume attachment: owned and exclusive to LiteLLM (metadata only; in-guest permissions, OAuth and runtime readiness not verified)\n")
+		return 0
+	}
 	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "attach" {
 		id, err := effective.String("gateway.id")
 		if err != nil {
@@ -392,6 +421,42 @@ func runGateway(
 		return 0
 	}
 
+	if len(args) == 3 && args[0] == "model" && args[2] == "render" {
+		definition, err := renderRegisteredChatGPTModel(args[1])
+		if err != nil {
+			fmt.Fprintf(stderr, "render registered ChatGPT model: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(definition))
+		fmt.Fprintln(stderr, "model definition rendered for review only; gateway routing and OAuth remain inactive")
+		return 0
+	}
+	if len(args) > 0 && args[0] == "model" && (len(args) == 2 && args[1] == "list" || len(args) == 3 && args[2] == "show") {
+		path, err := modelregistry.DefaultPath()
+		if err != nil {
+			fmt.Fprintln(stderr, "resolve model registry: unavailable")
+			return 1
+		}
+		reg, err := modelregistry.Load(path)
+		if err != nil {
+			fmt.Fprintln(stderr, "read private model registry: invalid or inaccessible")
+			return 1
+		}
+		if args[1] == "list" {
+			for _, model := range reg.Models {
+				fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", model.Name, model.Source, model.Provider, "activation pending")
+			}
+			return 0
+		}
+		for _, model := range reg.Models {
+			if model.Name == args[1] {
+				fmt.Fprintf(stdout, "model %q: source %q via provider %q (authorization and activation pending)\n", model.Name, model.Source, model.Provider)
+				return 0
+			}
+		}
+		fmt.Fprintf(stderr, "model alias %q is not registered\n", args[1])
+		return 1
+	}
 	if len(args) > 0 && args[0] == "provider" && (len(args) == 2 && args[1] == "list" || len(args) == 3 && args[2] == "show") {
 		path, err := providerregistry.DefaultPath()
 		if err != nil {
@@ -441,9 +506,33 @@ func runGateway(
 			}
 		}
 		if !dryRun {
-			if kind != "provider" {
-				fmt.Fprintln(stderr, "model registration is not implemented; use --dry-run")
-				return 2
+			if kind == "model" {
+				if source == "" {
+					source = name
+				}
+				if provider == "" && strings.HasPrefix(source, "chatgpt/") {
+					provider = "chatgpt"
+				}
+				if _, err := gateway.ChatGPTModelRegistration(name, source); err != nil || provider == "" {
+					fmt.Fprintln(stderr, "invalid ChatGPT Responses model registration")
+					return 2
+				}
+				path, err := modelregistry.DefaultPath()
+				if err != nil {
+					fmt.Fprintln(stderr, "resolve model registry: unavailable")
+					return 1
+				}
+				changed, err := modelregistry.Register(path, modelregistry.Model{Name: name, Provider: provider, Source: source})
+				if err != nil {
+					fmt.Fprintf(stderr, "register model: %v\n", err)
+					return 1
+				}
+				if changed {
+					fmt.Fprintf(stdout, "model %q: registered locally (authorization and activation pending)\n", name)
+				} else {
+					fmt.Fprintf(stdout, "model %q: already registered (authorization and activation pending)\n", name)
+				}
+				return 0
 			}
 			if name != "chatgpt" {
 				fmt.Fprintln(stderr, "only chatgpt provider is supported")
@@ -494,8 +583,27 @@ func runGateway(
 				}
 			}
 			if provider != "chatgpt" {
-				fmt.Fprintln(stderr, "only the default chatgpt provider is supported in this preview")
-				return 2
+				path, pathErr := providerregistry.DefaultPath()
+				if pathErr != nil {
+					fmt.Fprintln(stderr, "cannot verify provider alias")
+					return 1
+				}
+				providers, loadErr := providerregistry.Load(path)
+				if loadErr != nil {
+					fmt.Fprintln(stderr, "cannot read private provider registry")
+					return 1
+				}
+				registered := false
+				for _, p := range providers.Providers {
+					if p.Type == "chatgpt" && p.Alias == provider {
+						registered = true
+						break
+					}
+				}
+				if !registered {
+					fmt.Fprintln(stderr, "model provider alias is not registered")
+					return 2
+				}
 			}
 			rendered, err = gateway.ChatGPTModelRegistration(name, source)
 		}
@@ -600,10 +708,15 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
+	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage audit  (read-only; no authentication)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider chatgpt register [--alias=NAME] [--dry-run]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider list")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider ALIAS show")
-	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME register [--provider=chatgpt] [--source=chatgpt/MODEL] --dry-run")
+	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME register [--provider=ALIAS] [--source=chatgpt/MODEL] [--dry-run]")
+	fmt.Fprintln(w, "       aginctus [global options] gateway model list")
+	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME show")
+	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME render  (read-only, not activated)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway responses verify [--require-function-call] < stream.sse")
 }
 
 func runHerdr(
@@ -722,6 +835,9 @@ func runWorkload(
 	stdout, stderr io.Writer,
 	effective *config.Config,
 ) int {
+	if len(args) > 1 && args[0] == "gateway" && args[1] == "provision" {
+		return runWorkloadGatewayProvision(ctx, args[2:], stdout, stderr, effective)
+	}
 	if len(args) > 0 && args[0] == "status" {
 		return runWorkloadStatus(ctx, args[1:], stdout, stderr, effective)
 	}
@@ -872,6 +988,7 @@ Commands:
   gateway validate  Validate the AI gateway deployment configuration
   gateway apply     Reconcile the AI gateway
   gateway status    Inspect gateway project and service state
+  gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
   gateway remove [--force] Remove gateway instances, preserving data volumes
   gateway render    Render the AI gateway Compose model
   gateway chatgpt model render MODEL  Render native LiteLLM Responses model registration
