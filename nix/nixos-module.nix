@@ -17,6 +17,9 @@ let
     ;
 
   cfg = config.services.aginctus;
+  firewalldBackend = config.services.firewalld.enable;
+  nativeNftBackend = !firewalldBackend && config.networking.firewall.backend == "nftables";
+  iptablesBackend = !firewalldBackend && !nativeNftBackend;
   system = pkgs.stdenv.hostPlatform.system;
   jsonFormat = pkgs.formats.json { };
 
@@ -54,6 +57,10 @@ let
     alias:
     builtins.stringLength alias <= 100 && builtins.match "[A-Za-z0-9][A-Za-z0-9_.-]*" alias != null;
 
+  validFirewalldZone =
+    builtins.stringLength cfg.settings.firewall.zone <= 17
+    && builtins.match "aginctus-[a-z0-9][a-z0-9-]*" cfg.settings.firewall.zone != null;
+
   enabledImageAliases =
     lib.optional cfg.images.herdrClient.enable cfg.images.herdrClient.alias
     ++ lib.optional cfg.images.opencodeWorkload.enable cfg.images.opencodeWorkload.alias;
@@ -87,6 +94,12 @@ let
     };
 
   knownSettingsOptions = {
+    firewall.zone = mkOption {
+      type = types.str;
+      default = "aginctus-dns";
+      description = "Dedicated firewalld zone to manage for the selected Aginctus profile (max 17 characters, aginctus- prefix).";
+    };
+
     gateway = {
       id = mkOption {
         type = types.str;
@@ -243,6 +256,12 @@ in
       };
     };
 
+    firewall.enable = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Reconcile ownership-scoped Incus DNS/DHCP exceptions with the NixOS iptables-nft or firewalld backend.";
+    };
+
     reconcile = {
       enable = mkOption {
         type = types.bool;
@@ -259,6 +278,24 @@ in
 
   config = mkIf cfg.enable {
     assertions = [
+      {
+        assertion = !cfg.firewall.enable || validFirewalldZone;
+        message = "services.aginctus.settings.firewall.zone must begin with aginctus-, use only lowercase letters, digits and hyphens, and be no more than 17 characters long.";
+      }
+      {
+        assertion =
+          !cfg.firewall.enable
+          || (
+            config.networking.firewall.enable
+            && (
+              if firewalldBackend || nativeNftBackend then
+                config.networking.nftables.enable
+              else
+                !config.networking.nftables.enable
+            )
+          );
+        message = "services.aginctus.firewall requires enabled host filtering with nftables for firewalld/NixOS-native or iptables-nft for the iptables backend.";
+      }
       {
         assertion = configuredSecretPaths == [ ];
         message = "services.aginctus.settings cannot contain runtime gateway secrets: ${
@@ -279,10 +316,127 @@ in
       }
     ];
 
+    # ExtraCommands executes before the NixOS iptables firewall's final
+    # reject, unlike an independent nftables accept-only base chain.
+    networking.firewall.extraCommands = lib.mkIf (cfg.firewall.enable && iptablesBackend) ''
+      iptables -N AGINCTUS_INPUT 2>/dev/null || iptables -F AGINCTUS_INPUT
+      iptables -C nixos-fw -j AGINCTUS_INPUT 2>/dev/null || iptables -I nixos-fw 1 -j AGINCTUS_INPUT
+      # On Incus errors the empty chain must remain fail-closed.
+      ${aginctusCommand} --configuration-file ${configFile} network firewall reconcile || true
+    '';
+    networking.firewall.extraPackages = lib.mkIf (cfg.firewall.enable && iptablesBackend) [
+      pkgs.nftables
+    ];
+    networking.firewall.extraStopCommands = lib.mkIf (cfg.firewall.enable && iptablesBackend) ''
+      iptables -D nixos-fw -j AGINCTUS_INPUT 2>/dev/null || true
+      iptables -F AGINCTUS_INPUT 2>/dev/null || true
+      iptables -X AGINCTUS_INPUT 2>/dev/null || true
+    '';
+
+    # NixOS native nftables declares a normal, empty child chain within the
+    # authoritative NixOS table and adds its call from input-allow. Never
+    # create a separate accepting nftables input base chain.
+    # Gate the whole attrsOf table entry, not only its content. Otherwise
+    # firewalld evaluation creates an empty nixos-fw submodule with no
+    # family, even though the native firewall backend is disabled.
+    networking.nftables.tables = lib.mkIf (cfg.firewall.enable && nativeNftBackend) {
+      "nixos-fw".content = ''
+        chain aginctus_dns_input { }
+      '';
+    };
+    networking.firewall.extraInputRules = lib.mkIf (cfg.firewall.enable && nativeNftBackend) ''
+      jump aginctus_dns_input comment "aginctus:guest-host-dns-dhcp"
+    '';
+
+    # Firewalld owns its nftables table (flags owner,persist), so Aginctus
+    # must use firewall-cmd/D-Bus instead of editing that table directly.
+    # Only this empty, DROP-by-default zone is permanent. Verified bridge
+    # bindings and narrow exceptions are installed at runtime by the service;
+    # firewalld reloads remove them until the next reconciliation.
+    environment.etc."firewalld/zones/${cfg.settings.firewall.zone}.xml" =
+      lib.mkIf (cfg.firewall.enable && firewalldBackend && validFirewalldZone)
+        {
+          text = ''
+            <?xml version="1.0" encoding="utf-8"?>
+            <zone target="DROP">
+              <short>Aginctus DNS/DHCP</short>
+              <description>Runtime-only permissions for one Incus-owned management bridge.</description>
+            </zone>
+          '';
+        };
+
     environment.etc."aginctus/config.json".source = configFile;
 
+    systemd.timers.aginctus-firewall-reconcile = lib.mkIf cfg.firewall.enable {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "15s";
+        OnUnitActiveSec = "30s";
+        Unit = "aginctus-firewall-reconcile.service";
+      };
+    };
+
     systemd.services =
-      lib.optionalAttrs cfg.images.herdrClient.enable {
+      lib.optionalAttrs cfg.firewall.enable {
+        aginctus-firewall-reconcile = {
+          description = "Reconcile Aginctus-owned Incus guest-to-host DNS/DHCP policy";
+          wantedBy = [ "multi-user.target" ];
+          after = [
+            "incus.service"
+            "firewall.service"
+          ]
+          ++ lib.optional firewalldBackend "firewalld.service"
+          ++ lib.optional nativeNftBackend "nftables.service";
+          wants = [
+            "incus.service"
+            "firewall.service"
+          ]
+          ++ lib.optional firewalldBackend "firewalld.service"
+          ++ lib.optional nativeNftBackend "nftables.service";
+          path = [
+            pkgs.iptables
+            pkgs.nftables
+            pkgs.incus
+          ]
+          ++ lib.optional firewalldBackend pkgs.firewalld;
+          serviceConfig = {
+            Type = "oneshot";
+            User = "root";
+            # ProtectHome hides /root; do not probe a root-user override file.
+            # The managed configuration is passed explicitly via --configuration-file.
+            Environment = [ "XDG_CONFIG_HOME=/var/empty" ];
+            NoNewPrivileges = true;
+            PrivateTmp = true;
+            ProtectHome = true;
+            CapabilityBoundingSet = [ "CAP_NET_ADMIN" ];
+            AmbientCapabilities = [ "CAP_NET_ADMIN" ];
+            # Reconciliation must not misidentify an uninitialized firewalld
+            # nftables table as the iptables-nft backend during daemon restart.
+            # Wait a bounded time for both D-Bus and the effective INPUT hook.
+            ExecStartPre = lib.optional firewalldBackend (
+              "${pkgs.writeShellScript "aginctus-firewalld-ready" ''
+                for attempt in {1..50}; do
+                  if ${pkgs.nftables}/bin/nft list chain inet firewalld filter_INPUT >/dev/null 2>&1 && ${pkgs.firewalld}/bin/firewall-cmd --state >/dev/null 2>&1; then
+                    exit 0
+                  fi
+                  ${pkgs.coreutils}/bin/sleep 0.2
+                done
+                echo 'firewalld INPUT chain is not ready for reconciliation' >&2
+                exit 1
+              ''}"
+            );
+            ExecStart = "${aginctusCommand} --configuration-file ${configFile} --config firewall.backend=${
+              if firewalldBackend then
+                "firewalld"
+              else if nativeNftBackend then
+                "nixos-nft"
+              else
+                "iptables-nft"
+            } network firewall reconcile";
+          };
+        };
+      }
+      // lib.optionalAttrs cfg.images.herdrClient.enable {
         aginctus-image-herdr-client = imageUpdateService {
           alias = cfg.images.herdrClient.alias;
           source = cfg.images.herdrClient.source;
@@ -322,6 +476,9 @@ in
           script = ''
             set -eu
             ${aginctusCommand} --configuration-file ${configFile} network ensure
+            # Reconcile effective host filtering immediately after the managed
+            # bridge is created, before starting dependent workloads.
+            ${lib.optionalString cfg.firewall.enable "${pkgs.systemd}/bin/systemctl start aginctus-firewall-reconcile.service"}
             ${aginctusCommand} --configuration-file ${configFile} herdr client ensure
             ${lib.concatMapStringsSep "\n" (
               id: "${aginctusCommand} --configuration-file ${configFile} workload ${lib.escapeShellArg id} ensure"

@@ -38,6 +38,7 @@ pkgs.testers.runNixOSTest {
     environment.systemPackages = [ pkgs.incus pkgs.jq ];
     services.aginctus = {
       enable = true;
+      firewall.enable = false; # Native nftables Incus VM; #223 is iptables-only.
       package = flake.packages.${system}.aginctus;
       images.herdrClient.enable = true;
       images.herdrClient.source = flake.packages.${system}.herdr-client;
@@ -60,6 +61,7 @@ pkgs.testers.runNixOSTest {
     };
     services.aginctus = {
       enable = true;
+      firewall.enable = false; # Existing image lifecycle test does not use firewall reconciliation.
       package = pkgs.writeShellScriptBin "aginctus" ''
         if [ -e /run/aginctus-test-fail-image ]; then
           case "$*" in
@@ -149,6 +151,24 @@ pkgs.testers.runNixOSTest {
   '';
 }
 NIX
+
+# Firewalld uses the native nftables backend and can exercise real Incus
+# ownership validation with the packaged Aginctus CLI in a disposable VM.
+echo 'Building and executing the disposable NixOS Incus/firewalld integration check...'
+nix build '.#checks.x86_64-linux.firewall-firewalld-integration' --no-link --print-build-logs --show-trace "$@"
+echo 'PASS: Incus/firewalld integration check completed.'
+
+# Exercise the native NixOS nftables backend with a real, disposable Incus VM.
+echo 'Building and executing the disposable NixOS native-nftables/Incus check...'
+nix build '.#checks.x86_64-linux.firewall-nixos-nft-integration' --no-link --print-build-logs --show-trace "$@"
+echo 'PASS: native NixOS nftables/Incus integration check completed.'
+
+# Run the iptables hook/packet-filtering integration in an independent
+# disposable NixOS VM before the existing native-nftables Incus lifecycle test.
+# The iptables test intentionally uses a fixture; NixOS Incus requires nftables.
+echo 'Building and executing the disposable NixOS iptables firewall check...'
+nix build '.#checks.x86_64-linux.firewall-iptables-integration' --no-link --print-build-logs --show-trace "$@"
+echo 'PASS: iptables firewall integration check completed.'
 
 export AGINCTUS_VM_REPO="$repo"
 echo 'Building and executing the disposable NixOS QEMU/Incus integration test...'

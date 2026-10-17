@@ -52,6 +52,33 @@ let
       workloads = [ "missing" ];
     };
   };
+  withCustomZone = evaluate {
+    networking.nftables.enable = true;
+    services.firewalld.enable = true;
+    services.aginctus.settings.firewall.zone = "aginctus-vm";
+  };
+  invalidFirewalldZones =
+    map
+      (
+        zone:
+        evaluate {
+          services.aginctus.settings.firewall.zone = zone;
+        }
+      )
+      [
+        "trusted"
+        "aginctus-TooLong"
+        "aginctus-abcdefghijkl"
+        "../danger"
+      ];
+  nativeNftHost = evaluate {
+    networking.nftables.enable = true;
+    networking.firewall.backend = "nftables";
+  };
+  firewalldHost = evaluate {
+    services.firewalld.enable = true;
+    networking.nftables.enable = true;
+  };
   withReconcile = evaluate {
     services.aginctus.reconcile = {
       enable = true;
@@ -89,7 +116,32 @@ let
   ];
 in
 assert settings.incus.management.network.name == "integration-mgmt";
+assert settings.firewall.zone == "aginctus-dns";
+assert builtins.hasAttr "firewalld/zones/aginctus-vm.xml" withCustomZone.environment.etc;
+assert builtins.all (
+  cfg:
+  lib.any (item: lib.hasInfix "settings.firewall.zone" item.message) (failedAginctusAssertions cfg)
+) invalidFirewalldZones;
 assert defaultPackage == self.packages.${system}.aginctus;
+assert base.services.aginctus.firewall.enable;
+assert base.systemd.timers.aginctus-firewall-reconcile.timerConfig.OnUnitActiveSec == "30s";
+assert lib.hasInfix "AGINCTUS_INPUT" base.networking.firewall.extraCommands;
+assert !(lib.hasInfix "AGINCTUS_INPUT" firewalldHost.networking.firewall.extraCommands);
+# A native-only chain must not instantiate an incomplete nixos-fw table on a
+# firewalld host: NixOS supplies the table's family only for its own backend.
+assert !(builtins.hasAttr "nixos-fw" firewalldHost.networking.nftables.tables);
+assert !(builtins.hasAttr "nixos-fw" base.networking.nftables.tables);
+assert nativeNftHost.networking.nftables.tables."nixos-fw".family == "inet";
+assert builtins.elem "firewalld.service"
+  firewalldHost.systemd.services.aginctus-firewall-reconcile.after;
+assert lib.hasInfix "chain aginctus_dns_input"
+  nativeNftHost.networking.nftables.tables."nixos-fw".content;
+assert lib.hasInfix "jump aginctus_dns_input" nativeNftHost.networking.firewall.extraInputRules;
+assert builtins.elem "nftables.service"
+  nativeNftHost.systemd.services.aginctus-firewall-reconcile.after;
+
+assert lib.hasInfix "aginctus-firewall-reconcile.service"
+  withReconcile.systemd.services.aginctus-reconcile.script;
 assert builtins.length secretAssertions == 1;
 assert lib.hasInfix "gateway.postgres.password" (builtins.head secretAssertions).message;
 assert lib.hasInfix "gateway.master.key" (builtins.head secretAssertions).message;
