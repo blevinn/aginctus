@@ -278,6 +278,9 @@ func runNetwork(
 	if len(args) == 2 && args[0] == "firewall" && args[1] == "policy" {
 		return runNetworkFirewallPolicy(ctx, stdout, stderr, effective)
 	}
+	if len(args) == 2 && args[0] == "firewall" && args[1] == "reconcile" {
+		return runNetworkFirewallReconcile(ctx, stdout, stderr, effective)
+	}
 
 	action := args[0]
 	options, err := parseNetworkOptions(args[1:])
@@ -351,6 +354,7 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network remove [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] network status")
 	fmt.Fprintln(w, "       aginctus [global options] network firewall policy")
+	fmt.Fprintln(w, "       aginctus [global options] network firewall reconcile  # privileged mutation")
 }
 
 var ensureCredentialStorage = statevolume.EnsureGatewayCredentialsOnHost
