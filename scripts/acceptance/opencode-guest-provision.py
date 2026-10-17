@@ -12,7 +12,7 @@ import sys
 import uuid
 
 
-def incus(operation, *args, input_data=None):
+def incus(operation, *args, input_data=None, stage=None):
     try:
         return subprocess.run(
             ["incus", operation, *args], input=input_data, text=True,
@@ -22,7 +22,7 @@ def incus(operation, *args, input_data=None):
         # The tool's stderr may contain credential-bearing stdin. Report only
         # the operation and exit code, never raw command output or payload.
         code = getattr(exc, "returncode", "timeout")
-        raise RuntimeError(f"Incus {operation} failed (status {code})") from None
+        raise RuntimeError(f"{stage or operation} failed (status {code})") from None
 
 
 def main():
@@ -48,7 +48,7 @@ def main():
         created = True
         incus("start", name, "--project", project)
         incus("exec", name, "--project", project, "--",
-              helper, input_data=payload)
+              helper, input_data=payload, stage="guest helper provisioning")
 
         # No credential value is read back or displayed. The shell script has
         # fixed text, contains no secrets, and checks metadata and safe config.
@@ -69,7 +69,7 @@ grep -Fq '"protocol": "responses"' "$dir/gateway.json"
 grep -Fq '"endpoint": "http://10.42.40.12:4000/v1"' "$dir/gateway.json"
 '''
         incus("exec", name, "--project", project, "--",
-              "/bin/sh", "-c", verification)
+              "/run/current-system/sw/bin/sh", "-c", verification, stage="guest file verification (initial)")
 
         # Verify invalid payload cannot replace a successfully installed key.
         bad_payload = json.dumps({
@@ -84,7 +84,7 @@ grep -Fq '"endpoint": "http://10.42.40.12:4000/v1"' "$dir/gateway.json"
         )
         if bad.returncode == 0:
             raise RuntimeError("guest accepted invalid model")
-        incus("exec", name, "--project", project, "--", "/bin/sh", "-c", verification)
+        incus("exec", name, "--project", project, "--", "/run/current-system/sw/bin/sh", "-c", verification, stage="guest file verification (after rejection)")
         print("PASS: disposable offline Incus guest accepted stdin provisioning, "
               "enforced private files, and rejected invalid input")
     finally:
