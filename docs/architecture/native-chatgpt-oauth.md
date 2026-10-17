@@ -122,10 +122,12 @@ valid JSON `arguments`, use `--require-function-call`. Examples with
 *synthetic nonsecret* events:
 
 ```sh
-printf '%s\\n' \\
-  'event: response.completed' \\
-  'data: {"type":"response.completed","response":{"status":"completed"}}' \\
-  '' | nix develop -c go run ./cmd/aginctus gateway responses verify
+cat <<'SSE' | nix develop -c go run ./cmd/aginctus gateway responses verify
+event: response.completed
+data: {"type":"response.completed","response":{"status":"completed"}}
+
+SSE
+
 ```
 
 The verifier reads from stdin once and prints only completion/event counts,
