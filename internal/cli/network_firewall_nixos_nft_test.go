@@ -11,8 +11,27 @@ import (
 	"github.com/blevinn/aginctus/internal/firewall"
 )
 
+// Use the shared command/privilege fixture, but pin the native backend
+// exactly as the NixOS systemd service does. Automatic native detection is
+// deliberately disabled to avoid mutating an incidental nftables table.
+func nativeNftReconcileFixture(t *testing.T) *config.Config {
+	t.Helper()
+	firewallReconcileFixture(t)
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	cfg, err := loader.Load(config.Options{
+		Overrides: []string{"firewall.backend=nixos-nft"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
 func TestNativeNftReconcileScopedToOwnedChildChain(t *testing.T) {
-	cfg := firewallReconcileFixture(t)
+	cfg := nativeNftReconcileFixture(t)
 	var txn string
 	firewallCommand = func(_ context.Context, input, name string, args ...string) (string, error) {
 		call := name + " " + strings.Join(args, " ")
@@ -48,7 +67,7 @@ func TestNativeNftReconcileScopedToOwnedChildChain(t *testing.T) {
 }
 
 func TestNativeNftDeletedBridgeClearsOnlyOwnedPermissions(t *testing.T) {
-	cfg := firewallReconcileFixture(t)
+	cfg := nativeNftReconcileFixture(t)
 	var txn string
 	firewallCommand = func(_ context.Context, input, name string, args ...string) (string, error) {
 		switch name + " " + strings.Join(args, " ") {
@@ -81,7 +100,7 @@ func TestNativeNftDeletedBridgeClearsOnlyOwnedPermissions(t *testing.T) {
 }
 
 func TestNativeNftMissingInputHookNeverMutates(t *testing.T) {
-	cfg := firewallReconcileFixture(t)
+	cfg := nativeNftReconcileFixture(t)
 	firewallCommand = func(_ context.Context, _ string, name string, args ...string) (string, error) {
 		switch name + " " + strings.Join(args, " ") {
 		case "nft -a list ruleset":
