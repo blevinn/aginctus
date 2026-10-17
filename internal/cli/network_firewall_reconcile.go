@@ -99,9 +99,16 @@ func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 		return fail("Aginctus-managed firewalld zone is missing; activate the NixOS module")
 	}
 	zone := "--zone=" + firewall.FirewalldZone
-	target, err := run(zone, "--get-target")
+	// firewalld exposes --get-target only in permanent configuration.
+	// Also inspect the active runtime zone: a permanent DROP alone does not
+	// prove that the currently enforced target is still restrictive.
+	target, err := run("--permanent", zone, "--get-target")
 	if err != nil || target != "DROP" {
-		return fail("Aginctus firewalld zone must have the DROP target")
+		return fail("Aginctus firewalld permanent zone must have the DROP target")
+	}
+	activeZone, err := run(zone, "--list-all")
+	if err != nil || !hasFirewalldDropTarget(activeZone) {
+		return fail("Aginctus firewalld runtime zone must have the DROP target")
 	}
 	// We own this dedicated zone. Refuse unexpected runtime configuration
 	// instead of accidentally extending somebody else's host exceptions.
@@ -208,4 +215,13 @@ func sameRichRules(current string, expected []string) bool {
 		}
 	}
 	return true
+}
+
+func hasFirewalldDropTarget(details string) bool {
+	for _, line := range strings.Split(details, "\n") {
+		if strings.TrimSpace(line) == "target: DROP" {
+			return true
+		}
+	}
+	return false
 }
