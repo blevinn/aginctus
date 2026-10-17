@@ -17,7 +17,7 @@ import (
 
 // The key is deliberately piped to a fixed guest helper, never placed in argv.
 var provisionGatewayGuest = func(ctx context.Context, instance string, payload []byte) error {
-	cmd := exec.CommandContext(ctx, "incus", "exec", instance, "--project", "default", "--", "aginctus-opencode-gateway-provision")
+	cmd := exec.CommandContext(ctx, "incus", "exec", instance, "--project", "default", "--", "/run/current-system/sw/bin/aginctus-opencode-gateway-provision")
 	cmd.Stdin = strings.NewReader(string(payload))
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("guest provisioning failed (verify image and permissions)")
