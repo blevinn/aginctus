@@ -5,42 +5,43 @@ import (
 	"testing"
 )
 
-func TestRenderFirewalldHooksEffectiveInputAndOnlyDNSDHCP(t *testing.T) {
+func TestFirewalldRules(t *testing.T) {
 	p := &Policy{Interface: "custom-bridge", Address: "10.20.30.1", Subnet: "10.20.30.0/24"}
-	got, err := RenderFirewalld(p, false, false)
+	got, err := FirewalldRules(p)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(got) != 3 {
+		t.Fatalf("expected DNS UDP/TCP and DHCP, got %v", got)
+	}
 	for _, want := range []string{
-		"add chain inet firewalld aginctus_dns_input",
-		"insert rule inet firewalld filter_INPUT jump aginctus_dns_input",
-		"iifname \"custom-bridge\" ip saddr 10.20.30.0/24 ip daddr 10.20.30.1 udp dport 53 accept",
-		"iifname \"custom-bridge\" ip saddr 10.20.30.0/24 ip daddr 10.20.30.1 tcp dport 53 accept",
-		"iifname \"custom-bridge\" udp sport 68 udp dport 67 accept",
+		`source address="10.20.30.0/24" destination address="10.20.30.1" port port="53" protocol="udp"`,
+		`source address="10.20.30.0/24" destination address="10.20.30.1" port port="53" protocol="tcp"`,
+		`port port="67" protocol="udp" accept`,
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %q: %s", want, got)
+		if !strings.Contains(strings.Join(got, "\n"), want) {
+			t.Errorf("missing %q: %v", want, got)
 		}
 	}
-	for _, bad := range []string{"hook input", "POSTROUTING", "forward", "masquerade", "tcp dport 22"} {
-		if strings.Contains(got, bad) {
-			t.Errorf("unexpected %q: %s", bad, got)
+	for _, rule := range got {
+		if strings.Contains(rule, "dport 22") || strings.Contains(rule, "masquerade") || strings.Contains(rule, "forward") {
+			t.Fatalf("unexpected broad permission: %s", rule)
 		}
 	}
 }
-func TestRenderFirewalldFlushOnlyOnDisown(t *testing.T) {
-	got, err := RenderFirewalld(nil, true, true)
-	if err != nil || got != "flush chain inet firewalld aginctus_dns_input\n" {
-		t.Fatalf("got=%q err=%v", got, err)
+
+func TestFirewalldRulesDisownedOrInvalid(t *testing.T) {
+	empty, err := FirewalldRules(nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("disowned network must produce no exceptions: %v, %v", empty, err)
 	}
-}
-func TestRenderFirewalldFailsOnCorruptHookAndInjectedName(t *testing.T) {
-	if _, err := RenderFirewalld(nil, false, true); err == nil {
-		t.Fatal("orphan hook admitted")
-	}
-	if _, err := RenderFirewalld(&Policy{
-		Interface: "bad\"\nflush table inet firewalld", Address: "10.20.30.1", Subnet: "10.20.30.0/24",
-	}, true, true); err == nil {
-		t.Fatal("injection admitted")
+	for _, p := range []Policy{
+		{Interface: "bad\"\nadd-rule", Address: "10.20.30.1", Subnet: "10.20.30.0/24"},
+		{Interface: "bridge0", Address: "10.20.31.1", Subnet: "10.20.30.0/24"},
+		{Interface: "bridge0", Address: "not-an-ip", Subnet: "10.20.30.0/24"},
+	} {
+		if _, err := FirewalldRules(&p); err == nil {
+			t.Fatalf("invalid policy admitted: %+v", p)
+		}
 	}
 }
