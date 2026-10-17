@@ -109,6 +109,45 @@ authenticated inference response. Thus a pass is **not** permission to enable
 `CHATGPT_TOKEN_DIR` or a `chatgpt/` model. Guest file preparation is #217;
 the independent gateway database and firewall work remains under #219/#220.
 
+### Offline Responses event contract verifier (no gateway activation)
+
+`aginctus gateway responses verify` accepts a **Responses SSE transcript**
+on standard input and checks event/payload consistency, JSON framing,
+bounded input, an explicit `response.completed` event with
+`response.status=completed`, and that no failure, incomplete status,
+duplicate completion or subsequent events occurred. A trailing `[DONE]`
+marker is allowed **only after** the terminal completion. To require a
+completed function-call output item with nonempty `name`, `call_id`, and
+valid JSON `arguments`, use `--require-function-call`. Examples with
+*synthetic nonsecret* events:
+
+```sh
+printf '%s\\n' \\
+  'event: response.completed' \\
+  'data: {"type":"response.completed","response":{"status":"completed"}}' \\
+  '' | nix develop -c go run ./cmd/aginctus gateway responses verify
+```
+
+The verifier reads from stdin once and prints only completion/event counts,
+or a generic rejection; it never prints payload text, prompts or error
+details from the transcript. It deliberately permits future `response.*`
+events not relevant to terminal/call checks and does not interpret model
+outputs. It enforces a bounded stream (8 MiB) and line (1 MiB). This
+allows independent offline regression tests and operator-controlled
+verification of a previously observed streaming event sequence **without**
+introducing an HTTP proxy, credential handler, network access or model
+activation.
+
+**This is not an actual inference acceptance test.** A synthetic stream may
+pass without any model request. The future controlled live acceptance
+(#172/#187/#123/#124) must securely establish the source was the pinned
+LiteLLM gateway, verify authenticated workload ingress, upstream model
+authorization, exact request routing, tool execution and terminal events.
+Do not capture or commit live raw SSE transcripts containing user prompts,
+provider responses or tool arguments; if used live, pipe directly to the
+validator without logging, `tee`, or exposing secrets. Keep all native
+OAuth activation blockers unchanged.
+
 ### Activation blockers verified against pinned LiteLLM v1.103.0
 
 The upstream `litellm/llms/chatgpt/authenticator.py` implementation directly rewrites `auth.json` via `open(..., "w")`, does not implement interprocess locking or atomic token replacement, and can trigger device-code login as a side effect of model resolution. It also embeds some upstream error details in exception messages. Consequently **do not enable `CHATGPT_TOKEN_DIR`, configure an active `chatgpt/` route, or run live OAuth yet**, even after #217 prepares a private file. A later, explicitly reviewed activation must enforce one refresh owner, safe persistence, token-safe errors, and a controlled authorization boundary, ideally through a confirmed compatible upstream release rather than a duplicate OAuth implementation.
