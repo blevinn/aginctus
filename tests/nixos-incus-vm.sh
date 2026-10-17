@@ -152,6 +152,12 @@ pkgs.testers.runNixOSTest {
 }
 NIX
 
+# Firewalld uses the native nftables backend and can exercise real Incus
+# ownership validation with the packaged Aginctus CLI in a disposable VM.
+echo 'Building and executing the disposable NixOS Incus/firewalld integration check...'
+nix build '.#checks.x86_64-linux.firewall-firewalld-integration' --no-link --print-build-logs --show-trace "$@"
+echo 'PASS: Incus/firewalld integration check completed.'
+
 # Run the iptables hook/packet-filtering integration in an independent
 # disposable NixOS VM before the existing native-nftables Incus lifecycle test.
 # The iptables test intentionally uses a fixture; NixOS Incus requires nftables.
