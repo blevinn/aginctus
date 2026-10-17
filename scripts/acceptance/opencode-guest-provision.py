@@ -50,7 +50,8 @@ def main():
         # Probe the imported image *before* passing even a disposable key.
         # Use a fixed, nonsecret script; never echo file contents.
         probe = """set -eu
-for path in /run/current-system/sw/bin/aginctus-opencode-gateway-provision /nix/var/nix/profiles/system/sw/bin/aginctus-opencode-gateway-provision /run/current-system /nix/var/nix/profiles/system; do
+printf 'PID1='; cat /proc/1/comm
+for path in /run/current-system/sw/bin/aginctus-opencode-gateway-provision /nix/var/nix/profiles/system/sw/bin/aginctus-opencode-gateway-provision /run/current-system /nix/var/nix/profiles/system /etc/os-release /etc/systemd/system /sbin/init; do
   if [ -e "$path" ]; then printf 'EXISTS %s\\n' "$path"; else printf 'MISSING %s\\n' "$path"; fi
 done
 """
@@ -58,7 +59,7 @@ done
                        "/bin/sh", "-c", probe, stage="guest image profile diagnostic")
         print(result.stdout, end="")
         if "EXISTS /run/current-system/sw/bin/aginctus-opencode-gateway-provision" not in result.stdout:
-            raise RuntimeError("guest helper absent at expected system profile path")
+            raise RuntimeError("guest system profile not ready or helper absent; see boot/profile diagnostic")
 
         incus("exec", name, "--project", project, "--",
               helper, input_data=payload, stage="guest helper provisioning")
