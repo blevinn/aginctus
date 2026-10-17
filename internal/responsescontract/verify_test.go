@@ -53,6 +53,8 @@ func TestVerifyResponsesRejectsFailuresWithoutLeakingPayload(t *testing.T) {
 		{"event after completion", finished+created, false},
 		{"function item incomplete", invalidCall+finished, true},
 		{"no tool event", created+finished, true},
+		{"duplicate completed function call", callDone+callDone+finished, true},
+		{"nonobject function arguments", strings.Replace(callDone, "{}", "null", 1)+finished, true},
 		{"unknown SSE field", "authorization: Bearer "+leak+"\n\n"+finished, false},
 		{"unexpected data marker", "data: [DONE]\n\n"+finished, false},
 		{"unexpected event type", "data: {\"type\":\"error\",\"detail\":\""+leak+"\"}\n\n"+finished, false},
