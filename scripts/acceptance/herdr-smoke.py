@@ -88,11 +88,27 @@ def main():
                     if not isinstance(result, dict) or "result" not in result:
                         raise RuntimeError("agent get returned no result")
                     print(f"PASS: OpenCode agent startup and inspection, iteration {iteration+1}")
+                    if os.environ.get("AGINCTUS_ACCEPTANCE_HERDR_AGENT_PROMPT") == "I_UNDERSTAND":
+                        step = "agent-prompt-wait"
+                        subprocess.run([sys.executable, str(fixture), "prompt", str(base), identity,
+                                        "Reply with the word READY and do not modify any files."],
+                                       env=env, check=True, timeout=180, capture_output=True, text=True)
+                        subprocess.run([sys.executable, str(fixture), "wait", str(base), identity],
+                                       env=env, check=True, timeout=180, capture_output=True, text=True)
+                        print(f"PASS: agent prompt/wait returned, iteration {iteration+1}")
             except (RuntimeError, OSError, subprocess.SubprocessError, ValueError, KeyError, json.JSONDecodeError):
                 print(f"FAIL: Herdr smoke iteration {iteration+1}, phase {step} (details suppressed)", file=sys.stderr)
                 raise
             finally:
                 if (base.parent / ".herdr-owned.json").exists():
+                    # Attempt scoped interrupt when an agent was requested, then
+                    # close the recorded workspace even if interrupt fails.
+                    if agent_smoke:
+                        try:
+                            subprocess.run([sys.executable, str(fixture), "stop", str(base), identity],
+                                           env=env, check=True, timeout=180, capture_output=True, text=True)
+                        except (OSError, subprocess.SubprocessError):
+                            print("WARN: agent interrupt failed; closing owned workspace", file=sys.stderr)
                     subprocess.run([sys.executable, str(fixture), "close", str(base), identity],
                                    env=env, check=True, timeout=180, capture_output=True, text=True)
                 subprocess.run([sys.executable, cleanup, "cleanup", str(base), identity, guest], check=True, timeout=60,
