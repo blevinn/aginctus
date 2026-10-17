@@ -71,7 +71,11 @@ pkgs.testers.runNixOSTest {
     def firewall(*args):
         return machine.succeed("firewall-cmd " + " ".join(args))
 
-    assert firewall(zone, "--get-target").strip() == "DROP"
+    assert firewall("--permanent", zone, "--get-target").strip() == "DROP"
+    assert any(
+        line.strip() == "target: DROP"
+        for line in firewall(zone, "--list-all").splitlines()
+    )
     assert "aginctus-test" in firewall(zone, "--list-interfaces")
 
     def owned_rules():
@@ -119,7 +123,11 @@ pkgs.testers.runNixOSTest {
 
     machine.succeed("systemctl restart firewalld.service")
     machine.succeed("systemctl start aginctus-firewall-reconcile.service")
-    assert firewall(zone, "--get-target").strip() == "DROP"
+    assert firewall("--permanent", zone, "--get-target").strip() == "DROP"
+    assert any(
+        line.strip() == "target: DROP"
+        for line in firewall(zone, "--list-all").splitlines()
+    )
     assert 'port="53"' in owned_rules()
     assert "aginctus-test" in firewall(zone, "--list-interfaces")
 
