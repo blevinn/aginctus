@@ -260,10 +260,12 @@ def main(argv=None):
         base = endpoint(args.endpoint)
         if not ALIAS.fullmatch(args.alias) or not KEY_ALIAS.fullmatch(args.gateway_id):
             raise KeyErrorSafe("invalid alias or gateway identifier")
-        path = secure_output_path(args.output, creating=not args.revoke)
         if not args.issue and not args.revoke:
-            print(f"DRY RUN: would manage one model-scoped pilot key for {args.alias}; no secrets read or network access")
+            if not Path(args.output).is_absolute() or str(args.output).startswith("/nix/store/"):
+                raise KeyErrorSafe("key output must be an absolute path outside Nix store")
+            print(f"DRY RUN: would manage one model-scoped pilot key for {args.alias}; no secrets, files or network accessed")
             return 0
+        path = secure_output_path(args.output, creating=not args.revoke)
         master = read_master(args.gateway_id)
         opener = build_opener(ProxyHandler({}), NoRedirect())
         if args.issue:
