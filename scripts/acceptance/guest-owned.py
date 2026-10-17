@@ -42,7 +42,7 @@ stage)
     fi
     safe_dir "$root"
     mkdir -m 700 -- "$base"
-    printf '%s\\n' "$identity" > "$marker"
+    printf '%s\n' "$identity" > "$marker"
     chmod 600 -- "$marker"
     check_marker
     ;;
