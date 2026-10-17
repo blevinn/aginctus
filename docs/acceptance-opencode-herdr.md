@@ -59,4 +59,3 @@ nix develop -c python3 scripts/acceptance/herdr-smoke.py
 ```
 
 Review the Herdr workspace list afterwards and confirm that neither run left a workspace or a guest directory. This only establishes remote workspace operations, not the full `agent start/prompt/wait/stop` contract. A separate real agent-lifecycle run is still required before regarding #233 as a validated real lifecycle integration. Do **not** merge solely on mocked lifecycle assertions.
-
