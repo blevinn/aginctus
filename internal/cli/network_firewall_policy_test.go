@@ -37,3 +37,53 @@ func TestFirewallPolicyRejectsUnownedBeforeDisplay(t *testing.T) {
 		t.Fatalf("out=%q err=%q", out.String(), errs.String())
 	}
 }
+
+func TestFirewalldRuntimeTargetMustBeDrop(t *testing.T) {
+	for _, tc := range []struct {
+		name, response string
+		accept         bool
+	}{
+		{"drop", "aginctus-dns (active)\n  target: DROP\n  interfaces: aginctus-test\n", true},
+		{"accept", "aginctus-dns (active)\n  target: ACCEPT\n", false},
+		{"default", "aginctus-dns\n  target: default\n", false},
+		{"missing", "aginctus-dns\n  interfaces: aginctus-test\n", false},
+		{"unrelated", "aginctus-dns\n  target: REJECT\n  rich rules:\n    target: DROP unexpected\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hasFirewalldDropTarget(tc.response); got != tc.accept {
+				t.Fatalf("hasFirewalldDropTarget(%q)=%v, want %v", tc.response, got, tc.accept)
+			}
+		})
+	}
+}
+
+func TestSelectFirewallBackendDuringRestart(t *testing.T) {
+	for _, tc := range []struct {
+		name, ruleset, requested, selected, wantError string
+	}{
+		{"explicit firewalld ready", "table inet firewalld {", "firewalld", "firewalld", ""},
+		{"explicit firewalld startup gap", "table ip filter {", "firewalld", "", "not ready"},
+		{"explicit firewalld no tables", "", "firewalld", "", "not ready"},
+		{"explicit firewalld conflicting filters", "table inet firewalld {\ntable inet nixos-fw {", "firewalld", "", "multiple independently"},
+		{"explicit iptables ready", "table ip filter {", "iptables-nft", "iptables-nft", ""},
+		{"explicit iptables rejects firewalld", "table inet firewalld {", "iptables-nft", "", "conflicts"},
+		{"explicit iptables rejects native nftables", "table inet nixos-fw {", "iptables-nft", "", "conflicts"},
+		{"auto firewalld", "table inet firewalld {", "", "firewalld", ""},
+		{"auto iptables", "table ip filter {", "", "iptables-nft", ""},
+		{"auto native nftables", "table inet nixos-fw {", "", "", "native nftables"},
+		{"unknown backend", "", "bypass", "", "unsupported"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := selectFirewallBackend(tc.ruleset, tc.requested)
+			if got != tc.selected {
+				t.Errorf("backend=%q, want %q", got, tc.selected)
+			}
+			if tc.wantError == "" && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tc.wantError != "" && (err == nil || !strings.Contains(err.Error(), tc.wantError)) {
+				t.Errorf("error=%v, want substring %q", err, tc.wantError)
+			}
+		})
+	}
+}

@@ -13,6 +13,15 @@ let
     if [ "''${1:-}" = "--configuration-file" ]; then
       shift 2
     fi
+    # The NixOS unit now pins the backend explicitly. The fixture exercises
+    # iptables rule application rather than the packaged Go CLI, but must
+    # verify the same invocation shape instead of rejecting valid arguments.
+    if [ "''${1:-}" = "--config" ]; then
+      if [ "''${2:-}" != "firewall.backend=iptables-nft" ]; then
+        exit 2
+      fi
+      shift 2
+    fi
     if [ "''${1:-}" != "network" ] || [ "''${2:-}" != "firewall" ] || [ "''${3:-}" != "reconcile" ]; then
       exit 2
     fi

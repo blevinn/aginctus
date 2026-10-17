@@ -128,6 +128,9 @@ func (l *Loader) Load(options Options) (*Config, error) {
 }
 
 var defaults = map[string]any{
+	"firewall": map[string]any{
+		"zone": "aginctus-dns",
+	},
 	"gateway": map[string]any{
 		"id":          "local",
 		"credentials": map[string]any{"storage": map[string]any{"pool": "default"}},
