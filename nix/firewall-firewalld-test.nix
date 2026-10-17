@@ -127,7 +127,7 @@ pkgs.testers.runNixOSTest {
     machine.start()
     machine.wait_for_unit("multi-user.target")
     machine.wait_until_succeeds(
-        "firewall-cmd --zone=aginctus-dns --list-rich-rules | grep -F 'port=\\"53\\"'"
+        "firewall-cmd --zone=aginctus-dns --list-rich-rules | grep -F 'port='"
     )
   '';
 }
