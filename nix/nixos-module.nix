@@ -55,6 +55,10 @@ let
     alias:
     builtins.stringLength alias <= 100 && builtins.match "[A-Za-z0-9][A-Za-z0-9_.-]*" alias != null;
 
+  validFirewalldZone =
+    builtins.stringLength cfg.settings.firewall.zone <= 17
+    && builtins.match "aginctus-[a-z0-9][a-z0-9-]*" cfg.settings.firewall.zone != null;
+
   enabledImageAliases =
     lib.optional cfg.images.herdrClient.enable cfg.images.herdrClient.alias
     ++ lib.optional cfg.images.opencodeWorkload.enable cfg.images.opencodeWorkload.alias;
@@ -275,10 +279,7 @@ in
       {
         assertion =
           !cfg.firewall.enable
-          || (
-            builtins.stringLength cfg.settings.firewall.zone <= 17
-            && builtins.match "aginctus-[a-z0-9][a-z0-9-]*" cfg.settings.firewall.zone != null
-          );
+          || validFirewalldZone;
         message = "services.aginctus.settings.firewall.zone must begin with aginctus-, use only lowercase letters, digits and hyphens, and be no more than 17 characters long.";
       }
       {
@@ -332,7 +333,7 @@ in
     # Only this empty, DROP-by-default zone is permanent. Verified bridge
     # bindings and narrow exceptions are installed at runtime by the service;
     # firewalld reloads remove them until the next reconciliation.
-    environment.etc."firewalld/zones/${cfg.settings.firewall.zone}.xml" = lib.mkIf (cfg.firewall.enable && firewalldBackend) {
+    environment.etc."firewalld/zones/${cfg.settings.firewall.zone}.xml" = lib.mkIf (cfg.firewall.enable && firewalldBackend && validFirewalldZone) {
       text = ''
         <?xml version="1.0" encoding="utf-8"?>
         <zone target="DROP">
