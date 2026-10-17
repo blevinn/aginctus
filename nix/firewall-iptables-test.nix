@@ -76,7 +76,10 @@ pkgs.testers.runNixOSTest {
       before = [ "aginctus-firewall-reconcile.service" ];
       serviceConfig.Type = "oneshot";
       serviceConfig.RemainAfterExit = true;
-      path = [ pkgs.iproute2 pkgs.coreutils ];
+      path = [
+        pkgs.iproute2
+        pkgs.coreutils
+      ];
       script = ''
         mkdir -p /run/aginctus-test
         ip link show aginctus-test >/dev/null 2>&1 || ip link add aginctus-test type bridge
