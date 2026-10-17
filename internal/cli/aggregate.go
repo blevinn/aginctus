@@ -15,6 +15,7 @@ import (
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 	"github.com/blevinn/aginctus/internal/orchestration"
+	"github.com/blevinn/aginctus/internal/statevolume"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -120,7 +121,9 @@ var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, ef
 	// First validate without side effects, including unknown drivers and
 	// malformed Compose documents.
 	validator := orchestration.NewEngine(map[string]orchestration.Driver{
-		"apply": applydriver.New(), "compose": composedriver.New(),
+		"apply":        applydriver.New(),
+		"compose":      composedriver.New(),
+		"state-volume": statevolume.NewDriver(),
 	})
 	if err := validator.Validate(plan, orchestration.ExecuteOptions{}); err != nil {
 		return err
@@ -146,7 +149,9 @@ var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, ef
 		}
 	}
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
-		"apply": applydriver.New(), "compose": composedriver.NewWithEnvironment(environment),
+		"apply":        applydriver.New(),
+		"compose":      composedriver.NewWithEnvironment(environment),
+		"state-volume": statevolume.NewDriver(),
 	})
 	_, err = engine.Execute(ctx, plan, orchestration.ExecuteOptions{})
 	return err
