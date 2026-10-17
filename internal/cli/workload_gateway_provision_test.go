@@ -29,9 +29,9 @@ func TestDiscoverGatewayIPv4(t *testing.T) {
 	}
 
 	for _, tt := range []struct {
-		name       string
-		inventory  string
-		network    string
+		name      string
+		inventory string
+		network   string
 	}{
 		{"stopped", strings.Replace(good, `"Running"`, `"Stopped"`, 1), management},
 		{"unowned", strings.Replace(good, `"user.aginctus.managed":"true"`, `"user.aginctus.managed":"false"`, 1), management},
