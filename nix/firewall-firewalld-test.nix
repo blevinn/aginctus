@@ -5,21 +5,11 @@
 }:
 let
   pkgs = import nixpkgs { inherit system; };
-  # Capture the exact nft transaction and rejection reason inside the disposable
-  # VM only. The production service continues to suppress raw nft output.
-  nftDiagnostic = pkgs.writeShellScriptBin "nft" ''
-    if [ "''${1:-}" = "-f" ] && [ "''${2:-}" = "-" ]; then
-      mkdir -p /run/aginctus-nft-test
-      cat > /run/aginctus-nft-test/batch.nft
-      ${pkgs.nftables}/bin/nft "$@" < /run/aginctus-nft-test/batch.nft > /run/aginctus-nft-test/stdout 2> /run/aginctus-nft-test/stderr
-      exit $?
-    fi
-    exec ${pkgs.nftables}/bin/nft "$@"
-  '';
+
 in
 pkgs.testers.runNixOSTest {
   name = "aginctus-firewalld-incus";
-  nodes.machine = { lib, pkgs, ... }: {
+  nodes.machine = { pkgs, ... }: {
     imports = [ self.nixosModules.aginctus ];
     system.stateVersion = "26.05";
     virtualisation = {
@@ -30,7 +20,6 @@ pkgs.testers.runNixOSTest {
     networking.nftables.enable = true;
     networking.firewall.enable = true;
     services.firewalld.enable = true;
-    systemd.services.aginctus-firewall-reconcile.path = lib.mkBefore [ nftDiagnostic ];
     virtualisation.incus.enable = true;
 
     services.aginctus = {
@@ -52,6 +41,7 @@ pkgs.testers.runNixOSTest {
       incus
       iproute2
       nftables
+      firewalld
       dnsutils
       netcat-openbsd
       python3
@@ -75,49 +65,26 @@ pkgs.testers.runNixOSTest {
         "ip -4 address show aginctus-test | grep -F 10.247.82.1"
     )
     machine.succeed("systemctl reset-failed aginctus-firewall-reconcile.service || true")
-    # Fail with actionable nft diagnostics from this disposable VM. Do not
-    # expose raw nft output in the production service journal.
-    status, service_output = machine.execute(
-        "systemctl start aginctus-firewall-reconcile.service"
-    )
-    if status != 0:
-        print("Aginctus firewall service failed: " + service_output)
-        for command in [
-            "systemctl show aginctus-firewall-reconcile.service -p ExecMainStatus -p Result",
-            "nft -a list table inet firewalld | head -15",
-            "systemctl show aginctus-firewall-reconcile.service -p CapabilityBoundingSet -p AmbientCapabilities",
-            "nft -a list chain inet firewalld filter_INPUT",
-            "nft -a list chain inet firewalld aginctus_dns_input",
-            "cat /run/aginctus-nft-test/batch.nft",
-            "cat /run/aginctus-nft-test/stderr",
-            "aginctus --configuration-file /etc/aginctus/config.json network firewall policy",
-        ]:
-            code, output = machine.execute(command)
-            print(f"DIAG {command}: exit={code} output={output}")
-        # Check the exact transaction submitted by the reconciler rather
-        # than duplicating policy/rules in a separate handwritten fixture.
-        code, output = machine.execute(
-            "nft --check -f /run/aginctus-nft-test/batch.nft"
-        )
-        print(f"DIAG nft batch preflight: exit={code} output={output}")
-        raise AssertionError("Aginctus nft reconciliation failed; see DIAG lines above")
+    machine.succeed("systemctl start aginctus-firewall-reconcile.service")
 
+    zone = "--zone=aginctus-dns"
+    def firewall(*args):
+        return machine.succeed("firewall-cmd " + " ".join(args))
+
+    assert firewall(zone, "--get-target").strip() == "DROP"
+    assert "aginctus-test" in firewall(zone, "--list-interfaces")
 
     def owned_rules():
-        return machine.succeed("nft list chain inet firewalld aginctus_dns_input")
+        return firewall(zone, "--list-rich-rules")
 
-    def hook():
-        return machine.succeed("nft -a list chain inet firewalld filter_INPUT")
-
-    assert "jump aginctus_dns_input" in hook()
     rules = owned_rules()
-    assert rules.count("dport 53") == 2, rules
-    assert "dport 67" in rules, rules
-    assert "dport 22" not in rules, rules
+    assert rules.count('port="53"') == 2, rules
+    assert 'port="67"' in rules, rules
+    assert 'port="22"' not in rules, rules
 
     machine.succeed("systemctl start aginctus-firewall-reconcile.service")
     assert owned_rules() == rules, "reconciliation duplicated rules"
-    assert hook().count("jump aginctus_dns_input") == 1, hook()
+    assert firewall(zone, "--list-interfaces").split().count("aginctus-test") == 1
 
     machine.succeed("ip netns add test-guest")
     machine.succeed("ip link add guest-host type veth peer name guest0")
@@ -144,22 +111,23 @@ pkgs.testers.runNixOSTest {
 
     machine.succeed("incus network set aginctus-test user.aginctus.managed false")
     machine.fail("systemctl start aginctus-firewall-reconcile.service")
-    assert "dport 53" not in owned_rules(), owned_rules()
+    assert 'port="53"' not in owned_rules(), owned_rules()
     machine.succeed("incus network set aginctus-test user.aginctus.managed true")
     machine.succeed("systemctl reset-failed aginctus-firewall-reconcile.service")
     machine.succeed("systemctl start aginctus-firewall-reconcile.service")
-    assert "dport 53" in owned_rules()
+    assert 'port="53"' in owned_rules()
 
     machine.succeed("systemctl restart firewalld.service")
     machine.succeed("systemctl start aginctus-firewall-reconcile.service")
-    assert hook().count("jump aginctus_dns_input") == 1, hook()
-    assert "dport 53" in owned_rules()
+    assert firewall(zone, "--get-target").strip() == "DROP"
+    assert 'port="53"' in owned_rules()
+    assert "aginctus-test" in firewall(zone, "--list-interfaces")
 
     machine.shutdown()
     machine.start()
     machine.wait_for_unit("multi-user.target")
     machine.wait_until_succeeds(
-        "nft list chain inet firewalld aginctus_dns_input | grep -F 'dport 53'"
+        "firewall-cmd --zone=aginctus-dns --list-rich-rules | grep -F 'port=\\"53\\"'"
     )
   '';
 }
