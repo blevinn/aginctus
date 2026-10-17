@@ -92,15 +92,10 @@ pkgs.testers.runNixOSTest {
         ]:
             code, output = machine.execute(command)
             print(f"DIAG {command}: exit={code} output={output}")
-        machine.succeed("""cat > /tmp/aginctus-firewalld-preflight.nft <<'NFT'
-add chain inet firewalld aginctus_dns_input
-insert rule inet firewalld filter_INPUT jump aginctus_dns_input comment "aginctus:guest-host-dns-dhcp"
-add rule inet firewalld aginctus_dns_input iifname "aginctus-test" ip saddr 10.247.82.0/24 ip daddr 10.247.82.1 udp dport 53 accept
-add rule inet firewalld aginctus_dns_input iifname "aginctus-test" ip saddr 10.247.82.0/24 ip daddr 10.247.82.1 tcp dport 53 accept
-add rule inet firewalld aginctus_dns_input iifname "aginctus-test" udp sport 68 udp dport 67 accept
-NFT""")
+        # Check the exact transaction submitted by the reconciler rather
+        # than duplicating policy/rules in a separate handwritten fixture.
         code, output = machine.execute(
-            "nft --check -f /tmp/aginctus-firewalld-preflight.nft"
+            "nft --check -f /run/aginctus-nft-test/batch.nft"
         )
         print(f"DIAG nft batch preflight: exit={code} output={output}")
         raise AssertionError("Aginctus nft reconciliation failed; see DIAG lines above")
