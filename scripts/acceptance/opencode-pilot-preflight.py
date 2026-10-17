@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Read-only pilot infrastructure preflight for #124; no Herdr or inference claims."""
 import json
-import os
 import subprocess
 import sys
 from urllib.parse import quote
@@ -10,8 +9,21 @@ def run(*args):
     try:
         result = subprocess.run(args, capture_output=True, text=True, timeout=15, check=True)
         return result.stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        raise RuntimeError("required read-only command failed") from None
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("read-only command timed out: " + " ".join(args[:3])) from None
+    except FileNotFoundError:
+        raise RuntimeError("required executable missing: " + args[0]) from None
+    except subprocess.CalledProcessError:
+        # Never include stderr or stdout; only approved static operation labels.
+        if args[0] == "aginctus":
+            label = "config get"
+        elif args[0] == "incus":
+            label = "query"
+        else:
+            label = "command"
+        raise RuntimeError("read-only " + label + " failed") from None
+    except OSError:
+        raise RuntimeError("unable to invoke required read-only command") from None
 
 def config(name):
     value = run("aginctus", "config", "get", name)
