@@ -118,7 +118,7 @@ bounded input, an explicit `response.completed` event with
 duplicate completion or subsequent events occurred. A trailing `[DONE]`
 marker is allowed **only after** the terminal completion. To require a
 completed function-call output item with nonempty `name`, `call_id`, and
-valid JSON `arguments`, use `--require-function-call`. Examples with
+valid JSON-object `arguments`, use `--require-function-call`. Examples with
 *synthetic nonsecret* events:
 
 ```sh
