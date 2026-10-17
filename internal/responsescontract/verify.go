@@ -45,6 +45,7 @@ func Verify(input io.Reader, requireFunctionCall bool) (Summary, error) {
 	eventName := ""
 	var data strings.Builder
 	hasData, completed, done := false, false, false
+	seenCalls := map[string]bool{}
 	dispatch := func() error {
 		if !hasData {
 			eventName = ""
@@ -87,10 +88,15 @@ func Verify(input io.Reader, requireFunctionCall bool) (Summary, error) {
 			return fmt.Errorf("Responses stream failed or was incomplete")
 		case "response.output_item.done":
 			if payload.Item.Type == "function_call" {
+				args := strings.TrimSpace(payload.Item.Arguments)
 				if payload.Item.CallID == "" || payload.Item.Name == "" ||
-					!json.Valid([]byte(payload.Item.Arguments)) {
+					!strings.HasPrefix(args, "{") || !json.Valid([]byte(args)) {
 					return fmt.Errorf("Responses function-call item is incomplete")
 				}
+				if seenCalls[payload.Item.CallID] {
+					return fmt.Errorf("Responses function-call item was completed more than once")
+				}
+				seenCalls[payload.Item.CallID] = true
 				summary.FunctionCalls++
 			}
 		}
