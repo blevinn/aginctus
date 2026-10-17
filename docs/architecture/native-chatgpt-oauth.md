@@ -39,6 +39,28 @@ It is **not enough** to mount arbitrary host authentication files or copy tokens
 4. Prove pinned-version Responses streaming, tool-call events and completion statuses with actual OpenCode traffic through LiteLLM.
 5. Verify that the `aginctus-egress` bridge is present or reconcile it through the existing gateway provisioning path before attempting live deployment. The earlier #186 daemon deployment failed because the bridge was missing, not because provider credentials were invalid.
 
+
+## Local model alias registration (inert, pre-activation)
+
+Aginctus can now persist a workload-facing alias intent **without** activating a LiteLLM deployment, starting OAuth, selecting an upstream account, or asserting that a model name is available:
+
+```sh
+aginctus gateway provider chatgpt register --alias=personal
+aginctus gateway model coding register --provider=personal --source=chatgpt/OPERATOR_VERIFIED_MODEL
+aginctus gateway model list
+aginctus gateway model coding show
+```
+
+Replace `OPERATOR_VERIFIED_MODEL` only after independently checking account entitlements and the pinned provider's supported model identifiers. `gateway model ... register --dry-run` still previews only the nonsecret LiteLLM Responses model fragment and does not persist state. Bare `chatgpt/MODEL` registration defaults to the `chatgpt` provider identity, which must first be registered.
+
+The model registry is `${XDG_STATE_HOME:-$HOME/.local/state}/aginctus/gateway/models.json` (0700 parent, 0600 file), separate from `providers.json`. It validates aliases, requires a previously registered ChatGPT provider alias, serializes writes, rejects suspicious files and duplicate conflicting registrations, and provides read-only inspection. The records are nonsecret **intent**, not deployed routes; downstream #123 must receive only a separately authorized workload-facing alias and LiteLLM key. #124 must verify the alias against a *real terminal Responses event*, not registration success. This stage does not add a new public listener or modify gateway networks.
+
+### Activation blockers verified against pinned LiteLLM v1.103.0
+
+The upstream `litellm/llms/chatgpt/authenticator.py` implementation directly rewrites `auth.json` via `open(..., "w")`, does not implement interprocess locking or atomic token replacement, and can trigger device-code login as a side effect of model resolution. It also embeds some upstream error details in exception messages. Consequently **do not enable `CHATGPT_TOKEN_DIR`, configure an active `chatgpt/` route, or run live OAuth yet**, even after #217 prepares a private file. A later, explicitly reviewed activation must enforce one refresh owner, safe persistence, token-safe errors, and a controlled authorization boundary, ideally through a confirmed compatible upstream release rather than a duplicate OAuth implementation.
+
+OpenAI's individual Terms of Use (https://openai.com/policies/terms-of-use/) restrict automated/programmatic output extraction. The applicability to routing a personal ChatGPT subscription through LiteLLM for workload inference is not established here; obtain a documented authorization basis before enabling this route. Use an approved API-key-backed provider as a separate supported route when appropriate.
+
 ## Scope guardrails
 
 Do not add another OpenAI Responses proxy or multiple LiteLLM instances by default. Use only supported ChatGPT models and account permissions. Explicitly error on unsupported features. Per-workload LiteLLM identities belong in v0.2 (#177), not this milestone. No live OAuth credential deployment occurs as a side effect of merging this document.
