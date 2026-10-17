@@ -331,6 +331,7 @@
               jq
               just
               nixfmt
+              python3
               shellcheck
               shfmt
             ];
