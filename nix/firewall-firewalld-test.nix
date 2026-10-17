@@ -56,7 +56,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed(
         "incus network create aginctus-test "
         "ipv4.address=10.247.82.1/24 ipv4.nat=false ipv4.routing=false "
-        "ipv6.address=none user.aginctus.managed=true "
+        "ipv6.address=none raw.dnsmasq=address=/fixture.incus/10.247.82.1 user.aginctus.managed=true "
         "user.aginctus.resource=management-network"
     )
     machine.wait_until_succeeds(
