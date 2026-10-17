@@ -275,6 +275,9 @@ func runNetwork(
 	if args[0] == "status" {
 		return runNetworkStatus(ctx, args[1:], stdout, stderr, effective)
 	}
+	if len(args) == 2 && args[0] == "firewall" && args[1] == "policy" {
+		return runNetworkFirewallPolicy(ctx, stdout, stderr, effective)
+	}
 
 	action := args[0]
 	options, err := parseNetworkOptions(args[1:])
@@ -347,6 +350,7 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] network apply [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] network remove [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] network status")
+	fmt.Fprintln(w, "       aginctus [global options] network firewall policy")
 }
 
 var ensureCredentialStorage = statevolume.EnsureGatewayCredentialsOnHost
