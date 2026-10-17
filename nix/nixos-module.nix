@@ -369,7 +369,23 @@ in
             ProtectHome = true;
             CapabilityBoundingSet = [ "CAP_NET_ADMIN" ];
             AmbientCapabilities = [ "CAP_NET_ADMIN" ];
-            ExecStart = "${aginctusCommand} --configuration-file ${configFile} network firewall reconcile";
+            # Reconciliation must not misidentify an uninitialized firewalld
+            # nftables table as the iptables-nft backend during daemon restart.
+            # Wait a bounded time for both D-Bus and the effective INPUT hook.
+            ExecStartPre = lib.optional firewalldBackend (
+              "${pkgs.writeShellScript "aginctus-firewalld-ready" ''
+                for attempt in {1..50}; do
+                  if ${pkgs.nftables}/bin/nft list chain inet firewalld filter_INPUT >/dev/null 2>&1 \\
+                    && ${pkgs.firewalld}/bin/firewall-cmd --state >/dev/null 2>&1; then
+                    exit 0
+                  fi
+                  ${pkgs.coreutils}/bin/sleep 0.2
+                done
+                echo 'firewalld INPUT chain is not ready for reconciliation' >&2
+                exit 1
+              ''}"
+            );
+            ExecStart = "${aginctusCommand} --configuration-file ${configFile} --config firewall.backend=${if firewalldBackend then "firewalld" else "iptables-nft"} network firewall reconcile";
           };
         };
       }
