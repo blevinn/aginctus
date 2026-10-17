@@ -12,7 +12,10 @@ PHASES = ("open", "start", "prompt", "wait", "stop", "close")
 ID = re.compile(r"^aginctus-acceptance\.[A-Za-z0-9]{8}$")
 
 def invoke(machine, *args):
-    cmd = ["herdr", "--machine", machine, *args]
+    client = os.environ.get("AGINCTUS_ACCEPTANCE_HERDR_CLIENT", "aginctus-herdr")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", client):
+        raise RuntimeError("invalid managed Herdr client name")
+    cmd = ["incus", "exec", client, "--", "herdr", "--machine", machine, *args]
     try:
         result = subprocess.run(cmd, text=True, capture_output=True, check=True, timeout=180)
     except (OSError, subprocess.SubprocessError):
