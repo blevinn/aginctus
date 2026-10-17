@@ -17,6 +17,7 @@ let
     ;
 
   cfg = config.services.aginctus;
+  firewalldBackend = config.services.firewalld.enable;
   system = pkgs.stdenv.hostPlatform.system;
   jsonFormat = pkgs.formats.json { };
 
@@ -266,9 +267,8 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion =
-          !cfg.firewall.enable || (config.networking.firewall.enable && !config.networking.nftables.enable);
-        message = "services.aginctus.firewall requires networking.firewall.enable=true and networking.nftables.enable=false; native nftables is unsupported in v0.1.";
+        assertion = !cfg.firewall.enable || (config.networking.firewall.enable && (firewalldBackend || !config.networking.nftables.enable));
+        message = "services.aginctus.firewall requires enabled host filtering and supports firewalld-nft or NixOS iptables-nft, not NixOS native nftables alone.";
       }
       {
         assertion = configuredSecretPaths == [ ];
@@ -290,16 +290,16 @@ in
       }
     ];
 
-    # Attach inside NixOS's nixos-fw decision chain ahead of its final
-    # reject, not in builtin INPUT where it could bypass host policies.
-    networking.firewall.extraCommands = lib.mkIf cfg.firewall.enable ''
+    # ExtraCommands executes before the NixOS iptables firewall's final
+    # reject, unlike an independent nftables accept-only base chain.
+    networking.firewall.extraCommands = lib.mkIf (cfg.firewall.enable && !firewalldBackend) ''
       iptables -N AGINCTUS_INPUT 2>/dev/null || iptables -F AGINCTUS_INPUT
       iptables -C nixos-fw -j AGINCTUS_INPUT 2>/dev/null || iptables -I nixos-fw 1 -j AGINCTUS_INPUT
       # On Incus errors the empty chain must remain fail-closed.
       ${aginctusCommand} --configuration-file ${configFile} network firewall reconcile || true
     '';
-    networking.firewall.extraPackages = lib.mkIf cfg.firewall.enable [ pkgs.nftables ];
-    networking.firewall.extraStopCommands = lib.mkIf cfg.firewall.enable ''
+    networking.firewall.extraPackages = lib.mkIf (cfg.firewall.enable && !firewalldBackend) [ pkgs.nftables ];
+    networking.firewall.extraStopCommands = lib.mkIf (cfg.firewall.enable && !firewalldBackend) ''
       iptables -D nixos-fw -j AGINCTUS_INPUT 2>/dev/null || true
       iptables -F AGINCTUS_INPUT 2>/dev/null || true
       iptables -X AGINCTUS_INPUT 2>/dev/null || true
@@ -321,19 +321,9 @@ in
         aginctus-firewall-reconcile = {
           description = "Reconcile Aginctus-owned Incus guest-to-host DNS/DHCP policy";
           wantedBy = [ "multi-user.target" ];
-          after = [
-            "incus.service"
-            "firewall.service"
-          ];
-          wants = [
-            "incus.service"
-            "firewall.service"
-          ];
-          path = [
-            pkgs.iptables
-            pkgs.nftables
-            pkgs.incus
-          ];
+          after = [ "incus.service" "firewall.service" ] ++ lib.optional firewalldBackend "firewalld.service";
+          wants = [ "incus.service" "firewall.service" ] ++ lib.optional firewalldBackend "firewalld.service";
+          path = [ pkgs.iptables pkgs.nftables pkgs.incus ];
           serviceConfig = {
             Type = "oneshot";
             User = "root";
@@ -346,7 +336,8 @@ in
           };
         };
       }
-      // lib.optionalAttrs cfg.images.herdrClient.enable {
+      //
+      lib.optionalAttrs cfg.images.herdrClient.enable {
         aginctus-image-herdr-client = imageUpdateService {
           alias = cfg.images.herdrClient.alias;
           source = cfg.images.herdrClient.source;
