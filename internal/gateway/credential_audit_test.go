@@ -73,7 +73,9 @@ func TestCredentialAuditFailsClosed(t *testing.T) {
 		{"foreign instance", func(f *fixture) { f.i.Config["user.aginctus.managed"] = "false" }, "LiteLLM target"},
 		{"unmounted", func(f *fixture) { delete(f.i.ExpandedDevices, credentialDevice) }, "no matching"},
 		{"changed device", func(f *fixture) { f.i.ExpandedDevices[credentialDevice]["source"] = "foreign" }, "unexpected"},
-		{"overlapping mount", func(f *fixture) { f.i.ExpandedDevices["other"] = map[string]string{"type": "disk", "path": "/var/lib/aginctus"} }, "overlaps"},
+		{"overlapping mount", func(f *fixture) {
+			f.i.ExpandedDevices["other"] = map[string]string{"type": "disk", "path": "/var/lib/aginctus"}
+		}, "overlaps"},
 		{"missing volume", func(f *fixture) { f.v = nil }, "credential volume"},
 		{"wrong volume", func(f *fixture) { f.v.Name = "foreign" }, "credential volume"},
 		{"foreign volume", func(f *fixture) { f.v.Config["user.aginctus.gateway"] = "foreign" }, "ownership"},
