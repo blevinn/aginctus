@@ -53,29 +53,27 @@ def main():
             env["AGINCTUS_ACCEPTANCE_GUEST_ROOT"] = guest
             # No implicit fabricated staging signal: the operator-supplied helper
             # must verify or stage this exact identity and path first.
-            helper = env.get("AGINCTUS_ACCEPTANCE_HERDR_STAGE", "")
+            helper = env.get("AGINCTUS_ACCEPTANCE_HERDR_STAGE", str(Path(__file__).with_name("guest-owned.py")))
             if not helper or not Path(helper).is_file() or not os.access(helper, os.X_OK):
                 raise RuntimeError("reviewed per-run guest staging helper required")
-            cleanup = env.get("AGINCTUS_ACCEPTANCE_HERDR_CLEANUP", "")
+            cleanup = env.get("AGINCTUS_ACCEPTANCE_HERDR_CLEANUP", str(Path(__file__).with_name("guest-owned.py")))
             if not cleanup or not Path(cleanup).is_file() or not os.access(cleanup, os.X_OK):
                 raise RuntimeError("reviewed per-run guest cleanup helper required")
-            opened = False
             try:
-                subprocess.run([helper, str(base), identity, guest], check=True, timeout=60,
+                subprocess.run([sys.executable, helper, "stage", str(base), identity, guest], check=True, timeout=60,
                                capture_output=True, text=True)
                 env["AGINCTUS_ACCEPTANCE_GUEST_STAGED"] = identity
                 subprocess.run([sys.executable, str(fixture), "open", str(base), identity],
                                env=env, check=True, timeout=180, capture_output=True, text=True)
-                opened = True
                 state = json.loads((base.parent / ".herdr-owned.json").read_text())
                 response = json.loads(call("incus", "exec", client, "--", "herdr", "--machine", machine, "workspace", "get", state["workspace_id"]))
                 if not isinstance(response, dict) or "result" not in response:
                     raise RuntimeError("workspace inspect response missing")
             finally:
-                if opened:
+                if (base.parent / ".herdr-owned.json").exists():
                     subprocess.run([sys.executable, str(fixture), "close", str(base), identity],
                                    env=env, check=True, timeout=180, capture_output=True, text=True)
-                subprocess.run([cleanup, str(base), identity, guest], check=True, timeout=60,
+                subprocess.run([sys.executable, cleanup, "cleanup", str(base), identity, guest], check=True, timeout=60,
                                capture_output=True, text=True)
             print(f"PASS: remote Herdr workspace create/get/close, iteration {iteration+1}")
     print("NOT VERIFIED: OpenCode agent, guest task execution, gateway inference, and credentials")
