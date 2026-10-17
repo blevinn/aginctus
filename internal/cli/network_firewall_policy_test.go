@@ -37,3 +37,22 @@ func TestFirewallPolicyRejectsUnownedBeforeDisplay(t *testing.T) {
 		t.Fatalf("out=%q err=%q", out.String(), errs.String())
 	}
 }
+
+func TestFirewalldRuntimeTargetMustBeDrop(t *testing.T) {
+	for _, tc := range []struct {
+		name, response string
+		accept         bool
+	}{
+		{"drop", "aginctus-dns (active)\n  target: DROP\n  interfaces: aginctus-test\n", true},
+		{"accept", "aginctus-dns (active)\n  target: ACCEPT\n", false},
+		{"default", "aginctus-dns\n  target: default\n", false},
+		{"missing", "aginctus-dns\n  interfaces: aginctus-test\n", false},
+		{"unrelated", "aginctus-dns\n  target: REJECT\n  rich rules:\n    target: DROP unexpected\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hasFirewalldDropTarget(tc.response); got != tc.accept {
+				t.Fatalf("hasFirewalldDropTarget(%q)=%v, want %v", tc.response, got, tc.accept)
+			}
+		})
+	}
+}
