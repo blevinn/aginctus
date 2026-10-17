@@ -115,8 +115,28 @@ func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 	if err != nil {
 		return fail("cannot inspect Aginctus firewalld rich rules")
 	}
-	// Remove previous exceptions *before* evaluating the fresh bridge, so
-	// deleting or disowning the network closes existing permissions.
+	owned, discoveryErr := deriveFirewallPolicy(ctx, cfg)
+	var rules []string
+	if discoveryErr == nil {
+		rules, err = firewall.FirewalldRules(&owned)
+		if err != nil {
+			return fail("invalid owned-bridge firewalld policy")
+		}
+	}
+	interfaces, err := run(zone, "--list-interfaces")
+	if err != nil {
+		return fail("cannot inspect Aginctus firewalld interface bindings")
+	}
+	// Leave an unchanged, verified runtime policy intact. The periodic timer
+	// must not interrupt active DNS connections every 30 seconds.
+	if discoveryErr == nil && sameRichRules(current, rules) &&
+		strings.TrimSpace(interfaces) == owned.Interface {
+		fmt.Fprintf(stdout, "firewalld zone already reconciled for bridge %q\n", owned.Interface)
+		return 0
+	}
+
+	// Remove prior exceptions before admitting any new identity. If network
+	// discovery failed, this clears old access and leaves the DROP zone.
 	for _, rule := range strings.Split(current, "\n") {
 		if rule == "" {
 			continue
@@ -125,19 +145,9 @@ func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 			return fail("cannot clear stale Aginctus firewalld exceptions")
 		}
 	}
-
-	owned, discoveryErr := deriveFirewallPolicy(ctx, cfg)
 	if discoveryErr != nil {
 		fmt.Fprintf(stderr, "Aginctus firewalld exceptions cleared (fail closed): %v\n", discoveryErr)
 		return 1
-	}
-	rules, err := firewall.FirewalldRules(&owned)
-	if err != nil {
-		return fail("invalid owned-bridge firewalld policy")
-	}
-	interfaces, err := run(zone, "--list-interfaces")
-	if err != nil {
-		return fail("cannot inspect Aginctus firewalld interface bindings")
 	}
 	for _, iface := range strings.Fields(interfaces) {
 		if iface != owned.Interface {
@@ -175,4 +185,27 @@ func containsWord(words, target string) bool {
 		}
 	}
 	return false
+}
+
+func sameRichRules(current string, expected []string) bool {
+	if strings.TrimSpace(current) == "" {
+		return len(expected) == 0
+	}
+	existing := strings.Split(strings.TrimSpace(current), "\n")
+	if len(existing) != len(expected) {
+		return false
+	}
+	for _, rule := range expected {
+		found := false
+		for _, installed := range existing {
+			if strings.TrimSpace(installed) == rule {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
