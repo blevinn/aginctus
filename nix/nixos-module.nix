@@ -336,11 +336,14 @@ in
     # NixOS native nftables declares a normal, empty child chain within the
     # authoritative NixOS table and adds its call from input-allow. Never
     # create a separate accepting nftables input base chain.
-    networking.nftables.tables."nixos-fw".content =
-      lib.mkIf (cfg.firewall.enable && nativeNftBackend)
-        ''
-          chain aginctus_dns_input { }
-        '';
+    # Gate the whole attrsOf table entry, not only its content. Otherwise
+    # firewalld evaluation creates an empty nixos-fw submodule with no
+    # family, even though the native firewall backend is disabled.
+    networking.nftables.tables = lib.mkIf (cfg.firewall.enable && nativeNftBackend) {
+      "nixos-fw".content = ''
+        chain aginctus_dns_input { }
+      '';
+    };
     networking.firewall.extraInputRules = lib.mkIf (cfg.firewall.enable && nativeNftBackend) ''
       jump aginctus_dns_input comment "aginctus:guest-host-dns-dhcp"
     '';
