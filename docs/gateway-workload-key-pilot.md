@@ -24,8 +24,8 @@ It does not restart any guest, rewrite Compose, change DNS, or open a network.
   check the approved alias exists, and POST one `/key/generate` request.
   The generated key is restricted to **exactly one selected model alias**,
   one-hour expiry, **$1 total max budget**, `max_parallel_requests=1`,
-  `rpm_limit=5`, and the provider-facing/info routes necessary for
-  the smoke-test flow. The response must explicitly confirm the exact
+  `rpm_limit=5`, and only the inference-route preset and exact `/v1/models` discovery route
+  needed for the smoke-test flow. The response must explicitly confirm the exact
   model list, bounded budget and expiration; then a restricted
   `/v1/models` check must expose *only* the selected alias.
 - **`--revoke`**: use the existing gateway master solely to POST
