@@ -1,6 +1,6 @@
 # Owned Herdr lifecycle phases for #124
 
-The Python implementation `scripts/acceptance/herdr-lifecycle.py` now calls documented Herdr commands for `open`, `start`, `prompt`, `wait`, `stop` and `close`. It uses the Herdr `--machine` selector, which points to a **previously saved and authenticated Herdr machine**, not an arbitrary SSH host. The API is documented at [Herdr agent automation](https://herdr.dev/docs/agent-automation/) and [Herdr CLI reference](https://herdr.dev/docs/cli-reference/); pilot validation must confirm the pinned Herdr version supports them.
+The Python implementation `scripts/acceptance/herdr-lifecycle.py` now calls documented Herdr commands for `open`, `start`, `prompt`, `wait`, `stop` and `close`. It uses the Herdr `--machine` selector, which points to a **previously saved and authenticated Herdr machine on the same machine where the CLI runs**, not an arbitrary SSH host. The pilot's intended Herdr client runs inside the `aginctus-herdr` Incus container; the host's `herdr machine list --json` is not its machine registry. The API is documented at [Herdr agent automation](https://herdr.dev/docs/agent-automation/) and [Herdr CLI reference](https://herdr.dev/docs/cli-reference/); pilot validation must confirm the pinned Herdr version supports them.
 
 This is a partial integration, **not** complete acceptance. The live dispatcher requires all nine hooks. There is still no built-in `preflight` covering authenticated Herdr reachability and guest workspace transport, no real `credential-check` or `gateway-evidence` hook. The OpenCode gateway launcher from #123 must be provisioned and validated separately. The Herdr agent's settled state does not prove it ran tests; inspect agent tool traces, gateway logs and guest test execution independently.
 
@@ -59,3 +59,15 @@ nix develop -c python3 scripts/acceptance/herdr-smoke.py
 ```
 
 Review the Herdr workspace list afterwards and confirm that neither run left a workspace or a guest directory. This only establishes remote workspace operations, not the full `agent start/prompt/wait/stop` contract. A separate real agent-lifecycle run is still required before regarding #233 as a validated real lifecycle integration. Do **not** merge solely on mocked lifecycle assertions.
+
+## Pilot topology correction
+
+The host-side development shell's `herdr machine list --json` returned `[]`. That is not evidence that the dedicated Herdr client container lacks remote machines: Herdr settings are scoped to the account and machine running the CLI. Check the managed Herdr client instance independently using authenticated Incus exec (read-only):
+
+```sh
+incus exec aginctus-herdr -- herdr machine list --json
+incus exec aginctus-herdr -- herdr --version
+incus exec aginctus-herdr -- herdr status server
+```
+
+Use the configured Herdr client instance name in place of `aginctus-herdr` if overridden. If the client also has no registered machines, inspect Aginctus SSH provisioning before trying to register anything manually. Do not create a host-local Herdr machine entry as a workaround: it would bypass the Aginctus client identity, host key pinning and registration workflow. The existing lifecycle script executes `herdr` locally; it must be adapted to run in the intended **client container context** or explicitly tested with the correct remote profile before live execution. Likewise, test guest staging with the managed, authenticated Incus interface; do not invent unverified SSH shortcuts.
