@@ -10,10 +10,10 @@ let
   # Incus ownership policy is independently unit-tested in Go.
   fixtureCli = pkgs.writeShellScriptBin "aginctus" ''
     set -eu
-    if [ "${1:-}" = "--configuration-file" ]; then
+    if [ "''${1:-}" = "--configuration-file" ]; then
       shift 2
     fi
-    if [ "${1:-}" != "network" ] || [ "${2:-}" != "firewall" ] || [ "${3:-}" != "reconcile" ]; then
+    if [ "''${1:-}" != "network" ] || [ "''${2:-}" != "firewall" ] || [ "''${3:-}" != "reconcile" ]; then
       exit 2
     fi
     if [ -e /run/aginctus-test/revoked ]; then
