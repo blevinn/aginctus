@@ -266,7 +266,8 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
-        assertion = !cfg.firewall.enable || (config.networking.firewall.enable && !config.networking.nftables.enable);
+        assertion =
+          !cfg.firewall.enable || (config.networking.firewall.enable && !config.networking.nftables.enable);
         message = "services.aginctus.firewall requires networking.firewall.enable=true and networking.nftables.enable=false; native nftables is unsupported in v0.1.";
       }
       {
@@ -320,9 +321,19 @@ in
         aginctus-firewall-reconcile = {
           description = "Reconcile Aginctus-owned Incus guest-to-host DNS/DHCP policy";
           wantedBy = [ "multi-user.target" ];
-          after = [ "incus.service" "firewall.service" ];
-          wants = [ "incus.service" "firewall.service" ];
-          path = [ pkgs.iptables pkgs.nftables pkgs.incus ];
+          after = [
+            "incus.service"
+            "firewall.service"
+          ];
+          wants = [
+            "incus.service"
+            "firewall.service"
+          ];
+          path = [
+            pkgs.iptables
+            pkgs.nftables
+            pkgs.incus
+          ];
           serviceConfig = {
             Type = "oneshot";
             User = "root";
@@ -335,8 +346,7 @@ in
           };
         };
       }
-      //
-      lib.optionalAttrs cfg.images.herdrClient.enable {
+      // lib.optionalAttrs cfg.images.herdrClient.enable {
         aginctus-image-herdr-client = imageUpdateService {
           alias = cfg.images.herdrClient.alias;
           source = cfg.images.herdrClient.source;
