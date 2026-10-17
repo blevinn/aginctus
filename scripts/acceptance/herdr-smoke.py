@@ -42,6 +42,7 @@ def main():
     ):
         raise RuntimeError("required managed Herdr machine is not registered and enabled")
     fixture = Path(__file__).with_name("herdr-lifecycle.py")
+    agent_smoke = os.environ.get("AGINCTUS_ACCEPTANCE_HERDR_AGENT_SMOKE") == "I_UNDERSTAND"
     for iteration in range(2):
         step = "prepare"
         identity = PREFIX + secrets.token_hex(4)
@@ -76,6 +77,17 @@ def main():
                 response = json.loads(call("incus", "exec", client, "--", "herdr", "--machine", machine, "workspace", "get", state["workspace_id"]))
                 if not isinstance(response, dict) or "result" not in response:
                     raise RuntimeError("workspace inspect response missing")
+                if agent_smoke:
+                    step = "agent-start"
+                    subprocess.run([sys.executable, str(fixture), "start", str(base), identity],
+                                   env=env, check=True, timeout=180, capture_output=True, text=True)
+                    step = "agent-inspect"
+                    state = json.loads((base.parent / ".herdr-owned.json").read_text())
+                    result = json.loads(call("incus", "exec", client, "--", "herdr", "--machine",
+                                             machine, "agent", "get", state["agent_name"]))
+                    if not isinstance(result, dict) or "result" not in result:
+                        raise RuntimeError("agent get returned no result")
+                    print(f"PASS: OpenCode agent startup and inspection, iteration {iteration+1}")
             except (RuntimeError, OSError, subprocess.SubprocessError, ValueError, KeyError, json.JSONDecodeError):
                 print(f"FAIL: Herdr smoke iteration {iteration+1}, phase {step} (details suppressed)", file=sys.stderr)
                 raise
@@ -86,7 +98,7 @@ def main():
                 subprocess.run([sys.executable, cleanup, "cleanup", str(base), identity, guest], check=True, timeout=60,
                                capture_output=True, text=True)
             print(f"PASS: remote Herdr workspace create/get/close, iteration {iteration+1}")
-    print("NOT VERIFIED: OpenCode agent, guest task execution, gateway inference, and credentials")
+    print("NOT VERIFIED: agent prompt/wait, guest task execution, gateway inference, and credentials" if agent_smoke else "NOT VERIFIED: OpenCode agent, guest task execution, gateway inference, and credentials")
 
 if __name__ == "__main__":
     try:
