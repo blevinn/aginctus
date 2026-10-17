@@ -17,6 +17,7 @@ case "$action" in
    ;;
  wait)
    test -f "$workspace/.started"
+   if [[ "${ACCEPTANCE_TEST_FAIL:-}" == 1 ]]; then exit 7; fi
    sed -i 's/return a - b/return a + b/' "$workspace/calc.go"
    ;;
  credential-check) test ! -f "$workspace/upstream-token" ;;
@@ -35,7 +36,7 @@ test -f "$tmp/events/stop"
 test -f "$tmp/events/close"
 rm "$tmp/events/"*
 # Failure must still stop and close; live opt-in must reject without opening.
-sed -i 's/sed -i '\''s\/return a - b\/return a + b\/'\'' "$workspace\/calc.go"/exit 7/' "$tmp/adapter"
+export ACCEPTANCE_TEST_FAIL=1
 if bash scripts/acceptance/opencode.sh mock; then echo "unexpected mock pass" >&2; exit 1; fi
 test -f "$tmp/events/stop"
 test -f "$tmp/events/close"
