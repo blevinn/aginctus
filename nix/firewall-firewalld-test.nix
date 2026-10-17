@@ -5,6 +5,7 @@
 }:
 let
   pkgs = import nixpkgs { inherit system; };
+  testZone = "aginctus-vm";
 
 in
 pkgs.testers.runNixOSTest {
@@ -26,6 +27,7 @@ pkgs.testers.runNixOSTest {
       enable = true;
       package = self.packages.${system}.aginctus;
       firewall.enable = true;
+      settings.firewall.zone = testZone;
       images.herdrClient.enable = false;
       images.opencodeWorkload.enable = false;
       settings.incus.management.network = {
@@ -76,7 +78,9 @@ pkgs.testers.runNixOSTest {
     machine.succeed("systemctl reset-failed aginctus-firewall-reconcile.service || true")
     machine.succeed("systemctl start aginctus-firewall-reconcile.service")
 
-    zone = "--zone=aginctus-dns"
+    # Custom name proves the integration does not rely on aginctus-dns.
+    machine.succeed("test -r /etc/firewalld/zones/${testZone}.xml")
+    zone = "--zone=${testZone}"
     def firewall(*args):
         return machine.succeed("firewall-cmd " + " ".join(args))
 
@@ -146,7 +150,7 @@ pkgs.testers.runNixOSTest {
     machine.start()
     machine.wait_for_unit("multi-user.target")
     machine.wait_until_succeeds(
-        "firewall-cmd --zone=aginctus-dns --list-rich-rules | grep -F 'port='"
+        "firewall-cmd --zone=${testZone} --list-rich-rules | grep -F 'port='"
     )
   '';
 }
