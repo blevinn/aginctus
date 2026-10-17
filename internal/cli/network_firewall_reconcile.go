@@ -32,16 +32,25 @@ func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, 
 		fmt.Fprintln(stderr, "cannot verify effective nftables input backend")
 		return 1
 	}
-	if strings.Contains(ruleset, "table inet firewalld") && strings.Contains(ruleset, "table inet nixos-fw") {
-		fmt.Fprintln(stderr, "multiple independently rejecting nftables host firewalls detected; fail closed")
+	// The NixOS service pins its intended backend. A firewalld restart may
+	// temporarily erase its nftables table before startup is complete; do
+	// not misdetect that interval as an iptables-nft installation.
+	requestedBackend := ""
+	if value, exists := cfg.Get("firewall.backend"); exists {
+		var ok bool
+		requestedBackend, ok = value.(string)
+		if !ok {
+			fmt.Fprintln(stderr, "firewall backend selection must be a string")
+			return 1
+		}
+	}
+	selectedBackend, err := selectFirewallBackend(ruleset, requestedBackend)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if strings.Contains(ruleset, "table inet firewalld") {
+	if selectedBackend == "firewalld" {
 		return reconcileFirewalld(ctx, stdout, stderr, cfg)
-	}
-	if strings.Contains(ruleset, "table inet nixos-fw") {
-		fmt.Fprintln(stderr, "NixOS native nftables backend requires a separate supported integration")
-		return 1
 	}
 	version, err := firewallCommand(ctx, "", "iptables", "--version")
 	if err != nil || !strings.Contains(version, "(nf_tables)") {
@@ -79,6 +88,38 @@ func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, 
 	}
 	fmt.Fprintf(stdout, "Aginctus INPUT policy reconciled for verified bridge %q (DNS/DHCP only)\n", policy.Interface)
 	return 0
+}
+
+
+func selectFirewallBackend(ruleset, requested string) (string, error) {
+	firewalldPresent := strings.Contains(ruleset, "table inet firewalld")
+	nixosPresent := strings.Contains(ruleset, "table inet nixos-fw")
+	if firewalldPresent && nixosPresent {
+		return "", fmt.Errorf("multiple independently rejecting nftables host firewalls detected; fail closed")
+	}
+	switch requested {
+	case "firewalld":
+		if !firewalldPresent {
+			return "", fmt.Errorf("firewalld nftables table not ready; retry after firewalld startup")
+		}
+		return "firewalld", nil
+	case "iptables-nft":
+		if firewalldPresent || nixosPresent {
+			return "", fmt.Errorf("configured iptables-nft backend conflicts with active nftables host firewall")
+		}
+		return "iptables-nft", nil
+	case "":
+		// Interactive CLI usage retains read-only automatic selection.
+		if firewalldPresent {
+			return "firewalld", nil
+		}
+		if nixosPresent {
+			return "", fmt.Errorf("NixOS native nftables backend requires a separate supported integration")
+		}
+		return "iptables-nft", nil
+	default:
+		return "", fmt.Errorf("unsupported firewall backend selection")
+	}
 }
 
 // reconcileFirewalld uses firewalld's own D-Bus management client. Its
