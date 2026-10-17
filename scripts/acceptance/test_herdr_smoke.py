@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -29,6 +30,16 @@ class SmokeSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "guest workspace"):
                 smoke.main()
             call.assert_not_called()
+
+    def test_managed_machine_registry_required(self):
+        with patch.dict(os.environ, {
+            "AGINCTUS_ACCEPTANCE_HERDR_SMOKE": "I_UNDERSTAND",
+            "AGINCTUS_ACCEPTANCE_HERDR_MACHINE": "aginctus-dev",
+            "AGINCTUS_ACCEPTANCE_HERDR_SMOKE_ROOT": "/home/agent/aginctus-acceptance",
+        }), patch.object(smoke, "call", return_value="[]") as call:
+            with self.assertRaisesRegex(RuntimeError, "not registered"):
+                smoke.main()
+            self.assertEqual(call.call_args.args[:4], ("incus", "exec", "aginctus-herdr", "--"))
 
 if __name__ == "__main__":
     unittest.main()
