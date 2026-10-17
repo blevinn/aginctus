@@ -12,9 +12,11 @@ or upstream provider secret. It neither deploys nor repairs the gateway.
   hostname, the NixOS firewall backend is active, and the management bridge
   keeps NAT and routing disabled. Follow docs/firewall-pilot-validation.md.
 - An **authorized API-key model** is actually registered and exposed under the
-  selected alias. #247 proposes separate optional registration; its local
-  dry-run or successful model listing alone does not prove a provider call.
-  Never activate unapproved ChatGPT OAuth for this smoke.
+  selected alias. #247 merged a guarded opt-in model registration utility;
+  its previous validation was **dry-run only** with the deliberately
+  unverified `openai/placeholder` source. **No live model or provider key was
+  registered by that dry-run.** Confirm an actual approved model and key
+  separately before the live smoke. Never activate unapproved ChatGPT OAuth.
 - The operator has already created a **separate LiteLLM virtual key**, scoped
   only to the selected model alias, with a limited lifetime and revocation
   procedure. It is not the master key. Store it in a caller-owned 0600 regular
@@ -29,6 +31,22 @@ or upstream provider secret. It neither deploys nor repairs the gateway.
   must be separately verified from actual gateway-side observations.
 - The test makes one small billable Responses inference request. Run only
   with an approved upstream model and spending authorization.
+
+## Validated pilot baseline (operator report, 2026-10-17)
+
+- On the host with Aginctus installed as authoritative Incus network manager,
+  `litellm-1` and `postgres-1` were both Running; hostname-based PostgreSQL
+  TCP connectivity from LiteLLM passed.
+- LiteLLM local `/health/liveliness` **and** `/health/readiness` returned
+  HTTP 200. `aginctus gateway credential-storage audit` confirmed exclusive
+  *Incus attachment metadata*; NAT and routing on `aginctus-mgmt` were
+  each `false`.
+- The observed private LiteLLM IPv4 was `10.144.44.70`, but verify it again
+  before running anything against the pilot. This is not a durable configured
+  endpoint or a substitute for authenticated provider inference.
+- Neither an upstream API-key route nor a restricted virtual workload key
+  has been shown to exist yet. The only #247 registration reported was a
+  non-mutating preview. Never use its `openai/placeholder` source for live use.
 
 ## Operator workflow
 
