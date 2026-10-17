@@ -50,21 +50,16 @@ def main():
         # Probe the imported image *before* passing even a disposable key.
         # Use a fixed, nonsecret script; never echo file contents.
         probe = """set -eu
-if [ ! -x /run/current-system/sw/bin/aginctus-opencode-gateway-provision ]; then
-  echo "Guest helper is absent or not executable in the imported image" >&2
-  exit 42
-fi
-if [ ! -x /run/current-system/sw/bin/python3 ]; then
-  echo "Python3 not exposed on the guest system PATH (helper may use Nix store Python)" >&2
-fi
+for path in /run/current-system/sw/bin/aginctus-opencode-gateway-provision /nix/var/nix/profiles/system/sw/bin/aginctus-opencode-gateway-provision /run/current-system /nix/var/nix/profiles/system; do
+  if [ -e "$path" ]; then printf 'EXISTS %s\\n' "$path"; else printf 'MISSING %s\\n' "$path"; fi
+done
 """
-        try:
-            incus("exec", name, "--project", project, "--",
-                  "/bin/sh", "-c", probe, stage="guest image helper preflight")
-        except RuntimeError as exc:
-            raise RuntimeError(
-                f"{exc}; check whether the imported image includes the provisioning helper"
-            ) from None
+        result = incus("exec", name, "--project", project, "--",
+                       "/bin/sh", "-c", probe, stage="guest image profile diagnostic")
+        print(result.stdout, end="")
+        if "EXISTS /run/current-system/sw/bin/aginctus-opencode-gateway-provision" not in result.stdout:
+            raise RuntimeError("guest helper absent at expected system profile path")
+
         incus("exec", name, "--project", project, "--",
               helper, input_data=payload, stage="guest helper provisioning")
 
