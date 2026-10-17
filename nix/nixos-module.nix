@@ -343,6 +343,9 @@ in
           serviceConfig = {
             Type = "oneshot";
             User = "root";
+            # ProtectHome hides /root; do not probe a root-user override file.
+            # The managed configuration is passed explicitly via --configuration-file.
+            Environment = [ "XDG_CONFIG_HOME=/var/empty" ];
             NoNewPrivileges = true;
             PrivateTmp = true;
             ProtectHome = true;
