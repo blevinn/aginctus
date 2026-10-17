@@ -305,9 +305,16 @@
         }
       );
 
-      checks = forAllSystems (system: {
-        nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
-      });
+      checks = forAllSystems (system:
+        {
+          nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
+        }
+        // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          firewall-iptables-integration = import ./nix/firewall-iptables-test.nix {
+            inherit self nixpkgs system;
+          };
+        }
+      );
 
       devShells = forAllSystems (
         system:
