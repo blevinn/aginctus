@@ -15,12 +15,12 @@ The volumes remain separate from the replaceable root disk and are retained afte
 
 ## Host-independent volume provisioning in Aginctus
 
-`aginctus herdr client apply` calls the local Incus Go API to ensure the `<client>-state-system` volume exists in the configured storage pool **before** reconciling the client instance. No host shell script, Nix command, or host NixOS module is required.
+`aginctus herdr client apply` and top-level `aginctus apply` both render an explicit `herdr-system-state` orchestration step. The state-volume driver uses the local Incus Go API to ensure the `<client>-state-system` volume exists in the configured storage pool **after network reconciliation and before the Herdr instance**. No host shell script, Nix command, or host NixOS module is required. Rendered plans and `apply --from` preserve the ordered prerequisite.
 
 - Missing volume: create a `custom` filesystem volume with `user.aginctus.managed=true`, `user.aginctus.resource=state-volume`, `user.aginctus.instance=<client>`, and `user.aginctus.state-class=system`.
 - Existing volume: verify the expected name, type, filesystem content and **all ownership markers**; refuse foreign or unmarked volumes.
 - Existing same-name instance: verify Aginctus ownership before creating the volume; refuse collisions.
-- `--dry-run`: do not create or mutate volumes. The current Apply dry-run does not yet print a separate volume creation plan; this remains a reporting gap.
+- `--dry-run`: do not create or mutate volumes. The Herdr plan now includes a separate state-volume step; its dry-run validation checks the request but does not inspect actual Incus volume availability.
 - `herdr client remove`: deletes only the client instance and retains its volumes. Removing a volume requires a separate, explicitly destructive lifecycle action not provided by this PR.
 - Concurrent creators can race: the losing creator fails and may retry the full reconciliation after checking the resulting ownership. Do not silently adopt another volume.
 

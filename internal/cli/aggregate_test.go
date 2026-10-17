@@ -39,7 +39,7 @@ func TestAggregateApplyRenderDeterministicSharedNetwork(t *testing.T) {
 	if err := plan.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	expected := []string{"management-network", "herdr-client", "gateway-egress-network", "gateway", "workload-dev"}
+	expected := []string{"management-network", "herdr-system-state", "herdr-client", "gateway-egress-network", "gateway", "workload-dev"}
 	if len(plan.Steps) != len(expected) {
 		t.Fatalf("steps = %d, want %d: %s", len(plan.Steps), len(expected), first)
 	}
@@ -131,7 +131,10 @@ func TestAggregateRenderStreamRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.Steps) != 5 {
+	if len(p.Steps) != 6 {
 		t.Fatalf("steps=%d", len(p.Steps))
+	}
+	if p.Steps[1].Driver != "state-volume" || p.Steps[1].ID != "herdr-system-state" {
+		t.Fatalf("missing Herdr volume prerequisite in rendered stream: %#v", p.Steps[1])
 	}
 }
