@@ -53,6 +53,8 @@ let
     };
   };
   withCustomZone = evaluate {
+    networking.nftables.enable = true;
+    services.firewalld.enable = true;
     services.aginctus.settings.firewall.zone = "aginctus-vm";
   };
   invalidFirewalldZones = map (
