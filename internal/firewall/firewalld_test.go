@@ -45,3 +45,20 @@ func TestFirewalldRulesDisownedOrInvalid(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateFirewalldZone(t *testing.T) {
+	for _, name := range []string{"aginctus-dns", "aginctus-vm", "aginctus-a1-foo"} {
+		if err := ValidateFirewalldZone(name); err != nil {
+			t.Errorf("valid zone %q: %v", name, err)
+		}
+	}
+	for _, name := range []string{
+		"", "public", "trusted", "drop", "aginctus-",
+		"aginctus-FOO", "aginctus_foo", "aginctus-foo bar",
+		"aginctus-abcdefghijkl", "../aginctus-vm", "aginctus-vm.xml",
+	} {
+		if err := ValidateFirewalldZone(name); err == nil {
+			t.Errorf("invalid zone %q accepted", name)
+		}
+	}
+}
