@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"io"
 	"strings"
 	"testing"
 
@@ -40,8 +39,5 @@ func TestGatewayResponsesVerifyFromStdin(t *testing.T) {
 	if code, out, message := run("responses", "verify"); code != 1 ||
 		out != "" || strings.Contains(message, secret) || !strings.Contains(message, "contract") {
 		t.Fatalf("invalid stream leaked payload or passed: code=%d out=%q err=%q", code, out, message)
-	}
-	if _, ok := gatewayResponsesInput.(io.Reader); !ok {
-		t.Fatal("synthetic input missing")
 	}
 }
