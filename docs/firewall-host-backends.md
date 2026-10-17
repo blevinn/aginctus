@@ -6,7 +6,7 @@ Incus chain accepts them. Never open an entire bridge or enable management
 routing/NAT to resolve this issue.
 
 The existing `services.aginctus` NixOS module is the intended one-time,
-generic integration. On the pilot's iptables-nft backend,
+generic integration. On a NixOS iptables-nft backend,
 `networking.firewall.extraCommands` is evaluated before NixOS's final
 reject; it can insert a narrowly scoped Aginctus-owned chain *in the actual
 NixOS INPUT path*. Native nftables has a different extension point and must
@@ -15,8 +15,8 @@ Incus network identity, not a network naming convention.
 
 ## Reproduce the packet drop
 
-`aginctus network firewall diagnose` is **read-only**; it summarizes backend
-evidence, not complete firewall rules or credential-bearing Incus instances.
+The separate diagnostic command proposed in PR #221 is not part of this
+workstream; use the read-only host commands below until it is merged.
 
 These initial commands are also **read-only**:
 
@@ -47,26 +47,63 @@ Identify the **last** reject/drop and its table/chain/handle. Do not share
 expanded gateway instance configuration, tokens or complete host rulesets.
 LiteLLM's incorrect default route is a separate concern.
 
-## Firewalld-native INPUT adapter
+## Firewalld-managed interface zone
 
-A `filter_INPUT` chain at `priority filter + 10` is characteristic of
-**firewalld**, not evidence that the iptables-nft backend itself enforces that
-chain. Always inspect the enclosing table name; the pilot still needs a packet
-trace to prove the rejecting chain. An iptables-nft ACCEPT does not defeat an
-independent firewalld reject at a later hook priority.
+Firewalld's `table inet firewalld` has `flags owner,persist` on the pilot
+configuration. External `nft -f` operations against that table fail even
+with `CAP_NET_ADMIN`; the previous direct-nft approach is **unsupported**.
+Do not disable table ownership or create an independent nftables accept base
+chain.
 
-When `services.firewalld.enable` is active, the generic Aginctus host module
-does not add an iptables INPUT hook. Its privileged reconciliation instead
-adds an ordinary `aginctus_dns_input` chain **inside `table inet firewalld`**
-and an owned jump at the start of firewalld's actual `filter_INPUT` chain.
-Reconciliation replaces the owned chain in one nft batch; it never edits
-FORWARD/NAT or disables firewall filtering. A missing or disowned bridge
-yields an empty chain. Firewalld reloads can recreate its table and erase
-runtime hooks: systemd starts the reconciler after firewalld, and a
-30-second timer provides eventual recovery. There may be a short **DNS outage**
-between reload and reconciliation; no broad fallback is permitted.
+The Aginctus NixOS module declares one empty, **DROP-by-default** zone,
+`/etc/firewalld/zones/aginctus-dns.xml`. The zone has **no permanent
+interface bindings and no permanent allowances**. The privileged
+`aginctus network firewall reconcile` command calls `firewall-cmd` to:
 
-This targets firewalld's currently observed nft layout. If the chain or
-terminal reject cannot be verified, reconciliation refuses modifications.
-The integration must be validated on the pilot host before declaring #220
-complete. Unrelated instance default-route problems are out of scope.
+1. Confirm the dedicated zone exists and is DROP-only, with no unexpected
+   services, sources, ports, protocols or forward-ports.
+2. Remove prior runtime rich-rule exceptions **before** reading new Incus
+   state. When ownership verification fails, it leaves the exceptions empty
+   (fail closed) and returns a nonzero status.
+3. Verify the selected Incus network's ownership labels, isolation flags,
+   bridge interface, subnet, and configured name/address.
+4. Add source/subnet-and-destination-constrained UDP/TCP DNS 53 rich rules
+   and interface-scoped DHCPv4 UDP 67, then bind **only the verified bridge**
+   to the dedicated zone. Unrelated interface bindings are rejected.
+5. Reconcile again at system startup and on the existing 30-second timer.
+   Firewalld reload clears runtime bindings/rules; an outage is possible
+   until reconciliation restores them.
+
+**DHCP qualifier:** firewalld rich-rule syntax cannot simultaneously match
+UDP source port 68 and destination port 67. The DHCP permission therefore
+matches destination port 67 on the verified *bridge interface*, without a
+source-port constraint. It is narrower than a trusted interface or arbitrary
+host-port allowance, but is not equivalent to the earlier iptables-nft
+source-port-68 matcher. The production deployment must retain the default
+DROP zone and be assessed against this distinction.
+
+The dedicated zone owns only runtime rules, not NAT or forwarding. It never
+calls `--runtime-to-permanent`, `--change-interface`, or `--reload`. If the
+bridge becomes disowned, its restrictive DROP binding may remain until a
+firewalld reload; that prevents a disowned bridge from suddenly inheriting a
+more permissive default zone.
+
+The automated `just test-nix` suite checks a *real* Incus daemon,
+firewalld's owner-protected table and generated rules, UDP/TCP DNS from a
+namespace client, blocked unrelated TCP, ownership revocation, reload and
+cold-boot restoration. It does not mutate the pilot firewall.
+
+## Pilot verification after the automated suite passes
+
+Read-only:
+
+```sh
+sudo firewall-cmd --get-zones
+sudo firewall-cmd --zone=aginctus-dns --get-target
+sudo firewall-cmd --zone=aginctus-dns --list-interfaces
+sudo firewall-cmd --zone=aginctus-dns --list-rich-rules
+sudo nft -a list chain inet firewalld filter_INPUT
+```
+
+Do not proceed with a pilot firewall activation until the automated VM
+integration and host backend review have passed.
