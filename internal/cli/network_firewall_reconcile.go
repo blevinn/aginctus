@@ -135,11 +135,15 @@ func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 		return 1
 	}
 
-	zones, err := run("--get-zones")
-	if err != nil || !containsWord(zones, firewall.FirewalldZone) {
-		return fail("Aginctus-managed firewalld zone is missing; activate the NixOS module")
+	zoneName, err := cfg.String("firewall.zone")
+	if err != nil || firewall.ValidateFirewalldZone(zoneName) != nil {
+		return fail("invalid configured Aginctus firewalld zone")
 	}
-	zone := "--zone=" + firewall.FirewalldZone
+	zones, err := run("--get-zones")
+	if err != nil || !containsWord(zones, zoneName) {
+		return fail("configured Aginctus-managed firewalld zone is missing; activate the NixOS module")
+	}
+	zone := "--zone=" + zoneName
 	// firewalld exposes --get-target only in permanent configuration.
 	// Also inspect the active runtime zone: a permanent DROP alone does not
 	// prove that the currently enforced target is still restrictive.
