@@ -72,6 +72,10 @@ interface bindings and no permanent allowances**. The privileged
    and interface-scoped DHCPv4 UDP 67, then bind **only the verified bridge**
    to the dedicated zone. Unrelated interface bindings are rejected.
 5. Reconcile again at system startup and on the existing 30-second timer.
+   The NixOS systemd unit pins `firewall.backend=firewalld` and waits up to
+   ten seconds for firewalld's D-Bus service and nftables INPUT chain to be
+   ready. When the table is temporarily absent during a restart, the
+   reconciler **fails closed** instead of falling back to iptables-nft.
    Firewalld reload clears runtime bindings/rules; an outage is possible
    until reconciliation restores them.
 
