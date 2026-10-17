@@ -375,8 +375,7 @@ in
             ExecStartPre = lib.optional firewalldBackend (
               "${pkgs.writeShellScript "aginctus-firewalld-ready" ''
                 for attempt in {1..50}; do
-                  if ${pkgs.nftables}/bin/nft list chain inet firewalld filter_INPUT >/dev/null 2>&1 \\
-                    && ${pkgs.firewalld}/bin/firewall-cmd --state >/dev/null 2>&1; then
+                  if ${pkgs.nftables}/bin/nft list chain inet firewalld filter_INPUT >/dev/null 2>&1 && ${pkgs.firewalld}/bin/firewall-cmd --state >/dev/null 2>&1; then
                     exit 0
                   fi
                   ${pkgs.coreutils}/bin/sleep 0.2
