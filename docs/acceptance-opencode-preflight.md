@@ -19,7 +19,7 @@ nix develop -c bash -c 'command -v aginctus || echo "Aginctus CLI not on PATH"; 
 # From a checkout, build the CLI without installing it on the host:
 tmp="$(mktemp -d)"
 nix develop -c go build -o "$tmp/aginctus" ./cmd/aginctus
-nix develop -c env PATH="$tmp:$PATH" python3 scripts/acceptance/opencode-pilot-preflight.py
+nix develop -c bash -c 'PATH="$1:$PATH" python3 scripts/acceptance/opencode-pilot-preflight.py' bash "$tmp"
 rm -rf -- "$tmp"
 ```
 
