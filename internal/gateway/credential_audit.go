@@ -15,14 +15,8 @@ func auditCredentialAttachment(a CredentialAttachment, project *api.Project, ins
 	if err := a.Validate(); err != nil {
 		return err
 	}
-	if project == nil || project.Name != a.ComposeProject ||
-		project.Config["user.aginctus.managed"] != "true" ||
-		project.Config["user.aginctus.resource"] != "compose-project" ||
-		project.Config["user.aginctus.deployment"] != a.ComposeProject {
-		return fmt.Errorf("gateway Compose project is missing or its ownership markers do not match")
-	}
-	if project.Config["features.storage.volumes"] != "true" {
-		return fmt.Errorf("gateway Compose project must isolate its storage volumes")
+	if err := verifyCredentialComposeProject(project, a.ComposeProject); err != nil {
+		return err
 	}
 	needed, err := plannedCredentialDevice(instance, a)
 	if err != nil {
@@ -61,12 +55,8 @@ func AuditCredentialAttachment(ctx context.Context, a CredentialAttachment) erro
 	if err != nil {
 		return fmt.Errorf("inspect gateway Compose project: unavailable")
 	}
-	if project == nil || project.Name != a.ComposeProject ||
-		project.Config["features.storage.volumes"] != "true" ||
-		project.Config["user.aginctus.managed"] != "true" ||
-		project.Config["user.aginctus.resource"] != "compose-project" ||
-		project.Config["user.aginctus.deployment"] != a.ComposeProject {
-		return fmt.Errorf("gateway Compose project ownership or storage isolation is invalid")
+	if err := verifyCredentialComposeProject(project, a.ComposeProject); err != nil {
+		return err
 	}
 	server := client.UseProject(a.ComposeProject)
 	instance, _, err := server.GetInstance(liteLLMServiceInstance)
