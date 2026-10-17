@@ -127,12 +127,14 @@ assert base.services.aginctus.firewall.enable;
 assert base.systemd.timers.aginctus-firewall-reconcile.timerConfig.OnUnitActiveSec == "30s";
 assert lib.hasInfix "AGINCTUS_INPUT" base.networking.firewall.extraCommands;
 assert !(lib.hasInfix "AGINCTUS_INPUT" firewalldHost.networking.firewall.extraCommands);
-assert builtins.elem "firewalld.service" firewalldHost.systemd.services.aginctus-firewall-reconcile.after;
+assert builtins.elem "firewalld.service"
+  firewalldHost.systemd.services.aginctus-firewall-reconcile.after;
 assert lib.hasInfix "chain aginctus_dns_input" nativeNftHost.networking.nftables.tables."nixos-fw".content;
 assert lib.hasInfix "jump aginctus_dns_input" nativeNftHost.networking.firewall.extraInputRules;
 assert builtins.elem "nftables.service" nativeNftHost.systemd.services.aginctus-firewall-reconcile.after;
 
-assert lib.hasInfix "aginctus-firewall-reconcile.service" withReconcile.systemd.services.aginctus-reconcile.script;
+assert lib.hasInfix "aginctus-firewall-reconcile.service"
+  withReconcile.systemd.services.aginctus-reconcile.script;
 assert builtins.length secretAssertions == 1;
 assert lib.hasInfix "gateway.postgres.password" (builtins.head secretAssertions).message;
 assert lib.hasInfix "gateway.master.key" (builtins.head secretAssertions).message;
