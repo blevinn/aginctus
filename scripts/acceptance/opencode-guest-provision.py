@@ -9,6 +9,7 @@ import json
 import secrets
 import subprocess
 import sys
+import time
 import uuid
 
 
@@ -55,11 +56,19 @@ for path in /run/current-system/sw/bin/aginctus-opencode-gateway-provision /nix/
   if [ -e "$path" ]; then printf 'EXISTS %s\\n' "$path"; else printf 'MISSING %s\\n' "$path"; fi
 done
 """
-        result = incus("exec", name, "--project", project, "--",
-                       "/bin/sh", "-c", probe, stage="guest image profile diagnostic")
-        print(result.stdout, end="")
-        if "EXISTS /run/current-system/sw/bin/aginctus-opencode-gateway-provision" not in result.stdout:
-            raise RuntimeError("guest system profile not ready or helper absent; see boot/profile diagnostic")
+        # NixOS first boot activates /run/current-system asynchronously.
+        # Keep this offline, bounded, and credential-free until ready.
+        result = None
+        for attempt in range(30):
+            result = incus("exec", name, "--project", project, "--",
+                           "/bin/sh", "-c", probe, stage="guest boot readiness")
+            if "EXISTS /run/current-system/sw/bin/aginctus-opencode-gateway-provision" in result.stdout:
+                break
+            if attempt < 29:
+                time.sleep(2)
+        else:
+            print(result.stdout, end="")
+            raise RuntimeError("guest did not activate NixOS system profile within 60 seconds")
 
         incus("exec", name, "--project", project, "--",
               helper, input_data=payload, stage="guest helper provisioning")
