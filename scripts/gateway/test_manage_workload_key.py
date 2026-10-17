@@ -105,7 +105,7 @@ class KeyLifecycleTests(unittest.TestCase):
         self.assertEqual(remote.assert_json["models"], [MODEL])
         self.assertEqual(remote.assert_json["duration"], "1h")
         self.assertEqual(remote.assert_json["max_budget"], 1.0)
-        self.assertEqual(remote.assert_json["allowed_routes"], ["llm_api_routes", "info_routes"])
+        self.assertEqual(remote.assert_json["allowed_routes"], ["llm_api_routes", "/v1/models"])
         self.assertEqual(remote.assert_json["max_parallel_requests"], 1)
         self.assertEqual(len(remote.calls), 3)
         rc, out, _ = self.call(remote, "--revoke")
