@@ -449,6 +449,9 @@ in
           script = ''
             set -eu
             ${aginctusCommand} --configuration-file ${configFile} network ensure
+            # Reconcile effective host filtering immediately after the managed
+            # bridge is created, before starting dependent workloads.
+            ${lib.optionalString cfg.firewall.enable "${pkgs.systemd}/bin/systemctl start aginctus-firewall-reconcile.service"}
             ${aginctusCommand} --configuration-file ${configFile} herdr client ensure
             ${lib.concatMapStringsSep "\n" (
               id: "${aginctusCommand} --configuration-file ${configFile} workload ${lib.escapeShellArg id} ensure"

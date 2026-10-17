@@ -45,11 +45,17 @@ func InspectLink(name string, expected net.IP) error {
 // claiming user.aginctus.managed=true. The configured name is an identity
 // selector; it never independently grants permission.
 func Derive(network *api.Network, configuredName, configuredAddress string, inspect LinkInspection) (Policy, error) {
+	if !bridgeName.MatchString(configuredName) {
+		return Policy{}, fmt.Errorf("unsafe selected bridge interface name")
+	}
 	if network == nil || configuredName == "" || network.Name != configuredName ||
 		!network.Managed || network.Type != "bridge" ||
 		network.Config["user.aginctus.managed"] != "true" ||
 		network.Config["user.aginctus.resource"] != "management-network" {
 		return Policy{}, fmt.Errorf("Incus network identity or ownership mismatch")
+	}
+	if network.Status != "" && network.Status != "Created" {
+		return Policy{}, fmt.Errorf("Incus bridge is not in Created state")
 	}
 	if network.Config["ipv4.nat"] != "false" || network.Config["ipv4.routing"] != "false" ||
 		network.Config["ipv6.address"] != "none" {

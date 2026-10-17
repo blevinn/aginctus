@@ -71,6 +71,10 @@ let
         "aginctus-abcdefghijkl"
         "../danger"
       ];
+  firewalldHost = evaluate {
+    services.firewalld.enable = true;
+    networking.nftables.enable = true;
+  };
   withReconcile = evaluate {
     services.aginctus.reconcile = {
       enable = true;
@@ -115,6 +119,14 @@ assert builtins.all (
   lib.any (item: lib.hasInfix "settings.firewall.zone" item.message) (failedAginctusAssertions cfg)
 ) invalidFirewalldZones;
 assert defaultPackage == self.packages.${system}.aginctus;
+assert base.services.aginctus.firewall.enable;
+assert base.systemd.timers.aginctus-firewall-reconcile.timerConfig.OnUnitActiveSec == "30s";
+assert lib.hasInfix "AGINCTUS_INPUT" base.networking.firewall.extraCommands;
+assert !(lib.hasInfix "AGINCTUS_INPUT" firewalldHost.networking.firewall.extraCommands);
+assert builtins.elem "firewalld.service"
+  firewalldHost.systemd.services.aginctus-firewall-reconcile.after;
+assert lib.hasInfix "aginctus-firewall-reconcile.service"
+  withReconcile.systemd.services.aginctus-reconcile.script;
 assert builtins.length secretAssertions == 1;
 assert lib.hasInfix "gateway.postgres.password" (builtins.head secretAssertions).message;
 assert lib.hasInfix "gateway.master.key" (builtins.head secretAssertions).message;

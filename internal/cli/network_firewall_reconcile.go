@@ -13,6 +13,9 @@ import (
 )
 
 // Replaceable for unit tests. Never expose raw firewall utility output.
+var firewallEffectiveUID = os.Geteuid
+var discoverFirewallPolicy = deriveFirewallPolicy
+
 var firewallCommand = func(ctx context.Context, input string, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	if input != "" {
@@ -23,7 +26,7 @@ var firewallCommand = func(ctx context.Context, input string, name string, args 
 }
 
 func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config) int {
-	if os.Geteuid() != 0 {
+	if firewallEffectiveUID() != 0 {
 		fmt.Fprintln(stderr, "firewall reconciliation requires root (host INPUT mutation)")
 		return 1
 	}
@@ -66,7 +69,7 @@ func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, 
 		fmt.Fprintln(stderr, "Aginctus firewall chain missing")
 		return 1
 	}
-	policy, discoveryErr := deriveFirewallPolicy(ctx, cfg)
+	policy, discoveryErr := discoverFirewallPolicy(ctx, cfg)
 	var approved *firewall.Policy
 	if discoveryErr == nil {
 		approved = &policy
@@ -166,7 +169,7 @@ func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 	if err != nil {
 		return fail("cannot inspect Aginctus firewalld rich rules")
 	}
-	owned, discoveryErr := deriveFirewallPolicy(ctx, cfg)
+	owned, discoveryErr := discoverFirewallPolicy(ctx, cfg)
 	var rules []string
 	if discoveryErr == nil {
 		rules, err = firewall.FirewalldRules(&owned)
