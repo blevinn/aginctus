@@ -5,10 +5,21 @@
 }:
 let
   pkgs = import nixpkgs { inherit system; };
+  # Capture the exact nft transaction and rejection reason inside the disposable
+  # VM only. The production service continues to suppress raw nft output.
+  nftDiagnostic = pkgs.writeShellScriptBin "nft" ''
+    if [ "''${1:-}" = "-f" ] && [ "''${2:-}" = "-" ]; then
+      mkdir -p /run/aginctus-nft-test
+      cat > /run/aginctus-nft-test/batch.nft
+      ${pkgs.nftables}/bin/nft "$@" < /run/aginctus-nft-test/batch.nft > /run/aginctus-nft-test/stdout 2> /run/aginctus-nft-test/stderr
+      exit $?
+    fi
+    exec ${pkgs.nftables}/bin/nft "$@"
+  '';
 in
 pkgs.testers.runNixOSTest {
   name = "aginctus-firewalld-incus";
-  nodes.machine = { pkgs, ... }: {
+  nodes.machine = { lib, pkgs, ... }: {
     imports = [ self.nixosModules.aginctus ];
     system.stateVersion = "26.05";
     virtualisation = {
@@ -19,6 +30,7 @@ pkgs.testers.runNixOSTest {
     networking.nftables.enable = true;
     networking.firewall.enable = true;
     services.firewalld.enable = true;
+    systemd.services.aginctus-firewall-reconcile.path = lib.mkBefore [ nftDiagnostic ];
     virtualisation.incus.enable = true;
 
     services.aginctus = {
@@ -74,6 +86,8 @@ pkgs.testers.runNixOSTest {
             "systemctl show aginctus-firewall-reconcile.service -p ExecMainStatus -p Result",
             "nft -a list chain inet firewalld filter_INPUT",
             "nft -a list chain inet firewalld aginctus_dns_input",
+            "cat /run/aginctus-nft-test/batch.nft",
+            "cat /run/aginctus-nft-test/stderr",
             "aginctus --configuration-file /etc/aginctus/config.json network firewall policy",
         ]:
             code, output = machine.execute(command)
