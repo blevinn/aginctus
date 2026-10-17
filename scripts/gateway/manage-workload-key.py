@@ -41,14 +41,13 @@ def endpoint(value):
     try:
         p = urlsplit(value)
         ip = ipaddress.IPv4Address(p.hostname)
-        if (p.scheme != "http" or p.port != 4000 or p.username is not None
-                or p.password is not None or p.path not in ("", "/")
-                or p.query or p.fragment ):
+        valid = (p.scheme == "http" and p.port == 4000
+                 and p.username is None and p.password is None
+                 and p.path in ("", "/") and not p.query and not p.fragment
+                 and any(ip in network for network in NETS))
     except (TypeError, ValueError):
         raise KeyErrorSafe("endpoint must be private numeric IPv4 HTTP port 4000") from None
-    if (p.scheme != "http" or p.port != 4000 or p.username is not None
-            or p.password is not None or p.path not in ("", "/")
-            or p.query or p.fragment or not any(ip in n for n in NETS)):
+    if not valid:
         raise KeyErrorSafe("endpoint must be private numeric IPv4 HTTP port 4000")
     return f"http://{ip}:4000"
 
@@ -151,7 +150,10 @@ def validate_grant(data, requested_model, master):
         raise KeyErrorSafe("generated key is missing or invalid")
     if key == master:
         raise KeyErrorSafe("generated key must differ from gateway master")
-    key = ascii_secret(key.encode("utf-8"))
+    try:
+        key = ascii_secret(key.encode("ascii"))
+    except UnicodeError:
+        raise KeyErrorSafe("generated key contains invalid encoding") from None
     if data.get("models") != [requested_model]:
         raise KeyErrorSafe("generated key does not confirm exact model restriction")
     budget = data.get("max_budget")
@@ -169,14 +171,6 @@ def validate_grant(data, requested_model, master):
     if when.tzinfo is None or not now < when <= now + timedelta(minutes=75):
         raise KeyErrorSafe("generated key expiration is not within pilot limit")
     return key
-
-
-def store_key(path, value):
-    # Reserve with O_EXCL before the remote request; never replace another key.
-    with os.fdopen(os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600), "wb") as out:
-        out.write((value + "\n").encode("ascii"))
-        out.flush()
-        os.fsync(out.fileno())
 
 
 def run_issue(opener, base, alias, master, output):
@@ -200,7 +194,10 @@ def run_issue(opener, base, alias, master, output):
         # preserve it for explicit revocation rather than discarding it.
         value = response.get("key") if isinstance(response, dict) else None
         if isinstance(value, str) and value.startswith("sk-") and value != master:
-            value = ascii_secret(value.encode("utf-8"))
+            try:
+                value = ascii_secret(value.encode("ascii"))
+            except UnicodeError:
+                raise KeyErrorSafe("generated key contains invalid encoding") from None
             with os.fdopen(fd, "wb", closefd=False) as out:
                 out.write((value + "\n").encode("ascii"))
                 out.flush()
@@ -232,7 +229,8 @@ def run_revoke(opener, base, master, output):
         response = api(opener, base, "/key/delete", master, {"keys": [key]})
     except KeyErrorSafe:
         raise KeyErrorSafe("key deletion uncertain; retain protected file for investigation") from None
-    if not isinstance(response, dict) or not isinstance(response.get("deleted_keys"), list):
+    if (not isinstance(response, dict) or not isinstance(response.get("deleted_keys"), list)
+            or not response["deleted_keys"]):
         raise KeyErrorSafe("key deletion unconfirmed; retain protected file")
     # Some LiteLLM versions report a hashed ID, so verify revocation with an
     # authenticated endpoint rather than comparing returned secret text.
