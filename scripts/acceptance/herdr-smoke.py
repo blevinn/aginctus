@@ -29,8 +29,15 @@ def main():
     root = os.environ.get("AGINCTUS_ACCEPTANCE_HERDR_SMOKE_ROOT", "")
     if root != "/home/agent/aginctus-acceptance":
         raise RuntimeError("reviewed guest workspace parent required")
-    if not json.loads(call("herdr", "machine", "status", machine, "--json")).get("reachable"):
-        raise RuntimeError("Herdr machine is not reachable")
+    client = os.environ.get("AGINCTUS_ACCEPTANCE_HERDR_CLIENT", "aginctus-herdr")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", client):
+        raise RuntimeError("invalid managed Herdr client name")
+    registered = json.loads(call("incus", "exec", client, "--", "herdr", "machine", "list", "--json"))
+    if not isinstance(registered, list) or not any(
+        isinstance(entry, dict) and entry.get("label") == machine and entry.get("enabled") is True
+        for entry in registered
+    ):
+        raise RuntimeError("required managed Herdr machine is not registered and enabled")
     fixture = Path(__file__).with_name("herdr-lifecycle.py")
     for iteration in range(2):
         identity = PREFIX + secrets.token_hex(4)
@@ -61,7 +68,7 @@ def main():
                                env=env, check=True, timeout=180, capture_output=True, text=True)
                 opened = True
                 state = json.loads((base.parent / ".herdr-owned.json").read_text())
-                response = json.loads(call("herdr", "--machine", machine, "workspace", "get", state["workspace_id"]))
+                response = json.loads(call("incus", "exec", client, "--", "herdr", "--machine", machine, "workspace", "get", state["workspace_id"]))
                 if not isinstance(response, dict) or "result" not in response:
                     raise RuntimeError("workspace inspect response missing")
             finally:
