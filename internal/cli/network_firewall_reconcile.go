@@ -48,7 +48,7 @@ func runNetworkFirewallReconcile(ctx context.Context,stdout,stderr io.Writer,cfg
     }
     input,err:=firewallCommand(ctx,"","iptables","-S","nixos-fw")
     if err!=nil || !strings.Contains(input,"-j "+firewall.Chain) {
-        fmt.Fprintln(stderr,"Aginctus INPUT hook missing; activate the host NixOS module")
+        fmt.Fprintln(stderr,"Aginctus nixos-fw hook missing; activate the host NixOS module")
         return 1
     }
     if _,err:=firewallCommand(ctx,"","iptables","-S",firewall.Chain);err!=nil {
