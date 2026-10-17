@@ -165,7 +165,10 @@ pkgs.testers.runNixOSTest {
     machine.succeed("systemctl start aginctus-firewall-reconcile.service")
     assert owned_rules() == rules
 
-    machine.reboot()
+    # Exercise cold-boot restoration. Explicit stop/start avoids a driver
+    # reconnect race during an in-guest Ctrl-Alt-Delete reboot.
+    machine.shutdown()
+    machine.start()
     machine.wait_for_unit("multi-user.target")
     machine.wait_until_succeeds("iptables -S AGINCTUS_INPUT | grep -F -- '--dport 53'")
     machine.succeed("iptables -S nixos-fw | grep -F -- '-j AGINCTUS_INPUT'")
