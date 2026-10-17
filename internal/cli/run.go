@@ -722,6 +722,9 @@ func runWorkload(
 	stdout, stderr io.Writer,
 	effective *config.Config,
 ) int {
+	if len(args) > 1 && args[0] == "gateway" && args[1] == "provision" {
+		return runWorkloadGatewayProvision(ctx, args[2:], stdout, stderr, effective)
+	}
 	if len(args) > 0 && args[0] == "status" {
 		return runWorkloadStatus(ctx, args[1:], stdout, stderr, effective)
 	}
