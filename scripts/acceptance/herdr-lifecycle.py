@@ -90,7 +90,7 @@ def phase(action, workspace, identity, prompt=None):
     elif action == "wait":
         # The prompt wait establishes Herdr agent settled status only.
         # Gateway and guest test trace evidence MUST be independently verified.
-        invoke(machine, "agent", "get", state["agent_name"])
+        invoke(machine, "agent", "wait", state["agent_name"], "--until", "done", "--until", "idle", "--timeout", "150000")
     elif action == "stop":
         # Closing the owned workspace terminates its panes; no global agent stop.
         # Run close separately so a partial stop is still cleaned up.
