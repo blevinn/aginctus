@@ -140,6 +140,26 @@ guest. On a deployment with multiple plausible service IPv4 addresses, the
 command fails closed instead of guessing. Never enable management-network
 NAT/routing to work around a connectivity failure.
 
+### Real Incus test without LiteLLM
+
+The acceptance harness launches an **offline, disposable** NixOS OpenCode
+instance without profiles or NICs, streams a generated throwaway credential to
+the real guest helper, checks installed file ownership/permissions and safe
+settings, exercises invalid-input rejection, then deletes only its own test
+instance. It does not use the production `aginctus-dev` instance or an
+operational gateway. Run only on an Incus host after importing the rebuilt
+OpenCode image containing the provisioning helper:
+
+```sh
+just build opencode-workload
+just opencode-workload-image-update
+nix shell nixpkgs#python3 --command python3 \
+  scripts/acceptance/opencode-guest-provision.py --pool default
+```
+
+Replace `default` with your configured Incus storage pool. Inspect any
+cleanup warning before manually removing the named disposable test instance.
+
 ### Independent validation
 
 ```sh
