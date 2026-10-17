@@ -5,45 +5,32 @@ import (
 	"net"
 )
 
-// FirewalldChain is an ordinary chain inside the *live firewalld table*,
-// entered by a jump in firewalld's actual filter_INPUT chain before reject.
-// An independent input base chain would not override firewalld's decision.
-const FirewalldChain = "aginctus_dns_input"
-const FirewalldHookComment = "aginctus:guest-host-dns-dhcp"
+// FirewalldZone is installed declaratively by the NixOS module. Its DROP
+// target, empty permanent permissions and absence of permanent interfaces
+// are security invariants. Runtime exceptions belong exclusively to Aginctus.
+const FirewalldZone = "aginctus-dns"
 
-// RenderFirewalld produces an atomic nft transaction, never a shell script.
-// It changes only Aginctus's chain and its narrowly scoped INPUT jump.
-func RenderFirewalld(policy *Policy, chainExists, hookExists bool) (string, error) {
-	if hookExists && !chainExists {
-		return "", fmt.Errorf("firewalld hook exists without Aginctus chain")
+// FirewalldRules renders firewalld rich rules, never nftables syntax. The
+// zone's interface binding supplies the ingress-interface restriction.
+func FirewalldRules(policy *Policy) ([]string, error) {
+	if policy == nil {
+		return nil, nil
 	}
-	if policy != nil {
-		ip := net.ParseIP(policy.Address)
-		_, cidr, err := net.ParseCIDR(policy.Subnet)
-		if !bridgeName.MatchString(policy.Interface) || ip == nil || ip.To4() == nil ||
-			cidr == nil || err != nil || !cidr.Contains(ip) {
-			return "", fmt.Errorf("invalid firewalld bridge policy")
-		}
+	ip := net.ParseIP(policy.Address)
+	_, subnet, err := net.ParseCIDR(policy.Subnet)
+	if !bridgeName.MatchString(policy.Interface) || ip == nil || ip.To4() == nil ||
+		err != nil || subnet == nil || !subnet.Contains(ip) {
+		return nil, fmt.Errorf("invalid firewalld bridge policy")
 	}
-	transaction := ""
-	if !chainExists {
-		transaction += "add chain inet firewalld " + FirewalldChain + "\n"
-	} else {
-		transaction += "flush chain inet firewalld " + FirewalldChain + "\n"
+	rules := make([]string, 0, 3)
+	for _, proto := range []string{"udp", "tcp"} {
+		rules = append(rules, fmt.Sprintf(
+			`rule family="ipv4" source address="%s" destination address="%s" port port="53" protocol="%s" accept`,
+			policy.Subnet, policy.Address, proto))
 	}
-	if !hookExists {
-		transaction += "insert rule inet firewalld filter_INPUT jump " + FirewalldChain +
-			" comment \"" + FirewalldHookComment + "\"\n"
-	}
-	if policy != nil {
-		for _, proto := range []string{"udp", "tcp"} {
-			transaction += fmt.Sprintf(
-				"add rule inet firewalld %s iifname \"%s\" ip saddr %s ip daddr %s %s dport 53 accept\n",
-				FirewalldChain, policy.Interface, policy.Subnet, policy.Address, proto)
-		}
-		transaction += fmt.Sprintf(
-			"add rule inet firewalld %s iifname \"%s\" udp sport 68 udp dport 67 accept\n",
-			FirewalldChain, policy.Interface)
-	}
-	return transaction, nil
+	// DHCP DISCOVER has source 0.0.0.0 and broadcast destination. The
+	// firewalld rich-language API cannot combine source-port and destination-
+	// port matches, so constrain UDP 67 by ingress interface (zone) instead.
+	rules = append(rules, `rule family="ipv4" port port="67" protocol="udp" accept`)
+	return rules, nil
 }
