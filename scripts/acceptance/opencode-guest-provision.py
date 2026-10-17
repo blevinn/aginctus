@@ -54,6 +54,8 @@ def main():
         # fixed text, contains no secrets, and checks metadata and safe config.
         verification = r'''
 set -eu
+PATH=/run/current-system/sw/bin:/usr/bin:/bin
+export PATH
 dir=/var/lib/aginctus/opencode
 test "$(stat -c %a "$dir")" = 700
 test "$(stat -c %a "$dir/workload-key")" = 600
