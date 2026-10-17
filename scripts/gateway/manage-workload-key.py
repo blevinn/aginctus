@@ -25,7 +25,7 @@ NETS = tuple(ipaddress.ip_network(s) for s in (
     "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8"))
 KEY_BUDGET_USD = 1.0
 KEY_DURATION = "1h"
-KEY_ROUTES = ["llm_api_routes", "info_routes"]
+KEY_ROUTES = ["llm_api_routes", "/v1/models"]
 
 
 class KeyErrorSafe(Exception):
