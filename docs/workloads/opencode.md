@@ -105,6 +105,58 @@ Then use the existing Herdr client to create a disposable remote workspace, star
 
 **Remaining dependencies:** #122 supplies operational LiteLLM and tested inference; #172 must prove LiteLLM's Responses streaming and tool event contract for OAuth models; #220 ensures host-managed DNS/DHCP reachability. Workload-key delivery and approval of its model scope must be implemented/verified before #123 closes.
 
+## Provision private gateway access (#123)
+
+Once LiteLLM is deployed and an operator has approved the shared v0.1 model
+scope, create a **workload-facing LiteLLM key** in a local, mode-0600 file. This
+must not be the LiteLLM master key or any upstream/OAuth token. Aginctus does
+not generate or authorize that key: it must already be valid at LiteLLM.
+
+```sh
+# Substitute the actual operator-approved model alias and private key file:
+aginctus workload gateway provision dev --model=APPROVED_ALIAS --key-file=/secure/path/workload-key
+```
+
+The CLI verifies ownership and running state of the target workload and gateway
+Compose project. It inspects the single owned running LiteLLM service, requires
+**one unambiguous private IPv4 address**, and derives the
+`http://<discovered-ip>:4000/v1` endpoint. It does not assume a cross-project
+Incus DNS name. The service port 4000 is the v0.1 LiteLLM default; deployments
+using another port are intentionally unsupported by this initial contract.
+
+The host reads the protected key file, then transmits a fixed JSON payload
+through **Incus exec stdin** to the image's privileged
+`aginctus-opencode-gateway-provision` helper. No credential enters command
+arguments, Aginctus configuration overrides, Nix store paths, or the CLI's
+stdout/stderr. The guest installs the key and settings atomically in private
+agent-owned files beneath `/var/lib/aginctus/opencode`. Existing credentials
+are replaced on explicit invocation; coordinate shared-key rotation with the
+LiteLLM administrator. The key remains readable to the trusted workload
+`agent` user by design, so per-workload isolation remains a v0.2 task (#177).
+
+This only configures OpenCode. A successful command **does not** prove that
+LiteLLM accepts the key, routes the chosen model, or is reachable from the
+guest. On a deployment with multiple plausible service IPv4 addresses, the
+command fails closed instead of guessing. Never enable management-network
+NAT/routing to work around a connectivity failure.
+
+### Independent validation
+
+```sh
+nix shell nixpkgs#python3 --command python3 -m unittest discover -s guest/opencode -p 'test_*.py' -v
+nix develop -c go test ./internal/cli ./...
+nix flake check
+nix build .#opencode-workload --no-link
+git diff --check origin/main...HEAD
+```
+
+For pilot-host validation, invoke the provisioning command with a valid LiteLLM
+key and approved model, verify the key file's owner/mode using `stat` (without
+printing contents), verify `opencode models aginctus`, and run an actual
+Herdr model prompt against the private endpoint. Revoke the test key afterward.
+This remains dependent on live gateway readiness (#122), Responses/tool
+compatibility (#172), and management connectivity (#220).
+
 ## Lifecycle
 
 Run `aginctus workload dev ensure` to reconcile the configured management network and workload instance through the Apply driver, or `aginctus workload dev teardown` to delete only the workload instance. Use `--dry-run` to inspect actions, and see [workload lifecycle](lifecycle.md) for ownership and isolation rules.
