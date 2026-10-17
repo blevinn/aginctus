@@ -1,4 +1,8 @@
-{ self, nixpkgs, system }:
+{
+  self,
+  nixpkgs,
+  system,
+}:
 let
   pkgs = import nixpkgs { inherit system; };
 in
@@ -36,7 +40,12 @@ pkgs.testers.runNixOSTest {
     };
 
     environment.systemPackages = with pkgs; [
-      iproute2 iptables nftables incus dnsutils netcat-openbsd
+      iproute2
+      iptables
+      nftables
+      incus
+      dnsutils
+      netcat-openbsd
     ];
   };
 
