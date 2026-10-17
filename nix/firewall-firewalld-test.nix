@@ -54,6 +54,15 @@ pkgs.testers.runNixOSTest {
     machine.wait_for_unit("multi-user.target")
     machine.wait_for_unit("incus.service")
     machine.wait_for_unit("firewalld.service")
+    # The NixOS service must select its intended backend explicitly, even if
+    # firewalld's table temporarily disappears during a restart.
+    machine.succeed(
+        "systemctl show -p ExecStart aginctus-firewall-reconcile.service"
+        " | grep -F firewall.backend=firewalld"
+    )
+    machine.wait_until_succeeds(
+        "nft -a list table inet firewalld | grep -F 'flags owner,persist'"
+    )
     machine.succeed("incus admin init --auto --storage-backend dir")
     machine.succeed(
         "incus network create aginctus-test "
@@ -121,6 +130,8 @@ pkgs.testers.runNixOSTest {
     machine.succeed("systemctl start aginctus-firewall-reconcile.service")
     assert 'port="53"' in owned_rules()
 
+    # Do not wait in the driver after restart: the service must handle the
+    # daemon becoming active before its nftables INPUT table is ready.
     machine.succeed("systemctl restart firewalld.service")
     machine.succeed("systemctl start aginctus-firewall-reconcile.service")
     assert firewall("--permanent", zone, "--get-target").strip() == "DROP"
