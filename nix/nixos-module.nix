@@ -18,6 +18,8 @@ let
 
   cfg = config.services.aginctus;
   firewalldBackend = config.services.firewalld.enable;
+  nativeNftBackend = !firewalldBackend && config.networking.firewall.backend == "nftables";
+  iptablesBackend = !firewalldBackend && !nativeNftBackend;
   system = pkgs.stdenv.hostPlatform.system;
   jsonFormat = pkgs.formats.json { };
 
@@ -286,10 +288,10 @@ in
           || (
             config.networking.firewall.enable
             && (
-              if firewalldBackend then config.networking.nftables.enable else !config.networking.nftables.enable
+              if firewalldBackend || nativeNftBackend then config.networking.nftables.enable else !config.networking.nftables.enable
             )
           );
-        message = "services.aginctus.firewall requires enabled host filtering with nftables for firewalld or iptables-nft for the non-firewalld NixOS backend.";
+        message = "services.aginctus.firewall requires enabled host filtering with nftables for firewalld/NixOS-native or iptables-nft for the iptables backend.";
       }
       {
         assertion = configuredSecretPaths == [ ];
@@ -313,19 +315,29 @@ in
 
     # ExtraCommands executes before the NixOS iptables firewall's final
     # reject, unlike an independent nftables accept-only base chain.
-    networking.firewall.extraCommands = lib.mkIf (cfg.firewall.enable && !firewalldBackend) ''
+    networking.firewall.extraCommands = lib.mkIf (cfg.firewall.enable && iptablesBackend) ''
       iptables -N AGINCTUS_INPUT 2>/dev/null || iptables -F AGINCTUS_INPUT
       iptables -C nixos-fw -j AGINCTUS_INPUT 2>/dev/null || iptables -I nixos-fw 1 -j AGINCTUS_INPUT
       # On Incus errors the empty chain must remain fail-closed.
       ${aginctusCommand} --configuration-file ${configFile} network firewall reconcile || true
     '';
-    networking.firewall.extraPackages = lib.mkIf (cfg.firewall.enable && !firewalldBackend) [
+    networking.firewall.extraPackages = lib.mkIf (cfg.firewall.enable && iptablesBackend) [
       pkgs.nftables
     ];
-    networking.firewall.extraStopCommands = lib.mkIf (cfg.firewall.enable && !firewalldBackend) ''
+    networking.firewall.extraStopCommands = lib.mkIf (cfg.firewall.enable && iptablesBackend) ''
       iptables -D nixos-fw -j AGINCTUS_INPUT 2>/dev/null || true
       iptables -F AGINCTUS_INPUT 2>/dev/null || true
       iptables -X AGINCTUS_INPUT 2>/dev/null || true
+    '';
+
+    # NixOS native nftables declares a normal, empty child chain within the
+    # authoritative NixOS table and adds its call from input-allow. Never
+    # create a separate accepting nftables input base chain.
+    networking.nftables.tables."nixos-fw".content = lib.mkIf (cfg.firewall.enable && nativeNftBackend) ''
+      chain aginctus_dns_input { }
+    '';
+    networking.firewall.extraInputRules = lib.mkIf (cfg.firewall.enable && nativeNftBackend) ''
+      jump aginctus_dns_input comment "aginctus:guest-host-dns-dhcp"
     '';
 
     # Firewalld owns its nftables table (flags owner,persist), so Aginctus
@@ -365,12 +377,14 @@ in
             "incus.service"
             "firewall.service"
           ]
-          ++ lib.optional firewalldBackend "firewalld.service";
+          ++ lib.optional firewalldBackend "firewalld.service"
+          ++ lib.optional nativeNftBackend "nftables.service";
           wants = [
             "incus.service"
             "firewall.service"
           ]
-          ++ lib.optional firewalldBackend "firewalld.service";
+          ++ lib.optional firewalldBackend "firewalld.service"
+          ++ lib.optional nativeNftBackend "nftables.service";
           path = [
             pkgs.iptables
             pkgs.nftables
@@ -404,7 +418,7 @@ in
               ''}"
             );
             ExecStart = "${aginctusCommand} --configuration-file ${configFile} --config firewall.backend=${
-              if firewalldBackend then "firewalld" else "iptables-nft"
+              if firewalldBackend then "firewalld" else if nativeNftBackend then "nixos-nft" else "iptables-nft"
             } network firewall reconcile";
           };
         };
