@@ -43,6 +43,7 @@ func TestDeriveOwnedBridge(t *testing.T) {
 func TestDeriveRejectsForeignAndDrift(t *testing.T) {
 	cases := map[string]func(*api.Network){
 		"wrong selected name": func(n *api.Network) { n.Name = "aginctus-mgmt" },
+		"not created":         func(n *api.Network) { n.Status = "Pending" },
 		"not managed":         func(n *api.Network) { n.Managed = false },
 		"wrong type":          func(n *api.Network) { n.Type = "physical" },
 		"missing marker":      func(n *api.Network) { delete(n.Config, "user.aginctus.managed") },
@@ -75,5 +76,17 @@ func TestDeriveRejectsForeignAndDrift(t *testing.T) {
 		return errors.New("missing")
 	}); err == nil || !strings.Contains(err.Error(), "interface") {
 		t.Fatalf("live link mismatch: %v", err)
+	}
+}
+
+func TestDeriveRejectsUnsafeBridgeSelectorBeforeInspection(t *testing.T) {
+	for _, name := range []string{"name with spaces", "../etc", "overlong-bridge-name"} {
+		_, err := Derive(owned(), name, "auto", func(string, net.IP) error {
+			t.Fatal("unsafe name must not reach interface lookup")
+			return nil
+		})
+		if err == nil || !strings.Contains(err.Error(), "unsafe") {
+			t.Fatalf("bridge selector %q admitted: %v", name, err)
+		}
 	}
 }
