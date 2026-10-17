@@ -290,6 +290,8 @@
         {
           aginctus = aginctusCli;
           default = aginctusCli;
+          # Expose exactly the runtime used by the workload image for contract tests.
+          opencode-runtime = pkgs.opencode;
 
           oauth-gateway = pkgs.runCommand "aginctus-oauth-gateway-image" { } ''
             mkdir -p "$out"
