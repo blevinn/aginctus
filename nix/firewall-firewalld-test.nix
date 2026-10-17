@@ -84,6 +84,8 @@ pkgs.testers.runNixOSTest {
         print("Aginctus firewall service failed: " + service_output)
         for command in [
             "systemctl show aginctus-firewall-reconcile.service -p ExecMainStatus -p Result",
+            "nft -a list table inet firewalld | head -15",
+            "systemctl show aginctus-firewall-reconcile.service -p CapabilityBoundingSet -p AmbientCapabilities",
             "nft -a list chain inet firewalld filter_INPUT",
             "nft -a list chain inet firewalld aginctus_dns_input",
             "cat /run/aginctus-nft-test/batch.nft",
