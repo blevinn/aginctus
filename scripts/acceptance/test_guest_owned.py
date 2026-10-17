@@ -25,9 +25,9 @@ class GuestOwnedTests(unittest.TestCase):
                     "/home/agent/aginctus-acceptance/" + identity)
             args = run.call_args.args[0]
             self.assertEqual(args[:9], ["incus", "exec", "aginctus-dev", "--", "runuser",
-                                        "-u", "agent", "--", "python3"])
-            self.assertEqual(args[-2:], ["stage", identity])
-            self.assertNotIn("sh", args)
+                                        "-u", "agent", "--", "/bin/sh"])
+            self.assertEqual(args[-3:], ["aginctus-guest-owned", "stage", identity])
+            self.assertEqual(args[9], "-c")
 
 if __name__ == "__main__":
     unittest.main()
