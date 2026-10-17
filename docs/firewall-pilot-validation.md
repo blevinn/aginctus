@@ -91,3 +91,24 @@ also initiates an immediate firewall reconciliation when enabled. Until the next
 a firewalld reload can deny DNS; do not create broader fallback exceptions.
 Record the actual failure verdict and recovery behavior in the PR, rather
 than marking acceptance complete from an untested design.
+
+## NixOS-native nftables host backend
+
+For `networking.firewall.backend = "nftables"` without firewalld, the
+Aginctus module extends NixOS's own `table inet nixos-fw` with an initially
+empty child chain. An `input-allow` jump is declared through NixOS's
+`networking.firewall.extraInputRules` extension. Reconciliation replaces
+**only** that owned child chain with verified bridge-scoped DNS/DHCP
+permissions; it never creates an independent INPUT base hook.
+
+Read-only after NixOS module activation:
+
+```sh
+sudo nft list chain inet nixos-fw input
+sudo nft list chain inet nixos-fw input-allow
+sudo nft list chain inet nixos-fw aginctus_dns_input
+```
+
+NixOS retains its input conntrack filtering, host default drop and foreign
+permissions. A firewall reload initializes an empty owned child chain and
+can temporarily block guest DNS until the reconciler runs again.

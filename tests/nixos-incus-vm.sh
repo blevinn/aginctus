@@ -158,6 +158,11 @@ echo 'Building and executing the disposable NixOS Incus/firewalld integration ch
 nix build '.#checks.x86_64-linux.firewall-firewalld-integration' --no-link --print-build-logs --show-trace "$@"
 echo 'PASS: Incus/firewalld integration check completed.'
 
+# Exercise the native NixOS nftables backend with a real, disposable Incus VM.
+echo 'Building and executing the disposable NixOS native-nftables/Incus check...'
+nix build '.#checks.x86_64-linux.firewall-nixos-nft-integration' --no-link --print-build-logs --show-trace "$@"
+echo 'PASS: native NixOS nftables/Incus integration check completed.'
+
 # Run the iptables hook/packet-filtering integration in an independent
 # disposable NixOS VM before the existing native-nftables Incus lifecycle test.
 # The iptables test intentionally uses a fixture; NixOS Incus requires nftables.
