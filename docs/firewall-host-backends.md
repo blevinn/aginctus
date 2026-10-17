@@ -55,9 +55,25 @@ with `CAP_NET_ADMIN`; the previous direct-nft approach is **unsupported**.
 Do not disable table ownership or create an independent nftables accept base
 chain.
 
-The Aginctus NixOS module declares one empty, **DROP-by-default** zone,
-`/etc/firewalld/zones/aginctus-dns.xml`. The zone has **no permanent
-interface bindings and no permanent allowances**. The privileged
+The Aginctus NixOS module declares one empty, **DROP-by-default**
+zone named by `services.aginctus.settings.firewall.zone` (default
+`aginctus-dns`), materialized as `/etc/firewalld/zones/<zone>.xml`.
+Firewalld zone names are limited to 17 characters; Aginctus requires the
+`aginctus-` prefix and lowercase alphanumeric/hyphen suffix. For example:
+
+```nix
+services.aginctus.settings.firewall.zone = "aginctus-lab";
+```
+
+Using a custom name is supported today and tested with `aginctus-vm`. Future
+multi-profile support should allocate **one different zone per profile** and
+ensure corresponding distinct units and network ownership policies. Multiple
+Aginctus instances or profiles on the same host are **not** enabled by this
+option alone (planned for v0.3). Do not configure multiple independent
+instances to share a zone.
+
+The zone has **no permanent interface bindings and no permanent
+allowances**. The privileged
 `aginctus network firewall reconcile` command calls `firewall-cmd` to:
 
 1. Confirm the dedicated zone exists and is DROP-only, with no unexpected
@@ -100,7 +116,8 @@ cold-boot restoration. It does not mutate the pilot firewall.
 
 ## Pilot verification after the automated suite passes
 
-Read-only:
+Read-only (the commands below use the default zone; substitute the
+configured name when customized):
 
 ```sh
 sudo firewall-cmd --get-zones
