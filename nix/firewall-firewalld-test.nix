@@ -63,7 +63,34 @@ pkgs.testers.runNixOSTest {
         "ip -4 address show aginctus-test | grep -F 10.247.82.1"
     )
     machine.succeed("systemctl reset-failed aginctus-firewall-reconcile.service || true")
-    machine.succeed("systemctl start aginctus-firewall-reconcile.service")
+    # Fail with actionable nft diagnostics from this disposable VM. Do not
+    # expose raw nft output in the production service journal.
+    status, service_output = machine.execute(
+        "systemctl start aginctus-firewall-reconcile.service"
+    )
+    if status != 0:
+        print("Aginctus firewall service failed: " + service_output)
+        for command in [
+            "systemctl show aginctus-firewall-reconcile.service -p ExecMainStatus -p Result",
+            "nft -a list chain inet firewalld filter_INPUT",
+            "nft -a list chain inet firewalld aginctus_dns_input",
+            "aginctus --configuration-file /etc/aginctus/config.json network firewall policy",
+        ]:
+            code, output = machine.execute(command)
+            print(f"DIAG {command}: exit={code} output={output}")
+        machine.succeed("""cat > /tmp/aginctus-firewalld-preflight.nft <<'NFT'
+add chain inet firewalld aginctus_dns_input
+insert rule inet firewalld filter_INPUT jump aginctus_dns_input comment "aginctus:guest-host-dns-dhcp"
+add rule inet firewalld aginctus_dns_input iifname "aginctus-test" ip saddr 10.247.82.0/24 ip daddr 10.247.82.1 udp dport 53 accept
+add rule inet firewalld aginctus_dns_input iifname "aginctus-test" ip saddr 10.247.82.0/24 ip daddr 10.247.82.1 tcp dport 53 accept
+add rule inet firewalld aginctus_dns_input iifname "aginctus-test" udp sport 68 udp dport 67 accept
+NFT""")
+        code, output = machine.execute(
+            "nft --check -f /tmp/aginctus-firewalld-preflight.nft"
+        )
+        print(f"DIAG nft batch preflight: exit={code} output={output}")
+        raise AssertionError("Aginctus nft reconciliation failed; see DIAG lines above")
+
 
     def owned_rules():
         return machine.succeed("nft list chain inet firewalld aginctus_dns_input")
