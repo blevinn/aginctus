@@ -62,9 +62,10 @@ interface bindings and no permanent allowances**. The privileged
 
 1. Confirm the dedicated zone exists and is DROP-only, with no unexpected
    services, sources, ports, protocols or forward-ports.
-2. Remove prior runtime rich-rule exceptions **before** reading new Incus
-   state. When ownership verification fails, it leaves the exceptions empty
-   (fail closed) and returns a nonzero status.
+2. Verify current Incus ownership. Leave an unchanged, matching policy
+   intact to avoid disrupting DNS every 30 seconds; otherwise remove stale
+   runtime exceptions before installing anything new. On failed verification,
+   leave the exceptions empty (fail closed) and return a nonzero status.
 3. Verify the selected Incus network's ownership labels, isolation flags,
    bridge interface, subnet, and configured name/address.
 4. Add source/subnet-and-destination-constrained UDP/TCP DNS 53 rich rules
