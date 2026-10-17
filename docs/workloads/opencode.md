@@ -1,6 +1,6 @@
 # OpenCode workload
 
-Status: OpenCode image and declarative workload instance lifecycle implemented; remote SSH registration, gateway credential delivery and runtime readiness remain integration work.
+Status: OpenCode image, lifecycle and fail-closed gateway launcher implemented; credential provisioning, service discovery and on-host inference remain integration work.
 
 ## Purpose
 
@@ -54,7 +54,49 @@ The image contains no model-provider credentials.
 
 The intended path is for OpenCode to use a workload credential issued by the Aginctus AI gateway. Provider credentials remain in the gateway and never enter the workload image.
 
-Until gateway credential delivery is implemented, this image only establishes the runtime environment.
+The image invokes an Aginctus OpenCode launcher from Herdr and interactive shells. It reads **runtime** files (not Nix store values):
+
+- `/var/lib/aginctus/opencode/gateway.json`: `{"endpoint":"http://<private-litellm-dns>:4000/v1","model":"<approved-alias>","protocol":"responses"}`.
+- `/var/lib/aginctus/opencode/workload-key`: shared v0.1 LiteLLM **workload** key, readable by `agent` with mode `0600`. This must not be the LiteLLM master key or any upstream/OAuth token.
+
+**Do not copy the placeholder names literally.** Obtain the DNS name/port from the actual Compose service discovery in the configured management network, and the alias from the approved LiteLLM model registration. Project-scoped Incus DNS names may not resolve from the default-project workload; prove resolution rather than assuming the Compose service name is reachable. Until a safe credential-delivery interface is implemented, provision these files only through a verified operator-controlled private channel, never via `incus exec ... -- sh -c 'echo SECRET ...'` or environment overrides containing secrets.
+
+`gateway.json` may be world-readable (no secrets); `workload-key` must remain a private regular file. The runtime exports the workload key only in the child OpenCode process environment and uses OpenCode's `{env:...}` API-key interpolation. No secret is serialized into `OPENCODE_CONFIG_CONTENT`, a rendered Nix derivation, a command-line argument or OpenCode's configured provider JSON. The launcher defaults to the OpenAI Responses adapter (`@ai-sdk/openai`). Specify `"protocol":"chat-completions"` only for an explicitly validated LiteLLM model which requires `@ai-sdk/openai-compatible`.
+
+If the endpoint, model or key is absent/invalid, OpenCode does **not** launch. An incorrect DNS name or an unreachable gateway fails requests without making direct upstream network connectivity available. The management network stays unrouted and without NAT.
+
+## Isolated validation (does not require Incus or LiteLLM)
+
+```sh
+python3 -m unittest discover -s guest/opencode -p 'test_*.py' -v
+nix develop -c go test ./...
+nix flake check
+nix build .#opencode-workload --no-link
+```
+
+The synthetic HTTP server asserts `POST /v1/responses`, a bearer key, model selection and a tool-call response. It uses a fake OpenCode executable to inspect the actual runtime environment; this does **not** establish that pinned OpenCode 1.15.10 or LiteLLM has been exercised.
+
+## Final pilot-host validation (after #122, #172 and #220)
+
+```sh
+aginctus config get incus.management.network.name
+aginctus config get gateway.compose.project
+aginctus gateway status
+aginctus workload dev status
+incus list --project default
+incus list --project "$(aginctus config get gateway.compose.project | tr -d '"')"
+# From inside the workload, verify the discovered LiteLLM DNS name resolves:
+incus exec aginctus-dev --project default -- getent hosts '<private-litellm-dns>'
+# Verify the runtime credential is provisioned with restrictive permissions
+# without displaying its contents:
+incus exec aginctus-dev --project default -- stat -c '%a %U:%G' /var/lib/aginctus/opencode/workload-key
+# Check that the agent user can select the configured gateway model:
+incus exec aginctus-dev --project default -- runuser -u agent -- opencode models aginctus
+```
+
+Then use the existing Herdr client to create a disposable remote workspace, start an OpenCode agent, prompt it to create a marker file under the **guest-local** workspace, verify the file content, terminate the agent and remove the temporary workspace. Inspect gateway access logs for an authenticated LiteLLM request without logging secrets. Test a deliberately invalid key and temporarily unreachable private endpoint: both must fail without fallback to a public provider. Confirm `incus network show "$(aginctus config get incus.management.network.name | tr -d '"')"` still reports `ipv4.nat=false` and `ipv4.routing=false` and that the agent cannot directly reach an external provider.
+
+**Remaining dependencies:** #122 supplies operational LiteLLM and tested inference; #172 must prove LiteLLM's Responses streaming and tool event contract for OAuth models; #220 ensures host-managed DNS/DHCP reachability. Workload-key delivery and approval of its model scope must be implemented/verified before #123 closes. 
 
 ## Lifecycle
 
