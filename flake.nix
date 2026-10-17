@@ -168,6 +168,12 @@
             ];
           };
 
+          # Runtime-only gateway configuration: no endpoint, model or key is
+          # materialized into the Nix store. Herdr's PATH resolves this wrapper.
+          aginctusOpenCode = pkgs.writeShellScriptBin "opencode" ''
+            exec ${pkgs.python3}/bin/python3 ${./guest/opencode/launch.py} ${pkgs.opencode}/bin/opencode "$@"
+          '';
+
           opencodeWorkloadSystem = nixpkgs.lib.nixosSystem {
             inherit system;
             modules = [
@@ -186,7 +192,7 @@
                   environment.systemPackages = [
                     herdrPackage
                     pkgs.git
-                    pkgs.opencode
+                    aginctusOpenCode
                     pkgs.openssh
                     sshAuthorizeHelper
                   ];
