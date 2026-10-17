@@ -18,21 +18,27 @@ def guest(*argv):
             capture_output=True, text=True, timeout=25, check=True)
         return result.stdout
     except (OSError, subprocess.SubprocessError):
-        raise RuntimeError("guest readiness check failed") from None
+        raise RuntimeError("guest command failed") from None
+
+def stage(label, fn):
+    try:
+        return fn()
+    except (RuntimeError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        raise RuntimeError("readiness phase failed: " + label) from None
 
 def check():
     workload = os.environ.get("AGINCTUS_ACCEPTANCE_WORKLOAD", "aginctus-dev")
     if not INSTANCE.fullmatch(workload):
         raise RuntimeError("invalid managed workload name")
     # Metadata is checked by root. The secret itself is NEVER opened/read.
-    metadata = guest("stat", "-c", "%a %U %F", "--", KEY).strip()
+    metadata = stage("credential metadata", lambda: guest("stat", "-c", "%a %U %F", "--", KEY)).strip()
     if metadata != "600 agent regular file":
         raise RuntimeError("unsafe or absent workload credential metadata")
-    guest("runuser", "-u", "agent", "--", "test", "-r", KEY)
-    cfg_meta = guest("stat", "-c", "%F", "--", CONFIG).strip()
+    stage("credential accessibility", lambda: guest("runuser", "-u", "agent", "--", "test", "-r", KEY))
+    cfg_meta = stage("gateway configuration metadata", lambda: guest("stat", "-c", "%F", "--", CONFIG)).strip()
     if cfg_meta != "regular file":
         raise RuntimeError("missing regular gateway configuration")
-    cfg = json.loads(guest("runuser", "-u", "agent", "--", "cat", CONFIG))
+    cfg = stage("gateway configuration readability", lambda: json.loads(guest("runuser", "-u", "agent", "--", "cat", CONFIG)))
     if not isinstance(cfg, dict) or set(cfg) != {"endpoint", "model", "protocol"}:
         raise RuntimeError("invalid gateway configuration fields")
     if cfg["protocol"] != "responses":
@@ -49,7 +55,7 @@ def check():
     host = url.hostname
     if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}", host):
         raise RuntimeError("invalid gateway hostname")
-    guest("runuser", "-u", "agent", "--", "getent", "hosts", host)
+    stage("gateway DNS", lambda: guest("runuser", "-u", "agent", "--", "getent", "hosts", host))
     return cfg["model"]
 
 if __name__ == "__main__":
@@ -57,6 +63,9 @@ if __name__ == "__main__":
         model = check()
         print("PASS: private OpenCode Responses runtime files and guest DNS ready")
         print("NOT VERIFIED: actual gateway reachability, upstream inference, agent prompt, and egress policy")
-    except (RuntimeError, ValueError, KeyError, TypeError, json.JSONDecodeError):
-        print("FAIL: OpenCode inference runtime readiness (details suppressed)", file=sys.stderr)
+    except (RuntimeError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        message = str(exc)
+        known = ("credential metadata", "credential accessibility", "gateway configuration metadata", "gateway configuration readability", "gateway DNS")
+        label = next((name for name in known if message == "readiness phase failed: " + name), "configuration validation")
+        print("FAIL: OpenCode inference readiness: " + label + " (details suppressed)", file=sys.stderr)
         sys.exit(1)
