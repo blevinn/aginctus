@@ -168,6 +168,12 @@
             ];
           };
 
+          # Runtime-only gateway configuration: no endpoint, model or key is
+          # materialized into the Nix store. Herdr's PATH resolves this wrapper.
+          aginctusOpenCode = pkgs.writeShellScriptBin "opencode" ''
+            exec ${pkgs.python3}/bin/python3 ${./guest/opencode/launch.py} ${pkgs.opencode}/bin/opencode "$@"
+          '';
+
           opencodeWorkloadSystem = nixpkgs.lib.nixosSystem {
             inherit system;
             modules = [
@@ -186,7 +192,7 @@
                   environment.systemPackages = [
                     herdrPackage
                     pkgs.git
-                    pkgs.opencode
+                    aginctusOpenCode
                     pkgs.openssh
                     sshAuthorizeHelper
                   ];
@@ -284,6 +290,8 @@
         {
           aginctus = aginctusCli;
           default = aginctusCli;
+          # Expose exactly the runtime used by the workload image for contract tests.
+          opencode-runtime = pkgs.opencode;
 
           oauth-gateway = pkgs.runCommand "aginctus-oauth-gateway-image" { } ''
             mkdir -p "$out"
@@ -334,6 +342,7 @@
               jq
               just
               nixfmt
+              python3
               shellcheck
               shfmt
             ];
