@@ -168,7 +168,7 @@ def validate_grant(data, requested_model, master):
     except ValueError:
         raise KeyErrorSafe("invalid generated key expiration") from None
     now = datetime.now(timezone.utc)
-    if when.tzinfo is None or not now < when <= now + timedelta(minutes=75):
+    if when.tzinfo is None or not now < when <= now + timedelta(minutes=65):
         raise KeyErrorSafe("generated key expiration is not within pilot limit")
     return key
 
@@ -189,7 +189,11 @@ def run_issue(opener, base, alias, master, output):
     fd = os.open(output, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
     created = False
     try:
-        response = api(opener, base, "/key/generate", master, request)
+        try:
+            response = api(opener, base, "/key/generate", master, request)
+        except KeyErrorSafe:
+            # A timeout may follow a successful remote commit. This alias is nonsecret.
+            raise KeyErrorSafe(f"key generation uncertain; inspect and revoke remote alias {key_alias} before retrying") from None
         # A remote key may already exist if any step below fails. If possible,
         # preserve it for explicit revocation rather than discarding it.
         value = response.get("key") if isinstance(response, dict) else None
