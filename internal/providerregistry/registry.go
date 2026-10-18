@@ -77,7 +77,7 @@ func Register(path string, p Provider) (bool, error) {
 		}
 	}
 	reg.Providers = append(reg.Providers, p)
-	data, err := json.MarshalIndent(reg, "", "  ")
+	data, err = json.MarshalIndent(reg, "", "  ")
 	if err != nil {
 		return false, err
 	}
