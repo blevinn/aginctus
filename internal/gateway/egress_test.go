@@ -70,8 +70,8 @@ func TestEgressGatewayTopologyAndRenderParity(t *testing.T) {
 		t.Fatalf("Postgres exposed to egress: %#v", got)
 	}
 	wantLiteLLMNetworks := map[string]any{
-		"management": {"x-incus-compose": {"internal": true}},
-		"egress":     {},
+		"management": map[string]any{"x-incus-compose": map[string]any{"internal": true}},
+		"egress":     map[string]any{},
 	}
 	if got := litellm["networks"]; !reflect.DeepEqual(got, wantLiteLLMNetworks) {
 		t.Fatalf("LiteLLM management gateway suppression mismatch: %#v", got)
@@ -84,6 +84,52 @@ func TestEgressNameIsDistinctAndSafe(t *testing.T) {
 		spec.EgressNetwork = name
 		if err := spec.Validate(); err == nil {
 			t.Fatalf("unsafe egress network accepted: %q", name)
+		}
+	}
+}
+
+func TestEgressStaticIPv4CIDRRenderParity(t *testing.T) {
+	spec := egressTestSpec()
+	spec.EgressIPv4Address = "10.42.40.5/24"
+	plan, err := spec.OrchestrationPlan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := spec.RenderCompose()
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalized, err := yaml.YAMLToJSON([]byte(rendered))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var renderModel map[string]any
+	if err := json.Unmarshal(normalized, &renderModel); err != nil {
+		t.Fatal(err)
+	}
+	var deployment struct {
+		Compose map[string]any `json:"compose"`
+	}
+	if err := json.Unmarshal(plan.Steps[2].Configuration, &deployment); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(renderModel, deployment.Compose) {
+		t.Fatal("render and orchestration differ")
+	}
+	services := deployment.Compose["services"].(map[string]any)
+	litellm := services["litellm"].(map[string]any)
+	networks := litellm["networks"].(map[string]any)
+	if got := networks["egress"].(map[string]any)["ipv4_address"]; got != "10.42.40.5/24" {
+		t.Fatalf("unexpected CIDR: %v", got)
+	}
+}
+
+func TestEgressIPv4RequiresValidHostCIDR(t *testing.T) {
+	for _, addr := range []string{"bogus", "10.42.40.1", "10.42.40.0/24", "2001:db8::2/64", "10.42.40.2/32"} {
+		spec := egressTestSpec()
+		spec.EgressIPv4Address = addr
+		if err := spec.Validate(); err == nil {
+			t.Fatalf("accepted invalid CIDR %q", addr)
 		}
 	}
 }
