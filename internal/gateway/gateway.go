@@ -119,7 +119,7 @@ services:
     networks:
 {{if .EgressNetwork}}      management:
         x-incus-compose:
-          gateway: false
+          internal: true
       egress: {}
 {{else}}      - management
 {{end}}
