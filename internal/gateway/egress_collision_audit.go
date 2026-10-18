@@ -62,6 +62,10 @@ func auditRequestedEgressAddress(ctx context.Context, network, project string, r
 			if instance.ExpandedDevices == nil {
 				return fmt.Errorf("missing expanded device inventory")
 			}
+			egressNICCount := 0
+			for _, device := range instance.ExpandedDevices {
+				if device["type"] == "nic" && device["network"] == network { egressNICCount++ }
+			}
 			for _, device := range instance.ExpandedDevices {
 				if device["type"] != "nic" || device["network"] != network {
 					continue
@@ -72,7 +76,7 @@ func auditRequestedEgressAddress(ctx context.Context, network, project string, r
 				if value == "" && p.Name == project && instance.Name == "litellm-1" &&
 					instance.Config["user.aginctus.managed"] == "true" &&
 					instance.Config["user.aginctus.resource"] == "compose-instance" &&
-					instance.Config["user.aginctus.deployment"] == project {
+					instance.Config["user.aginctus.deployment"] == project && egressNICCount == 1 {
 					continue
 				}
 				if value == "" {
