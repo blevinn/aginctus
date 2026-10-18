@@ -374,6 +374,20 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 3 && args[0] == "egress" && args[1] == "reconcile" && args[2] == "--dry-run" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation configuration: %v\n", err)
+			return 1
+		}
+		plan, err := gateway.PlanEgressReconciliation(ctx, spec, gatewayEgressQuery)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, plan)
+		return 0
+	}
 	if len(args) == 2 && args[0] == "egress" && args[1] == "audit" {
 		spec, err := gateway.FromConfig(effective)
 		if err != nil {
@@ -1036,6 +1050,7 @@ Commands:
   gateway apply    Reconcile the AI gateway
   gateway egress preflight  Read-only owned egress network / DHCP safety check
   gateway egress audit      Read-only LiteLLM NIC configuration audit
+  gateway egress reconcile --dry-run  Plan owned LiteLLM NIC repair without mutation
   gateway status    Inspect gateway project and service state
   gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
   gateway remove [--force] Remove gateway instances, preserving data volumes
