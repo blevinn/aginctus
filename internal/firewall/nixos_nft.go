@@ -2,7 +2,6 @@ package firewall
 
 import (
 	"fmt"
-	"net"
 )
 
 // NixosNftChain is an ordinary chain in NixOS's authoritative firewall
@@ -15,10 +14,7 @@ func RenderNixosNft(policy *Policy) (string, error) {
 	if policy == nil {
 		return txn, nil
 	}
-	ip := net.ParseIP(policy.Address)
-	_, subnet, err := net.ParseCIDR(policy.Subnet)
-	if !bridgeName.MatchString(policy.Interface) || err != nil || ip == nil ||
-		ip.To4() == nil || subnet == nil || !subnet.Contains(ip) {
+	if !validIPv4Policy(policy) {
 		return "", fmt.Errorf("invalid verified NixOS nftables policy")
 	}
 	txn += "add rule inet nixos-fw " + NixosNftChain + " ct state invalid return\n"

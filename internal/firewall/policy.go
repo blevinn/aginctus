@@ -17,6 +17,27 @@ type Policy struct {
 	Subnet    string
 }
 
+// validIPv4Policy is the common renderer boundary for verified management
+// bridge DNS/DHCP exceptions. In particular, net.IPNet.Contains alone is
+// insufficient: an IPv6 ::/0 CIDR also contains IPv4-mapped IP addresses.
+// Reject IPv6 subnet families (including mapped IPv4 CIDRs with 128-bit masks)
+// before formatting any IPv4-only iptables, nftables or firewalld rule.
+func validIPv4Policy(policy *Policy) bool {
+	if policy == nil || !bridgeName.MatchString(policy.Interface) {
+		return false
+	}
+	ip := net.ParseIP(policy.Address)
+	if ip == nil || ip.To4() == nil {
+		return false
+	}
+	_, subnet, err := net.ParseCIDR(policy.Subnet)
+	if err != nil || subnet == nil || subnet.IP.To4() == nil {
+		return false
+	}
+	_, bits := subnet.Mask.Size()
+	return bits == net.IPv4len*8 && subnet.Contains(ip)
+}
+
 // LinkInspection is injectable to let policy tests run without a real bridge.
 type LinkInspection func(name string, expected net.IP) error
 
