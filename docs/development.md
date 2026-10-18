@@ -130,6 +130,45 @@ just fmt
 
 `just fmt` formats both Go and Nix sources.
 
+## Validation tiers
+
+For routine development and required CI validation, run:
+
+```sh
+just check
+nix flake check
+```
+
+`just check` verifies Go modules and runs Go tests and vetting. `nix flake check`
+builds the lightweight NixOS module check, but intentionally **does not execute**
+the firewall integration VMs. Those tests remain available as individually
+buildable flake packages on `x86_64-linux`.
+
+For the complete NixOS firewall VM suite, run:
+
+```sh
+just test-nix-firewall
+```
+
+To run only the relevant firewall backend test:
+
+```sh
+nix build -L --no-link .#firewall-iptables-integration
+nix build -L --no-link .#firewall-firewalld-integration
+nix build -L --no-link .#firewall-nixos-nft-integration
+```
+
+The VM tests exercise actual firewall enforcement, ownership revocation,
+reconciliation, service restarts, and reboot behavior. Run them on an
+`x86_64-linux` builder capable of executing NixOS virtual machine tests (with
+hardware virtualization available where needed). They should be run before
+merging firewall/security-boundary changes and during release validation, even
+though they are not part of mandatory per-commit checks. A separately scheduled
+or manually triggered CI job can also run these builds without making them
+required checks; failures should remain visible.
+
+`just test-nix` remains the separate heavyweight Incus/QEMU acceptance harness.
+
 ## direnv
 
 If you use direnv with nix-direnv support, the repository includes an `.envrc`:
