@@ -717,3 +717,75 @@ func TestWorkloadRemoveNamed(t *testing.T) {
 		t.Fatalf("id = %q, options = %#v", gotID, gotOptions)
 	}
 }
+
+// TestPrintUsageMatchesGatewaySurface verifies the top-level help advertises
+// the gateway commands actually dispatched by runGateway.
+func TestPrintUsageMatchesGatewaySurface(t *testing.T) {
+	var buf bytes.Buffer
+	printUsage(&buf)
+	help := buf.String()
+
+	// The historical bug: the help printed a non-dispatchable form.
+	if strings.Contains(help, "gateway chatgpt model render") {
+		t.Fatalf("top-level usage still advertises the non-dispatchable "+
+			"'gateway chatgpt model render' form:\n%s", help)
+	}
+
+	// The correct, dispatched form must appear.
+	if !strings.Contains(help, "gateway model NAME render") {
+		t.Fatalf("top-level usage missing 'gateway model NAME render':\n%s", help)
+	}
+
+	// Other dispatched commands must each appear at least once.
+	for _, want := range []string{
+		"gateway provider chatgpt register",
+		"gateway provider list",
+		"gateway provider ALIAS show",
+		"gateway model NAME register",
+		"gateway model list",
+		"gateway model NAME show",
+		"gateway credential-storage ensure",
+		"gateway credential-storage attach",
+		"gateway credential-storage audit",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("top-level usage missing %q:\n%s", want, help)
+		}
+	}
+
+	// A literal escape sequence leaked into the help would render as
+	// "\n" instead of a real newline.
+	if strings.Contains(help, `\n`) {
+		t.Fatalf("top-level usage contains a literal backslash-n:\n%s", help)
+	}
+}
+
+// TestGatewayHelpTextInvariants covers the same surface from the gateway
+// subcommand usage, which is printed for unmatched gateway subcommands.
+func TestGatewayHelpTextInvariants(t *testing.T) {
+	var buf bytes.Buffer
+	printGatewayUsage(&buf)
+	help := buf.String()
+
+	for _, want := range []string{
+		"gateway validate",
+		"gateway render",
+		"gateway apply",
+		"gateway remove",
+		"gateway status",
+		"gateway credential-storage ensure",
+		"gateway credential-storage attach",
+		"gateway credential-storage audit",
+		"gateway provider chatgpt register",
+		"gateway provider list",
+		"gateway provider ALIAS show",
+		"gateway model NAME register",
+		"gateway model list",
+		"gateway model NAME show",
+		"gateway model NAME render",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("gateway usage missing %q:\n%s", want, help)
+		}
+	}
+}

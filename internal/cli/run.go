@@ -1032,15 +1032,24 @@ Commands:
   config get PATH   Print one effective configuration value
   doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
   gateway validate  Validate the AI gateway deployment configuration
-  gateway apply     Reconcile the AI gateway
+  gateway up       Alias for gateway apply
+  gateway apply    Reconcile the AI gateway
   gateway egress preflight  Read-only owned egress network / DHCP safety check
   gateway egress audit      Read-only LiteLLM NIC configuration audit
   gateway status    Inspect gateway project and service state
   gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
   gateway remove [--force] Remove gateway instances, preserving data volumes
   gateway render    Render the AI gateway Compose model
-  gateway chatgpt model render MODEL  Render native LiteLLM Responses model registration
-  gateway credential-storage ensure  Create/verify dedicated unmounted gateway credential volume
+  gateway provider chatgpt register [--alias=NAME] [--dry-run]  Register a provider alias
+  gateway provider list              List registered provider aliases
+  gateway provider ALIAS show        Show one registered provider alias
+  gateway model NAME register [--provider=ALIAS] [--source=chatgpt/MODEL] [--dry-run]  Register a model alias
+  gateway model list                 List registered model aliases
+  gateway model NAME show            Show one registered model alias
+  gateway model NAME render          Render the stored LiteLLM Responses model definition (read-only)
+  gateway credential-storage ensure   Create/verify dedicated unmounted gateway credential volume
+  gateway credential-storage attach   Attach the credential volume to LiteLLM
+  gateway credential-storage audit    Read-only credential attachment audit
   herdr                  Launch interactive Herdr in its client container
   herdr client apply     Create, reconcile, and bootstrap the Herdr client
   herdr client remove    Delete the Herdr client container
