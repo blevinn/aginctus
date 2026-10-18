@@ -31,7 +31,9 @@ func TestAuditEgressInstances(t *testing.T) {
 			}
 			got, err := auditEgressInstances(context.Background(), "aginctus-egress", run)
 			if tc.want == "blocked" {
-				if err == nil { t.Fatal("expected blocked inventory") }
+				if err == nil {
+					t.Fatal("expected blocked inventory")
+				}
 			} else if err != nil {
 				t.Fatal(err)
 			} else if tc.want == "none" && len(got) != 0 {
