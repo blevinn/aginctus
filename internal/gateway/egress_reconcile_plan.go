@@ -23,10 +23,10 @@ func PlanEgressReconciliation(ctx context.Context, spec Spec, query func(context
 		return "", fmt.Errorf("inspect owned egress bridge: %w", err)
 	}
 	var bridge struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-		Managed bool `json:"managed"`
-		Config map[string]string `json:"config"`
+		Name    string            `json:"name"`
+		Type    string            `json:"type"`
+		Managed bool              `json:"managed"`
+		Config  map[string]string `json:"config"`
 	}
 	if err := json.Unmarshal(rawNetwork, &bridge); err != nil {
 		return "", fmt.Errorf("decode egress bridge: %w", err)
@@ -56,9 +56,9 @@ func PlanEgressReconciliation(ctx context.Context, spec Spec, query func(context
 		return "", fmt.Errorf("inspect existing LiteLLM instance: %w", err)
 	}
 	var instance struct {
-		Name string `json:"name"`
-		Config map[string]string `json:"config"`
-		Devices map[string]map[string]string `json:"devices"`
+		Name            string                       `json:"name"`
+		Config          map[string]string            `json:"config"`
+		Devices         map[string]map[string]string `json:"devices"`
 		ExpandedDevices map[string]map[string]string `json:"expanded_devices"`
 	}
 	if err := json.Unmarshal(rawInstance, &instance); err != nil {
@@ -77,10 +77,14 @@ func PlanEgressReconciliation(ctx context.Context, spec Spec, query func(context
 		}
 		switch d["network"] {
 		case spec.Network:
-			if managementName != "" { return "", fmt.Errorf("multiple management NICs found") }
+			if managementName != "" {
+				return "", fmt.Errorf("multiple management NICs found")
+			}
 			managementName = name
 		case spec.EgressNetwork:
-			if egressName != "" { return "", fmt.Errorf("multiple egress NICs found") }
+			if egressName != "" {
+				return "", fmt.Errorf("multiple egress NICs found")
+			}
 			egressName = name
 		}
 	}
