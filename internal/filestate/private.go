@@ -1,5 +1,5 @@
-// Package filestate provides bounded, descriptor-based reads of private local
-// state files on Linux. It does not create, rename, or change any files.
+// Package filestate provides bounded descriptor-based reads and crash-safe
+// advisory write locks for private local state files on Linux.
 package filestate
 
 import (

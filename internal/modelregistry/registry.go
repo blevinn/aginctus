@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/blevinn/aginctus/internal/filestate"
 	"github.com/blevinn/aginctus/internal/providerregistry"
 )
 
@@ -134,11 +135,13 @@ func Register(path string, model Model) (bool, error) {
 	if err != nil || !d.IsDir() || d.Mode().Perm()&0077 != 0 {
 		return false, fmt.Errorf("model state directory must be private")
 	}
-	lock := path + ".lock"
-	if err := os.Mkdir(lock, 0700); err != nil {
-		return false, fmt.Errorf("model registry busy or lock exists")
+	// Keep the advisory lock across read/modify/atomic-replace; the kernel
+	// releases it on Close or process death without deleting the lock inode.
+	lock, err := filestate.LockRegistry(path)
+	if err != nil {
+		return false, fmt.Errorf("acquire model registry write lock: %w", err)
 	}
-	defer os.Remove(lock)
+	defer lock.Close()
 	reg, err := Load(path)
 	if err != nil {
 		return false, err

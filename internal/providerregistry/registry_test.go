@@ -1,10 +1,13 @@
 package providerregistry
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/blevinn/aginctus/internal/filestate"
 )
 
 func TestRegisterIdempotent(t *testing.T) {
@@ -47,12 +50,28 @@ func TestRejectInsecureOrUnsupported(t *testing.T) {
 	}
 }
 func TestRegistryLockFailsClosed(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "providers.json")
-	if err := os.Mkdir(path+".lock", 0700); err != nil {
+	// Provider registration requires a private directory, not merely a
+	// non-writable one (the shared lock helper has a broader policy).
+	dir := filepath.Join(t.TempDir(), "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "chatgpt"}); err == nil {
-		t.Fatal("accepted concurrent lock")
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "providers.json")
+	lock, err := filestate.LockRegistry(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "chatgpt"}); !errors.Is(err, filestate.ErrRegistryBusy) {
+		t.Fatalf("concurrent registration did not fail busy: %v", err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := Register(path, Provider{Type: "chatgpt", Alias: "chatgpt"}); err != nil || !changed {
+		t.Fatalf("registration failed after releasing lock: changed=%t err=%v", changed, err)
 	}
 }
 
