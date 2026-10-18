@@ -192,7 +192,7 @@ Incus profiles: it receives an explicit root disk on the configured storage pool
 and an explicit NIC on the configured management network.
 
 The default image alias is produced by `nix build .#herdr-client` and imported
-locally with `just herdr-client-image-update`. The image is NixOS 26.05 and
+locally with `just update image herdr-client`. The image is NixOS 26.05 and
 consumes Herdr from the published Herdr flake, with the exact revision pinned by
 Aginctus's `flake.lock`. A systemd service starts `herdr server` in headless mode
 when the container boots.
@@ -266,6 +266,26 @@ services.aginctus.reconcile = {
 ```
 
 This reconciles the management network, Herdr client, and selected workloads only after Incus and any enabled image update services have succeeded. The services include the host `incus` executable in their systemd `PATH`. An image import failure prevents dependent reconciliation instead of allowing workloads to start against an outdated alias. Reconciliation is disabled by default because it mutates Incus state.
+
+### Host firewall reconciliation (default-on)
+
+Independent of the Incus-state reconcile above, the module defaults
+`services.aginctus.firewall.enable = true`. When enabled, the module
+adds a boot-time oneshot and a 30-second timer that call
+`aginctus network firewall reconcile` and (on the firewalld backend)
+materialize a generated drop-zone file under `/etc/firewalld/zones/`.
+The reconcile mutates **host** INPUT rules — it is not the same
+operation as `services.aginctus.reconcile`, which targets Incus
+state. Disable the firewall reconciler explicitly to opt out:
+
+```nix
+services.aginctus.firewall.enable = false;
+```
+
+The full host example at the top of this document enables the
+firewall reconciler silently. See
+[`docs/firewall-host-backends.md`](firewall-host-backends.md) for the
+ownership contract and backend-specific caveats.
 
 The flake provides `packages.<system>.aginctus` (also `packages.<system>.default`) and the module selects that package by default. A consuming host can still override `services.aginctus.package` to pin or replace the CLI independently.
 
