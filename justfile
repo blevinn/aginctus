@@ -7,6 +7,10 @@ mod fmt '.just/fmt.just'
 test:
     go test ./...
 
+# Run the heavyweight NixOS firewall VM tests explicitly (x86_64-linux).
+test-nix-firewall:
+    nix build -L --no-link .#firewall-iptables-integration .#firewall-firewalld-integration .#firewall-nixos-nft-integration
+
 # Builds and runs a disposable QEMU VM with real Incus and the packaged CLI.
 # Unlike 'just test', this is a heavyweight integration check.
 test-nix *args:
