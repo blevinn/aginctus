@@ -15,7 +15,6 @@ import (
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 	"github.com/blevinn/aginctus/internal/modelregistry"
 	"github.com/blevinn/aginctus/internal/providerregistry"
-	"github.com/blevinn/aginctus/internal/statevolume"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -358,7 +357,7 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network firewall reconcile  # privileged mutation")
 }
 
-var ensureCredentialStorage = statevolume.EnsureGatewayCredentialsOnHost
+var ensureCredentialStorage = gateway.EnsureCredentialVolume
 var attachGatewayCredentials = gateway.AttachCredentialVolume
 var auditGatewayCredentials = gateway.AuditCredentialAttachment
 
@@ -620,17 +619,26 @@ func runGateway(
 			fmt.Fprintf(stderr, "gateway credential storage gateway ID: %v\n", err)
 			return 1
 		}
+		project, err := effective.String("gateway.compose.project")
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway credential storage Compose project: %v\n", err)
+			return 1
+		}
 		pool, err := effective.String("gateway.credentials.storage.pool")
 		if err != nil {
 			fmt.Fprintf(stderr, "gateway credential storage pool: %v\n", err)
 			return 1
 		}
-		v := statevolume.GatewayCredentials{Pool: pool, GatewayID: id}
-		if err := ensureCredentialStorage(ctx, v); err != nil {
+		a := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
+		if err := a.Validate(); err != nil {
+			fmt.Fprintf(stderr, "gateway credential storage configuration: %v\n", err)
+			return 1
+		}
+		if err := ensureCredentialStorage(ctx, a); err != nil {
 			fmt.Fprintf(stderr, "gateway credential storage: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "gateway credential volume %q: ready (unmounted; no credentials imported)\n", v.Name())
+		fmt.Fprintf(stdout, "gateway credential volume %q: ready in Compose project %q (attachment unchanged; no credentials imported)\n", a.VolumeName(), project)
 		return 0
 	}
 	if len(args) == 0 || len(args) > 2 {
