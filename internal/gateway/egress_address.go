@@ -32,11 +32,8 @@ func selectEgressIPv4(bridgeCIDR string, unavailable []netip.Addr) (string, erro
 	// Prefer high addresses to make the result reproducible. The final address
 	// of a subnet is broadcast, and must never be selected.
 	last := network.Addr()
-	for addr := last; network.Contains(addr); addr = addr.Next() {
+	for addr := last.Next(); network.Contains(addr); addr = addr.Next() {
 		last = addr
-		if addr == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
-			break
-		}
 	}
 	for candidate := last.Prev(); network.Contains(candidate); candidate = candidate.Prev() {
 		if !blocked[candidate] && candidate != network.Addr() {
