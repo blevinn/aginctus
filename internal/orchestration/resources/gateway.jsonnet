@@ -53,7 +53,12 @@ ag.orchestration(cfg.id,
             LITELLM_SALT_KEY: '${AGINCTUS_GATEWAY_SALT_KEY}',
             STORE_MODEL_IN_DB: 'True',
           },
-          networks: if cfg.egressNetwork == '' then ['management'] else ['management', 'egress'],
+          networks: if cfg.egressNetwork == '' then ['management'] else {
+            management: {
+              'x-incus-compose': { internal: true },
+            },
+            egress: {},
+          },
         },
       },
       volumes: {
