@@ -62,6 +62,12 @@ func auditRequestedEgressAddress(ctx context.Context, network, project string, r
 			if instance.ExpandedDevices == nil {
 				return fmt.Errorf("missing expanded device inventory")
 			}
+			egressNICCount := 0
+			for _, device := range instance.ExpandedDevices {
+				if device["type"] == "nic" && device["network"] == network {
+					egressNICCount++
+				}
+			}
 			for _, device := range instance.ExpandedDevices {
 				if device["type"] != "nic" || device["network"] != network {
 					continue
@@ -72,7 +78,7 @@ func auditRequestedEgressAddress(ctx context.Context, network, project string, r
 				if value == "" && p.Name == project && instance.Name == "litellm-1" &&
 					instance.Config["user.aginctus.managed"] == "true" &&
 					instance.Config["user.aginctus.resource"] == "compose-instance" &&
-					instance.Config["user.aginctus.deployment"] == project {
+					instance.Config["user.aginctus.deployment"] == project && egressNICCount == 1 {
 					continue
 				}
 				if value == "" {
@@ -90,6 +96,16 @@ func auditRequestedEgressAddress(ctx context.Context, network, project string, r
 					return fmt.Errorf("unexpected non-IPv4 egress assignment")
 				}
 				if addr == requested {
+					// An already configured address on the exact, owned
+					// LiteLLM NIC is our desired state, not a collision.
+					// Never exempt another NIC, even on the same instance.
+					if p.Name == project && instance.Name == "litellm-1" &&
+						instance.Config["user.aginctus.managed"] == "true" &&
+						instance.Config["user.aginctus.resource"] == "compose-instance" &&
+						instance.Config["user.aginctus.deployment"] == project &&
+						egressNICCount == 1 {
+						continue
+					}
 					return fmt.Errorf("requested egress address is already assigned")
 				}
 			}

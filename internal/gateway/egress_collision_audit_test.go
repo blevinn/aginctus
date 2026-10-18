@@ -53,3 +53,37 @@ func mustParseAddress(t *testing.T, value string) netip.Addr {
 	}
 	return addr
 }
+
+func TestAuditOwnedLiteLLMEgressAddressIsIdempotent(t *testing.T) {
+	for _, tc := range []struct {
+		name, projectInstances, want string
+	}{
+		{"owned sole NIC", `[{"name":"litellm-1","config":{"user.aginctus.managed":"true","user.aginctus.resource":"compose-instance","user.aginctus.deployment":"aginctus-gateway"},"expanded_devices":{"eth1":{"type":"nic","network":"aginctus-egress","ipv4.address":"10.42.40.25/24"}}}]`, ""},
+		{"foreign ownership", `[{"name":"litellm-1","config":{"user.aginctus.managed":"false","user.aginctus.resource":"compose-instance","user.aginctus.deployment":"aginctus-gateway"},"expanded_devices":{"eth1":{"type":"nic","network":"aginctus-egress","ipv4.address":"10.42.40.25/24"}}}]`, "already assigned"},
+		{"duplicate NICs", `[{"name":"litellm-1","config":{"user.aginctus.managed":"true","user.aginctus.resource":"compose-instance","user.aginctus.deployment":"aginctus-gateway"},"expanded_devices":{"eth1":{"type":"nic","network":"aginctus-egress","ipv4.address":"10.42.40.25/24"},"eth2":{"type":"nic","network":"aginctus-egress","ipv4.address":"10.42.40.26/24"}}}]`, "already assigned"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			query := func(_ context.Context, args ...string) ([]byte, error) {
+				switch args[len(args)-1] {
+				case "/1.0/networks/aginctus-egress/leases":
+					return []byte(`[]`), nil
+				case "/1.0/projects?recursion=1":
+					return []byte(`[{"name":"aginctus-gateway"}]`), nil
+				case "/1.0/instances?recursion=2&project=aginctus-gateway":
+					return []byte(tc.projectInstances), nil
+				default:
+					t.Fatalf("unexpected query: %v", args)
+					return nil, nil
+				}
+			}
+			err := auditRequestedEgressAddress(context.Background(), "aginctus-egress", "aginctus-gateway", mustParseAddress(t, "10.42.40.25"), query)
+			if tc.want == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %s, got %v", tc.want, err)
+			}
+		})
+	}
+}
