@@ -1,9 +1,11 @@
 package gateway
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/blevinn/aginctus/internal/statevolume"
 	"github.com/lxc/incus/v7/shared/api"
 )
 
@@ -137,5 +139,54 @@ func TestAttachmentRejectsUnsafeProject(t *testing.T) {
 	a = attachmentFixture()
 	if strings.Contains(a.device()["source"], "oauth") {
 		t.Fatal("OAuth-specific mount")
+	}
+}
+
+// A1: ensure must enforce the very same project ownership/isolation gate as
+// attach and audit, *before* calling the state-volume mutation path.
+func TestCredentialEnsureProjectGuardBeforeVolumeMutation(t *testing.T) {
+	a := attachmentFixture()
+	cases := []struct {
+		name    string
+		project *api.Project
+		reject  bool
+	}{
+		{"owned isolated", ownedAuditProject(), false},
+		{"absent", nil, true},
+		{"wrong name", func() *api.Project { p := ownedAuditProject(); p.Name = "foreign"; return p }(), true},
+		{"unmanaged", func() *api.Project { p := ownedAuditProject(); delete(p.Config, "user.aginctus.managed"); return p }(), true},
+		{"foreign resource", func() *api.Project { p := ownedAuditProject(); p.Config["user.aginctus.resource"] = "foreign"; return p }(), true},
+		{"wrong deployment", func() *api.Project { p := ownedAuditProject(); p.Config["user.aginctus.deployment"] = "other"; return p }(), true},
+		{"shared volumes", func() *api.Project { p := ownedAuditProject(); p.Config["features.storage.volumes"] = "false"; return p }(), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			ensure := func(_ context.Context, v statevolume.GatewayCredentials) error {
+				calls++
+				if v.Project != a.ComposeProject || v.Pool != a.Pool || v.GatewayID != a.GatewayID {
+					t.Fatalf("wrong volume target: %+v", v)
+				}
+				return nil
+			}
+			err := ensureCredentialVolume(context.Background(), a, tc.project, ensure)
+			if tc.reject {
+				if err == nil || calls != 0 {
+					t.Fatalf("rejected project reached volume mutation: calls=%d err=%v", calls, err)
+				}
+			} else if err != nil || calls != 1 {
+				t.Fatalf("owned project ensure: calls=%d err=%v", calls, err)
+			}
+		})
+	}
+	for _, bad := range []string{"default", "", "../invalid"} {
+		badSpec := a
+		badSpec.ComposeProject = bad
+		calls := 0
+		err := ensureCredentialVolume(context.Background(), badSpec, ownedAuditProject(),
+			func(context.Context, statevolume.GatewayCredentials) error { calls++; return nil })
+		if err == nil || calls != 0 {
+			t.Fatalf("invalid project %q called ensure: calls=%d err=%v", bad, calls, err)
+		}
 	}
 }

@@ -4,19 +4,20 @@ Aginctus uses LiteLLM's built-in `chatgpt/` Responses provider. This step prepar
 
 ## Important: Incus project ownership
 
-The earlier `gateway credential-storage ensure` command creates a retained, owned custom volume in the **default** Incus project. The gateway's `incus-compose` deploys service instances into a separate Incus project, normally `aginctus-gateway`, with project-isolated custom volumes. Incus does not implicitly let this instance attach an unrelated default-project volume.
+`gateway credential-storage ensure` now creates or verifies a retained, owned custom filesystem volume **inside the configured gateway Compose project**, normally `aginctus-gateway`; it no longer silently provisions the default Incus project. Before any volume mutation, it requires the project to exist with the expected Aginctus Compose ownership markers and `features.storage.volumes=true`. It creates no project or instance, attaches no disk, and imports no credentials.
 
-`gateway credential-storage attach` therefore checks the gateway Compose project has `features.storage.volumes=true` and ensures a **separate, project-local managed custom filesystem volume** with the same logical name. It does **not** copy credentials, migrate, mount, reconfigure or delete the legacy default-project volume. In the present pilot that volume should remain empty and unattached. Migration/cleanup is a separate explicit decision.
+`gateway credential-storage attach` uses the same project ownership/isolation policy, and may ensure the same project-local volume before attaching it to the owned LiteLLM instance. Prior versions of `ensure` may have created a **legacy default-project** volume with the same logical name. Neither command adopts, copies, migrates, reconfigures nor deletes that legacy volume. It should remain unattached and may require an explicit, separately reviewed operator cleanup after verifying its contents and consumers.
 
 **Do not** express this sensitive volume as a regular incus-compose named external volume: current incus-compose treats missing external volumes as createable and may delete them through volume removal. Aginctus keeps lifecycle ownership independently.
 
 ## Command (explicit live Incus mutation)
 
 ```sh
+aginctus gateway credential-storage ensure
 aginctus gateway credential-storage attach
 ```
 
-Requires an existing owned `litellm-1` guest under the configured Compose project, matching `user.aginctus.managed=true`, `user.aginctus.resource=compose-instance` and `user.aginctus.deployment=<project>`. The private volume is created in that project if missing, ownership-checked, and required to have no consumers except the intended LiteLLM instance. The only added disk device is `aginctus_chatgpt_credentials` at `/var/lib/aginctus/chatgpt`. Disk mutation is concurrency-protected with the instance ETag. Repeating the command is idempotent; collisions or foreign ownership fail closed.
+`ensure` requires the isolated, owned Compose project but does not require the LiteLLM instance or add a disk device. `attach` requires an existing owned `litellm-1` guest under the configured Compose project, matching `user.aginctus.managed=true`, `user.aginctus.resource=compose-instance` and `user.aginctus.deployment=<project>`. The private volume is created in that project if missing, ownership-checked, and required to have no consumers except the intended LiteLLM instance. The only added disk device is `aginctus_chatgpt_credentials` at `/var/lib/aginctus/chatgpt`. Disk mutation is concurrency-protected with the instance ETag. Repeating the command is idempotent; collisions or foreign ownership fail closed.
 
 This command **does not** change the service environment, set `CHATGPT_TOKEN_DIR`, import tokens, run a login, or activate an inference route. Before using the mount for authentication, a separate increment must prove the guest's runtime user can write to the mounted directory, adjust private ownership safely, and configure LiteLLM to point its native authenticator there. Do not manually copy host OAuth state or perform device-code authentication before those preconditions are met.
 
@@ -25,6 +26,8 @@ This command **does not** change the service environment, set `CHATGPT_TOKEN_DIR
 ```sh
 incus project show aginctus-gateway
 incus --project aginctus-gateway config show litellm-1 --expanded
+incus --project aginctus-gateway storage volume show default aginctus-gateway-local-credentials
+# Optional read-only legacy check (do not remove automatically):
 incus --project default storage volume show default aginctus-gateway-local-credentials
 ```
 
