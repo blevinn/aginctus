@@ -85,6 +85,15 @@ func reconcileStoppedEgressNICs(ctx context.Context, spec Spec, read func(contex
 	if err := op.WaitContext(ctx); err != nil {
 		return fmt.Errorf("LiteLLM NIC update completion uncertain; inspect before retry: %w", err)
 	}
+	// A completed Incus operation is not sufficient evidence that the
+	// requested device configuration persisted. Re-read from the server.
+	verified, _, err := editor.GetInstance("litellm-1")
+	if err != nil || verified == nil {
+		return fmt.Errorf("LiteLLM NIC update completed but post-update state unavailable; inspect before starting")
+	}
+	if err := verifyPersistedEgressNICs(verified, spec, management, egress); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -96,4 +105,20 @@ func ReconcileStoppedEgressNICs(ctx context.Context, spec Spec, read func(contex
 		return fmt.Errorf("connect local Incus: %w", err)
 	}
 	return reconcileStoppedEgressNICs(ctx, spec, read, server.UseProject(spec.Project))
+}
+
+// verifyPersistedEgressNICs requires a stopped, owned instance with the exact
+// locally defined NIC settings, not merely successful operation completion.
+func verifyPersistedEgressNICs(verified *api.Instance, spec Spec, management, egress string) error {
+	if verified == nil || verified.Name != "litellm-1" || !strings.EqualFold(verified.Status, "Stopped") ||
+		verified.Config["user.aginctus.managed"] != "true" ||
+		verified.Config["user.aginctus.resource"] != "compose-instance" ||
+		verified.Config["user.aginctus.deployment"] != spec.Project ||
+		verified.Devices[management]["network"] != spec.Network ||
+		verified.Devices[management]["ipv4.gateway"] != "none" ||
+		verified.Devices[egress]["network"] != spec.EgressNetwork ||
+		verified.Devices[egress]["ipv4.address"] != spec.EgressIPv4Address {
+		return fmt.Errorf("LiteLLM NIC update completed but persisted state differs; inspect before starting")
+	}
+	return nil
 }
