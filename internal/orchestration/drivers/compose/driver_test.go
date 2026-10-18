@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	composeclient "github.com/lxc/incus-compose/client"
-	"github.com/lxc/incus-compose/iclient"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/orchestration"
+	composeclient "github.com/lxc/incus-compose/client"
+	"github.com/lxc/incus-compose/iclient"
 	"github.com/lxc/incus/v7/shared/api"
 )
 
