@@ -226,6 +226,16 @@
                       PermitTunnel = false;
                       PermitUserRC = false;
                     };
+                    # The remote Herdr CLI resolves its API socket from
+                    # HERDR_SOCKET_PATH; declare it once via sshd's SetEnv so
+                    # every SSH session (including Herdr's `herdr --machine
+                    # <label> workspace list`) reaches the systemd-managed
+                    # server socket without a per-call wrapper, shell export
+                    # or user-writable symlink. The path mirrors the systemd
+                    # service's XDG_CONFIG_HOME (see below).
+                    extraConfig = ''
+                      SetEnv HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock
+                    '';
                   };
 
                   systemd.services.herdr = {
@@ -241,6 +251,12 @@
                         "XDG_CONFIG_HOME=/var/lib/herdr/config"
                         "XDG_RUNTIME_DIR=/run/herdr"
                         "XDG_STATE_HOME=/var/lib/herdr"
+                        # Belt-and-braces: the server is a managed daemon and
+                        # must answer the same socket the SSH CLI declares
+                        # above. Without this, `HERDR_SOCKET_PATH` would be
+                        # ignored on the server side and the CLI would probe
+                        # an unrelated path on first contact.
+                        "HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock"
                       ];
                       ExecStart = "${herdrPackage}/bin/herdr server";
                       Restart = "on-failure";
@@ -343,6 +359,9 @@
 
       checks = forAllSystems (system: {
         nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
+        opencode-workload-socket-alignment = import ./nix/opencode-workload-check.nix {
+          inherit self nixpkgs system;
+        };
       });
 
       devShells = forAllSystems (
