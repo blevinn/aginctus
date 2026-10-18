@@ -177,8 +177,8 @@ func TestExplicitEgressBridgeCIDRInPlan(t *testing.T) {
 func TestEgressDHCPDisabledRequiresExplicitAddressing(t *testing.T) {
 	for _, tc := range []struct {
 		name, bridge, host string
-		disabled bool
-		valid bool
+		disabled           bool
+		valid              bool
 	}{
 		{"default", "", "", false, true},
 		{"missing both", "", "", true, false},
@@ -186,13 +186,13 @@ func TestEgressDHCPDisabledRequiresExplicitAddressing(t *testing.T) {
 		{"missing bridge", "", "10.42.40.25/24", true, false},
 		{"complete", "10.42.40.1/24", "10.42.40.25/24", true, true},
 	} {
-		t.Run(tc.name,func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			spec := egressTestSpec()
 			spec.EgressBridgeIPv4CIDR = tc.bridge
 			spec.EgressIPv4Address = tc.host
 			spec.EgressDHCPDisabled = tc.disabled
 			if err := spec.Validate(); (err == nil) != tc.valid {
-				t.Fatalf("valid=%v, validation error: %v", tc.valid,err)
+				t.Fatalf("valid=%v, validation error: %v", tc.valid, err)
 			}
 		})
 	}
@@ -201,22 +201,32 @@ func TestEgressDHCPDisabledRequiresExplicitAddressing(t *testing.T) {
 	spec.EgressIPv4Address = "10.42.40.25/24"
 	spec.EgressDHCPDisabled = true
 	plan, err := spec.OrchestrationPlan()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	var data struct {
 		Documents []struct {
 			Config map[string]string `json:"config"`
 		} `json:"documents"`
 	}
-	if err := json.Unmarshal(plan.Steps[1].Configuration,&data); err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(plan.Steps[1].Configuration, &data); err != nil {
+		t.Fatal(err)
+	}
 	if len(data.Documents) != 1 || data.Documents[0].Config["ipv4.dhcp"] != "false" {
-		t.Fatalf("expected disabled DHCP network configuration: %s",plan.Steps[1].Configuration)
+		t.Fatalf("expected disabled DHCP network configuration: %s", plan.Steps[1].Configuration)
 	}
 	spec.EgressDHCPDisabled = false
 	plan, err = spec.OrchestrationPlan()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	data.Documents = nil // Avoid retaining entries from the prior JSON map.
-	if err := json.Unmarshal(plan.Steps[1].Configuration,&data); err != nil { t.Fatal(err) }
-	if len(data.Documents) != 1 { t.Fatalf("unexpected network plan documents: %d", len(data.Documents)) }
+	if err := json.Unmarshal(plan.Steps[1].Configuration, &data); err != nil {
+		t.Fatal(err)
+	}
+	if len(data.Documents) != 1 {
+		t.Fatalf("unexpected network plan documents: %d", len(data.Documents))
+	}
 	if _, set := data.Documents[0].Config["ipv4.dhcp"]; set {
 		t.Fatalf("default should leave DHCP policy absent")
 	}
