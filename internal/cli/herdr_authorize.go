@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -24,16 +25,26 @@ var herdrAuthorizationGuestExec = func(ctx context.Context, instance string, std
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		return string(output), 0, nil
+	// Capture stdout and stderr separately. The guest helpers emit a strict
+	// tab- or whitespace-delimited protocol on stdout (key fields, generation,
+	// pinned host key, SSH probe account) that the host-side code parses with
+	// exact equality or regex matches. Any stderr chatter from `incus exec`
+	// (warnings, progress lines, daemon advisories) would corrupt those parsers
+	// if combined with stdout, so the helper deliberately discards stderr on
+	// success and redacts it from errors.
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err == nil {
+		return stdout.String(), 0, nil
+	} else {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			// Avoid leaking guest helper output into errors; it may contain keys.
+			return "", exit.ExitCode(), fmt.Errorf("guest helper %q exited with status %d", arguments[0], exit.ExitCode())
+		}
+		return "", -1, fmt.Errorf("execute guest helper %q: %w", arguments[0], err)
 	}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) {
-		// Avoid leaking guest helper output into errors; it may contain keys.
-		return "", exit.ExitCode(), fmt.Errorf("guest helper %q exited with status %d", arguments[0], exit.ExitCode())
-	}
-	return "", -1, fmt.Errorf("execute guest helper %q: %w", arguments[0], err)
 }
 
 var managedClientPublicKeyPattern = regexp.MustCompile(`^ssh-ed25519 [A-Za-z0-9+/=]+ aginctus:[1-9][0-9]*$`)

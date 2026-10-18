@@ -136,9 +136,15 @@ func registerHerdrMachine(ctx context.Context, cfg *config.Config, id string) er
 	}
 	// Prove the SSH alias resolves via the installed guest configuration,
 	// not merely with bespoke flags used by the host-trust preflight.
+	// The mismatch case is reported separately from the exec error case:
+	// a successful session that returns the wrong account is a real defect,
+	// not a transient transport failure.
 	result, _, err := herdrMachineGuestExec(ctx, client.Name, "", "ssh", "-o", "BatchMode=yes", alias, "id", "-un")
-	if err != nil || strings.TrimSpace(result) != "agent" {
-		return fmt.Errorf("managed SSH alias probe failed: %v", err)
+	if err != nil {
+		return fmt.Errorf("managed SSH alias probe failed: %w", err)
+	}
+	if strings.TrimSpace(result) != "agent" {
+		return fmt.Errorf("managed SSH alias probe returned unexpected account %q", strings.TrimSpace(result))
 	}
 
 	raw, _, err := herdrMachineGuestExec(ctx, client.Name, "", "herdr", "machine", "list", "--json")
