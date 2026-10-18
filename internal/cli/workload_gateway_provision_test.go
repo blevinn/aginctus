@@ -81,3 +81,29 @@ func TestReadWorkloadKey(t *testing.T) {
 		t.Fatal("accepted symlink")
 	}
 }
+
+func TestReadWorkloadKeyRejectsUnsafeParentOversizeAndSpecialFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "key")
+	if err := os.WriteFile(path, []byte("test-key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readWorkloadKey(path); err == nil {
+		t.Fatal("accepted untrusted parent directory")
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", 8193)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readWorkloadKey(path); err == nil {
+		t.Fatal("accepted oversized workload key")
+	}
+	if _, err := readWorkloadKey("relative-file"); err == nil {
+		t.Fatal("accepted relative workload key path")
+	}
+}
