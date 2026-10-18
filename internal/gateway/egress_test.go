@@ -231,3 +231,41 @@ func TestEgressDHCPDisabledRequiresExplicitAddressing(t *testing.T) {
 		t.Fatalf("default should leave DHCP policy absent")
 	}
 }
+
+func TestEgressDHCPRangesRenderedAndValidated(t *testing.T) {
+	spec := egressTestSpec()
+	spec.EgressBridgeIPv4CIDR = "10.42.40.1/24"
+	spec.EgressIPv4Address = "10.42.40.25/24"
+	spec.EgressDHCPRanges = "10.42.40.100-10.42.40.199"
+	plan, err := spec.OrchestrationPlan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Documents []struct {
+			Config map[string]string `json:"config"`
+		} `json:"documents"`
+	}
+	if err := json.Unmarshal(plan.Steps[1].Configuration, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Documents[0].Config["ipv4.dhcp.ranges"]; got != spec.EgressDHCPRanges {
+		t.Fatalf("DHCP ranges absent from plan: %q", got)
+	}
+	for _, tc := range []struct {
+		name, ranges string
+		disabled     bool
+	}{
+		{"overlapping NIC", "10.42.40.20-10.42.40.30", false},
+		{"overlapping gateway", "10.42.40.1-10.42.40.10", false},
+		{"malformed", "nope", false},
+		{"disabled", "10.42.40.100-10.42.40.199", true},
+	} {
+		s := spec
+		s.EgressDHCPRanges = tc.ranges
+		s.EgressDHCPDisabled = tc.disabled
+		if err := s.Validate(); err == nil {
+			t.Errorf("%s unexpectedly valid", tc.name)
+		}
+	}
+}
