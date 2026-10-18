@@ -106,6 +106,17 @@ host-port allowance, but is not equivalent to the earlier iptables-nft
 source-port-68 matcher. The production deployment must retain the default
 DROP zone and be assessed against this distinction.
 
+**Conntrack INVALID asymmetry:** the iptables-nft and nixos-nft backends
+both emit a `ct state invalid return` (or `-m conntrack --ctstate INVALID
+-j RETURN`) rule that runs *before* the DNS/DHCP accept rules, so a
+DNS-shaped spoofed packet on the verified bridge cannot reach the accept
+rules. The firewalld backend has no equivalent rich-rule primitive; the
+firewalld zone is DROP-by-default and inherits the host's INVALID policy
+implicitly, so a firewalld-only deployment relies on the kernel nftables
+INPUT path rather than on Aginctus-owned rules. Do not "fix" the firewalld
+backend by emulating the iptables/nft RETURN rule via a separate rich rule;
+the asymmetry is documented and intentional.
+
 The dedicated zone owns only runtime rules, not NAT or forwarding. It never
 calls `--runtime-to-permanent`, `--change-interface`, or `--reload`. If the
 bridge becomes disowned, its restrictive DROP binding may remain until a

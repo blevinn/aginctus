@@ -35,6 +35,12 @@ let
       echo ':AGINCTUS_INPUT - [0:0]'
       echo '-F AGINCTUS_INPUT'
       if [ "$allowed" = true ]; then
+        # Mirror the production renderer in internal/firewall/iptables.go:
+        # the conntrack INVALID RETURN precedes the DNS/DHCP accepts so a
+        # DNS-shaped spoofed packet cannot reach the accept rules. The
+        # fixture is the only end-to-end path for the iptables backend;
+        # if this rule ever drifts from the Go renderer, update both.
+        echo '-A AGINCTUS_INPUT -m conntrack --ctstate INVALID -j RETURN'
         echo '-A AGINCTUS_INPUT -i aginctus-test -s 10.247.81.0/24 -d 10.247.81.1 -p udp --dport 53 -j ACCEPT'
         echo '-A AGINCTUS_INPUT -i aginctus-test -s 10.247.81.0/24 -d 10.247.81.1 -p tcp --dport 53 -j ACCEPT'
         echo '-A AGINCTUS_INPUT -i aginctus-test -p udp --sport 68 --dport 67 -j ACCEPT'
@@ -133,6 +139,11 @@ pkgs.testers.runNixOSTest {
         return machine.succeed("iptables -S AGINCTUS_INPUT")
 
     rules = owned_rules()
+    # The conntrack INVALID RETURN precedes the accept rules (see
+    # internal/firewall/iptables.go); the fixture now mirrors it so a
+    # fixture regression is caught by the same end-to-end path that
+    # exercises the production renderer.
+    assert "ctstate INVALID" in rules, rules
     assert rules.count("--dport 53") == 2, rules
     assert rules.count("--dport 67") == 1, rules
     assert "--dport 22" not in rules, rules
