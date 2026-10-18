@@ -31,7 +31,7 @@ func auditEgressInstances(ctx context.Context, network string, run func(context.
 			return nil, fmt.Errorf("inspect instances in project %q: %w", project.Name, err)
 		}
 		var instances []struct {
-			Devices map[string]map[string]string `json:"devices"`
+			Devices         map[string]map[string]string `json:"devices"`
 			ExpandedDevices map[string]map[string]string `json:"expanded_devices"`
 		}
 		if err := json.Unmarshal(raw, &instances); err != nil {
