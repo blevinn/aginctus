@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -209,5 +210,144 @@ func TestRejectNonObjectConfigurationDocuments(t *testing.T) {
 				t.Fatalf("Load() accepted %s", document)
 			}
 		})
+	}
+}
+
+func TestRuntimeSecretNestedOverridesRejectedWithoutDisclosure(t *testing.T) {
+	const secret = "sentinel-sensitive-value"
+	cases := []string{
+		`gateway={"postgres":{"password":"sentinel-sensitive-value"}}`,
+		`gateway.postgres={"password":"sentinel-sensitive-value"}`,
+		`gateway={"master":{"key":"sentinel-sensitive-value"}}`,
+		`gateway.master={"key":"sentinel-sensitive-value"}`,
+		`gateway={"salt":{"key":"sentinel-sensitive-value"}}`,
+		`gateway.salt={"key":"sentinel-sensitive-value"}`,
+		`gateway={"id":"safe","postgres":{"password":"sentinel-sensitive-value"}}`,
+		`gateway={"postgres.password":"sentinel-sensitive-value"}`,
+		`gateway={"MASTER":{"KEY":"sentinel-sensitive-value"}}`,
+		`gateway={"postgres":{"password":null}}`,
+		`gateway.master.key="sentinel-sensitive-value"`,
+		`gateway.salt.key="sentinel-sensitive-value"`,
+	}
+	for _, override := range cases {
+		t.Run(override[:strings.IndexByte(override, '=')], func(t *testing.T) {
+			_, err := (&Loader{}).Load(Options{Overrides: []string{override}})
+			if err == nil {
+				t.Fatal("Load accepted nested runtime secret override")
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Fatal("override rejection disclosed runtime credential value")
+			}
+		})
+	}
+
+	// Ordinary nested non-secret gateway settings remain configurable.
+	cfg, err := (&Loader{}).Load(Options{Overrides: []string{
+		`gateway={"id":"safe","compose":{"project":"isolated"}}`,
+	}})
+	if err != nil {
+		t.Fatalf("ordinary object override rejected: %v", err)
+	}
+	if got, _ := cfg.Get("gateway.compose.project"); got != "isolated" {
+		t.Fatalf("ordinary object override did not apply: %v", got)
+	}
+}
+
+func TestRuntimeSecretNestedEnvironmentRejectedWithoutDisclosure(t *testing.T) {
+	const secret = "sentinel-sensitive-value"
+	cases := []string{
+		`AGINCTUS_GATEWAY={"postgres":{"password":"sentinel-sensitive-value"}}`,
+		`AGINCTUS_GATEWAY_POSTGRES={"password":"sentinel-sensitive-value"}`,
+		`AGINCTUS_GATEWAY={"master":{"key":"sentinel-sensitive-value"}}`,
+		`AGINCTUS_GATEWAY_MASTER={"key":"sentinel-sensitive-value"}`,
+		`AGINCTUS_GATEWAY={"salt":{"key":"sentinel-sensitive-value"}}`,
+		`AGINCTUS_GATEWAY_SALT={"key":"sentinel-sensitive-value"}`,
+	}
+	for _, entry := range cases {
+		t.Run(entry[:strings.IndexByte(entry, '=')], func(t *testing.T) {
+			_, err := (&Loader{Environment: []string{entry}}).Load(Options{})
+			if err == nil {
+				t.Fatal("Load accepted nested environment runtime secret")
+			}
+			if strings.Contains(err.Error(), secret) {
+				t.Fatal("environment rejection disclosed runtime credential value")
+			}
+		})
+	}
+	// The three direct environment variables are intentionally consumed by
+	// the gateway runtime, not mapped into the effective configuration.
+	for _, suffix := range []string{"POSTGRES_PASSWORD", "MASTER_KEY", "SALT_KEY"} {
+		cfg, err := (&Loader{Environment: []string{
+			"AGINCTUS_GATEWAY_" + suffix + "=" + secret,
+		}}).Load(Options{})
+		if err != nil {
+			t.Fatalf("direct runtime environment variable rejected: %v", err)
+		}
+		value, err := json.Marshal(cfg.Values())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(value), secret) {
+			t.Fatal("direct runtime environment credential entered effective config")
+		}
+	}
+}
+
+func TestRuntimeSecretsRejectedInAllJSONConfigurationSources(t *testing.T) {
+	const secret = "sentinel-sensitive-value"
+	documents := []string{
+		`{"gateway":{"postgres":{"password":"sentinel-sensitive-value"}}}`,
+		`{"gateway":{"master":{"key":"sentinel-sensitive-value"}}}`,
+		`{"gateway":{"salt":{"key":"sentinel-sensitive-value"}}}`,
+		`{"gateway":{"postgres":{"password":null}}}`,
+		`{"gateway.postgres":{"password":"sentinel-sensitive-value"}}`,
+	}
+	for _, source := range []string{"system", "user", "explicit"} {
+		for i, document := range documents {
+			t.Run(fmt.Sprintf("%s/%d", source, i), func(t *testing.T) {
+				path := filepath.Join(t.TempDir(), "config.json")
+				writeFile(t, path, document)
+				loader := &Loader{}
+				options := Options{}
+				switch source {
+				case "system":
+					loader.SystemPath = path
+				case "user":
+					loader.UserPath = path
+				case "explicit":
+					options.ConfigurationFile = path
+				}
+				_, err := loader.Load(options)
+				if err == nil {
+					t.Fatal("Load accepted forbidden JSON document")
+				}
+				if strings.Contains(err.Error(), secret) {
+					t.Fatal("file rejection disclosed runtime credential value")
+				}
+			})
+		}
+	}
+
+	// Rejected source merges must not partially update their destination.
+	values := cloneMap(defaults)
+	err := mergeJSON(values, []byte(`{"gateway":{"id":"modified","master":{"key":"sentinel-sensitive-value"}}}`))
+	if err == nil {
+		t.Fatal("mergeJSON accepted runtime secret")
+	}
+	if got := values["gateway"].(map[string]any)["id"]; got != "local" {
+		t.Fatalf("failed merge mutated destination: %v", got)
+	}
+}
+
+func TestInvalidOverrideDoesNotEchoValue(t *testing.T) {
+	const secret = "sentinel-sensitive-value"
+	_, err := (&Loader{}).Load(Options{Overrides: []string{
+		"invalid..path=" + secret,
+	}})
+	if err == nil {
+		t.Fatal("Load accepted invalid configuration path")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatal("invalid override error disclosed its value")
 	}
 }
