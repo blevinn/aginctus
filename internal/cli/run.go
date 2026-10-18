@@ -402,6 +402,19 @@ func runGateway(
 		fmt.Fprintln(stdout, plan)
 		return 0
 	}
+	if len(args) == 3 && args[0] == "egress" && args[1] == "reconcile" && args[2] == "--confirm-stopped-instance" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation configuration: %v\n", err)
+			return 1
+		}
+		if err := gateway.ReconcileStoppedEgressNICs(ctx, spec, gatewayEgressQuery); err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "LiteLLM NIC settings updated; instance remains stopped; inspect and start separately")
+		return 0
+	}
 	if len(args) == 3 && args[0] == "egress" && args[1] == "reconcile" && args[2] == "--dry-run" {
 		spec, err := gateway.FromConfig(effective)
 		if err != nil {
