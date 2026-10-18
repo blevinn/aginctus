@@ -49,7 +49,7 @@ func TestRegistryLockRejectsUnsafeFiles(t *testing.T) {
 	if _, err := LockRegistry(path); err == nil {
 		t.Fatal("symlink lock accepted")
 	}
-	if err := os.Remove(path+".flock"); err != nil {
+	if err := os.Remove(path + ".flock"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(path+".flock", 0o700); err != nil {
@@ -58,7 +58,7 @@ func TestRegistryLockRejectsUnsafeFiles(t *testing.T) {
 	if _, err := LockRegistry(path); err == nil {
 		t.Fatal("directory lock accepted")
 	}
-	if err := os.Remove(path+".flock"); err != nil {
+	if err := os.Remove(path + ".flock"); err != nil {
 		t.Fatal(err)
 	}
 	if err := syscall.Mkfifo(path+".flock", 0o600); err != nil {
@@ -67,7 +67,7 @@ func TestRegistryLockRejectsUnsafeFiles(t *testing.T) {
 	if _, err := LockRegistry(path); err == nil {
 		t.Fatal("FIFO lock accepted")
 	}
-	if err := os.Remove(path+".flock"); err != nil {
+	if err := os.Remove(path + ".flock"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path+".flock", []byte("do not truncate"), 0o644); err != nil {
@@ -86,7 +86,7 @@ func TestRegistryLockRejectsUnsafeFiles(t *testing.T) {
 	if err := lock.Close(); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(path+".flock")
+	data, err := os.ReadFile(path + ".flock")
 	if err != nil || string(data) != "do not truncate" {
 		t.Fatalf("lock file contents unexpectedly changed: %q, %v", data, err)
 	}

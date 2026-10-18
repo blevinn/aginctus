@@ -50,7 +50,16 @@ func TestRejectInsecureOrUnsupported(t *testing.T) {
 	}
 }
 func TestRegistryLockFailsClosed(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "providers.json")
+	// Provider registration requires a private directory, not merely a
+	// non-writable one (the shared lock helper has a broader policy).
+	dir := filepath.Join(t.TempDir(), "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "providers.json")
 	lock, err := filestate.LockRegistry(path)
 	if err != nil {
 		t.Fatal(err)
