@@ -173,3 +173,49 @@ func TestExplicitEgressBridgeCIDRInPlan(t *testing.T) {
 		}
 	}
 }
+
+func TestEgressDHCPDisabledRequiresExplicitAddressing(t *testing.T) {
+	for _, tc := range []struct {
+		name, bridge, host string
+		disabled bool
+		valid bool
+	}{
+		{"default", "", "", false, true},
+		{"missing both", "", "", true, false},
+		{"missing host", "10.42.40.1/24", "", true, false},
+		{"missing bridge", "", "10.42.40.25/24", true, false},
+		{"complete", "10.42.40.1/24", "10.42.40.25/24", true, true},
+	} {
+		t.Run(tc.name,func(t *testing.T) {
+			spec := egressTestSpec()
+			spec.EgressBridgeIPv4CIDR = tc.bridge
+			spec.EgressIPv4Address = tc.host
+			spec.EgressDHCPDisabled = tc.disabled
+			if err := spec.Validate(); (err == nil) != tc.valid {
+				t.Fatalf("valid=%v, validation error: %v", tc.valid,err)
+			}
+		})
+	}
+	spec := egressTestSpec()
+	spec.EgressBridgeIPv4CIDR = "10.42.40.1/24"
+	spec.EgressIPv4Address = "10.42.40.25/24"
+	spec.EgressDHCPDisabled = true
+	plan, err := spec.OrchestrationPlan()
+	if err != nil { t.Fatal(err) }
+	var data struct {
+		Documents []struct {
+			Config map[string]string `json:"config"`
+		} `json:"documents"`
+	}
+	if err := json.Unmarshal(plan.Steps[1].Configuration,&data); err != nil { t.Fatal(err) }
+	if len(data.Documents) != 1 || data.Documents[0].Config["ipv4.dhcp"] != "false" {
+		t.Fatalf("expected disabled DHCP network configuration: %s",plan.Steps[1].Configuration)
+	}
+	spec.EgressDHCPDisabled = false
+	plan, err = spec.OrchestrationPlan()
+	if err != nil { t.Fatal(err) }
+	if err := json.Unmarshal(plan.Steps[1].Configuration,&data); err != nil { t.Fatal(err) }
+	if _, set := data.Documents[0].Config["ipv4.dhcp"]; set {
+		t.Fatalf("default should leave DHCP policy absent")
+	}
+}
