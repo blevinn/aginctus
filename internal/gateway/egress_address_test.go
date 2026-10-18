@@ -20,8 +20,8 @@ func TestSelectEgressIPv4(t *testing.T) {
 
 func TestSelectEgressIPv4FailClosed(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		cidr string
+		name     string
+		cidr     string
 		excluded []netip.Addr
 	}{
 		{"invalid", "auto", nil},
