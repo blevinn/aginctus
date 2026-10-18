@@ -90,6 +90,16 @@ func auditRequestedEgressAddress(ctx context.Context, network, project string, r
 					return fmt.Errorf("unexpected non-IPv4 egress assignment")
 				}
 				if addr == requested {
+					// An already configured address on the exact, owned
+					// LiteLLM NIC is our desired state, not a collision.
+					// Never exempt another NIC, even on the same instance.
+					if p.Name == project && instance.Name == "litellm-1" &&
+						instance.Config["user.aginctus.managed"] == "true" &&
+						instance.Config["user.aginctus.resource"] == "compose-instance" &&
+						instance.Config["user.aginctus.deployment"] == project &&
+						device["network"] == network {
+						continue
+					}
 					return fmt.Errorf("requested egress address is already assigned")
 				}
 			}
