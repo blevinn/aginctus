@@ -8,9 +8,9 @@ import (
 
 func TestAuditEgressInstances(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name      string
 		instances string
-		want string
+		want      string
 	}{
 		{"assigned", `[{"expanded_devices":{"eth1":{"type":"nic","network":"aginctus-egress","ipv4.address":"10.42.40.254"}}}]`, "10.42.40.254"},
 		{"dynamic", `[{"expanded_devices":{"eth1":{"type":"nic","network":"aginctus-egress"}}}]`, "blocked"},
