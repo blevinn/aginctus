@@ -129,6 +129,32 @@ func TestPlanForceOmitsHerdrOwnershipGuard(t *testing.T) {
 	}
 }
 
+func TestPlanForcePreservesManagementNetworkOwnershipGuard(t *testing.T) {
+	plan, err := testSpec().Plan("upsert", true)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if len(plan.Steps) != 3 {
+		t.Fatalf("steps = %#v", plan.Steps)
+	}
+	if plan.Steps[0].ID != "management-network" {
+		t.Fatalf("first step = %#v", plan.Steps[0])
+	}
+	network := decodeApplyConfig(t, plan.Steps[0].Configuration)
+	for key, want := range map[string]string{
+		"user.aginctus.managed":  "true",
+		"user.aginctus.resource": "management-network",
+	} {
+		if got := network.RequireExistingConfig[key]; got != want {
+			t.Fatalf("network guard %s = %q, want %q", key, got, want)
+		}
+	}
+	herdr := decodeApplyConfig(t, plan.Steps[2].Configuration)
+	if len(herdr.RequireExistingConfig) != 0 {
+		t.Fatalf("force did not relax Herdr instance guard: %#v", herdr.RequireExistingConfig)
+	}
+}
+
 func TestPlanUsesCanonicalSystemStateVolume(t *testing.T) {
 	plan, err := testSpec().Plan("upsert", false)
 	if err != nil {
