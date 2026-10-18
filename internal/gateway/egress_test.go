@@ -133,3 +133,43 @@ func TestEgressIPv4RequiresValidHostCIDR(t *testing.T) {
 		}
 	}
 }
+
+func TestExplicitEgressBridgeCIDRInPlan(t *testing.T) {
+	spec := egressTestSpec()
+	spec.EgressBridgeIPv4CIDR = "10.42.40.1/24"
+	spec.EgressIPv4Address = "10.42.40.25/24"
+	plan, err := spec.OrchestrationPlan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var networkStep struct {
+		Documents []struct {
+			Config map[string]string `json:"config"`
+		} `json:"documents"`
+	}
+	if err := json.Unmarshal(plan.Steps[1].Configuration, &networkStep); err != nil {
+		t.Fatal(err)
+	}
+	if len(networkStep.Documents) != 1 || networkStep.Documents[0].Config["ipv4.address"] != "10.42.40.1/24" {
+		t.Fatalf("unexpected egress bridge IPv4 address in network plan")
+	}
+	for _, tc := range []struct {
+		bridge string
+		host   string
+	}{
+		{"not-a-prefix", ""},
+		{"2001:db8::1/64", ""},
+		{"10.42.40.0/24", ""},
+		{"10.42.40.1/31", ""},
+		{"10.42.40.1/24", "10.42.41.5/24"},
+		{"10.42.40.1/24", "10.42.40.1/24"},
+		{"10.42.40.1/24", "10.42.40.5/25"},
+	} {
+		s := egressTestSpec()
+		s.EgressBridgeIPv4CIDR = tc.bridge
+		s.EgressIPv4Address = tc.host
+		if err := s.Validate(); err == nil {
+			t.Fatalf("accepted bridge %q and host %q", tc.bridge, tc.host)
+		}
+	}
+}
