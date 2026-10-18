@@ -759,7 +759,7 @@ func runGateway(
 		}
 		fmt.Fprintf(stdout, "gateway %q: gateway instances removed (persistent volumes retained)\n", spec.ID)
 		return 0
-	case "apply":
+	case "apply", "up":
 		runtimeEnvironment, err := spec.InitializeRuntimeEnvironment()
 		if err != nil {
 			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
@@ -781,18 +781,6 @@ func runGateway(
 			return 1
 		}
 		fmt.Fprint(stdout, rendered)
-		return 0
-	case "up":
-		runtimeEnvironment, err := spec.InitializeRuntimeEnvironment()
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
-			return 1
-		}
-		if err := spec.Deploy(ctx, runtimeEnvironment); err != nil {
-			fmt.Fprintf(stderr, "gateway deployment: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "gateway %q: started (application readiness not verified)\n", spec.ID)
 		return 0
 	default:
 		printGatewayUsage(stderr)
