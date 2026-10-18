@@ -125,5 +125,55 @@ class RegisterTests(unittest.TestCase):
                 self.assertEqual(status, 1)
 
 
+    def test_opencode_go_native_responses_fixed_route(self):
+        self.assertEqual(
+            mod.registration_route("opencode-go", "openai/gpt-6-luna"),
+            "https://opencode.ai/inference/go/openai/v1",
+        )
+        self.assertEqual(mod.registration_route("openai", "openai/gpt-4o-mini"), None)
+        for source in (
+                "openai/glm-5.3", "openai/minimax-m3", "openai/kimi-k2.7-code",
+                "openai/../gpt-6-luna", "chatgpt/gpt-6-luna", "openai/unknown",
+                "openai/gpt-6-luna?api_base=http://evil"):
+            with self.subTest(source=source), self.assertRaises(mod.RegistrationError):
+                mod.registration_route("opencode-go", source)
+        with self.assertRaises(mod.RegistrationError):
+            mod.registration_route("other", "openai/gpt-6-luna")
+
+    def test_opencode_go_registration_is_exact_and_no_secret_output(self):
+        fake = FakeOpener()
+        admin, provider = "admin-sensitive", "go-api-key-sensitive"
+        mod.register(
+            "http://10.42.0.7:4000", "aginctus-go-pilot", "openai/gpt-6-luna",
+            admin, provider, fake,
+            api_base=mod.registration_route("opencode-go", "openai/gpt-6-luna"),
+        )
+        self.assertEqual(len(fake.requests), 3)
+        request = json.loads(fake.requests[1].data)
+        self.assertEqual(request["litellm_params"], {
+            "model": "openai/gpt-6-luna",
+            "api_key": provider,
+            "api_base": "https://opencode.ai/inference/go/openai/v1",
+        })
+        self.assertEqual(request["model_info"], {"mode": "responses"})
+        self.assertEqual(fake.ids, ["aginctus-go-pilot"])
+        self.assertNotIn("extra_headers", request["litellm_params"])
+
+    def test_opencode_go_dry_run_is_inert(self):
+        output, error = io.StringIO(), io.StringIO()
+        with patch.dict("os.environ", {"XDG_STATE_HOME": "/does/not/exist"}), \
+                contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
+            result = mod.main([
+                "--endpoint", "http://10.144.44.70:4000",
+                "--provider", "opencode-go",
+                "--alias", "aginctus-go-pilot",
+                "--source", "openai/gpt-6-luna",
+            ])
+        self.assertEqual(result, 0)
+        self.assertIn("DRY RUN", output.getvalue())
+        self.assertIn("opencode-go native Responses", output.getvalue())
+        self.assertEqual(error.getvalue(), "")
+
+
 if __name__ == "__main__":
     unittest.main()

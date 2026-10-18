@@ -21,6 +21,24 @@ MODEL = re.compile(r"^openai/[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 PRIVATE_NETS = tuple(ipaddress.ip_network(x) for x in (
     "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8"
 ))
+# Canonical OpenCode Go API documented at opencode.ai/v2/docs/console/go.
+# Only native Responses models: other Go models use Chat Completions/Messages.
+GO_RESPONSES_BASE = "https://opencode.ai/inference/go/openai/v1"
+GO_RESPONSES_MODELS = frozenset({
+    "grok-4.7", "gpt-6-luna", "gpt-5.6-luna",
+    "muse-spark-1.3-contributor", "muse-spark-1.2-contributor",
+})
+
+
+def registration_route(provider, source):
+    if not MODEL.fullmatch(source):
+        raise RegistrationError("invalid OpenAI-compatible upstream source")
+    if provider == "openai":
+        return None
+    if provider == "opencode-go" and source.removeprefix("openai/") in GO_RESPONSES_MODELS:
+        return GO_RESPONSES_BASE
+    raise RegistrationError("provider/model is not a supported native Responses route")
+
 
 
 class RegistrationError(Exception):
@@ -118,15 +136,19 @@ def aliases(info):
     return result
 
 
-def register(endpoint, alias, source, master, upstream, opener=None):
+def register(endpoint, alias, source, master, upstream, opener=None, api_base=None):
     if opener is None:
         opener = build_opener(ProxyHandler({}), NoRedirect())
     existing = aliases(api_request(opener, endpoint, "/v1/models", master))
     if alias in existing:
         raise RegistrationError("model alias already exists; refusing to overwrite or silently reuse")
+    params = {"model": source, "api_key": upstream}
+    if api_base is not None:
+        # The value is selected only by registration_route(), never by user URL.
+        params["api_base"] = api_base
     api_request(opener, endpoint, "/model/new", master, {
         "model_name": alias,
-        "litellm_params": {"model": source, "api_key": upstream},
+        "litellm_params": params,
         "model_info": {"mode": "responses"},
     })
     # Never retry POST automatically. An uncertain response might still have
@@ -139,19 +161,23 @@ def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--endpoint", required=True, help="Private numeric IPv4 gateway endpoint, HTTP port 4000")
     p.add_argument("--alias", required=True, help="Explicit workload-facing model name")
-    p.add_argument("--source", required=True, help="Explicit OpenAI upstream, e.g. openai/gpt-4o-mini")
+    p.add_argument("--source", required=True, help="LiteLLM upstream, e.g. openai/gpt-6-luna")
+    p.add_argument("--provider", choices=("openai", "opencode-go"), default="openai",
+                   help="Upstream route; OpenCode Go uses a fixed, trusted Responses API base")
     p.add_argument("--gateway-id", default="local", help="Existing gateway secrets state ID")
     p.add_argument("--upstream-key-file", help="Protected external API-key file (0600)")
     p.add_argument("--apply", action="store_true", help="Persist a model in the running LiteLLM database")
     args = p.parse_args(argv)
     try:
         endpoint = private_endpoint(args.endpoint)
-        if not ALIAS.fullmatch(args.alias) or not MODEL.fullmatch(args.source):
-            raise RegistrationError("invalid explicit model alias or OpenAI source name")
+        if not ALIAS.fullmatch(args.alias):
+            raise RegistrationError("invalid explicit model alias")
+        api_base = registration_route(args.provider, args.source)
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", args.gateway_id):
             raise RegistrationError("invalid gateway ID")
         if not args.apply:
-            print(f"DRY RUN: would register {args.alias} -> {args.source} on private LiteLLM; no credentials read")
+            route = args.provider if api_base is None else "opencode-go native Responses"
+            print(f"DRY RUN: would register {args.alias} -> {args.source} ({route}) on private LiteLLM; no credentials read")
             return 0
         if not args.upstream_key_file:
             raise RegistrationError("--upstream-key-file is required with --apply")
@@ -164,7 +190,7 @@ def main(argv=None):
         upstream = credential(protected_read(args.upstream_key_file))
         if upstream == master:
             raise RegistrationError("upstream credential cannot equal LiteLLM master credential")
-        register(endpoint, args.alias, args.source, master, upstream)
+        register(endpoint, args.alias, args.source, master, upstream, api_base=api_base)
         print("PASS: LiteLLM model alias registered in database (upstream inference NOT yet verified)")
         return 0
     except (RegistrationError, json.JSONDecodeError) as exc:
