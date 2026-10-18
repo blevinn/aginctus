@@ -29,6 +29,7 @@ type Spec struct {
 	EgressIPv4Address    string
 	EgressBridgeIPv4CIDR string
 	EgressDHCPDisabled   bool
+	EgressDHCPRanges     string
 	NetworkIPv4Address   string
 	NetworkIPv4NAT       bool
 	NetworkIPv4Routing   bool
