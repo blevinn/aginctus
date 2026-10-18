@@ -89,7 +89,7 @@ func (s Spec) Validate() error {
 	if s.EgressIPv4Address != "" {
 		prefix, err := netip.ParsePrefix(s.EgressIPv4Address)
 		if err != nil || !prefix.Addr().Is4() || !prefix.Addr().IsGlobalUnicast() ||
-		prefix.Bits() >= 31 || prefix.Addr() == prefix.Masked().Addr() {
+			prefix.Bits() >= 31 || prefix.Addr() == prefix.Masked().Addr() {
 			return fmt.Errorf("gateway egress IPv4 address must be an IPv4 host CIDR with usable host bits")
 		}
 		if s.EgressNetwork == "" {
@@ -186,10 +186,10 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 	return generator.Evaluate(
 		"import 'aginctus/gateway.jsonnet'",
 		map[string]any{
-			"id":            s.ID,
-			"egressNetwork": s.EgressNetwork,
+			"id":                s.ID,
+			"egressNetwork":     s.EgressNetwork,
 			"egressIPv4Address": s.EgressIPv4Address,
-			"project":       s.Project,
+			"project":           s.Project,
 			"network": map[string]any{
 				"name":        s.Network,
 				"ipv4Address": s.NetworkIPv4Address,
