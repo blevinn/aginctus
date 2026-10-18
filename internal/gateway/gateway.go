@@ -69,6 +69,13 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		spec.EgressBridgeIPv4CIDR = cidr
 	}
 
+	if value, ok := effective.Get("gateway.egress.network.ipv4.dhcp.ranges"); ok {
+		ranges, valid := value.(string)
+		if !valid {
+			return Spec{}, fmt.Errorf("gateway egress DHCP ranges must be a string")
+		}
+		spec.EgressDHCPRanges = ranges
+	}
 	if value, ok := effective.Get("gateway.egress.network.ipv4.dhcp"); ok {
 		enabled, valid := value.(bool)
 		if !valid {
@@ -104,6 +111,22 @@ func FromConfig(effective *config.Config) (Spec, error) {
 var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 func (s Spec) Validate() error {
+	if s.EgressDHCPRanges != "" {
+		if s.EgressDHCPDisabled || s.EgressBridgeIPv4CIDR == "" || s.EgressIPv4Address == "" {
+			return fmt.Errorf("egress DHCP ranges require enabled DHCP and explicit bridge and LiteLLM IPv4 CIDRs")
+		}
+		pool, err := parseEgressDHCPRanges(s.EgressBridgeIPv4CIDR, s.EgressDHCPRanges)
+		if err != nil {
+			return fmt.Errorf("gateway egress DHCP ranges: %w", err)
+		}
+		bridge, _ := netip.ParsePrefix(s.EgressBridgeIPv4CIDR)
+		host, _ := netip.ParsePrefix(s.EgressIPv4Address)
+		for _, addr := range pool {
+			if addr == bridge.Addr() || addr == bridge.Masked().Addr() || addr == host.Addr() {
+				return fmt.Errorf("egress DHCP range includes bridge gateway, subnet address or LiteLLM static address")
+			}
+		}
+	}
 	if s.EgressDHCPDisabled && (s.EgressBridgeIPv4CIDR == "" || s.EgressIPv4Address == "") {
 		return fmt.Errorf("disabled egress DHCP requires both explicit bridge gateway and LiteLLM static IPv4 CIDRs")
 	}
@@ -234,6 +257,7 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 			"egressIPv4Address":    s.EgressIPv4Address,
 			"egressBridgeIPv4CIDR": s.EgressBridgeIPv4CIDR,
 			"egressDHCPDisabled":   s.EgressDHCPDisabled,
+			"egressDHCPRanges":     s.EgressDHCPRanges,
 			"project":              s.Project,
 			"network": map[string]any{
 				"name":        s.Network,
