@@ -14,6 +14,10 @@ func TestEgressPreflightExcludesDHCPPool(t *testing.T) {
 			return []byte(`{"name":"aginctus-egress","type":"bridge","managed":true,"config":{"user.aginctus.managed":"true","user.aginctus.resource":"gateway-egress-network","ipv4.nat":"true","ipv4.routing":"true","ipv6.address":"none","ipv4.dhcp":"true","ipv4.dhcp.ranges":"10.42.40.200-10.42.40.254","ipv4.address":"10.42.40.1/24"}}`), nil
 		case "/1.0/networks/aginctus-egress/leases":
 			return []byte("[]"), nil
+		case "/1.0/projects?recursion=1":
+			return []byte(`[{"name":"default"}]`), nil
+		case "/1.0/instances?recursion=2&project=default":
+			return []byte(`[]`), nil
 		default:
 			t.Fatalf("unexpected API request %v", args)
 			return nil, nil
@@ -49,6 +53,10 @@ func TestEgressAddressPreflightFailClosed(t *testing.T) {
 					return network(tc.dhcp, tc.owner), nil
 				case "/1.0/networks/aginctus-egress/leases":
 					return []byte(tc.leases), nil
+				case "/1.0/projects?recursion=1":
+					return []byte(`[{"name":"default"}]`), nil
+				case "/1.0/instances?recursion=2&project=default":
+					return []byte(`[]`), nil
 				default:
 					t.Fatalf("unexpected Incus query: %v", args)
 					return nil, nil
