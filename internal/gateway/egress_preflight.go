@@ -47,9 +47,14 @@ func egressAddressPreflight(ctx context.Context, name string, run func(context.C
 		network.Config["ipv6.address"] != "none" {
 		return "", fmt.Errorf("egress network isolation configuration is not verified")
 	}
-	// Incus bridges normally enable DHCP. Do not recommend an address from a live DHCP pool.
-	if strings.ToLower(network.Config["ipv4.dhcp"]) != "false" {
-		return "", fmt.Errorf("egress address allocation blocked: DHCP not explicitly disabled; no reservation is held")
+	// Incus bridges normally enable DHCP. A restricted DHCP pool can be
+	// inspected, but never treat a candidate as reserved by that inspection.
+	dhcp := strings.ToLower(network.Config["ipv4.dhcp"])
+	if dhcp != "false" && dhcp != "true" && dhcp != "" {
+		return "", fmt.Errorf("unsupported IPv4 DHCP setting")
+	}
+	if dhcp != "false" && strings.TrimSpace(network.Config["ipv4.dhcp.ranges"]) == "" {
+		return "", fmt.Errorf("egress address allocation blocked: unrestricted DHCP pool; no reservation is held")
 	}
 	if strings.TrimSpace(network.Config["ipv4.address"]) == "" {
 		return "", fmt.Errorf("egress bridge has no IPv4 CIDR")
@@ -77,10 +82,25 @@ func egressAddressPreflight(ctx context.Context, name string, run func(context.C
 			unavailable = append(unavailable, addr)
 		}
 	}
+	// DHCP ranges must be fully parseable before the selector sees an address.
+	// Treat every address in each range as unavailable, rather than assuming
+	// a lease snapshot enumerates all future DHCP allocations.
+	if dhcp != "false" {
+		pools, err := parseEgressDHCPRanges(network.Config["ipv4.address"], network.Config["ipv4.dhcp.ranges"])
+		if err != nil {
+			return "", err
+		}
+		unavailable = append(unavailable, pools...)
+	}
+	assigned, err := auditEgressInstances(ctx, name, run)
+	if err != nil {
+		return "", err
+	}
+	unavailable = append(unavailable, assigned...)
 	candidate, err := selectEgressIPv4(network.Config["ipv4.address"], unavailable)
 	if err != nil {
 		return "", err
 	}
 	// Address selection does not reserve it or check static allocations.
-	return "", fmt.Errorf("candidate %s is unreserved: static assignments and allocation races not yet checked", candidate)
+	return "", fmt.Errorf("candidate %s is unreserved: address not reserved; concurrent allocations remain possible", candidate)
 }

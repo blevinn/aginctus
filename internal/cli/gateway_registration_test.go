@@ -15,6 +15,15 @@ func TestGatewayRegistrationDryRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Dry-run preview matches the commit path: the provider alias must
+	// already exist in the local provider registry. Pre-register the
+	// chatgpt alias so the model-register preview cases have a valid
+	// provider to resolve.
+	if got := runGateway(context.Background(),
+		[]string{"provider", "chatgpt", "register"},
+		&bytes.Buffer{}, &bytes.Buffer{}, nil, cfg); got != 0 {
+		t.Fatalf("seed chatgpt provider: %d", got)
+	}
 	cases := []struct {
 		args   []string
 		want   string
@@ -24,11 +33,18 @@ func TestGatewayRegistrationDryRun(t *testing.T) {
 		{[]string{"provider", "chatgpt", "register", "--alias=personal", "--dry-run"}, "\"alias\": \"personal\"", 0},
 		{[]string{"model", "chatgpt/gpt-6-sol", "register", "--dry-run"}, "\"mode\": \"responses\"", 0},
 		{[]string{"model", "coding", "register", "--source=chatgpt/gpt-6-sol", "--provider=chatgpt", "--dry-run"}, "\"model_name\": \"coding\"", 0},
-		{[]string{"provider", "chatgpt", "register"}, "registered locally", 0},
 		{[]string{"provider", "chatgpt", "register"}, "already registered", 0},
 		{[]string{"model", "chatgpt/gpt-6-sol", "register"}, "registered locally", 0},
 		{[]string{"model", "chatgpt/gpt-6-sol", "register"}, "already registered", 0},
-		{[]string{"model", "bad", "register", "--source=openai/gpt-5", "--dry-run"}, "model provider alias", 2},
+		{[]string{"model", "bad", "register", "--source=openai/gpt-5", "--dry-run"}, "--provider=ALIAS", 2},
+		// Defaulted chatgpt provider alias must be verified against the
+		// local registry, not silently accepted. The seed step above
+		// registered ``chatgpt``; this second dry-run uses an unregistered
+		// ``--source=openai/...`` so it should fail to resolve a provider.
+		{[]string{"model", "untouched", "register", "--source=openai/gpt-5", "--dry-run"}, "--provider=ALIAS", 2},
+		// Dry-run with an explicit but unregistered alias is rejected
+		// consistently with the commit path.
+		{[]string{"model", "missing", "register", "--source=chatgpt/foo", "--provider=ghost", "--dry-run"}, "model provider alias", 2},
 	}
 	for _, tc := range cases {
 		var out, errs bytes.Buffer

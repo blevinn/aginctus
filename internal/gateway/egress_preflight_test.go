@@ -7,6 +7,29 @@ import (
 	"testing"
 )
 
+func TestEgressPreflightExcludesDHCPPool(t *testing.T) {
+	run := func(_ context.Context, args ...string) ([]byte, error) {
+		switch args[len(args)-1] {
+		case "/1.0/networks/aginctus-egress":
+			return []byte(`{"name":"aginctus-egress","type":"bridge","managed":true,"config":{"user.aginctus.managed":"true","user.aginctus.resource":"gateway-egress-network","ipv4.nat":"true","ipv4.routing":"true","ipv6.address":"none","ipv4.dhcp":"true","ipv4.dhcp.ranges":"10.42.40.200-10.42.40.254","ipv4.address":"10.42.40.1/24"}}`), nil
+		case "/1.0/networks/aginctus-egress/leases":
+			return []byte("[]"), nil
+		case "/1.0/projects?recursion=1":
+			return []byte(`[{"name":"default"}]`), nil
+		case "/1.0/instances?recursion=2&project=default":
+			return []byte(`[]`), nil
+		default:
+			t.Fatalf("unexpected API request %v", args)
+			return nil, nil
+		}
+	}
+	got, err := egressAddressPreflight(context.Background(), "aginctus-egress", run)
+	if got != "" || err == nil || !strings.Contains(err.Error(), "10.42.40.199/24") ||
+		!strings.Contains(err.Error(), "unreserved") {
+		t.Fatalf("unexpected result %q, %v", got, err)
+	}
+}
+
 func TestEgressAddressPreflightFailClosed(t *testing.T) {
 	network := func(dhcp, owner string) []byte {
 		return []byte(fmt.Sprintf(`{"name":"aginctus-egress","type":"bridge","managed":true,"config":{"user.aginctus.managed":"true","user.aginctus.resource":%q,"ipv4.nat":"true","ipv4.routing":"true","ipv6.address":"none","ipv4.dhcp":%q,"ipv4.address":"10.42.40.1/24"}}`, owner, dhcp))
@@ -30,6 +53,10 @@ func TestEgressAddressPreflightFailClosed(t *testing.T) {
 					return network(tc.dhcp, tc.owner), nil
 				case "/1.0/networks/aginctus-egress/leases":
 					return []byte(tc.leases), nil
+				case "/1.0/projects?recursion=1":
+					return []byte(`[{"name":"default"}]`), nil
+				case "/1.0/instances?recursion=2&project=default":
+					return []byte(`[]`), nil
 				default:
 					t.Fatalf("unexpected Incus query: %v", args)
 					return nil, nil

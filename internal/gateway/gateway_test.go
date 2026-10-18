@@ -320,3 +320,61 @@ func TestGatewayAcceptsSafeCredentialSeed(t *testing.T) {
 		t.Fatal("valid seed changed unexpectedly")
 	}
 }
+
+// TestGatewayProjectAndNetworkRejectTraversalAndSeparators ensures that the
+// Compose project name and management network name are validated with the
+// same charset as the gateway ID. Both flow into the rendered Compose YAML
+// and into Incus CLI args, so a permissive check lets an accidental newline
+// split the rendered document or escape the arg boundary.
+func TestGatewayProjectAndNetworkRejectTraversalAndSeparators(t *testing.T) {
+	unsafe := []string{
+		"",
+		"../outside",
+		".",
+		"..",
+		"nested/path",
+		"a b",
+		"a\nb",
+		"a:b",
+		"a@b",
+		"a;rm",
+		"\"escape",
+		"a'b",
+	}
+	for _, name := range []struct {
+		field string
+		set   func(*Spec, string)
+	}{
+		{"Project", func(s *Spec, v string) { s.Project = v }},
+		{"Network", func(s *Spec, v string) { s.Network = v }},
+	} {
+		for _, value := range unsafe {
+			t.Run(fmt.Sprintf("%s=%q", name.field, value), func(t *testing.T) {
+				spec := Spec{
+					ID:            "local",
+					Project:       "gateway",
+					Network:       "mgmt",
+					LiteLLMImage:  "litellm",
+					PostgresImage: "postgres",
+				}
+				name.set(&spec, value)
+				if err := spec.Validate(); err == nil {
+					t.Fatalf("accepted unsafe %s %q", name.field, value)
+				}
+			})
+		}
+	}
+
+	for _, value := range []string{"gateway", "gateway-01", "gateway_01", "MgmtNet2"} {
+		spec := Spec{
+			ID:            "local",
+			Project:       value,
+			Network:       value,
+			LiteLLMImage:  "litellm",
+			PostgresImage: "postgres",
+		}
+		if err := spec.Validate(); err != nil {
+			t.Fatalf("valid value %q rejected by Validate: %v", value, err)
+		}
+	}
+}

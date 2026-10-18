@@ -88,7 +88,7 @@ ag.orchestration('herdr-client', steps)`,
 				"ipv4Routing": s.Network.IPv4Routing,
 				"ipv6Address": s.Network.IPv6Address,
 				"operation":   "upsert",
-				"force":       force,
+				"force":       false, // Herdr force must not adopt the shared management network.
 			},
 			"client": map[string]any{
 				"name":              s.Name,

@@ -24,10 +24,12 @@ The initial shell includes:
 
 - `git`;
 - `go`;
+- `herdr` (the pinned CLI used by the OpenCode acceptance harness and the Herdr remote branches);
 - `incus`;
 - `jq`;
 - `just`;
 - `nixfmt`;
+- `python3` (the guest provisioning / acceptance scripts use it directly);
 - `shellcheck`;
 - `shfmt`.
 
@@ -91,7 +93,7 @@ just update nix herdr
 Commit the resulting `flake.lock` change together with the image changes. Then import or replace the local development image alias with:
 
 ```sh
-just herdr-client-image-update
+just update image herdr-client
 ```
 
 The update target imports the image as `aginctus-herdr-client`, matching the

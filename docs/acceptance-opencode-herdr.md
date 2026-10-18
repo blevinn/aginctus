@@ -27,7 +27,21 @@ Live Herdr execution remains opt-in and **is not established by these test doubl
 
 ## Real pilot lifecycle smoke (required before merge)
 
-The new `scripts/acceptance/herdr-smoke.py` runs **two actual remote workspace create/get/close cycles** through the saved Herdr machine profile. It requires explicit opt-in and reviewed guest directory staging and cleanup commands. It does **not** run an agent or inference. Importantly, no operator should set a fabricated `AGINCTUS_ACCEPTANCE_GUEST_STAGED` value without checking actual guest readiness.
+The new `scripts/acceptance/herdr-smoke.py` runs **two actual remote workspace create/get/close cycles** through the saved Herdr machine profile. It requires explicit opt-in and reviewed guest directory staging and cleanup commands.
+
+There are two opt-in levels (see the module docstring):
+
+- base: ``AGINCTUS_ACCEPTANCE_HERDR_SMOKE=I_UNDERSTAND`` — runs the
+  Herdr workspace lifecycle through ``open`` / ``inspect``. **No agent
+  is launched and no inference is required.**
+- agent: ``AGINCTUS_ACCEPTANCE_HERDR_AGENT_SMOKE=I_UNDERSTAND`` —
+  additionally launches the OpenCode agent, inspects it via
+  ``herdr agent get``, and (if
+  ``AGINCTUS_ACCEPTANCE_HERDR_AGENT_PROMPT`` is also set) issues a
+  single constrained prompt. This level requires an
+  inference-capable environment.
+
+Importantly, no operator should set a fabricated `AGINCTUS_ACCEPTANCE_GUEST_STAGED` value without checking actual guest readiness.
 
 First inspect the pinned pilot version and command contract:
 
@@ -101,7 +115,7 @@ Pilot 2026-10-17: `python3` was missing inside `aginctus-dev`; the initial opt-i
 
 ## Opt-in real agent lifecycle (separate from workspace smoke)
 
-After the workspace-only smoke has passed, run a further pilot test **only if OpenCode runtime readiness has been independently verified**. The following starts a real OpenCode agent in each newly owned disposable pane, checks Herdr's agent inspection API, attempts an interrupt, and closes only the recorded workspace:
+After the workspace-only smoke has passed, run a further pilot test **only if OpenCode runtime readiness has been independently verified** *and* the inference prerequisites below have been confirmed. The following starts a real OpenCode agent in each newly owned disposable pane, checks Herdr's agent inspection API, attempts an interrupt, and closes only the recorded workspace:
 
 ```sh
 AGINCTUS_ACCEPTANCE_HERDR_SMOKE=I_UNDERSTAND \

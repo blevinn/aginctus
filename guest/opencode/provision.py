@@ -7,7 +7,8 @@ import pwd
 import stat
 import sys
 import tempfile
-from urllib.parse import urlsplit
+
+from gateway_endpoint import validate_endpoint, validate_key, validate_model
 
 DIRECTORY = Path("/var/lib/aginctus/opencode")
 
@@ -34,13 +35,9 @@ def install(payload, directory=DIRECTORY):
     endpoint, model, key = (config[k] for k in ("endpoint", "model", "key"))
     if not all(isinstance(v, str) for v in (endpoint, model, key)):
         raise ValueError("invalid types")
-    url = urlsplit(endpoint)
-    if url.scheme != "http" or not url.hostname or url.path != "/v1" or url.query or url.fragment or url.username:
-        raise ValueError("invalid endpoint")
-    if not model or model.strip() != model or "/" in model:
-        raise ValueError("invalid model")
-    if not key or key.strip() != key or "\n" in key or "\r" in key:
-        raise ValueError("invalid key")
+    validate_endpoint(endpoint)
+    validate_model(model)
+    validate_key(key)
     account = pwd.getpwnam("agent")
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     info = directory.lstat()

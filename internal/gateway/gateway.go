@@ -22,17 +22,18 @@ import (
 )
 
 type Spec struct {
-	ID                 string
-	Project            string
-	Network            string
-	EgressNetwork      string
-	EgressIPv4Address  string
-	NetworkIPv4Address string
-	NetworkIPv4NAT     bool
-	NetworkIPv4Routing bool
-	NetworkIPv6Address string
-	LiteLLMImage       string
-	PostgresImage      string
+	ID                   string
+	Project              string
+	Network              string
+	EgressNetwork        string
+	EgressIPv4Address    string
+	EgressBridgeIPv4CIDR string
+	NetworkIPv4Address   string
+	NetworkIPv4NAT       bool
+	NetworkIPv4Routing   bool
+	NetworkIPv6Address   string
+	LiteLLMImage         string
+	PostgresImage        string
 }
 
 func FromConfig(effective *config.Config) (Spec, error) {
@@ -57,6 +58,14 @@ func FromConfig(effective *config.Config) (Spec, error) {
 			return Spec{}, err
 		}
 		*key.dst = value
+	}
+
+	if value, ok := effective.Get("gateway.egress.network.ipv4.address"); ok {
+		cidr, valid := value.(string)
+		if !valid {
+			return Spec{}, fmt.Errorf("gateway egress bridge IPv4 address must be a CIDR string")
+		}
+		spec.EgressBridgeIPv4CIDR = cidr
 	}
 
 	if value, ok := effective.Get("gateway.egress.ipv4.address"); ok {
@@ -86,6 +95,24 @@ func FromConfig(effective *config.Config) (Spec, error) {
 var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 func (s Spec) Validate() error {
+	if s.EgressBridgeIPv4CIDR != "" {
+		bridge, err := netip.ParsePrefix(s.EgressBridgeIPv4CIDR)
+		if err != nil || !bridge.Addr().Is4() || !bridge.Addr().IsGlobalUnicast() ||
+			bridge.Bits() < 16 || bridge.Bits() > 30 ||
+			bridge.Addr() == bridge.Masked().Addr() {
+			return fmt.Errorf("gateway egress bridge requires a usable IPv4 gateway CIDR (/16 through /30)")
+		}
+		if s.EgressNetwork == "" {
+			return fmt.Errorf("gateway egress bridge CIDR requires an egress network")
+		}
+		if s.EgressIPv4Address != "" {
+			address, err := netip.ParsePrefix(s.EgressIPv4Address)
+			if err != nil || !bridge.Masked().Contains(address.Addr()) ||
+				address.Bits() != bridge.Bits() || address.Addr() == bridge.Addr() {
+				return fmt.Errorf("gateway LiteLLM egress IPv4 address must be a distinct host within the configured egress bridge subnet")
+			}
+		}
+	}
 	if s.EgressIPv4Address != "" {
 		prefix, err := netip.ParsePrefix(s.EgressIPv4Address)
 		if err != nil || !prefix.Addr().Is4() || !prefix.Addr().IsGlobalUnicast() ||
@@ -101,10 +128,14 @@ func (s Spec) Validate() error {
 		return fmt.Errorf("gateway id %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.ID)
 	case s.EgressNetwork != "" && (!gatewayIDPattern.MatchString(s.EgressNetwork) || s.EgressNetwork == s.Network):
 		return fmt.Errorf("gateway egress network must be a valid and distinct bridge name")
-	case s.Project == "":
-		return fmt.Errorf("gateway compose project must not be empty")
-	case s.Network == "":
-		return fmt.Errorf("gateway management network must not be empty")
+	case !gatewayIDPattern.MatchString(s.Project):
+		// Project is interpolated into the rendered Compose YAML and
+		// every Incus CLI arg that targets this deployment; a permissive
+		// charset here would let a malicious or accidental newline-split
+		// value corrupt the rendered document or escape the arg boundary.
+		return fmt.Errorf("gateway compose project %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.Project)
+	case !gatewayIDPattern.MatchString(s.Network):
+		return fmt.Errorf("gateway management network %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.Network)
 	case s.LiteLLMImage == "":
 		return fmt.Errorf("LiteLLM image must not be empty")
 	case s.PostgresImage == "":
@@ -186,10 +217,11 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 	return generator.Evaluate(
 		"import 'aginctus/gateway.jsonnet'",
 		map[string]any{
-			"id":                s.ID,
-			"egressNetwork":     s.EgressNetwork,
-			"egressIPv4Address": s.EgressIPv4Address,
-			"project":           s.Project,
+			"id":                   s.ID,
+			"egressNetwork":        s.EgressNetwork,
+			"egressIPv4Address":    s.EgressIPv4Address,
+			"egressBridgeIPv4CIDR": s.EgressBridgeIPv4CIDR,
+			"project":              s.Project,
 			"network": map[string]any{
 				"name":        s.Network,
 				"ipv4Address": s.NetworkIPv4Address,

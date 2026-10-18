@@ -374,6 +374,19 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 2 && args[0] == "egress" && args[1] == "audit" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress audit configuration: %v\n", err)
+			return 1
+		}
+		if err := gateway.AuditEgressRuntime(ctx, spec, gatewayEgressQuery); err != nil {
+			fmt.Fprintf(stderr, "egress runtime audit blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "LiteLLM NIC declarations verified (in-guest routes and upstream connectivity NOT verified)")
+		return 0
+	}
 	if len(args) == 2 && args[0] == "egress" && args[1] == "preflight" {
 		name, err := effective.String("gateway.egress.network.name")
 		if err != nil {
@@ -601,28 +614,33 @@ func runGateway(
 					provider = "chatgpt"
 				}
 			}
-			if provider != "chatgpt" {
-				path, pathErr := providerregistry.DefaultPath()
-				if pathErr != nil {
-					fmt.Fprintln(stderr, "cannot verify provider alias")
-					return 1
+			if provider == "" {
+				fmt.Fprintln(stderr, "model registration requires --provider=ALIAS (or --source=chatgpt/...)")
+				return 2
+			}
+			// Dry-run must match the commit path: a provider alias is only
+			// valid if the local provider registry contains it. The
+			// ``chatgpt`` alias is not exempt; only the registry decides.
+			path, pathErr := providerregistry.DefaultPath()
+			if pathErr != nil {
+				fmt.Fprintln(stderr, "cannot verify provider alias")
+				return 1
+			}
+			providers, loadErr := providerregistry.Load(path)
+			if loadErr != nil {
+				fmt.Fprintln(stderr, "cannot read private provider registry")
+				return 1
+			}
+			registered := false
+			for _, p := range providers.Providers {
+				if p.Type == "chatgpt" && p.Alias == provider {
+					registered = true
+					break
 				}
-				providers, loadErr := providerregistry.Load(path)
-				if loadErr != nil {
-					fmt.Fprintln(stderr, "cannot read private provider registry")
-					return 1
-				}
-				registered := false
-				for _, p := range providers.Providers {
-					if p.Type == "chatgpt" && p.Alias == provider {
-						registered = true
-						break
-					}
-				}
-				if !registered {
-					fmt.Fprintln(stderr, "model provider alias is not registered")
-					return 2
-				}
+			}
+			if !registered {
+				fmt.Fprintln(stderr, "model provider alias is not registered")
+				return 2
 			}
 			rendered, err = gateway.ChatGPTModelRegistration(name, source)
 		}
@@ -1017,6 +1035,7 @@ Commands:
   gateway up       Alias for gateway apply
   gateway apply    Reconcile the AI gateway
   gateway egress preflight  Read-only owned egress network / DHCP safety check
+  gateway egress audit      Read-only LiteLLM NIC configuration audit
   gateway status    Inspect gateway project and service state
   gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
   gateway remove [--force] Remove gateway instances, preserving data volumes

@@ -17,7 +17,7 @@ ag.orchestration(cfg.id,
         name: cfg.egressNetwork,
         networkType: 'bridge',
         config: {
-          'ipv4.address': 'auto',
+          'ipv4.address': if cfg.egressBridgeIPv4CIDR == '' then 'auto' else cfg.egressBridgeIPv4CIDR,
           'ipv4.nat': 'true',
           'ipv4.routing': 'true',
           'ipv6.address': 'none',

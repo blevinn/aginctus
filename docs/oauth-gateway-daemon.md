@@ -1,5 +1,14 @@
 # Dedicated OAuth gateway daemon — first executable slice (#170 / #171)
 
+> **Superseded for inference activation.** This document describes the
+> dedicated OAuth daemon approach that #170 / #171 explored. The
+> accepted v0.1 architecture (see
+> [`docs/architecture/native-chatgpt-oauth.md`](architecture/native-chatgpt-oauth.md))
+> pivots to native LiteLLM ChatGPT provider integration; a dedicated
+> daemon is **not** the v0.1 inference path. The daemon artifacts
+> remain in the tree as opt-in infrastructure for a future v0.3
+> separation; do not enable or activate them as part of v0.1 delivery.
+
 This is an **isolated fail-closed runtime**, not a working OAuth inference
 gateway. It establishes the guest service boundary before credentials are
 transferred or LiteLLM is allowed to route requests to it.
@@ -53,5 +62,5 @@ Do not deploy the guest or transfer any OAuth secret yet.
    before promoting PR #170 to merge-ready.
 
 Neither `aginctus gateway apply` nor aggregate apply provisions or enables
-this daemon yet. The separate `storage ensure` command only creates empty
-storage and is not evidence of a functioning OAuth provider.
+this daemon yet. The `gateway credential-storage ensure` subcommand only
+creates empty storage and is not evidence of a functioning OAuth provider.
