@@ -101,10 +101,14 @@ func (s Spec) Validate() error {
 		return fmt.Errorf("gateway id %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.ID)
 	case s.EgressNetwork != "" && (!gatewayIDPattern.MatchString(s.EgressNetwork) || s.EgressNetwork == s.Network):
 		return fmt.Errorf("gateway egress network must be a valid and distinct bridge name")
-	case s.Project == "":
-		return fmt.Errorf("gateway compose project must not be empty")
-	case s.Network == "":
-		return fmt.Errorf("gateway management network must not be empty")
+	case !gatewayIDPattern.MatchString(s.Project):
+		// Project is interpolated into the rendered Compose YAML and
+		// every Incus CLI arg that targets this deployment; a permissive
+		// charset here would let a malicious or accidental newline-split
+		// value corrupt the rendered document or escape the arg boundary.
+		return fmt.Errorf("gateway compose project %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.Project)
+	case !gatewayIDPattern.MatchString(s.Network):
+		return fmt.Errorf("gateway management network %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.Network)
 	case s.LiteLLMImage == "":
 		return fmt.Errorf("LiteLLM image must not be empty")
 	case s.PostgresImage == "":
