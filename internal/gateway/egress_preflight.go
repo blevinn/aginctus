@@ -18,7 +18,7 @@ func EgressAddressPreflight(ctx context.Context, name string) (string, error) {
   if err!=nil {return nil,fmt.Errorf("inspect egress network: %w",err)}
   return out,nil
  }
- raw,err:=run("network","show",name,"--format=json")
+ raw,err:=run("query","/1.0/networks/"+name)
  if err!=nil{return "",err}
  var network struct {
   Name string `json:"name"`
@@ -46,7 +46,7 @@ func EgressAddressPreflight(ctx context.Context, name string) (string, error) {
  if strings.TrimSpace(network.Config["ipv4.address"])=="" {
   return "",fmt.Errorf("egress bridge has no IPv4 CIDR")
  }
- leases,err:=run("network","list-leases",name,"--format=json")
+ leases,err:=run("query","/1.0/networks/"+name+"/leases")
  if err!=nil{return "",err}
  var entries []struct{Address string `json:"address"`; Type string `json:"type"`}
  if err:=json.Unmarshal(leases,&entries);err!=nil{return "",fmt.Errorf("decode leases: %w",err)}
