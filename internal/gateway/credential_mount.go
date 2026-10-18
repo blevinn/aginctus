@@ -27,6 +27,12 @@ func (a CredentialAttachment) volume() statevolume.GatewayCredentials {
 	return statevolume.GatewayCredentials{Pool: a.Pool, GatewayID: a.GatewayID, Project: a.ComposeProject}
 }
 
+// VolumeName is the stable, owned credential volume name shared by ensure,
+// attachment, and audit; it does not expose or read credential contents.
+func (a CredentialAttachment) VolumeName() string {
+	return a.volume().Name()
+}
+
 func (a CredentialAttachment) Validate() error {
 	if err := a.volume().Validate(); err != nil {
 		return err

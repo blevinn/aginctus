@@ -638,7 +638,7 @@ func runGateway(
 			fmt.Fprintf(stderr, "gateway credential storage: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "gateway credential volume %q: ready in Compose project %q (attachment unchanged; no credentials imported)\n", "aginctus-gateway-"+id+"-credentials", project)
+		fmt.Fprintf(stdout, "gateway credential volume %q: ready in Compose project %q (attachment unchanged; no credentials imported)\n", a.VolumeName(), project)
 		return 0
 	}
 	if len(args) == 0 || len(args) > 2 {

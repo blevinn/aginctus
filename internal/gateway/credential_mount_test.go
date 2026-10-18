@@ -142,25 +142,26 @@ func TestAttachmentRejectsUnsafeProject(t *testing.T) {
 	}
 }
 
-// A1: ensure must enforce the very same project ownership/isolation gate as
-// attach and audit, *before* calling the state-volume mutation path.
+// A1: ensure must enforce the same project ownership/isolation gate as
+// attach and audit before calling the state-volume mutation path.
 func TestCredentialEnsureProjectGuardBeforeVolumeMutation(t *testing.T) {
 	a := attachmentFixture()
 	cases := []struct {
-		name    string
-		project *api.Project
-		reject  bool
+		name   string
+		edit   func(*api.Project) *api.Project
+		reject bool
 	}{
-		{"owned isolated", ownedAuditProject(), false},
-		{"absent", nil, true},
-		{"wrong name", func() *api.Project { p := ownedAuditProject(); p.Name = "foreign"; return p }(), true},
-		{"unmanaged", func() *api.Project { p := ownedAuditProject(); delete(p.Config, "user.aginctus.managed"); return p }(), true},
-		{"foreign resource", func() *api.Project { p := ownedAuditProject(); p.Config["user.aginctus.resource"] = "foreign"; return p }(), true},
-		{"wrong deployment", func() *api.Project { p := ownedAuditProject(); p.Config["user.aginctus.deployment"] = "other"; return p }(), true},
-		{"shared volumes", func() *api.Project { p := ownedAuditProject(); p.Config["features.storage.volumes"] = "false"; return p }(), true},
+		{"owned isolated", func(p *api.Project) *api.Project { return p }, false},
+		{"absent", func(*api.Project) *api.Project { return nil }, true},
+		{"wrong name", func(p *api.Project) *api.Project { p.Name = "foreign"; return p }, true},
+		{"unmanaged", func(p *api.Project) *api.Project { delete(p.Config, "user.aginctus.managed"); return p }, true},
+		{"foreign resource", func(p *api.Project) *api.Project { p.Config["user.aginctus.resource"] = "foreign"; return p }, true},
+		{"wrong deployment", func(p *api.Project) *api.Project { p.Config["user.aginctus.deployment"] = "other"; return p }, true},
+		{"shared volumes", func(p *api.Project) *api.Project { p.Config["features.storage.volumes"] = "false"; return p }, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			project := tc.edit(ownedAuditProject())
 			calls := 0
 			ensure := func(_ context.Context, v statevolume.GatewayCredentials) error {
 				calls++
@@ -169,7 +170,7 @@ func TestCredentialEnsureProjectGuardBeforeVolumeMutation(t *testing.T) {
 				}
 				return nil
 			}
-			err := ensureCredentialVolume(context.Background(), a, tc.project, ensure)
+			err := ensureCredentialVolume(context.Background(), a, project, ensure)
 			if tc.reject {
 				if err == nil || calls != 0 {
 					t.Fatalf("rejected project reached volume mutation: calls=%d err=%v", calls, err)
@@ -184,7 +185,10 @@ func TestCredentialEnsureProjectGuardBeforeVolumeMutation(t *testing.T) {
 		badSpec.ComposeProject = bad
 		calls := 0
 		err := ensureCredentialVolume(context.Background(), badSpec, ownedAuditProject(),
-			func(context.Context, statevolume.GatewayCredentials) error { calls++; return nil })
+			func(context.Context, statevolume.GatewayCredentials) error {
+				calls++
+				return nil
+			})
 		if err == nil || calls != 0 {
 			t.Fatalf("invalid project %q called ensure: calls=%d err=%v", bad, calls, err)
 		}
