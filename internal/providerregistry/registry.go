@@ -54,11 +54,13 @@ func Register(path string, p Provider) (bool, error) {
 	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
 		return false, fmt.Errorf("provider state directory must be private")
 	}
-	lock := path + ".lock"
-	if err := os.Mkdir(lock, 0700); err != nil {
-		return false, fmt.Errorf("registry busy or lock exists: %w", err)
+	// Hold the kernel lock through the entire read/modify/atomic-replace.
+	// File.Close also releases the lock after interrupted transactions.
+	lock, err := filestate.LockRegistry(path)
+	if err != nil {
+		return false, fmt.Errorf("acquire provider registry write lock: %w", err)
 	}
-	defer os.Remove(lock)
+	defer lock.Close()
 	reg := Registry{Providers: []Provider{}}
 	data, err := filestate.ReadPrivateFile(path, 1<<20)
 	if err == nil {

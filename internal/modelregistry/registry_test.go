@@ -1,11 +1,13 @@
 package modelregistry
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/blevinn/aginctus/internal/filestate"
 	"github.com/blevinn/aginctus/internal/providerregistry"
 )
 
@@ -90,13 +92,14 @@ func TestRegistryRejectsInsecureAndConcurrentState(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(path+".lock", 0700); err != nil {
+	lock, err := filestate.LockRegistry(path)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Register(path, m); err == nil {
-		t.Fatal("accepted existing transaction lock")
+	if _, err := Register(path, m); !errors.Is(err, filestate.ErrRegistryBusy) {
+		t.Fatalf("concurrent writer did not fail busy: %v", err)
 	}
-	if err := os.Remove(path + ".lock"); err != nil {
+	if err := lock.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Register(path, m); err != nil {
