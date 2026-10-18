@@ -22,9 +22,9 @@ func AuditEgressRuntime(ctx context.Context, spec Spec, query func(context.Conte
 		return fmt.Errorf("inspect LiteLLM instance: %w", err)
 	}
 	var instance struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-		Config map[string]string `json:"config"`
+		Name            string                       `json:"name"`
+		Type            string                       `json:"type"`
+		Config          map[string]string            `json:"config"`
 		ExpandedDevices map[string]map[string]string `json:"expanded_devices"`
 	}
 	if err := json.Unmarshal(raw, &instance); err != nil {
