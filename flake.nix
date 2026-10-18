@@ -168,10 +168,10 @@
             ];
           };
 
-# Bundle the OpenCode guest Python scripts into a single store
+          # Bundle the OpenCode guest Python scripts into a single store
           # directory so the shared validator module sits alongside
           # provision.py and launch.py and is importable at runtime.
-          opencodeGuestScripts = pkgs.runCommand "aginctus-opencode-guest-scripts" {} ''
+          opencodeGuestScripts = pkgs.runCommand "aginctus-opencode-guest-scripts" { } ''
             mkdir -p $out
             cp ${./guest/opencode/provision.py} $out/provision.py
             cp ${./guest/opencode/launch.py} $out/launch.py

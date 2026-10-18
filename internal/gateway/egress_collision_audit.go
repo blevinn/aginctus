@@ -33,27 +33,39 @@ func auditRequestedEgressAddress(ctx context.Context, network, project string, r
 		}
 	}
 	projectsRaw, err := query(ctx, "query", "/1.0/projects?recursion=1")
-	if err != nil { return fmt.Errorf("inspect Incus projects: %w", err) }
-	var projects []struct { Name string `json:"name"` }
+	if err != nil {
+		return fmt.Errorf("inspect Incus projects: %w", err)
+	}
+	var projects []struct {
+		Name string `json:"name"`
+	}
 	if err := json.Unmarshal(projectsRaw, &projects); err != nil || len(projects) == 0 {
 		return fmt.Errorf("incomplete project inventory")
 	}
 	for _, p := range projects {
-		if !gatewayIDPattern.MatchString(p.Name) { return fmt.Errorf("invalid project inventory") }
+		if !gatewayIDPattern.MatchString(p.Name) {
+			return fmt.Errorf("invalid project inventory")
+		}
 		raw, err := query(ctx, "query", "/1.0/instances?recursion=2&project="+p.Name)
-		if err != nil { return fmt.Errorf("inspect project %q instances: %w", p.Name, err) }
+		if err != nil {
+			return fmt.Errorf("inspect project %q instances: %w", p.Name, err)
+		}
 		var instances []struct {
-			Name string `json:"name"`
-			Config map[string]string `json:"config"`
+			Name            string                       `json:"name"`
+			Config          map[string]string            `json:"config"`
 			ExpandedDevices map[string]map[string]string `json:"expanded_devices"`
 		}
 		if err := json.Unmarshal(raw, &instances); err != nil || instances == nil {
 			return fmt.Errorf("incomplete instances in project %q", p.Name)
 		}
 		for _, instance := range instances {
-			if instance.ExpandedDevices == nil { return fmt.Errorf("missing expanded device inventory") }
+			if instance.ExpandedDevices == nil {
+				return fmt.Errorf("missing expanded device inventory")
+			}
 			for _, device := range instance.ExpandedDevices {
-				if device["type"] != "nic" || device["network"] != network { continue }
+				if device["type"] != "nic" || device["network"] != network {
+					continue
+				}
 				value := device["ipv4.address"]
 				// Only the known, owned LiteLLM egress NIC may lack a static
 				// address while preparing its assignment.
@@ -63,15 +75,23 @@ func auditRequestedEgressAddress(ctx context.Context, network, project string, r
 					instance.Config["user.aginctus.deployment"] == project {
 					continue
 				}
-				if value == "" { return fmt.Errorf("another egress NIC has no explicit IPv4 address") }
+				if value == "" {
+					return fmt.Errorf("another egress NIC has no explicit IPv4 address")
+				}
 				addr, err := netip.ParseAddr(value)
 				if err != nil {
 					prefix, prefixErr := netip.ParsePrefix(value)
-					if prefixErr != nil { return fmt.Errorf("invalid static IPv4 device assignment") }
+					if prefixErr != nil {
+						return fmt.Errorf("invalid static IPv4 device assignment")
+					}
 					addr = prefix.Addr()
 				}
-				if !addr.Is4() { return fmt.Errorf("unexpected non-IPv4 egress assignment") }
-				if addr == requested { return fmt.Errorf("requested egress address is already assigned") }
+				if !addr.Is4() {
+					return fmt.Errorf("unexpected non-IPv4 egress assignment")
+				}
+				if addr == requested {
+					return fmt.Errorf("requested egress address is already assigned")
+				}
 			}
 		}
 	}
