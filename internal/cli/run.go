@@ -368,7 +368,15 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
-	if len(args) >= 2 && args[0] == "responses" && args[1] == "verify" {
+	if len(args) == 2 && args[0] == "egress" && args[1] == "preflight" {
+  name,err := effective.String("gateway.egress.network.name")
+  if err!=nil {fmt.Fprintf(stderr,"egress configuration: %v\n",err);return 1}
+  candidate,err:=gateway.EgressAddressPreflight(ctx,name)
+  if err!=nil {fmt.Fprintf(stderr,"egress preflight blocked: %v\n",err);return 1}
+  fmt.Fprintf(stdout,"egress candidate: %s (advisory only; NOT RESERVED, do not deploy without full inventory and atomic allocation)\n",candidate)
+  return 0
+ }
+ if len(args) >= 2 && args[0] == "responses" && args[1] == "verify" {
 		return verifyGatewayResponsesStream(args[2:], stdout, stderr)
 	}
 	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "audit" {
@@ -994,7 +1002,7 @@ Commands:
   config get PATH   Print one effective configuration value
   doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
   gateway validate  Validate the AI gateway deployment configuration
-  gateway apply     Reconcile the AI gateway
+  gateway apply     Reconcile the AI gateway\n  gateway egress preflight  Read-only owned egress network / DHCP safety check
   gateway status    Inspect gateway project and service state
   gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
   gateway remove [--force] Remove gateway instances, preserving data volumes
