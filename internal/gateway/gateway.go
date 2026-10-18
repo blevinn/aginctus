@@ -70,19 +70,26 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		spec.EgressBridgeIPv4CIDR = cidr
 	}
 
-	if value, ok := effective.Get("gateway.egress.network.ipv4.dhcp.ranges"); ok {
-		ranges, valid := value.(string)
-		if !valid {
-			return Spec{}, fmt.Errorf("gateway egress DHCP ranges must be a string")
+	// gateway.egress.network.ipv4.dhcp accepts either a boolean (legacy flat
+	// shape) or an object { enabled = bool, ranges = string }. The dot-splitting
+	// configuration loader cannot resolve a literal-dot sibling such as
+	// { "dhcp": true, "dhcp.ranges": "..." } because indexing into a bool is
+	// undefined; the nested object shape removes that collision and lets the
+	// ranges live under dhcp.ranges where the loader can find them.
+	if raw, ok := effective.Get("gateway.egress.network.ipv4.dhcp"); ok {
+		switch value := raw.(type) {
+		case bool:
+			spec.EgressDHCPDisabled = !value
+		case map[string]any:
+			if enabled, ok := value["enabled"].(bool); ok {
+				spec.EgressDHCPDisabled = !enabled
+			}
+			if ranges, ok := value["ranges"].(string); ok && ranges != "" {
+				spec.EgressDHCPRanges = ranges
+			}
+		default:
+			return Spec{}, fmt.Errorf("gateway egress IPv4 DHCP must be a boolean or an object with `enabled` and `ranges`")
 		}
-		spec.EgressDHCPRanges = ranges
-	}
-	if value, ok := effective.Get("gateway.egress.network.ipv4.dhcp"); ok {
-		enabled, valid := value.(bool)
-		if !valid {
-			return Spec{}, fmt.Errorf("gateway egress IPv4 DHCP must be a boolean")
-		}
-		spec.EgressDHCPDisabled = !enabled
 	}
 
 	if value, ok := effective.Get("gateway.egress.ipv4.address"); ok {
