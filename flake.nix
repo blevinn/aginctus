@@ -316,13 +316,8 @@
             ln -s ${opencodeWorkloadMetadata} "$out/metadata"
           '';
         }
-      );
-
-      checks = forAllSystems (
-        system:
-        {
-          nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
-        }
+        # Keep VM integration tests explicitly buildable, outside the default
+        # flake checks, so routine validation does not execute heavyweight VMs.
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           firewall-iptables-integration = import ./nix/firewall-iptables-test.nix {
             inherit self nixpkgs system;
@@ -333,6 +328,12 @@
           firewall-nixos-nft-integration = import ./nix/firewall-nixos-nft-test.nix {
             inherit self nixpkgs system;
           };
+        }
+      );
+
+      checks = forAllSystems (
+        system: {
+          nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
         }
       );
 
