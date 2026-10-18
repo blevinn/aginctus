@@ -202,7 +202,7 @@ func TestRejectNullConfigurationDocuments(t *testing.T) {
 }
 
 func TestRejectNonObjectConfigurationDocuments(t *testing.T) {
-	for _, document := range []string{"[]", "`" + "42" + "`", "true"} {
+	for _, document := range []string{"[]", "42", "true"} {
 		t.Run(document, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.json")
 			writeFile(t, path, document)
