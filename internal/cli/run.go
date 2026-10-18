@@ -374,6 +374,19 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 2 && args[0] == "egress" && args[1] == "audit" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress audit configuration: %v\n", err)
+			return 1
+		}
+		if err := gateway.AuditEgressRuntime(ctx, spec, gatewayEgressQuery); err != nil {
+			fmt.Fprintf(stderr, "egress runtime audit blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "LiteLLM NIC declarations verified (in-guest routes and upstream connectivity NOT verified)")
+		return 0
+	}
 	if len(args) == 2 && args[0] == "egress" && args[1] == "preflight" {
 		name, err := effective.String("gateway.egress.network.name")
 		if err != nil {
@@ -1014,7 +1027,7 @@ Commands:
   config get PATH   Print one effective configuration value
   doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
   gateway validate  Validate the AI gateway deployment configuration
-  gateway apply     Reconcile the AI gateway\n  gateway egress preflight  Read-only owned egress network / DHCP safety check
+  gateway apply     Reconcile the AI gateway\n  gateway egress preflight  Read-only owned egress network / DHCP safety check\n  gateway egress audit      Read-only LiteLLM NIC configuration audit
   gateway status    Inspect gateway project and service state
   gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
   gateway remove [--force] Remove gateway instances, preserving data volumes
