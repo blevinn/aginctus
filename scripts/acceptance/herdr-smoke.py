@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
-"""Opt-in real Herdr workspace lifecycle smoke test. No agent or inference needed."""
+"""Opt-in real Herdr workspace lifecycle smoke test.
+
+Two opt-in levels (both gated by an ``I_UNDERSTAND`` acknowledgment):
+
+- base (``AGINCTUS_ACCEPTANCE_HERDR_SMOKE=I_UNDERSTAND``): runs the
+  Herdr workspace lifecycle through ``open`` / ``inspect`` against a
+  registered managed machine. No agent is launched.
+- agent (``AGINCTUS_ACCEPTANCE_HERDR_AGENT_SMOKE=I_UNDERSTAND``):
+  additionally launches the OpenCode agent, inspects it via
+  ``herdr agent get``, and (if ``AGINCTUS_ACCEPTANCE_HERDR_AGENT_PROMPT``
+  is also set) issues a single constrained prompt.
+
+The agent level requires an inference-capable environment; the base
+level does not.
+"""
 import json
 import os
 from pathlib import Path
