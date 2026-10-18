@@ -55,7 +55,7 @@ ag.orchestration(cfg.id,
           },
           networks: if cfg.egressNetwork == '' then ['management'] else {
             management: {
-              'x-incus-compose': { gateway: false },
+              'x-incus-compose': { internal: true },
             },
             egress: {},
           },
