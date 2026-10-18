@@ -40,6 +40,22 @@ func (a CredentialAttachment) Validate() error {
 	return nil
 }
 
+// verifyCredentialComposeProject gates access to credentials before any volume
+// provisioning or instance update. A matching project name and isolated
+// storage are insufficient without Aginctus Compose ownership markers.
+func verifyCredentialComposeProject(project *api.Project, expected string) error {
+	if project == nil || project.Name != expected ||
+		project.Config["user.aginctus.managed"] != "true" ||
+		project.Config["user.aginctus.resource"] != "compose-project" ||
+		project.Config["user.aginctus.deployment"] != expected {
+		return fmt.Errorf("gateway Compose project is missing or its ownership markers do not match")
+	}
+	if project.Config["features.storage.volumes"] != "true" {
+		return fmt.Errorf("gateway Compose project must isolate its storage volumes; refusing default-project credential volume")
+	}
+	return nil
+}
+
 func (a CredentialAttachment) device() map[string]string {
 	return map[string]string{
 		"type":   "disk",
@@ -127,8 +143,8 @@ func AttachCredentialVolume(ctx context.Context, a CredentialAttachment) error {
 	if err != nil {
 		return fmt.Errorf("inspect gateway Compose project: %w", err)
 	}
-	if project.Config["features.storage.volumes"] != "true" {
-		return fmt.Errorf("gateway Compose project must have isolated storage volumes; refusing default-project credential volume")
+	if err := verifyCredentialComposeProject(project, a.ComposeProject); err != nil {
+		return err
 	}
 	server := client.UseProject(a.ComposeProject)
 	inst, etag, err := server.GetInstance(liteLLMServiceInstance)
