@@ -372,6 +372,13 @@ func readSecretState(path string) ([]byte, error) {
 
 func gatewayStateDir() (string, error) {
 	if value := os.Getenv("XDG_STATE_HOME"); value != "" {
+		// Match internal/providerregistry: a relative XDG_STATE_HOME would
+		// land secret material under $PWD/aginctus/gateway/... and is
+		// never an operator intent. Fail closed with the same message so
+		// the two files that consume XDG_STATE_HOME disagree on shape.
+		if !filepath.IsAbs(value) {
+			return "", fmt.Errorf("state directory must be absolute")
+		}
 		return value, nil
 	}
 	home, err := os.UserHomeDir()

@@ -321,7 +321,45 @@ func TestGatewayAcceptsSafeCredentialSeed(t *testing.T) {
 	}
 }
 
-// TestGatewayProjectAndNetworkRejectTraversalAndSeparators ensures that the
+func TestGatewayStateDirRejectsRelativeXDGStateHome(t *testing.T) {
+	// A relative XDG_STATE_HOME would land secret material under
+	// $PWD/aginctus/gateway/... and is never an operator intent. The
+	// gateway package must agree with internal/providerregistry on this
+	// fail-closed contract so the two consumers of XDG_STATE_HOME
+	// disagree on shape.
+	t.Setenv("XDG_STATE_HOME", "relative/path")
+	for _, name := range requiredRuntimeEnvironment {
+		t.Setenv(name, "")
+	}
+	spec := Spec{ID: "local"}
+	if _, err := spec.InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted relative XDG_STATE_HOME")
+	} else if !strings.Contains(err.Error(), "absolute") {
+		t.Fatalf("error %q does not name the absolute-path requirement", err)
+	}
+	// A bare XDG_STATE_HOME without a separator is also relative and
+	// must be rejected.
+	t.Setenv("XDG_STATE_HOME", ".")
+	if _, err := spec.InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted bare XDG_STATE_HOME='.'")
+	}
+}
+
+func TestGatewayStateDirAcceptsAbsoluteXDGStateHome(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	for _, name := range requiredRuntimeEnvironment {
+		t.Setenv(name, "")
+	}
+	spec := Spec{ID: "local"}
+	if _, err := spec.InitializeRuntimeEnvironment(); err != nil {
+		t.Fatalf("rejected absolute XDG_STATE_HOME: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(state, "aginctus", "gateway", "local")); err != nil {
+		t.Fatalf("expected state directory under absolute XDG_STATE_HOME: %v", err)
+	}
+}
+
 // Compose project name and management network name are validated with the
 // same charset as the gateway ID. Both flow into the rendered Compose YAML
 // and into Incus CLI args, so a permissive check lets an accidental newline
