@@ -136,3 +136,37 @@ func TestLoadRejectsSymlink(t *testing.T) {
 		t.Fatal("symlink accepted")
 	}
 }
+
+// TestDefaultPathRejectsRelativeXDGStateHome asserts that the
+// providerregistry fails closed on a relative XDG_STATE_HOME rather
+// than silently landing the provider file under $PWD. The error
+// message must match the gateway package so the two consumers of
+// XDG_STATE_HOME agree on shape.
+func TestDefaultPathRejectsRelativeXDGStateHome(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "relative/path")
+	if _, err := DefaultPath(); err == nil {
+		t.Fatal("accepted relative XDG_STATE_HOME")
+	} else if !strings.Contains(err.Error(), "absolute") {
+		t.Fatalf("error %q does not name the absolute-path requirement", err)
+	}
+	t.Setenv("XDG_STATE_HOME", ".")
+	if _, err := DefaultPath(); err == nil {
+		t.Fatal("accepted bare XDG_STATE_HOME='.'")
+	}
+}
+
+// TestDefaultPathAcceptsAbsoluteXDGStateHome asserts the safe path
+// still resolves to the expected registry location under an absolute
+// XDG_STATE_HOME.
+func TestDefaultPathAcceptsAbsoluteXDGStateHome(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	got, err := DefaultPath()
+	if err != nil {
+		t.Fatalf("DefaultPath: %v", err)
+	}
+	want := filepath.Join(state, "aginctus", "gateway", "providers.json")
+	if got != want {
+		t.Fatalf("DefaultPath = %q, want %q", got, want)
+	}
+}
