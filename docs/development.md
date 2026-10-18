@@ -44,7 +44,9 @@ go run ./cmd/aginctus help
 go run ./cmd/aginctus doctor
 ```
 
-The `doctor` command connects directly to the local Incus daemon through the Incus Go client and reports the server version. It does not create or modify Incus resources.
+The `doctor` command connects directly to the local Incus daemon, reports its server version, and checks that `core.https_address` is an explicit **numeric loopback IP with a TCP port** (for example, `127.0.0.1:8443` or `[::1]:8443`). Wildcard, LAN, DNS-hostname, malformed, or missing listeners are not reported as healthy. Plain `doctor` never modifies Incus.
+
+Use `doctor --fix` only when the HTTPS address is **absent**: it binds `127.0.0.1:8443` for Incus image caching. If a listener is already configured to an unsafe or unrecognized address, including when `--fix` is given, Aginctus reports an error **without modifying** it; inspect the operator's connections and change `core.https_address` explicitly if appropriate. The check validates the configured bind value, not a live socket reachability probe or firewall exposure audit.
 
 The first mutating command is:
 
