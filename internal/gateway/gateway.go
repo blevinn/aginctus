@@ -27,6 +27,7 @@ type Spec struct {
 	Network            string
 	EgressNetwork      string
 	EgressIPv4Address  string
+	EgressBridgeIPv4CIDR string
 	NetworkIPv4Address string
 	NetworkIPv4NAT     bool
 	NetworkIPv4Routing bool
@@ -59,6 +60,14 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		*key.dst = value
 	}
 
+	if value, ok := effective.Get("gateway.egress.network.ipv4.address"); ok {
+		cidr, valid := value.(string)
+		if !valid {
+			return Spec{}, fmt.Errorf("gateway egress bridge IPv4 address must be a CIDR string")
+		}
+		spec.EgressBridgeIPv4CIDR = cidr
+	}
+
 	if value, ok := effective.Get("gateway.egress.ipv4.address"); ok {
 		address, valid := value.(string)
 		if !valid {
@@ -86,6 +95,24 @@ func FromConfig(effective *config.Config) (Spec, error) {
 var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 func (s Spec) Validate() error {
+	if s.EgressBridgeIPv4CIDR != "" {
+		bridge, err := netip.ParsePrefix(s.EgressBridgeIPv4CIDR)
+		if err != nil || !bridge.Addr().Is4() || !bridge.Addr().IsGlobalUnicast() ||
+			bridge.Bits() < 16 || bridge.Bits() > 30 ||
+			bridge.Addr() == bridge.Masked().Addr() {
+			return fmt.Errorf("gateway egress bridge requires a usable IPv4 gateway CIDR (/16 through /30)")
+		}
+		if s.EgressNetwork == "" {
+			return fmt.Errorf("gateway egress bridge CIDR requires an egress network")
+		}
+		if s.EgressIPv4Address != "" {
+			address, err := netip.ParsePrefix(s.EgressIPv4Address)
+			if err != nil || !bridge.Masked().Contains(address.Addr()) ||
+				address.Bits() != bridge.Bits() || address.Addr() == bridge.Addr() {
+				return fmt.Errorf("gateway LiteLLM egress IPv4 address must be a distinct host within the configured egress bridge subnet")
+			}
+		}
+	}
 	if s.EgressIPv4Address != "" {
 		prefix, err := netip.ParsePrefix(s.EgressIPv4Address)
 		if err != nil || !prefix.Addr().Is4() || !prefix.Addr().IsGlobalUnicast() ||
@@ -193,6 +220,7 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 			"id":                s.ID,
 			"egressNetwork":     s.EgressNetwork,
 			"egressIPv4Address": s.EgressIPv4Address,
+			"egressBridgeIPv4CIDR": s.EgressBridgeIPv4CIDR,
 			"project":           s.Project,
 			"network": map[string]any{
 				"name":        s.Network,
