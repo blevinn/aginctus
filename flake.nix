@@ -168,14 +168,24 @@
             ];
           };
 
+# Bundle the OpenCode guest Python scripts into a single store
+          # directory so the shared validator module sits alongside
+          # provision.py and launch.py and is importable at runtime.
+          opencodeGuestScripts = pkgs.runCommand "aginctus-opencode-guest-scripts" {} ''
+            mkdir -p $out
+            cp ${./guest/opencode/provision.py} $out/provision.py
+            cp ${./guest/opencode/launch.py} $out/launch.py
+            cp ${./guest/opencode/gateway_endpoint.py} $out/gateway_endpoint.py
+          '';
+
           # Runtime-only gateway configuration: no endpoint, model or key is
           # materialized into the Nix store. Herdr's PATH resolves this wrapper.
           aginctusOpenCode = pkgs.writeShellScriptBin "opencode" ''
-            exec ${pkgs.python3}/bin/python3 ${./guest/opencode/launch.py} ${pkgs.opencode}/bin/opencode "$@"
+            exec ${pkgs.python3}/bin/python3 ${opencodeGuestScripts}/launch.py ${pkgs.opencode}/bin/opencode "$@"
           '';
 
           gatewayProvisionHelper = pkgs.writeShellScriptBin "aginctus-opencode-gateway-provision" ''
-            exec ${pkgs.python3}/bin/python3 ${./guest/opencode/provision.py}
+            exec ${pkgs.python3}/bin/python3 ${opencodeGuestScripts}/provision.py
           '';
 
           opencodeWorkloadSystem = nixpkgs.lib.nixosSystem {
