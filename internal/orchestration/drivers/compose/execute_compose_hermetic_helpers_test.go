@@ -109,3 +109,19 @@ func runHermeticExecuteCompose(t *testing.T, server *fakeIncusServer, conn *icli
 	)
 	return err, server.Calls
 }
+
+// runHermeticExecuteComposeWithConfig drives executeCompose with the supplied
+// Config and optional environment. Tests that need to exercise the
+// RecreateOnDrift opt-in or pass environment substitutions use this entry
+// point. The environment map is forwarded to loadProject, where it is written
+// to a private temp file the upstream library consumes.
+func runHermeticExecuteComposeWithConfig(t *testing.T, server *fakeIncusServer, conn *iclient.Connection, cfg Config, environment map[string]string) (error, []incusCall) {
+	t.Helper()
+	err := executeCompose(
+		context.Background(),
+		cfg,
+		environment,
+		func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error) { return conn, nil },
+	)
+	return err, server.Calls
+}
