@@ -1027,7 +1027,9 @@ Commands:
   config get PATH   Print one effective configuration value
   doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
   gateway validate  Validate the AI gateway deployment configuration
-  gateway apply     Reconcile the AI gateway\n  gateway egress preflight  Read-only owned egress network / DHCP safety check\n  gateway egress audit      Read-only LiteLLM NIC configuration audit
+  gateway apply     Reconcile the AI gateway
+  gateway egress preflight  Read-only owned egress network / DHCP safety check
+  gateway egress audit      Read-only LiteLLM NIC configuration audit
   gateway status    Inspect gateway project and service state
   gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
   gateway remove [--force] Remove gateway instances, preserving data volumes
