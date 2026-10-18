@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/blevinn/aginctus/internal/filestate"
 )
 
 type Provider struct {
@@ -58,20 +60,13 @@ func Register(path string, p Provider) (bool, error) {
 	}
 	defer os.Remove(lock)
 	reg := Registry{Providers: []Provider{}}
-	info, err = os.Lstat(path)
+	data, err := filestate.ReadPrivateFile(path, 1<<20)
 	if err == nil {
-		if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-			return false, fmt.Errorf("provider registry must be a private regular file")
-		}
-		bytes, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return false, readErr
-		}
-		if err := json.Unmarshal(bytes, &reg); err != nil {
+		if err := json.Unmarshal(data, &reg); err != nil {
 			return false, fmt.Errorf("parse provider registry: %w", err)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return false, err
+		return false, fmt.Errorf("read existing provider registry: %w", err)
 	}
 	for _, existing := range reg.Providers {
 		if existing.Alias == p.Alias {
@@ -82,7 +77,7 @@ func Register(path string, p Provider) (bool, error) {
 		}
 	}
 	reg.Providers = append(reg.Providers, p)
-	data, err := json.MarshalIndent(reg, "", "  ")
+	data, err = json.MarshalIndent(reg, "", "  ")
 	if err != nil {
 		return false, err
 	}
@@ -130,19 +125,12 @@ func Load(path string) (Registry, error) {
 	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
 		return empty, fmt.Errorf("provider state directory must be private")
 	}
-	info, err = os.Lstat(path)
+	data, err := filestate.ReadPrivateFile(path, 1<<20)
 	if errors.Is(err, os.ErrNotExist) {
 		return empty, nil
 	}
 	if err != nil {
-		return empty, err
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-		return empty, fmt.Errorf("provider registry must be a private regular file")
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return empty, err
+		return empty, fmt.Errorf("read provider registry: %w", err)
 	}
 	var result Registry
 	if err := json.Unmarshal(data, &result); err != nil {

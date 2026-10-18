@@ -76,6 +76,37 @@ func TestLoadPrivateRegistry(t *testing.T) {
 		t.Fatal("insecure file accepted")
 	}
 }
+func TestProviderRegistryReadRejectsUnsafeParentAndOversize(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "registry")
+	path := filepath.Join(dir, "providers.json")
+	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "personal"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("load accepted unsafe provider state directory")
+	}
+	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "another"}); err == nil {
+		t.Fatal("register accepted unsafe provider state directory")
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A bounded read protects registry parsing even when a private file
+	// contains unexpectedly large data.
+	if err := os.WriteFile(path, make([]byte, (1<<20)+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("load accepted oversized registry")
+	}
+	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "another"}); err == nil {
+		t.Fatal("register accepted oversized registry")
+	}
+}
+
 func TestLoadRejectsSymlink(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "providers.json")

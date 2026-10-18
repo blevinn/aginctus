@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/filestate"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -97,24 +97,12 @@ func discoverGatewayIPv4(data []byte, project, managementNetwork string) (string
 }
 
 func readWorkloadKey(path string) (string, error) {
-	info, err := os.Lstat(path)
+	raw, err := filestate.ReadPrivateFile(path, 8192)
 	if err != nil {
-		return "", fmt.Errorf("open workload key: %w", err)
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return "", errors.New("workload key must be a private regular file")
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	raw, err := io.ReadAll(io.LimitReader(f, 8193))
-	if err != nil {
-		return "", errors.New("read workload key failed")
+		return "", errors.New("workload key unavailable or invalid")
 	}
 	key := strings.TrimSpace(string(raw))
-	if len(raw) > 8192 || key == "" || strings.ContainsAny(key, "\r\n") {
+	if key == "" || strings.ContainsAny(key, "\r\n") {
 		return "", errors.New("invalid workload key")
 	}
 	return key, nil
