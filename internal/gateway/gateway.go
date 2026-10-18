@@ -22,18 +22,18 @@ import (
 )
 
 type Spec struct {
-	ID                 string
-	Project            string
-	Network            string
-	EgressNetwork      string
-	EgressIPv4Address  string
+	ID                   string
+	Project              string
+	Network              string
+	EgressNetwork        string
+	EgressIPv4Address    string
 	EgressBridgeIPv4CIDR string
-	NetworkIPv4Address string
-	NetworkIPv4NAT     bool
-	NetworkIPv4Routing bool
-	NetworkIPv6Address string
-	LiteLLMImage       string
-	PostgresImage      string
+	NetworkIPv4Address   string
+	NetworkIPv4NAT       bool
+	NetworkIPv4Routing   bool
+	NetworkIPv6Address   string
+	LiteLLMImage         string
+	PostgresImage        string
 }
 
 func FromConfig(effective *config.Config) (Spec, error) {
