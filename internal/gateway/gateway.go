@@ -117,8 +117,11 @@ services:
       LITELLM_SALT_KEY: ${AGINCTUS_GATEWAY_SALT_KEY}
       STORE_MODEL_IN_DB: "True"
     networks:
-      - management
-{{if .EgressNetwork}}      - egress
+{{if .EgressNetwork}}      management:
+        x-incus-compose:
+          gateway: false
+      egress: {}
+{{else}}      - management
 {{end}}
 volumes:
   gateway-postgres: {}
