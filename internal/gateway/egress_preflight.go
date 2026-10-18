@@ -59,7 +59,8 @@ func EgressAddressPreflight(ctx context.Context, name string) (string, error) {
  }
  candidate,err:=selectEgressIPv4(network.Config["ipv4.address"],unavailable)
  if err!=nil{return "",err}
- // Lease records alone cannot account for static assignments and other
- // networks. Report the candidate only as a possible value, never safe.
- return candidate,nil
+ // A lease snapshot is not a complete account of static assignments, and
+ // the candidate is not reserved. Return a blocked status until a later
+ // atomic allocator can validate and reserve the address.
+ return "",fmt.Errorf("candidate %s is unreserved: static assignments and allocation races not yet checked", candidate)
 }
