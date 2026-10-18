@@ -57,7 +57,7 @@ ag.orchestration(cfg.id,
             management: {
               'x-incus-compose': { internal: true },
             },
-            egress: {},
+            egress: if cfg.egressIPv4Address == '' then {} else { ipv4_address: cfg.egressIPv4Address },
           },
         },
       },
