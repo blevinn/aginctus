@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gorilla/websocket"
 	"github.com/lxc/incus/v7/shared/api"
 )
 
@@ -44,6 +45,9 @@ type fakeIncusServer struct {
 	// imageAliases is keyed by sanitized Incus project name; each value is keyed
 	// by alias name and stores the underlying fingerprint.
 	imageAliases map[string]map[string]api.ImageAliasesEntry
+	// images is keyed by Incus fingerprint; the upstream library uses the cached
+	// image to confirm Ensure without going through a real OCI pull.
+	images map[string]api.Image
 }
 
 // newFakeIncusServer wires up a TLS test server. URL() returns the base URL
@@ -54,6 +58,7 @@ func newFakeIncusServer() *fakeIncusServer {
 		projects:     map[string]api.Project{},
 		instances:    map[string]map[string]api.InstanceFull{},
 		imageAliases: map[string]map[string]api.ImageAliasesEntry{},
+		images:       map[string]api.Image{},
 	}
 	f.server = httptest.NewTLSServer(http.HandlerFunc(f.handle))
 	return f
@@ -102,6 +107,15 @@ func (f *fakeIncusServer) PutImageAlias(project, alias, fingerprint string) {
 			Target: fingerprint,
 		},
 	}
+	if _, ok := f.images[fingerprint]; !ok {
+		// Make the upstream Image.Ensure succeed by also seeding the image
+		// itself with the same architecture the upstream library expects
+		// (defaults to the host arch via incus-compose).
+		f.images[fingerprint] = api.Image{
+			Fingerprint:  fingerprint,
+			Architecture: "x86_64",
+		}
+	}
 }
 
 // CallsByPath returns every recorded call whose path matches pathPrefix. It is
@@ -143,11 +157,30 @@ func (f *fakeIncusServer) handle(w http.ResponseWriter, r *http.Request) {
 		f.serveGetInstance(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/1.0/images/aliases/"):
 		f.serveGetImageAlias(w, r)
+	case r.URL.Path == "/1.0/events" && isWebSocketUpgrade(r):
+		f.serveEvents(w, r)
+	case r.Method == http.MethodGet && r.URL.Path == "/1.0/networks":
+		writeSync(w, []string{"/1.0/networks/default"})
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/1.0/networks/"):
+		f.serveNetworkOrPost(w, r)
+	case r.Method == http.MethodPost && r.URL.Path == "/1.0/networks":
+		f.serveCreateNetwork(w, r)
 	case r.Method == http.MethodGet && r.URL.Path == "/1.0/profiles/default":
-		// Compose library inspects the default profile for storage pool detection.
-		writeSync(w, api.Profile{Name: "default", ProfilePut: api.ProfilePut{Devices: api.DevicesMap{}}})
+		// Compose library inspects the default profile to detect the storage
+		// pool used by the root disk device. Provide one so detection succeeds.
+		writeSync(w, api.Profile{
+			Name: "default",
+			ProfilePut: api.ProfilePut{
+				Devices: api.DevicesMap{
+					"root": {"type": "disk", "path": "/", "pool": "default"},
+				},
+			},
+		})
 	case r.Method == http.MethodGet && r.URL.Path == "/1.0/storage-pools":
-		writeSync(w, []api.StoragePool{{Name: "default"}})
+		// Connection.GetStoragePoolNames expects a list of URI strings.
+		writeSync(w, []string{"/1.0/storage-pools/default"})
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/1.0/images/") && !strings.HasPrefix(r.URL.Path, "/1.0/images/aliases/"):
+		f.serveGetImage(w, r)
 	default:
 		writeError(w, http.StatusNotFound, fmt.Sprintf("not found: %s %s", r.Method, r.URL.Path))
 	}
@@ -168,6 +201,7 @@ func (f *fakeIncusServer) serveServerInfo(w http.ResponseWriter) {
 		Environment: api.ServerEnvironment{
 			ServerVersion: "7.3.0",
 			Server:        "true",
+			Architectures: []string{"x86_64"},
 		},
 	})
 }
@@ -251,6 +285,77 @@ func (f *fakeIncusServer) serveGetImageAlias(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeSync(w, alias)
+}
+
+func (f *fakeIncusServer) serveGetImage(w http.ResponseWriter, r *http.Request) {
+	fingerprint := strings.TrimPrefix(r.URL.Path, "/1.0/images/")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	image, ok := f.images[fingerprint]
+	if !ok {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("image %q not found", fingerprint))
+		return
+	}
+	writeSync(w, image)
+}
+
+// serveNetworkOrPost answers both GET and PUT requests for an individual
+// network. Compose library calls these for the default network it manages.
+func (f *fakeIncusServer) serveNetworkOrPost(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/1.0/networks/")
+	switch r.Method {
+	case http.MethodGet:
+		writeSync(w, api.Network{Name: name, NetworkPut: api.NetworkPut{
+			Config: map[string]string{"ipv4.address": "none", "ipv6.address": "none"},
+		}})
+	default:
+		writeError(w, http.StatusNotFound, fmt.Sprintf("unsupported network method: %s", r.Method))
+	}
+}
+
+// serveCreateNetwork pretends to create a network without storing state.
+// The compose driver never inspects the result, so a sync response is enough.
+func (f *fakeIncusServer) serveCreateNetwork(w http.ResponseWriter, r *http.Request) {
+	writeSync(w, struct{}{})
+}
+
+// serveEvents upgrades the request to a WebSocket and keeps the connection
+// open without sending messages. The upstream listener goroutine blocks on
+// ReadMessage until the test closes the server, at which point the listener
+// returns and the upstream client can clean up.
+func (f *fakeIncusServer) serveEvents(w http.ResponseWriter, r *http.Request) {
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(*http.Request) bool { return true },
+	}
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		return
+	}
+	// Hold the connection until the test ends; do not send data. A real Incus
+	// server would emit lifecycle events here; the compose driver does not
+	// depend on them for its mutation logic, only for state refresh.
+	go func() {
+		defer conn.Close()
+		for {
+			if _, _, err := conn.NextReader(); err != nil {
+				return
+			}
+		}
+	}()
+}
+
+// isWebSocketUpgrade returns true for an /1.0/events request that asks to
+// switch protocols. The upstream iclient package sets the gorilla/websocket
+// upgrade headers before dialing.
+func isWebSocketUpgrade(r *http.Request) bool {
+	for _, c := range r.Header.Values("Connection") {
+		for _, part := range strings.Split(c, ",") {
+			if strings.EqualFold(strings.TrimSpace(part), "upgrade") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // writeSync writes a successful Incus response whose metadata is the JSON
