@@ -601,28 +601,33 @@ func runGateway(
 					provider = "chatgpt"
 				}
 			}
-			if provider != "chatgpt" {
-				path, pathErr := providerregistry.DefaultPath()
-				if pathErr != nil {
-					fmt.Fprintln(stderr, "cannot verify provider alias")
-					return 1
+			if provider == "" {
+				fmt.Fprintln(stderr, "model registration requires --provider=ALIAS (or --source=chatgpt/...)")
+				return 2
+			}
+			// Dry-run must match the commit path: a provider alias is only
+			// valid if the local provider registry contains it. The
+			// ``chatgpt`` alias is not exempt; only the registry decides.
+			path, pathErr := providerregistry.DefaultPath()
+			if pathErr != nil {
+				fmt.Fprintln(stderr, "cannot verify provider alias")
+				return 1
+			}
+			providers, loadErr := providerregistry.Load(path)
+			if loadErr != nil {
+				fmt.Fprintln(stderr, "cannot read private provider registry")
+				return 1
+			}
+			registered := false
+			for _, p := range providers.Providers {
+				if p.Type == "chatgpt" && p.Alias == provider {
+					registered = true
+					break
 				}
-				providers, loadErr := providerregistry.Load(path)
-				if loadErr != nil {
-					fmt.Fprintln(stderr, "cannot read private provider registry")
-					return 1
-				}
-				registered := false
-				for _, p := range providers.Providers {
-					if p.Type == "chatgpt" && p.Alias == provider {
-						registered = true
-						break
-					}
-				}
-				if !registered {
-					fmt.Fprintln(stderr, "model provider alias is not registered")
-					return 2
-				}
+			}
+			if !registered {
+				fmt.Fprintln(stderr, "model provider alias is not registered")
+				return 2
 			}
 			rendered, err = gateway.ChatGPTModelRegistration(name, source)
 		}
