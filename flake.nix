@@ -354,6 +354,9 @@
           firewall-nixos-nft-integration = import ./nix/firewall-nixos-nft-test.nix {
             inherit self nixpkgs system;
           };
+          herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
+            inherit self nixpkgs herdr system;
+          };
         }
       );
 
