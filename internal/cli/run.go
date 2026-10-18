@@ -374,6 +374,20 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 4 && args[0] == "egress" && args[1] == "dhcp" && args[2] == "plan" && strings.HasPrefix(args[3], "--ranges=") {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress DHCP migration configuration: %v\n", err)
+			return 1
+		}
+		plan, err := gateway.PlanEgressDHCPMigration(ctx, spec, strings.TrimPrefix(args[3], "--ranges="), gatewayEgressQuery)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress DHCP migration blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, plan)
+		return 0
+	}
 	if len(args) == 3 && args[0] == "egress" && args[1] == "reconcile" && args[2] == "--dry-run" {
 		spec, err := gateway.FromConfig(effective)
 		if err != nil {
@@ -1050,6 +1064,7 @@ Commands:
   gateway apply    Reconcile the AI gateway
   gateway egress preflight  Read-only owned egress network / DHCP safety check
   gateway egress audit      Read-only LiteLLM NIC configuration audit
+  gateway egress dhcp plan --ranges=START-END  Inspect safe DHCP pool migration
   gateway egress reconcile --dry-run  Plan owned LiteLLM NIC repair without mutation
   gateway status    Inspect gateway project and service state
   gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
