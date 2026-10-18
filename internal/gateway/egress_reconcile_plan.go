@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/netip"
+	"strings"
 )
 
 // PlanEgressReconciliation checks the existing, owned LiteLLM instance and
@@ -48,8 +49,27 @@ func PlanEgressReconciliation(ctx context.Context, spec Spec, query func(context
 	if bridge.Config["ipv4.nat"] != "true" || bridge.Config["ipv4.routing"] != "true" {
 		return "", fmt.Errorf("egress bridge NAT/routing policy not verified")
 	}
-	if bridge.Config["ipv4.dhcp"] != "false" {
-		return "", fmt.Errorf("egress bridge DHCP must be explicitly disabled before planning static NIC assignment")
+	// DHCP may remain enabled only when an explicit, fully parseable pool
+	// excludes the proposed static address. Incus defaults to unrestricted
+	// DHCP when ipv4.dhcp is absent; such bridges remain blocked.
+	dhcp := strings.ToLower(bridge.Config["ipv4.dhcp"])
+	switch dhcp {
+	case "false":
+	case "", "true":
+		if strings.TrimSpace(bridge.Config["ipv4.dhcp.ranges"]) == "" {
+			return "", fmt.Errorf("egress bridge has unrestricted DHCP; explicit nonoverlapping ranges or disabled DHCP required")
+		}
+		pool, err := parseEgressDHCPRanges(bridge.Config["ipv4.address"], bridge.Config["ipv4.dhcp.ranges"])
+		if err != nil {
+			return "", fmt.Errorf("inspect egress DHCP ranges: %w", err)
+		}
+		for _, allocated := range pool {
+			if allocated == address.Addr() {
+				return "", fmt.Errorf("configured LiteLLM address overlaps the egress DHCP pool")
+			}
+		}
+	default:
+		return "", fmt.Errorf("unsupported egress DHCP setting")
 	}
 	// Disabled DHCP does not invalidate old leases or prevent conflicting
 	// static addresses on other instances. A read-only proposal must refuse
