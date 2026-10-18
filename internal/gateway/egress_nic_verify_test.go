@@ -14,8 +14,8 @@ func TestVerifyPersistedEgressNICs(t *testing.T) {
 			Name: "litellm-1", Status: "Stopped",
 			InstancePut: api.InstancePut{
 				Config: map[string]string{
-					"user.aginctus.managed": "true",
-					"user.aginctus.resource": "compose-instance",
+					"user.aginctus.managed":    "true",
+					"user.aginctus.resource":   "compose-instance",
 					"user.aginctus.deployment": spec.Project,
 				},
 				Devices: map[string]map[string]string{
@@ -29,7 +29,7 @@ func TestVerifyPersistedEgressNICs(t *testing.T) {
 		t.Fatalf("persisted NIC state rejected: %v", err)
 	}
 	for _, tc := range []struct {
-		name string
+		name   string
 		change func(*api.Instance)
 	}{
 		{"running", func(i *api.Instance) { i.Status = "Running" }},
