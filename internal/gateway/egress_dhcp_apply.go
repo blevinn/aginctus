@@ -20,8 +20,12 @@ func applyEgressDHCPMigration(ctx context.Context, spec Spec, ranges string, rea
 		return err
 	}
 	network, etag, err := editor.GetNetwork(spec.EgressNetwork)
-	if err != nil { return fmt.Errorf("inspect network before guarded update: %w", err) }
-	if etag == "" { return fmt.Errorf("network concurrency token unavailable") }
+	if err != nil {
+		return fmt.Errorf("inspect network before guarded update: %w", err)
+	}
+	if etag == "" {
+		return fmt.Errorf("network concurrency token unavailable")
+	}
 	if network.Name != spec.EgressNetwork || network.Type != "bridge" || !network.Managed ||
 		network.Config["user.aginctus.managed"] != "true" ||
 		network.Config["user.aginctus.resource"] != "gateway-egress-network" ||
@@ -43,10 +47,14 @@ func applyEgressDHCPMigration(ctx context.Context, spec Spec, ranges string, rea
 	}
 	// Recheck lease inventory immediately before the ETag-protected PUT.
 	// A separate address reservation is still needed before writing NICs.
-	if _, err := PlanEgressDHCPMigration(ctx, spec, ranges, read); err != nil { return err }
+	if _, err := PlanEgressDHCPMigration(ctx, spec, ranges, read); err != nil {
+		return err
+	}
 	put := network.Writable()
 	put.Config = make(api.ConfigMap, len(network.Config)+1)
-	for key, value := range network.Config { put.Config[key] = value }
+	for key, value := range network.Config {
+		put.Config[key] = value
+	}
 	put.Config["ipv4.dhcp.ranges"] = ranges
 	if err := editor.UpdateNetwork(spec.EgressNetwork, put, etag); err != nil {
 		return fmt.Errorf("ETag-guarded DHCP migration failed: %w", err)
@@ -58,6 +66,8 @@ func applyEgressDHCPMigration(ctx context.Context, spec Spec, ranges string, rea
 // It does not change instances, volumes, or gateway credentials.
 func ApplyEgressDHCPMigration(ctx context.Context, spec Spec, ranges string, read func(context.Context, ...string) ([]byte, error)) error {
 	server, err := incusclient.ConnectIncusUnixWithContext(ctx, "", &incusclient.ConnectionArgs{SkipGetServer: true})
-	if err != nil { return fmt.Errorf("connect to local Incus: %w", err) }
+	if err != nil {
+		return fmt.Errorf("connect to local Incus: %w", err)
+	}
 	return applyEgressDHCPMigration(ctx, spec, ranges, read, server)
 }
