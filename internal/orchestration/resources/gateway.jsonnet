@@ -18,6 +18,7 @@ ag.orchestration(cfg.id,
         networkType: 'bridge',
         config: {
           'ipv4.address': if cfg.egressBridgeIPv4CIDR == '' then 'auto' else cfg.egressBridgeIPv4CIDR,
+          } + (if cfg.egressDHCPDisabled then { 'ipv4.dhcp': 'false' } else {}) + {
           'ipv4.nat': 'true',
           'ipv4.routing': 'true',
           'ipv6.address': 'none',
