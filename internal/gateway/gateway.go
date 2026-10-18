@@ -28,6 +28,7 @@ type Spec struct {
 	EgressNetwork        string
 	EgressIPv4Address    string
 	EgressBridgeIPv4CIDR string
+	EgressDHCPDisabled  bool
 	NetworkIPv4Address   string
 	NetworkIPv4NAT       bool
 	NetworkIPv4Routing   bool
@@ -68,6 +69,14 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		spec.EgressBridgeIPv4CIDR = cidr
 	}
 
+	if value, ok := effective.Get("gateway.egress.network.ipv4.dhcp"); ok {
+		enabled, valid := value.(bool)
+		if !valid {
+			return Spec{}, fmt.Errorf("gateway egress IPv4 DHCP must be a boolean")
+		}
+		spec.EgressDHCPDisabled = !enabled
+	}
+
 	if value, ok := effective.Get("gateway.egress.ipv4.address"); ok {
 		address, valid := value.(string)
 		if !valid {
@@ -95,6 +104,9 @@ func FromConfig(effective *config.Config) (Spec, error) {
 var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 func (s Spec) Validate() error {
+	if s.EgressDHCPDisabled && (s.EgressBridgeIPv4CIDR == "" || s.EgressIPv4Address == "") {
+		return fmt.Errorf("disabled egress DHCP requires both explicit bridge gateway and LiteLLM static IPv4 CIDRs")
+	}
 	if s.EgressBridgeIPv4CIDR != "" {
 		bridge, err := netip.ParsePrefix(s.EgressBridgeIPv4CIDR)
 		if err != nil || !bridge.Addr().Is4() || !bridge.Addr().IsGlobalUnicast() ||
@@ -221,6 +233,7 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 			"egressNetwork":        s.EgressNetwork,
 			"egressIPv4Address":    s.EgressIPv4Address,
 			"egressBridgeIPv4CIDR": s.EgressBridgeIPv4CIDR,
+			"egressDHCPDisabled":   s.EgressDHCPDisabled,
 			"project":              s.Project,
 			"network": map[string]any{
 				"name":        s.Network,
