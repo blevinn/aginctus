@@ -123,10 +123,16 @@ def main():
                                            env=env, check=True, timeout=180, capture_output=True, text=True)
                         except (OSError, subprocess.SubprocessError):
                             print("WARN: agent interrupt failed; closing owned workspace", file=sys.stderr)
-                    subprocess.run([sys.executable, str(fixture), "close", str(base), identity],
-                                   env=env, check=True, timeout=180, capture_output=True, text=True)
-                subprocess.run([sys.executable, cleanup, "cleanup", str(base), identity, guest], check=True, timeout=60,
-                               capture_output=True, text=True)
+                    try:
+                        subprocess.run([sys.executable, str(fixture), "close", str(base), identity],
+                                       env=env, check=True, timeout=180, capture_output=True, text=True)
+                    except (OSError, subprocess.SubprocessError):
+                        print("WARN: workspace close failed; cleanup helper will still run", file=sys.stderr)
+                try:
+                    subprocess.run([sys.executable, cleanup, "cleanup", str(base), identity, guest], check=True, timeout=60,
+                                   capture_output=True, text=True)
+                except (OSError, subprocess.SubprocessError):
+                    print("WARN: guest cleanup helper failed; staged directory may leak", file=sys.stderr)
             print(f"PASS: remote Herdr workspace create/get/close, iteration {iteration+1}")
     print("NOT VERIFIED: agent prompt/wait, guest task execution, gateway inference, and credentials" if agent_smoke else "NOT VERIFIED: OpenCode agent, guest task execution, gateway inference, and credentials")
 
