@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Managed SSH host trust for the Herdr client.
 # Usage: aginctus-ssh-host-trust inspect <alias>
 #        aginctus-ssh-host-trust reconcile <alias>   (stdin: ssh-ed25519 public host key)
@@ -24,6 +25,14 @@ check_existing() {
   if [[ -L "$trust" || -L "$known" ]]; then die "symlink in managed trust path"; fi
   if [[ -e "$trust" && ! -d "$trust" ]]; then die "invalid trust directory"; fi
   if [[ -e "$known" && ! -f "$known" ]]; then die "invalid known_hosts file"; fi
+  if [[ -e "$root" ]]; then
+    [[ -d "$root" ]] || die "invalid ssh state root"
+    [[ "$(stat -c '%u' "$root")" == 0 ]] || die "ssh state root not root-owned"
+  fi
+  if [[ -e "$trust" ]]; then
+    [[ "$(stat -c '%u' "$trust")" == 0 ]] || die "trust directory not root-owned"
+    [[ "$(stat -c '%a' "$trust")" == 700 ]] || die "unsafe trust directory permissions"
+  fi
   if [[ -e "$known" ]]; then
     [[ "$(stat -c '%u' "$known")" == 0 ]] || die "known_hosts not root-owned"
     [[ "$(stat -c '%a' "$known")" == 600 ]] || die "unsafe known_hosts permissions"
