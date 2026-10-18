@@ -64,7 +64,9 @@ func auditRequestedEgressAddress(ctx context.Context, network, project string, r
 			}
 			egressNICCount := 0
 			for _, device := range instance.ExpandedDevices {
-				if device["type"] == "nic" && device["network"] == network { egressNICCount++ }
+				if device["type"] == "nic" && device["network"] == network {
+					egressNICCount++
+				}
 			}
 			for _, device := range instance.ExpandedDevices {
 				if device["type"] != "nic" || device["network"] != network {
