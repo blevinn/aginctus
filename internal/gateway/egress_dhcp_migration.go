@@ -22,14 +22,18 @@ func PlanEgressDHCPMigration(ctx context.Context, spec Spec, ranges string, quer
 		return "", fmt.Errorf("proposed DHCP range must not be empty")
 	}
 	raw, err := query(ctx, "query", "/1.0/networks/"+spec.EgressNetwork)
-	if err != nil { return "", fmt.Errorf("inspect egress bridge: %w", err) }
-	var network struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-		Managed bool `json:"managed"`
-		Config map[string]string `json:"config"`
+	if err != nil {
+		return "", fmt.Errorf("inspect egress bridge: %w", err)
 	}
-	if err := json.Unmarshal(raw, &network); err != nil { return "", fmt.Errorf("decode egress bridge: %w", err) }
+	var network struct {
+		Name    string            `json:"name"`
+		Type    string            `json:"type"`
+		Managed bool              `json:"managed"`
+		Config  map[string]string `json:"config"`
+	}
+	if err := json.Unmarshal(raw, &network); err != nil {
+		return "", fmt.Errorf("decode egress bridge: %w", err)
+	}
 	if network.Name != spec.EgressNetwork || network.Type != "bridge" || !network.Managed ||
 		network.Config["user.aginctus.managed"] != "true" ||
 		network.Config["user.aginctus.resource"] != "gateway-egress-network" ||
@@ -47,9 +51,13 @@ func PlanEgressDHCPMigration(ctx context.Context, spec Spec, ranges string, quer
 		return "", fmt.Errorf("static LiteLLM address is incompatible with the live bridge")
 	}
 	pool, err := parseEgressDHCPRanges(network.Config["ipv4.address"], ranges)
-	if err != nil { return "", fmt.Errorf("proposed DHCP pool: %w", err) }
+	if err != nil {
+		return "", fmt.Errorf("proposed DHCP pool: %w", err)
+	}
 	addresses := make(map[netip.Addr]bool, len(pool))
-	for _, ip := range pool { addresses[ip] = true }
+	for _, ip := range pool {
+		addresses[ip] = true
+	}
 	if addresses[host.Addr()] {
 		return "", fmt.Errorf("proposed DHCP pool overlaps configured static LiteLLM address")
 	}
@@ -59,14 +67,20 @@ func PlanEgressDHCPMigration(ctx context.Context, spec Spec, ranges string, quer
 	// Preserve all existing leases, regardless of whether DHCP previously
 	// allocated them or they were pinned to a fixed address.
 	leasesRaw, err := query(ctx, "query", "/1.0/networks/"+spec.EgressNetwork+"/leases")
-	if err != nil { return "", fmt.Errorf("inspect existing egress leases: %w", err) }
-	var leases []struct { Address string `json:"address"` }
+	if err != nil {
+		return "", fmt.Errorf("inspect existing egress leases: %w", err)
+	}
+	var leases []struct {
+		Address string `json:"address"`
+	}
 	if err := json.Unmarshal(leasesRaw, &leases); err != nil || leases == nil {
 		return "", fmt.Errorf("incomplete egress lease inventory")
 	}
 	for _, lease := range leases {
 		ip, err := netip.ParseAddr(lease.Address)
-		if err != nil { return "", fmt.Errorf("invalid egress lease inventory") }
+		if err != nil {
+			return "", fmt.Errorf("invalid egress lease inventory")
+		}
 		if ip.Is4() && !addresses[ip] {
 			return "", fmt.Errorf("proposed DHCP pool excludes an existing IPv4 lease")
 		}
