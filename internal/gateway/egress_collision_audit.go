@@ -103,7 +103,7 @@ func auditRequestedEgressAddress(ctx context.Context, network, project string, r
 						instance.Config["user.aginctus.managed"] == "true" &&
 						instance.Config["user.aginctus.resource"] == "compose-instance" &&
 						instance.Config["user.aginctus.deployment"] == project &&
-						device["network"] == network {
+						egressNICCount == 1 {
 						continue
 					}
 					return fmt.Errorf("requested egress address is already assigned")
