@@ -142,8 +142,16 @@ func TestExplicitEgressBridgeCIDRInPlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(plan.Steps[1].Configuration), "\"ipv4.address\":\"10.42.40.1/24\"") {
-		t.Fatalf("explicit bridge CIDR missing from network plan: %s", plan.Steps[1].Configuration)
+	var networkStep struct {
+		Documents []struct {
+			Config map[string]string `json:"config"`
+		} `json:"documents"`
+	}
+	if err := json.Unmarshal(plan.Steps[1].Configuration, &networkStep); err != nil {
+		t.Fatal(err)
+	}
+	if len(networkStep.Documents) != 1 || networkStep.Documents[0].Config["ipv4.address"] != "10.42.40.1/24" {
+		t.Fatalf("unexpected egress bridge IPv4 address in network plan")
 	}
 	for _, tc := range []struct {
 		bridge string
