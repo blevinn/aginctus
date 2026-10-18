@@ -133,3 +133,35 @@ func TestEgressIPv4RequiresValidHostCIDR(t *testing.T) {
 		}
 	}
 }
+
+func TestExplicitEgressBridgeCIDRInPlan(t *testing.T) {
+	spec := egressTestSpec()
+	spec.EgressBridgeIPv4CIDR = "10.42.40.1/24"
+	spec.EgressIPv4Address = "10.42.40.25/24"
+	plan, err := spec.OrchestrationPlan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(plan.Steps[1].Configuration), "\"ipv4.address\":\"10.42.40.1/24\"") {
+		t.Fatalf("explicit bridge CIDR missing from network plan: %s", plan.Steps[1].Configuration)
+	}
+	for _, tc := range []struct {
+		bridge string
+		host   string
+	}{
+		{"not-a-prefix", ""},
+		{"2001:db8::1/64", ""},
+		{"10.42.40.0/24", ""},
+		{"10.42.40.1/31", ""},
+		{"10.42.40.1/24", "10.42.41.5/24"},
+		{"10.42.40.1/24", "10.42.40.1/24"},
+		{"10.42.40.1/24", "10.42.40.5/25"},
+	} {
+		s := egressTestSpec()
+		s.EgressBridgeIPv4CIDR = tc.bridge
+		s.EgressIPv4Address = tc.host
+		if err := s.Validate(); err == nil {
+			t.Fatalf("accepted bridge %q and host %q", tc.bridge, tc.host)
+		}
+	}
+}
