@@ -374,6 +374,20 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 5 && args[0] == "egress" && args[1] == "dhcp" && args[2] == "apply" && strings.HasPrefix(args[3], "--ranges=") && args[4] == "--confirm-bridge-only" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress DHCP configuration: %v\n", err)
+			return 1
+		}
+		ranges := strings.TrimPrefix(args[3], "--ranges=")
+		if err := gateway.ApplyEgressDHCPMigration(ctx, spec, ranges, gatewayEgressQuery); err != nil {
+			fmt.Fprintf(stderr, "egress DHCP migration blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "owned egress bridge DHCP range updated; LiteLLM networking NOT reconciled")
+		return 0
+	}
 	if len(args) == 4 && args[0] == "egress" && args[1] == "dhcp" && args[2] == "plan" && strings.HasPrefix(args[3], "--ranges=") {
 		spec, err := gateway.FromConfig(effective)
 		if err != nil {
@@ -1065,6 +1079,7 @@ Commands:
   gateway egress preflight  Read-only owned egress network / DHCP safety check
   gateway egress audit      Read-only LiteLLM NIC configuration audit
   gateway egress dhcp plan --ranges=START-END  Inspect safe DHCP pool migration
+  gateway egress dhcp apply --ranges=START-END --confirm-bridge-only  Guarded bridge DHCP update
   gateway egress reconcile --dry-run  Plan owned LiteLLM NIC repair without mutation
   gateway status    Inspect gateway project and service state
   gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
