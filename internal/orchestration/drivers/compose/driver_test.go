@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/orchestration"
+	"github.com/lxc/incus/v7/shared/api"
 )
 
 func TestValidateAcceptsComposeConfiguration(t *testing.T) {
@@ -520,13 +521,93 @@ func TestComposeExecutionGetsRuntimeEnvironment(t *testing.T) {
 	}
 }
 
-func TestSeedInstanceOwnershipExceptionIsNarrow(t *testing.T) {
-	if !isComposeImageSeed("ic-seed-abc") {
-		t.Fatal("upstream image seed not identified")
+// In a crashed OCI-image import, upstream's temporary container may remain
+// when the next reconcile inventories an otherwise owned Compose project.
+func TestComposeInstanceInventoryAcceptsInterruptedImport(t *testing.T) {
+	const project = "gateway-test"
+	owned := api.InstanceFull{Instance: api.Instance{
+		Name: "litellm-1", Type: string(api.InstanceTypeContainer),
+		InstancePut: api.InstancePut{Config: map[string]string{
+			ownershipManagedKey: "true",
+			ownershipResourceKey: "compose-instance",
+			ownershipDeploymentKey: project,
+		}},
+	}}
+	seed := api.InstanceFull{Instance: api.Instance{
+		Name: "ic-seed-abcdef", Type: string(api.InstanceTypeContainer),
+		InstancePut: api.InstancePut{Config: map[string]string{
+			composeclient.TempInstanceKey: "true",
+		}},
+	}}
+	if !isComposeImageSeed(seed) {
+		t.Fatal("upstream temporary image reader not identified")
 	}
-	for _, name := range []string{"app-1", "ic-seed", "custom-ic-seed-abc"} {
-		if isComposeImageSeed(name) {
-			t.Fatalf("unexpected exemption %q", name)
-		}
+	if err := verifyComposeInstanceInventory([]api.InstanceFull{owned, seed}, project); err != nil {
+		t.Fatalf("owned services plus interrupted image seed rejected: %v", err)
+	}
+	if err := verifyComposeInstanceInventory([]api.InstanceFull{owned}, project); err != nil {
+		t.Fatalf("owned service inventory rejected: %v", err)
+	}
+}
+
+func TestComposeInstanceInventoryRejectsForeignSeedsAndServices(t *testing.T) {
+	const project = "gateway-test"
+	makeInstance := func(name, kind string, config map[string]string) api.InstanceFull {
+		return api.InstanceFull{Instance: api.Instance{
+			Name: name, Type: kind, InstancePut: api.InstancePut{Config: config},
+		}}
+	}
+	seedMarker := map[string]string{composeclient.TempInstanceKey: "true"}
+	cases := []struct {
+		name string
+		instance api.InstanceFull
+	}{
+		{"unmarked seed prefix", makeInstance("ic-seed-abcdef", string(api.InstanceTypeContainer), nil)},
+		{"seed with false marker", makeInstance("ic-seed-abcdef", string(api.InstanceTypeContainer), map[string]string{composeclient.TempInstanceKey: "false"})},
+		{"seed prefix but VM", makeInstance("ic-seed-abcdef", string(api.InstanceTypeVM), seedMarker)},
+		{"empty seed suffix", makeInstance("ic-seed-", string(api.InstanceTypeContainer), seedMarker)},
+		{"embedded seed prefix", makeInstance("custom-ic-seed-abcdef", string(api.InstanceTypeContainer), seedMarker)},
+		{"bare seed name", makeInstance("ic-seed", string(api.InstanceTypeContainer), seedMarker)},
+		{"ordinary unowned service", makeInstance("postgres-1", string(api.InstanceTypeContainer), nil)},
+		{"wrong deployment service", makeInstance("litellm-1", string(api.InstanceTypeContainer), map[string]string{
+			ownershipManagedKey: "true", ownershipResourceKey: "compose-instance", ownershipDeploymentKey: "other",
+		})},
+		{"seed with unexpected ownership marker", makeInstance("ic-seed-abcdef", string(api.InstanceTypeContainer), map[string]string{
+			composeclient.TempInstanceKey: "true", ownershipResourceKey: "foreign",
+		})},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if isComposeImageSeed(tc.instance) {
+				t.Fatal("foreign instance incorrectly recognized as upstream image seed")
+			}
+			if err := verifyComposeInstanceInventory([]api.InstanceFull{tc.instance}, project); err == nil {
+				t.Fatal("foreign instance passed deployment ownership validation")
+			}
+		})
+	}
+}
+
+func TestComposeInstanceInventoryRejectsForeignAmongOwnedAndSeed(t *testing.T) {
+	const project = "gateway-test"
+	owned := api.InstanceFull{Instance: api.Instance{
+		Name: "postgres-1", Type: string(api.InstanceTypeContainer),
+		InstancePut: api.InstancePut{Config: map[string]string{
+			ownershipManagedKey: "true",
+			ownershipResourceKey: "compose-instance",
+			ownershipDeploymentKey: project,
+		}},
+	}}
+	seed := api.InstanceFull{Instance: api.Instance{
+		Name: "ic-seed-abcdef", Type: string(api.InstanceTypeContainer),
+		InstancePut: api.InstancePut{Config: map[string]string{
+			composeclient.TempInstanceKey: "true",
+		}},
+	}}
+	foreign := api.InstanceFull{Instance: api.Instance{
+		Name: "unexpected-1", Type: string(api.InstanceTypeContainer),
+	}}
+	if err := verifyComposeInstanceInventory([]api.InstanceFull{owned, seed, foreign}, project); err == nil {
+		t.Fatal("foreign service accepted after legitimate image seed")
 	}
 }

@@ -313,7 +313,35 @@ func stampComposeCommands(config *composeclient.InstanceConfig) error {
 	return nil
 }
 
-func isComposeImageSeed(name string) bool { return strings.HasPrefix(name, "ic-seed-") }
+// isComposeImageSeed recognizes only the pinned incus-compose image-reader
+// containers. The name alone is not proof: an interrupted import leaves
+// a container stamped with upstream's temporary-instance marker. An
+// unmarked namesake, VM, or container with Aginctus service markers is
+// subject to the ordinary service ownership check.
+func isComposeImageSeed(instance api.InstanceFull) bool {
+	return strings.HasPrefix(instance.Name, "ic-seed-") &&
+		len(instance.Name) > len("ic-seed-") &&
+		instance.Type == string(api.InstanceTypeContainer) &&
+		instance.Config[composeclient.TempInstanceKey] == "true" &&
+		instance.Config[ownershipManagedKey] == "" &&
+		instance.Config[ownershipResourceKey] == "" &&
+		instance.Config[ownershipDeploymentKey] == ""
+}
+
+// verifyComposeInstanceInventory checks all instances found in an owned
+// deployment. A recognized transient image seed is never adopted or modified
+// here; all other instances require the full Compose service markers.
+func verifyComposeInstanceInventory(instances []api.InstanceFull, project string) error {
+	for _, instance := range instances {
+		if isComposeImageSeed(instance) {
+			continue
+		}
+		if err := verifyComposeInstanceOwnership(instance.Config, project, instance.Name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func verifyComposeDeploymentOwnership(ctx context.Context, connection *iclient.Connection, project string) error {
 	incusProject := composeclient.SanitizeProjectName(project)
@@ -328,18 +356,7 @@ func verifyComposeDeploymentOwnership(ctx context.Context, connection *iclient.C
 	if err != nil {
 		return fmt.Errorf("inspect Compose instances in project %q: %w", project, err)
 	}
-	for _, instance := range instances {
-		// The pinned incus-compose image preparer creates transient ic-seed-*
-		// instances while importing OCI images. These are not deployment
-		// services and carry no Aginctus ownership marker. Never adopt them.
-		if isComposeImageSeed(instance.Name) {
-			continue
-		}
-		if err := verifyComposeInstanceOwnership(instance.Config, project, instance.Name); err != nil {
-			return err
-		}
-	}
-	return nil
+	return verifyComposeInstanceInventory(instances, project)
 }
 
 func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
@@ -370,7 +387,7 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	// Its create-on-missing fallback accepts concurrently created projects;
 	// instead, use the Incus create-only endpoint when initially missing.
 	projectName := composeclient.SanitizeProjectName(p.Name)
-	existing, _, err := connection.GetProject(ctx, projectName)
+	_, _, err = connection.GetProject(ctx, projectName)
 	if api.StatusErrorCheck(err, http.StatusNotFound) {
 		config := api.ConfigMap{"features.profiles": "true"}
 		for key, value := range p.ClientConfig.XIncus {
@@ -385,20 +402,11 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		}
 	} else if err != nil {
 		return fmt.Errorf("inspect Compose project %q: %w", p.Name, err)
-	} else {
-		if err := verifyComposeProjectOwnership(existing.Config, p.Name); err != nil {
-			return err
-		}
-		instances, listErr := connection.GetInstances(ctx, projectName, nil)
-		if listErr != nil {
-			return fmt.Errorf("inspect Compose instances in project %q: %w", p.Name, listErr)
-		}
-		for _, instance := range instances {
-			if err := verifyComposeInstanceOwnership(instance.Config, p.Name, instance.Name); err != nil {
-				return err
-			}
-		}
 	}
+	// Verify existing or newly created project ownership and its complete
+	// instance inventory once, using the same guard as post-Ensure. This
+	// check precedes any upstream EnsureProject mutation and accepts only
+	// properly marked transient image-reader containers.
 	// Verify the persisted object before upstream Ensure can add any keys.
 	if err := verifyComposeDeploymentOwnership(ctx, connection, p.Name); err != nil {
 		return fmt.Errorf("pre-ensure Compose ownership check: %w", err)
