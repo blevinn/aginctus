@@ -8,12 +8,15 @@ import (
 
 func TestPlanEgressReconciliation(t *testing.T) {
 	for _, tc := range []struct {
-		name, dhcp, owner, host, want string
+		name, dhcp, ranges, owner, host, want string
 	}{
-		{"owned, disabled DHCP", "false", "true", "", "would set"},
-		{"unrestricted DHCP", "", "true", "", "DHCP"},
-		{"foreign instance", "false", "false", "", "ownership"},
-		{"existing conflicting address", "false", "true", "10.42.40.20/24", "conflicting"},
+		{"owned, disabled DHCP", "false", "", "true", "", "would set"},
+		{"bounded DHCP outside chosen address", "true", "10.42.40.100-10.42.40.199", "true", "", "would set"},
+		{"bounded DHCP overlaps chosen address", "true", "10.42.40.20-10.42.40.30", "true", "", "overlaps"},
+		{"malformed DHCP range", "true", "bad-pool", "true", "", "DHCP ranges"},
+		{"unrestricted DHCP", "", "", "true", "", "DHCP"},
+		{"foreign instance", "false", "", "false", "", "ownership"},
+		{"existing conflicting address", "false", "", "true", "10.42.40.20/24", "conflicting"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			spec := egressTestSpec()
@@ -21,7 +24,7 @@ func TestPlanEgressReconciliation(t *testing.T) {
 			query := func(_ context.Context, args ...string) ([]byte, error) {
 				switch args[len(args)-1] {
 				case "/1.0/networks/aginctus-egress":
-					return []byte(`{"name":"aginctus-egress","type":"bridge","managed":true,"config":{"user.aginctus.managed":"true","user.aginctus.resource":"gateway-egress-network","ipv4.address":"10.42.40.1/24","ipv4.nat":"true","ipv4.routing":"true","ipv4.dhcp":"` + tc.dhcp + `"}}`), nil
+					return []byte(`{"name":"aginctus-egress","type":"bridge","managed":true,"config":{"user.aginctus.managed":"true","user.aginctus.resource":"gateway-egress-network","ipv4.address":"10.42.40.1/24","ipv4.nat":"true","ipv4.routing":"true","ipv4.dhcp":"` + tc.dhcp + `","ipv4.dhcp.ranges":"` + tc.ranges + `"}}`), nil
 				case "/1.0/networks/aginctus-egress/leases":
 					return []byte(`[]`), nil
 				case "/1.0/projects?recursion=1":
