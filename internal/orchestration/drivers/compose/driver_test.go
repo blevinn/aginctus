@@ -528,8 +528,8 @@ func TestComposeInstanceInventoryAcceptsInterruptedImport(t *testing.T) {
 	owned := api.InstanceFull{Instance: api.Instance{
 		Name: "litellm-1", Type: string(api.InstanceTypeContainer),
 		InstancePut: api.InstancePut{Config: map[string]string{
-			ownershipManagedKey: "true",
-			ownershipResourceKey: "compose-instance",
+			ownershipManagedKey:    "true",
+			ownershipResourceKey:   "compose-instance",
 			ownershipDeploymentKey: project,
 		}},
 	}}
@@ -559,7 +559,7 @@ func TestComposeInstanceInventoryRejectsForeignSeedsAndServices(t *testing.T) {
 	}
 	seedMarker := map[string]string{composeclient.TempInstanceKey: "true"}
 	cases := []struct {
-		name string
+		name     string
 		instance api.InstanceFull
 	}{
 		{"unmarked seed prefix", makeInstance("ic-seed-abcdef", string(api.InstanceTypeContainer), nil)},
@@ -593,8 +593,8 @@ func TestComposeInstanceInventoryRejectsForeignAmongOwnedAndSeed(t *testing.T) {
 	owned := api.InstanceFull{Instance: api.Instance{
 		Name: "postgres-1", Type: string(api.InstanceTypeContainer),
 		InstancePut: api.InstancePut{Config: map[string]string{
-			ownershipManagedKey: "true",
-			ownershipResourceKey: "compose-instance",
+			ownershipManagedKey:    "true",
+			ownershipResourceKey:   "compose-instance",
 			ownershipDeploymentKey: project,
 		}},
 	}}
