@@ -213,6 +213,12 @@ func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer, inc
 		return 1
 	}
 	if address != "" {
+		if !isLoopbackHTTPSAddress(address) {
+			// Do not rewrite a pre-existing listener even with --fix: doing
+			// so can sever another operator's deliberate remote connection.
+			fmt.Fprintln(stderr, "incus HTTPS listener: unsafe or invalid (requires a numeric loopback IP and TCP port); inspect core.https_address and remediate explicitly")
+			return 1
+		}
 		fmt.Fprintf(stdout, "incus HTTPS listener: configured (%s)\n", address)
 		return 0
 	}
