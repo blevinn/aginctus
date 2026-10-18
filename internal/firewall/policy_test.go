@@ -90,3 +90,48 @@ func TestDeriveRejectsUnsafeBridgeSelectorBeforeInspection(t *testing.T) {
 		}
 	}
 }
+
+func TestIPv4FirewallRenderersRejectIPv6Subnets(t *testing.T) {
+	base := Policy{Interface: "safe-bridge", Address: "10.20.30.1", Subnet: "10.20.30.0/24"}
+	renderers := []struct {
+		name   string
+		render func(*Policy) (string, error)
+	}{
+		{"iptables", Render},
+		{"nixos-nft", RenderNixosNft},
+		{"firewalld", func(p *Policy) (string, error) {
+			rules, err := FirewalldRules(p)
+			return strings.Join(rules, "\n"), err
+		}},
+	}
+	for _, renderer := range renderers {
+		t.Run(renderer.name, func(t *testing.T) {
+			for _, tc := range []struct {
+				name    string
+				address string
+				subnet  string
+			}{
+				{"ipv6 all-range", base.Address, "::/0"},
+				{"ipv6 mapped all-range", base.Address, "::ffff:0:0/96"},
+				{"ipv6 mapped subnet", base.Address, "::ffff:10.20.30.0/120"},
+				{"ipv6 documentation prefix", base.Address, "2001:db8::/32"},
+				{"ipv6 bridge address", "2001:db8::1", base.Subnet},
+				{"outside IPv4 subnet", base.Address, "10.21.30.0/24"},
+				{"malformed subnet", base.Address, "not-a-cidr"},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					p := base
+					p.Address, p.Subnet = tc.address, tc.subnet
+					got, err := renderer.render(&p)
+					if err == nil || got != "" {
+						t.Fatalf("renderer admitted invalid IPv4 policy %+v: output=%q err=%v", p, got, err)
+					}
+				})
+			}
+			got, err := renderer.render(&base)
+			if err != nil || got == "" {
+				t.Fatalf("renderer rejected valid IPv4 policy: output=%q err=%v", got, err)
+			}
+		})
+	}
+}

@@ -2,7 +2,6 @@ package firewall
 
 import (
 	"fmt"
-	"net"
 	"regexp"
 )
 
@@ -24,10 +23,7 @@ func FirewalldRules(policy *Policy) ([]string, error) {
 	if policy == nil {
 		return nil, nil
 	}
-	ip := net.ParseIP(policy.Address)
-	_, subnet, err := net.ParseCIDR(policy.Subnet)
-	if !bridgeName.MatchString(policy.Interface) || ip == nil || ip.To4() == nil ||
-		err != nil || subnet == nil || !subnet.Contains(ip) {
+	if !validIPv4Policy(policy) {
 		return nil, fmt.Errorf("invalid firewalld bridge policy")
 	}
 	rules := make([]string, 0, 3)

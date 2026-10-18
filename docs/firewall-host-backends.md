@@ -83,7 +83,10 @@ allowances**. The privileged
    runtime exceptions before installing anything new. On failed verification,
    leave the exceptions empty (fail closed) and return a nonzero status.
 3. Verify the selected Incus network's ownership labels, isolation flags,
-   bridge interface, subnet, and configured name/address.
+   bridge interface, subnet, and configured name/address. The three renderer
+   backends reject any policy containing a non-IPv4 address or subnet,
+   including IPv6 `::/0` and IPv4-mapped IPv6 CIDRs; they never interpolate
+   these into IPv4-family accept rules.
 4. Add source/subnet-and-destination-constrained UDP/TCP DNS 53 rich rules
    and interface-scoped DHCPv4 UDP 67, then bind **only the verified bridge**
    to the dedicated zone. Unrelated interface bindings are rejected.
