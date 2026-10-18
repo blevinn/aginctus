@@ -41,15 +41,34 @@ type Driver struct {
 var _ orchestration.Driver = (*Driver)(nil)
 
 func New() *Driver {
-	return &Driver{execute: executeCompose}
+	return &Driver{execute: newExecutor(iclient.NewConnection)}
 }
 
-func NewWithEnvironment(environment map[string]string) *Driver {
+// NewWithConnectionFactory returns a Driver whose execute function uses
+// the provided Incus connection factory instead of the production
+// iclient.NewConnection. It is intended for hermetic tests that need to
+// inject a fake without contacting a live Incus daemon. The factory's
+// argument always describes the local Unix-socket connection that the
+// compose driver requires.
+func NewWithConnectionFactory(environment map[string]string, newConnection func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error)) *Driver {
 	copied := make(map[string]string, len(environment))
 	for key, value := range environment {
 		copied[key] = value
 	}
-	return &Driver{execute: executeCompose, environment: copied}
+	return &Driver{execute: newExecutor(newConnection), environment: copied}
+}
+
+func NewWithEnvironment(environment map[string]string) *Driver {
+	return NewWithConnectionFactory(environment, iclient.NewConnection)
+}
+
+// newExecutor wraps executeCompose so the connection factory can be
+// supplied by the driver constructor while the rest of the function's
+// surface stays unchanged.
+func newExecutor(newConnection func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error)) func(context.Context, Config, map[string]string) error {
+	return func(ctx context.Context, cfg Config, environment map[string]string) error {
+		return executeCompose(ctx, cfg, environment, newConnection)
+	}
 }
 
 func (d *Driver) SupportsDryRun() bool {
@@ -359,7 +378,15 @@ func verifyComposeDeploymentOwnership(ctx context.Context, connection *iclient.C
 	return verifyComposeInstanceInventory(instances, project)
 }
 
-func executeCompose(ctx context.Context, cfg Config, environment map[string]string) error {
+func executeCompose(
+	ctx context.Context,
+	cfg Config,
+	environment map[string]string,
+	newConnection func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error),
+) error {
+	if newConnection == nil {
+		newConnection = iclient.NewConnection
+	}
 	path, cleanup, err := writeCompose(cfg.Compose)
 	if err != nil {
 		return err
@@ -371,7 +398,7 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 		return fmt.Errorf("load compose project %q: %w", cfg.Project, err)
 	}
 
-	global, err := newComposeGlobalClient(ctx, iclient.NewConnection)
+	global, err := newComposeGlobalClient(ctx, newConnection)
 	if err != nil {
 		return fmt.Errorf("construct local Incus connection for Compose: %w", err)
 	}
