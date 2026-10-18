@@ -403,11 +403,9 @@ func executeCompose(ctx context.Context, cfg Config, environment map[string]stri
 	} else if err != nil {
 		return fmt.Errorf("inspect Compose project %q: %w", p.Name, err)
 	}
-	// Verify existing or newly created project ownership and its complete
-	// instance inventory once, using the same guard as post-Ensure. This
-	// check precedes any upstream EnsureProject mutation and accepts only
-	// properly marked transient image-reader containers.
-	// Verify the persisted object before upstream Ensure can add any keys.
+	// Verify the persisted project and all instances before upstream
+	// EnsureProject can mutate either. Use the same guard after EnsureProject,
+	// narrowly exempting only genuine temporary OCI image-reader containers.
 	if err := verifyComposeDeploymentOwnership(ctx, connection, p.Name); err != nil {
 		return fmt.Errorf("pre-ensure Compose ownership check: %w", err)
 	}
