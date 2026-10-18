@@ -92,10 +92,15 @@ func egressAddressPreflight(ctx context.Context, name string, run func(context.C
 		}
 		unavailable = append(unavailable, pools...)
 	}
+	assigned, err := auditEgressInstances(ctx, name, run)
+	if err != nil {
+		return "", err
+	}
+	unavailable = append(unavailable, assigned...)
 	candidate, err := selectEgressIPv4(network.Config["ipv4.address"], unavailable)
 	if err != nil {
 		return "", err
 	}
 	// Address selection does not reserve it or check static allocations.
-	return "", fmt.Errorf("candidate %s is unreserved: static assignments and allocation races not yet checked", candidate)
+	return "", fmt.Errorf("candidate %s is unreserved: address not reserved; concurrent allocations remain possible", candidate)
 }
