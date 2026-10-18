@@ -369,14 +369,20 @@ func runGateway(
 	effective *config.Config,
 ) int {
 	if len(args) == 2 && args[0] == "egress" && args[1] == "preflight" {
-  name,err := effective.String("gateway.egress.network.name")
-  if err!=nil {fmt.Fprintf(stderr,"egress configuration: %v\n",err);return 1}
-  candidate,err:=gateway.EgressAddressPreflight(ctx,name)
-  if err!=nil {fmt.Fprintf(stderr,"egress preflight blocked: %v\n",err);return 1}
-  fmt.Fprintf(stdout,"egress candidate: %s (advisory only; NOT RESERVED, do not deploy without full inventory and atomic allocation)\n",candidate)
-  return 0
- }
- if len(args) >= 2 && args[0] == "responses" && args[1] == "verify" {
+		name, err := effective.String("gateway.egress.network.name")
+		if err != nil {
+			fmt.Fprintf(stderr, "egress configuration: %v\n", err)
+			return 1
+		}
+		candidate, err := gateway.EgressAddressPreflight(ctx, name)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress preflight blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "egress candidate: %s (advisory only; NOT RESERVED, do not deploy without full inventory and atomic allocation)\n", candidate)
+		return 0
+	}
+	if len(args) >= 2 && args[0] == "responses" && args[1] == "verify" {
 		return verifyGatewayResponsesStream(args[2:], stdout, stderr)
 	}
 	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "audit" {
