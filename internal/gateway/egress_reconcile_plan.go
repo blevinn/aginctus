@@ -54,7 +54,7 @@ func PlanEgressReconciliation(ctx context.Context, spec Spec, query func(context
 	// Disabled DHCP does not invalidate old leases or prevent conflicting
 	// static addresses on other instances. A read-only proposal must refuse
 	// any such collision rather than claim the selected address is available.
-	if err := auditRequestedEgressAddress(ctx, spec.EgressNetwork, address.Addr(), query); err != nil {
+	if err := auditRequestedEgressAddress(ctx, spec.EgressNetwork, spec.Project, address.Addr(), query); err != nil {
 		return "", err
 	}
 	rawInstance, err := query(ctx, "query", "/1.0/instances/litellm-1?project="+spec.Project+"&recursion=1")
