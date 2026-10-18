@@ -214,7 +214,9 @@ func TestEgressDHCPDisabledRequiresExplicitAddressing(t *testing.T) {
 	spec.EgressDHCPDisabled = false
 	plan, err = spec.OrchestrationPlan()
 	if err != nil { t.Fatal(err) }
+	data.Documents = nil // Avoid retaining entries from the prior JSON map.
 	if err := json.Unmarshal(plan.Steps[1].Configuration,&data); err != nil { t.Fatal(err) }
+	if len(data.Documents) != 1 { t.Fatalf("unexpected network plan documents: %d", len(data.Documents)) }
 	if _, set := data.Documents[0].Config["ipv4.dhcp"]; set {
 		t.Fatalf("default should leave DHCP policy absent")
 	}
