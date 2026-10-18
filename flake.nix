@@ -355,7 +355,12 @@
             inherit self nixpkgs system;
           };
           herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
-            inherit self nixpkgs herdr system;
+            inherit
+              self
+              nixpkgs
+              herdr
+              system
+              ;
           };
         }
       );
