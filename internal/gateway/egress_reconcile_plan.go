@@ -51,6 +51,12 @@ func PlanEgressReconciliation(ctx context.Context, spec Spec, query func(context
 	if bridge.Config["ipv4.dhcp"] != "false" {
 		return "", fmt.Errorf("egress bridge DHCP must be explicitly disabled before planning static NIC assignment")
 	}
+	// Disabled DHCP does not invalidate old leases or prevent conflicting
+	// static addresses on other instances. A read-only proposal must refuse
+	// any such collision rather than claim the selected address is available.
+	if err := auditRequestedEgressAddress(ctx, spec.EgressNetwork, address.Addr(), query); err != nil {
+		return "", err
+	}
 	rawInstance, err := query(ctx, "query", "/1.0/instances/litellm-1?project="+spec.Project+"&recursion=1")
 	if err != nil {
 		return "", fmt.Errorf("inspect existing LiteLLM instance: %w", err)
