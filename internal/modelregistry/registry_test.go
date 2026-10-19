@@ -122,3 +122,36 @@ func TestRegistryRejectsCorruptedEntries(t *testing.T) {
 		t.Fatal("accepted duplicate persisted model aliases")
 	}
 }
+
+func TestRegisterOpenCodeGoModelRequiresMatchingProvider(t *testing.T) {
+	path := registeredProvider(t, "personal")
+	providersPath, err := providerregistry.DefaultPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := providerregistry.Register(providersPath, providerregistry.Provider{Type: "opencode-go", Alias: "go"}); err != nil {
+		t.Fatal(err)
+	}
+	model := Model{Name: "go-coding", Provider: "go", Source: "openai/gpt-6-luna"}
+	if changed, err := Register(path, model); err != nil || !changed {
+		t.Fatalf("register OpenCode Go model: changed=%v err=%v", changed, err)
+	}
+	if changed, err := Register(path, model); err != nil || changed {
+		t.Fatalf("idempotent OpenCode Go model: changed=%v err=%v", changed, err)
+	}
+	for _, invalid := range []Model{
+		{Name: "wrong-chatgpt", Provider: "personal", Source: "openai/gpt-6-luna"},
+		{Name: "wrong-go", Provider: "go", Source: "chatgpt/gpt-5"},
+		{Name: "unknown-go", Provider: "go", Source: "openai/gpt-4o"},
+		{Name: "bad-name", Provider: "go", Source: "openai/gpt-6-luna/../../foo"},
+		{Name: "unregistered", Provider: "missing", Source: "openai/gpt-6-luna"},
+	} {
+		if _, err := Register(path, invalid); err == nil {
+			t.Fatalf("accepted invalid provider/source: %+v", invalid)
+		}
+	}
+	got, err := Load(path)
+	if err != nil || len(got.Models) != 1 || got.Models[0] != model {
+		t.Fatalf("invalid registrations affected state: %+v %v", got, err)
+	}
+}
