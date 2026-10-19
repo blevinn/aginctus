@@ -170,3 +170,24 @@ func TestDefaultPathAcceptsAbsoluteXDGStateHome(t *testing.T) {
 		t.Fatalf("DefaultPath = %q, want %q", got, want)
 	}
 }
+
+func TestOpenCodeGoProviderIdentity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry", "providers.json")
+	provider := Provider{Type: "opencode-go", Alias: "go"}
+	if changed, err := Register(path, provider); err != nil || !changed {
+		t.Fatalf("register: changed=%v err=%v", changed, err)
+	}
+	if changed, err := Register(path, provider); err != nil || changed {
+		t.Fatalf("idempotent: changed=%v err=%v", changed, err)
+	}
+	got, err := Load(path)
+	if err != nil || len(got.Providers) != 1 || got.Providers[0] != provider {
+		t.Fatalf("load: %+v %v", got, err)
+	}
+	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "go"}); err == nil {
+		t.Fatal("accepted provider alias reused with another type")
+	}
+	if _, err := Register(path, Provider{Type: "opencode-go", Alias: "../bad"}); err == nil {
+		t.Fatal("accepted unsafe OpenCode Go provider alias")
+	}
+}

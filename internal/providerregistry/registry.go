@@ -21,6 +21,10 @@ type Registry struct {
 
 var safeAlias = regexp.MustCompile("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
+func supportedType(providerType string) bool {
+	return providerType == "chatgpt" || providerType == "opencode-go"
+}
+
 // DefaultPath holds nonsecret provider identities in the current user's state.
 func DefaultPath() (string, error) {
 	root := os.Getenv("XDG_STATE_HOME")
@@ -37,7 +41,7 @@ func DefaultPath() (string, error) {
 	return filepath.Join(root, "aginctus", "gateway", "providers.json"), nil
 }
 func Register(path string, p Provider) (bool, error) {
-	if p.Type != "chatgpt" || !safeAlias.MatchString(p.Alias) {
+	if !supportedType(p.Type) || !safeAlias.MatchString(p.Alias) {
 		return false, fmt.Errorf("invalid or unsupported provider registration")
 	}
 	if !filepath.IsAbs(path) {
@@ -140,7 +144,7 @@ func Load(path string) (Registry, error) {
 	}
 	seen := map[string]bool{}
 	for _, p := range result.Providers {
-		if p.Type != "chatgpt" || !safeAlias.MatchString(p.Alias) || seen[p.Alias] {
+		if !supportedType(p.Type) || !safeAlias.MatchString(p.Alias) || seen[p.Alias] {
 			return empty, fmt.Errorf("invalid or duplicate provider registry entry")
 		}
 		seen[p.Alias] = true
