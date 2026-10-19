@@ -116,7 +116,7 @@ func TestRenderRegisteredChatGPTModelRejectsAmbiguousCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := renderRegisteredChatGPTModel("coding"); err == nil || !strings.Contains(err.Error(), "exactly one") {
+	if _, err := renderRegisteredModel("coding"); err == nil || !strings.Contains(err.Error(), "exactly one") {
 		t.Fatalf("accepted ambiguous credential identity: %v", err)
 	}
 	// Even a single provider identity cannot be inferred as another alias.
@@ -126,13 +126,70 @@ func TestRenderRegisteredChatGPTModelRejectsAmbiguousCredentials(t *testing.T) {
 	if _, err := providerregistry.Register(providersPath, providerregistry.Provider{Type: "chatgpt", Alias: "other"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := renderRegisteredChatGPTModel("coding"); err == nil || !strings.Contains(err.Error(), "does not match") {
+	if _, err := renderRegisteredModel("coding"); err == nil || !strings.Contains(err.Error(), "does not match") {
 		t.Fatalf("accepted wrong provider identity: %v", err)
 	}
 	if err := os.Chmod(providersPath, 0644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := renderRegisteredChatGPTModel("coding"); err == nil {
+	if _, err := renderRegisteredModel("coding"); err == nil {
 		t.Fatal("accepted insecure provider registry")
+	}
+}
+
+func TestRenderOpenCodeGoAndNativeChatGPTTogether(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	cfg, err := (&config.Loader{}).Load(config.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) (int, string, string) {
+		t.Helper()
+		var out, errs bytes.Buffer
+		code := runGateway(context.Background(), args, &out, &errs, nil, cfg)
+		return code, out.String(), errs.String()
+	}
+	for _, args := range [][]string{
+		{"provider", "chatgpt", "register", "--alias=personal"},
+		{"provider", "opencode-go", "register", "--alias=go"},
+		{"model", "native", "register", "--provider=personal", "--source=chatgpt/gpt-5"},
+		{"model", "coding", "register", "--provider=go", "--source=openai/gpt-6-luna"},
+	} {
+		if code, _, errs := run(args...); code != 0 {
+			t.Fatalf("%v: code=%d err=%q", args, code, errs)
+		}
+	}
+	for _, tc := range []struct {
+		alias   string
+		model   string
+		apiBase bool
+	}{
+		{"native", "chatgpt/gpt-5", false},
+		{"coding", "openai/gpt-6-luna", true},
+	} {
+		code, output, notice := run("model", tc.alias, "render")
+		if code != 0 || !strings.Contains(notice, "remain inactive") {
+			t.Fatalf("render %q: code=%d err=%q", tc.alias, code, notice)
+		}
+		var got map[string]any
+		if err := json.Unmarshal([]byte(output), &got); err != nil {
+			t.Fatal(err)
+		}
+		params := got["litellm_params"].(map[string]any)
+		if params["model"] != tc.model {
+			t.Fatalf("wrong route: %#v", params)
+		}
+		if tc.apiBase {
+			if params["api_base"] != "https://opencode.ai/inference/go/openai/v1" || len(params) != 2 {
+				t.Fatalf("unexpected Go route: %#v", params)
+			}
+		} else if len(params) != 1 {
+			t.Fatalf("native ChatGPT gained an API base: %#v", params)
+		}
+		if got["model_info"].(map[string]any)["mode"] != "responses" ||
+			strings.Contains(strings.ToLower(output), "api_key") ||
+			strings.Contains(strings.ToLower(output), "token") {
+			t.Fatalf("unsafe or non-Responses render: %s", output)
+		}
 	}
 }
