@@ -69,6 +69,27 @@ func TestHelpOfflineInventory(t *testing.T) {
 	}
 }
 
+func TestHelpGatewayRegistrationSyntax(t *testing.T) {
+	for _, args := range [][]string{{"help"}, {"--help"}, {"help", "gateway"}, {"gateway", "--help"}, {"gateway", "-h"}, {"--configuration-file=/nonexistent", "gateway", "--help"}} {
+		var out, errOut bytes.Buffer
+		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
+			t.Fatalf("%v: code=%d stderr=%q", args, code, errOut.String())
+		}
+		for _, syntax := range []string{
+			"gateway provider chatgpt register [--alias=NAME] [--dry-run]",
+			"gateway provider opencode-go register [--alias=NAME] [--dry-run]",
+			"gateway model NAME register [--provider=ALIAS] [--source=chatgpt/MODEL|openai/MODEL] [--dry-run]",
+		} {
+			if count := strings.Count(out.String(), syntax); count != 1 {
+				t.Errorf("%v: expected one occurrence of %q, got %d", args, syntax, count)
+			}
+		}
+		if strings.Contains(out.String(), "[--source=chatgpt/MODEL]") {
+			t.Errorf("%v: stale ChatGPT-only model grammar", args)
+		}
+	}
+}
+
 func TestHelpAdvertisedAliasesDispatch(t *testing.T) {
 	stubManagementNetwork(t, func(_ context.Context, _ managementnetwork.Spec, o managementnetwork.Options) error {
 		if !o.DryRun {

@@ -515,13 +515,13 @@ func runGateway(
 	}
 
 	if len(args) == 3 && args[0] == "model" && args[2] == "render" {
-		definition, err := renderRegisteredChatGPTModel(args[1])
+		definition, err := renderRegisteredModel(args[1])
 		if err != nil {
-			fmt.Fprintf(stderr, "render registered ChatGPT model: %v\n", err)
+			fmt.Fprintf(stderr, "render registered model: %v\n", err)
 			return 1
 		}
 		fmt.Fprintln(stdout, string(definition))
-		fmt.Fprintln(stderr, "model definition rendered for review only; gateway routing and OAuth remain inactive")
+		fmt.Fprintln(stderr, "model definition rendered for review only; gateway routing and credentials remain inactive")
 		return 0
 	}
 	if len(args) > 0 && args[0] == "model" && (len(args) == 2 && args[1] == "list" || len(args) == 3 && args[2] == "show") {
@@ -598,45 +598,28 @@ func runGateway(
 				return 2
 			}
 		}
-		if !dryRun {
-			if kind == "model" {
-				if source == "" {
-					source = name
-				}
-				if provider == "" && strings.HasPrefix(source, "chatgpt/") {
-					provider = "chatgpt"
-				}
-				if _, err := gateway.ChatGPTModelRegistration(name, source); err != nil || provider == "" {
-					fmt.Fprintln(stderr, "invalid ChatGPT Responses model registration")
-					return 2
-				}
-				path, err := modelregistry.DefaultPath()
-				if err != nil {
-					fmt.Fprintln(stderr, "resolve model registry: unavailable")
-					return 1
-				}
-				changed, err := modelregistry.Register(path, modelregistry.Model{Name: name, Provider: provider, Source: source})
-				if err != nil {
-					fmt.Fprintf(stderr, "register model: %v\n", err)
-					return 1
-				}
-				if changed {
-					fmt.Fprintf(stdout, "model %q: registered locally (authorization and activation pending)\n", name)
-				} else {
-					fmt.Fprintf(stdout, "model %q: already registered (authorization and activation pending)\n", name)
-				}
-				return 0
-			}
-			if name != "chatgpt" {
-				fmt.Fprintln(stderr, "only chatgpt provider is supported")
-				return 2
-			}
+		if kind == "provider" {
 			if alias == "" {
 				alias = name
 			}
-			if _, err := gateway.ChatGPTProviderRegistration(alias); err != nil {
+			var rendered []byte
+			var err error
+			switch name {
+			case "chatgpt":
+				rendered, err = gateway.ChatGPTProviderRegistration(alias)
+			case "opencode-go":
+				rendered, err = gateway.OpenCodeGoProviderRegistration(alias)
+			default:
+				fmt.Fprintln(stderr, "unsupported provider type")
+				return 2
+			}
+			if err != nil {
 				fmt.Fprintf(stderr, "gateway provider: %v\n", err)
 				return 2
+			}
+			if dryRun {
+				fmt.Fprintln(stdout, string(rendered))
+				return 0
 			}
 			path, err := providerregistry.DefaultPath()
 			if err != nil {
@@ -655,61 +638,74 @@ func runGateway(
 			}
 			return 0
 		}
-		var rendered []byte
-		var err error
-		if kind == "provider" {
-			if name != "chatgpt" {
-				fmt.Fprintln(stderr, "only chatgpt provider is supported")
-				return 2
-			}
-			if alias == "" {
-				alias = name
-			}
-			rendered, err = gateway.ChatGPTProviderRegistration(alias)
-		} else {
-			if source == "" {
-				source = name
-			}
-			if provider == "" {
-				if strings.HasPrefix(source, "chatgpt/") {
-					provider = "chatgpt"
-				}
-			}
-			if provider == "" {
-				fmt.Fprintln(stderr, "model registration requires --provider=ALIAS (or --source=chatgpt/...)")
-				return 2
-			}
-			// Dry-run must match the commit path: a provider alias is only
-			// valid if the local provider registry contains it. The
-			// ``chatgpt`` alias is not exempt; only the registry decides.
-			path, pathErr := providerregistry.DefaultPath()
-			if pathErr != nil {
-				fmt.Fprintln(stderr, "cannot verify provider alias")
-				return 1
-			}
-			providers, loadErr := providerregistry.Load(path)
-			if loadErr != nil {
-				fmt.Fprintln(stderr, "cannot read private provider registry")
-				return 1
-			}
-			registered := false
-			for _, p := range providers.Providers {
-				if p.Type == "chatgpt" && p.Alias == provider {
-					registered = true
-					break
-				}
-			}
-			if !registered {
-				fmt.Fprintln(stderr, "model provider alias is not registered")
-				return 2
-			}
-			rendered, err = gateway.ChatGPTModelRegistration(name, source)
+
+		if source == "" {
+			source = name
 		}
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway registration preview: %v\n", err)
+		if provider == "" && strings.HasPrefix(source, "chatgpt/") {
+			provider = "chatgpt"
+		}
+		if provider == "" {
+			fmt.Fprintln(stderr, "model registration requires --provider=ALIAS (or --source=chatgpt/...)")
 			return 2
 		}
-		fmt.Fprintln(stdout, string(rendered))
+		path, err := providerregistry.DefaultPath()
+		if err != nil {
+			fmt.Fprintln(stderr, "cannot verify provider alias")
+			return 1
+		}
+		providers, err := providerregistry.Load(path)
+		if err != nil {
+			fmt.Fprintln(stderr, "cannot read private provider registry")
+			return 1
+		}
+		providerType := ""
+		for _, p := range providers.Providers {
+			if p.Alias == provider {
+				providerType = p.Type
+				break
+			}
+		}
+		if providerType == "" {
+			fmt.Fprintf(stderr, "model provider alias %q is not registered locally\n", provider)
+			if dryRun {
+				return 2
+			}
+			return 1
+		}
+		var rendered []byte
+		switch providerType {
+		case "chatgpt":
+			rendered, err = gateway.ChatGPTModelRegistration(name, source)
+		case "opencode-go":
+			rendered, err = gateway.OpenCodeGoModelRegistration(name, source)
+		default:
+			fmt.Fprintln(stderr, "unsupported model provider type")
+			return 2
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "invalid %s Responses model registration: %v\n", providerType, err)
+			return 2
+		}
+		if dryRun {
+			fmt.Fprintln(stdout, string(rendered))
+			return 0
+		}
+		modelPath, err := modelregistry.DefaultPath()
+		if err != nil {
+			fmt.Fprintln(stderr, "resolve model registry: unavailable")
+			return 1
+		}
+		changed, err := modelregistry.Register(modelPath, modelregistry.Model{Name: name, Provider: provider, Source: source})
+		if err != nil {
+			fmt.Fprintf(stderr, "register model: %v\n", err)
+			return 1
+		}
+		if changed {
+			fmt.Fprintf(stdout, "model %q: registered locally (authorization and activation pending)\n", name)
+		} else {
+			fmt.Fprintf(stdout, "model %q: already registered (authorization and activation pending)\n", name)
+		}
 		return 0
 	}
 	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
@@ -805,9 +801,10 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage audit  (read-only; no authentication)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider chatgpt register [--alias=NAME] [--dry-run]")
+	fmt.Fprintln(w, "       aginctus [global options] gateway provider opencode-go register [--alias=NAME] [--dry-run]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider list")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider ALIAS show")
-	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME register [--provider=ALIAS] [--source=chatgpt/MODEL] [--dry-run]")
+	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME register [--provider=ALIAS] [--source=chatgpt/MODEL|openai/MODEL] [--dry-run]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model list")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME show")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME render  (read-only, not activated)")

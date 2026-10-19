@@ -81,6 +81,28 @@ that the stream originated from an upstream provider.
 Herdr/OpenCode end-to-end acceptance. This registrar does not touch native
 ChatGPT OAuth, its token volume, or the other sessions' branches.
 
+## Local Aginctus CLI registration (offline)
+
+The Go CLI also supports OpenCode Go **nonsecret local provider and model
+intents**. This is separate from the LiteLLM database registration above:
+
+~~~sh
+aginctus gateway provider opencode-go register --alias=go
+aginctus gateway model go-coding register \
+  --provider=go --source=openai/gpt-6-luna
+aginctus gateway provider list
+aginctus gateway model go-coding render
+~~~
+
+The rendered definition includes the fixed OpenCode Go API base and
+`mode=responses`, but **no API key**. Add `--dry-run` to either
+`register` command to preview without changing local state. The accepted
+OpenCode Go model IDs match the guardrails in the pilot registrar. Local
+registration does not apply or synchronize the model with LiteLLM, authorize
+a Go account, install a credential, or verify network access. Only the
+separately approved Python `--apply` path changes the running LiteLLM model
+registry. No live request is part of these commands.
+
 ## OpenCode Go pilot: native Responses endpoint
 
 The operator selected **OpenCode Go** for #122 (2026-10-17), rather than a

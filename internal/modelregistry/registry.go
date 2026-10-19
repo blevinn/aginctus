@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/blevinn/aginctus/internal/filestate"
+	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/providerregistry"
 )
 
@@ -33,9 +34,14 @@ func validModel(m Model) bool {
 	if strings.HasPrefix(name, "chatgpt/") {
 		name = strings.TrimPrefix(name, "chatgpt/")
 	}
-	return safeName.MatchString(name) && safeName.MatchString(m.Provider) &&
-		strings.HasPrefix(m.Source, "chatgpt/") &&
-		safeName.MatchString(strings.TrimPrefix(m.Source, "chatgpt/"))
+	if !safeName.MatchString(name) || !safeName.MatchString(m.Provider) {
+		return false
+	}
+	if strings.HasPrefix(m.Source, "chatgpt/") {
+		return safeName.MatchString(strings.TrimPrefix(m.Source, "chatgpt/"))
+	}
+	_, err := gateway.OpenCodeGoModelRegistration(m.Name, m.Source)
+	return err == nil
 }
 
 // DefaultPath is local nonsecret control-plane state, not a LiteLLM model config.
@@ -103,8 +109,8 @@ func Load(path string) (Registry, error) {
 	return reg, nil
 }
 
-// Register persists only an alias intent. It requires a locally registered
-// ChatGPT provider but neither tests account authorization nor enables a route.
+// Register persists only an alias intent. It verifies the local provider
+// type and source, but neither authenticates an account nor enables a route.
 func Register(path string, model Model) (bool, error) {
 	if !validModel(model) || !filepath.IsAbs(path) {
 		return false, fmt.Errorf("invalid model registration")
@@ -119,13 +125,26 @@ func Register(path string, model Model) (bool, error) {
 	}
 	found := false
 	for _, p := range providers.Providers {
-		if p.Alias == model.Provider && p.Type == "chatgpt" {
-			found = true
-			break
+		if p.Alias != model.Provider {
+			continue
 		}
+		found = true
+		var previewErr error
+		switch p.Type {
+		case "chatgpt":
+			_, previewErr = gateway.ChatGPTModelRegistration(model.Name, model.Source)
+		case "opencode-go":
+			_, previewErr = gateway.OpenCodeGoModelRegistration(model.Name, model.Source)
+		default:
+			return false, fmt.Errorf("unsupported model provider type")
+		}
+		if previewErr != nil {
+			return false, fmt.Errorf("model source is incompatible with provider type %q", p.Type)
+		}
+		break
 	}
 	if !found {
-		return false, fmt.Errorf("ChatGPT provider alias %q is not registered locally", model.Provider)
+		return false, fmt.Errorf("model provider alias %q is not registered locally", model.Provider)
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {

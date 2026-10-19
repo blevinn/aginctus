@@ -1,28 +1,23 @@
 package gateway
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
 )
 
-// loadFromFile parses a JSON document into an effective config.Loader output.
-// It deliberately writes the document to a temp file and reloads it through
-// the production loader so the literal-dot path resolution exercised by
-// FromConfig matches a real NixOS-rendered /etc/aginctus/config.json.
+// Use the production file loader so literal JSON keys retain their input shape.
 func loadFromFile(t *testing.T, body string) *config.Config {
 	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
+	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatalf("write temp config: %v", err)
+		t.Fatal(err)
 	}
-	loader := &config.Loader{
-		SystemPath: filepath.Join(t.TempDir(), "missing-system.json"),
-		UserPath:   filepath.Join(t.TempDir(), "missing-user.json"),
-	}
+	loader := &config.Loader{}
 	cfg, err := loader.Load(config.Options{ConfigurationFile: path})
 	if err != nil {
 		t.Fatalf("load config: %v", err)
@@ -30,115 +25,94 @@ func loadFromFile(t *testing.T, body string) *config.Config {
 	return cfg
 }
 
-func TestFromConfigAcceptsNestedEgressDHCPObj(t *testing.T) {
-	body := `{
-	  "gateway": {
-	    "id": "local",
-	    "egress": {
-	      "ipv4": {"address": "10.42.40.25/24"},
-	      "network": {
-	        "name": "aginctus-egress",
-	        "ipv4": {
-	          "address": "10.42.40.1/24",
-	          "dhcp": {"enabled": true, "ranges": "10.42.40.100-10.42.40.199"}
-	        }
-	      }
-	    }
-	  }
-	}`
-	spec, err := FromConfig(loadFromFile(t, body))
-	if err != nil {
-		t.Fatalf("FromConfig: %v", err)
+func TestFromConfigEgressDHCP(t *testing.T) {
+	const ranges = "10.42.40.100-10.42.40.199"
+	tests := []struct {
+		name     string
+		members  string
+		disabled bool
+		ranges   string
+		wantErr  string
+	}{
+		{name: "omitted"},
+		{name: "legacy enabled", members: `,"dhcp":true`},
+		{name: "legacy disabled", members: `,"dhcp":false`, disabled: true},
+		{name: "object enabled", members: `,"dhcp":{"enabled":true}`},
+		{name: "object disabled", members: `,"dhcp":{"enabled":false}`, disabled: true},
+		{name: "restricted pool", members: `,"dhcp":{"enabled":true,"ranges":"` + ranges + `"}`, ranges: ranges},
+		{name: "empty ranges", members: `,"dhcp":{"enabled":true,"ranges":""}`},
+		{name: "disabled empty ranges", members: `,"dhcp":{"enabled":false,"ranges":""}`, disabled: true},
+		{name: "string", members: `,"dhcp":"sensitive-input"`, wantErr: "must be a boolean or an object"},
+		{name: "number", members: `,"dhcp":42`, wantErr: "must be a boolean or an object"},
+		{name: "null", members: `,"dhcp":null`, wantErr: "must be a boolean or an object"},
+		{name: "array", members: `,"dhcp":[]`, wantErr: "must be a boolean or an object"},
+		{name: "empty object", members: `,"dhcp":{}`, wantErr: "enabled must be a boolean"},
+		{name: "missing enabled", members: `,"dhcp":{"ranges":"` + ranges + `"}`, wantErr: "enabled must be a boolean"},
+		{name: "string enabled", members: `,"dhcp":{"enabled":"false"}`, wantErr: "enabled must be a boolean"},
+		{name: "number enabled", members: `,"dhcp":{"enabled":0}`, wantErr: "enabled must be a boolean"},
+		{name: "null enabled", members: `,"dhcp":{"enabled":null}`, wantErr: "enabled must be a boolean"},
+		{name: "object enabled value", members: `,"dhcp":{"enabled":{}}`, wantErr: "enabled must be a boolean"},
+		{name: "array enabled", members: `,"dhcp":{"enabled":[]}`, wantErr: "enabled must be a boolean"},
+		{name: "boolean ranges", members: `,"dhcp":{"enabled":true,"ranges":false}`, wantErr: "ranges must be a string"},
+		{name: "number ranges", members: `,"dhcp":{"enabled":true,"ranges":42}`, wantErr: "ranges must be a string"},
+		{name: "null ranges", members: `,"dhcp":{"enabled":true,"ranges":null}`, wantErr: "ranges must be a string"},
+		{name: "object ranges", members: `,"dhcp":{"enabled":true,"ranges":{}}`, wantErr: "ranges must be a string"},
+		{name: "array ranges", members: `,"dhcp":{"enabled":true,"ranges":[]}`, wantErr: "ranges must be a string"},
+		{name: "misspelled ranges", members: `,"dhcp":{"enabled":true,"range":"sensitive-input"}`, wantErr: "only enabled and ranges"},
+		{name: "unknown field", members: `,"dhcp":{"enabled":true,"sensitive-input":"sensitive-input"}`, wantErr: "only enabled and ranges"},
+		{name: "nested dotted field", members: `,"dhcp":{"enabled":true,"ranges.start":"sensitive-input"}`, wantErr: "only enabled and ranges"},
+		{name: "disabled restricted pool", members: `,"dhcp":{"enabled":false,"ranges":"` + ranges + `"}`, wantErr: "require enabled DHCP"},
+		{name: "invalid range syntax", members: `,"dhcp":{"enabled":true,"ranges":"sensitive-input"}`, wantErr: "gateway egress DHCP ranges"},
+		{name: "bool dotted collision", members: `,"dhcp":true,"dhcp.ranges":"sensitive-input"`, wantErr: "literal dotted"},
+		{name: "disabled dotted collision", members: `,"dhcp":false,"dhcp.ranges":"sensitive-input"`, wantErr: "literal dotted"},
+		{name: "object dotted collision", members: `,"dhcp":{"enabled":true},"dhcp.ranges":"sensitive-input"`, wantErr: "literal dotted"},
+		{name: "dotted without dhcp", members: `,"dhcp.ranges":"sensitive-input"`, wantErr: "literal dotted"},
+		{name: "dotted enabled", members: `,"dhcp.enabled":false`, wantErr: "literal dotted"},
+		{name: "dotted typo", members: `,"dhcp.range":"sensitive-input"`, wantErr: "literal dotted"},
+		{name: "unrelated dotted key", members: `,"other.setting":"unchanged"`},
 	}
-	if spec.EgressDHCPDisabled {
-		t.Fatalf("EgressDHCPDisabled = true, want false (nested object explicit enabled=true)")
-	}
-	if spec.EgressDHCPRanges != "10.42.40.100-10.42.40.199" {
-		t.Fatalf("EgressDHCPRanges = %q, want 10.42.40.100-10.42.40.199", spec.EgressDHCPRanges)
-	}
-	if spec.EgressBridgeIPv4CIDR != "10.42.40.1/24" {
-		t.Fatalf("EgressBridgeIPv4CIDR = %q, want 10.42.40.1/24", spec.EgressBridgeIPv4CIDR)
-	}
-	if spec.EgressIPv4Address != "10.42.40.25/24" {
-		t.Fatalf("EgressIPv4Address = %q, want 10.42.40.25/24", spec.EgressIPv4Address)
-	}
-}
-
-func TestFromConfigAcceptsLegacyFlatEgressDHCPBool(t *testing.T) {
-	body := `{
-	  "gateway": {
-	    "id": "local",
-	    "egress": {
-	      "ipv4": {"address": "10.42.40.25/24"},
-	      "network": {
-	        "name": "aginctus-egress",
-	        "ipv4": {
-	          "address": "10.42.40.1/24",
-	          "dhcp": true
-	        }
-	      }
-	    }
-	  }
-	}`
-	spec, err := FromConfig(loadFromFile(t, body))
-	if err != nil {
-		t.Fatalf("FromConfig: %v", err)
-	}
-	if spec.EgressDHCPDisabled {
-		t.Fatalf("EgressDHCPDisabled = true, want false (legacy flat dhcp=true)")
-	}
-	if spec.EgressDHCPRanges != "" {
-		t.Fatalf("EgressDHCPRanges = %q, want empty (legacy flat dhcp=true)", spec.EgressDHCPRanges)
-	}
-}
-
-func TestFromConfigRejectsLiteralDotSiblingUnderBoolDHCP(t *testing.T) {
-	// The dot-splitting loader cannot index a literal-dot key once its parent
-	// resolves to a non-map value. The user-facing JSON shape
-	// { "dhcp": true, "dhcp.ranges": "..." } survives the JSON encoder but
-	// never reaches FromConfig ranges; the spec therefore remains consistent
-	// and the orchestration plan omits ipv4.dhcp.ranges, not because the
-	// bridge is unrestricted but because the path is unresolvable.
-	body := `{
-	  "gateway": {
-	    "id": "local",
-	    "egress": {
-	      "ipv4": {"address": "10.42.40.25/24"},
-	      "network": {
-	        "name": "aginctus-egress",
-	        "ipv4": {
-	          "address": "10.42.40.1/24",
-	          "dhcp": true,
-	          "dhcp.ranges": "10.42.40.100-10.42.40.199"
-	        }
-	      }
-	    }
-	  }
-	}`
-	spec, err := FromConfig(loadFromFile(t, body))
-	if err != nil {
-		t.Fatalf("FromConfig: %v", err)
-	}
-	if spec.EgressDHCPDisabled {
-		t.Fatalf("EgressDHCPDisabled = true, want false")
-	}
-	if spec.EgressDHCPRanges != "" {
-		t.Fatalf("EgressDHCPRanges = %q, want empty (literal-dot sibling cannot be resolved by the dot-splitting loader)", spec.EgressDHCPRanges)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"gateway":{"egress":{
+				"ipv4":{"address":"10.42.40.25/24"},
+				"network":{"ipv4":{"address":"10.42.40.1/24"%s}}
+			}}}`, tt.members)
+			spec, err := FromConfig(loadFromFile(t, body))
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("FromConfig error = %v, want %q", err, tt.wantErr)
+				}
+				if strings.Contains(err.Error(), "sensitive-input") {
+					t.Fatalf("error discloses input: %v", err)
+				}
+				if spec != (Spec{}) {
+					t.Fatalf("invalid policy returned a usable spec: %+v", spec)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if spec.EgressDHCPDisabled != tt.disabled || spec.EgressDHCPRanges != tt.ranges {
+				t.Fatalf("DHCP disabled/ranges = %v/%q, want %v/%q", spec.EgressDHCPDisabled, spec.EgressDHCPRanges, tt.disabled, tt.ranges)
+			}
+		})
 	}
 }
 
-func TestFromConfigRejectsUnsupportedEgressDHCPType(t *testing.T) {
-	body := `{
-	  "gateway": {
-	    "id": "local",
-	    "egress": {
-	      "network": {
-	        "ipv4": {"dhcp": 42}
-	      }
-	    }
-	  }
-	}`
-	if _, err := FromConfig(loadFromFile(t, body)); err == nil {
-		t.Fatal("FromConfig accepted unsupported ipv4.dhcp type")
+func TestFromConfigRejectsDottedEgressDHCPAncestors(t *testing.T) {
+	for _, body := range []string{
+		`{"gateway.egress.network.ipv4.dhcp":false}`,
+		`{"gateway.egress":{"network":{"ipv4":{"dhcp":false}}}}`,
+		`{"gateway":{"egress.network.ipv4.dhcp.ranges":"sensitive-input"}}`,
+		`{"gateway":{"egress":{"network.ipv4":{"dhcp":false}}}}`,
+		`{"gateway":{"egress":{"network":{"ipv4.dhcp":false}}}}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			_, err := FromConfig(loadFromFile(t, body))
+			if err == nil || !strings.Contains(err.Error(), "literal dotted") {
+				t.Fatalf("FromConfig error = %v, want literal dotted key rejection", err)
+			}
+		})
 	}
 }
