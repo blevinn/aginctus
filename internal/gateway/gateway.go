@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"syscall"
 	"text/template"
 
@@ -70,21 +71,30 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		spec.EgressBridgeIPv4CIDR = cidr
 	}
 
-	// gateway.egress.network.ipv4.dhcp accepts either a boolean (legacy flat
-	// shape) or an object { enabled = bool, ranges = string }. The dot-splitting
-	// configuration loader cannot resolve a literal-dot sibling such as
-	// { "dhcp": true, "dhcp.ranges": "..." } because indexing into a bool is
-	// undefined; the nested object shape removes that collision and lets the
-	// ranges live under dhcp.ranges where the loader can find them.
+	if err := rejectDottedEgressDHCPInput(effective); err != nil {
+		return Spec{}, err
+	}
+	// The input contract is documented in docs/configuration.md.
 	if raw, ok := effective.Get("gateway.egress.network.ipv4.dhcp"); ok {
 		switch value := raw.(type) {
 		case bool:
 			spec.EgressDHCPDisabled = !value
 		case map[string]any:
-			if enabled, ok := value["enabled"].(bool); ok {
-				spec.EgressDHCPDisabled = !enabled
+			for key := range value {
+				if key != "enabled" && key != "ranges" {
+					return Spec{}, fmt.Errorf("gateway egress IPv4 DHCP object accepts only enabled and ranges")
+				}
 			}
-			if ranges, ok := value["ranges"].(string); ok && ranges != "" {
+			enabled, ok := value["enabled"].(bool)
+			if !ok {
+				return Spec{}, fmt.Errorf("gateway egress IPv4 DHCP enabled must be a boolean")
+			}
+			spec.EgressDHCPDisabled = !enabled
+			if rawRanges, present := value["ranges"]; present {
+				ranges, ok := rawRanges.(string)
+				if !ok {
+					return Spec{}, fmt.Errorf("gateway egress IPv4 DHCP ranges must be a string")
+				}
 				spec.EgressDHCPRanges = ranges
 			}
 		default:
@@ -114,6 +124,24 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		return Spec{}, err
 	}
 	return spec, nil
+}
+
+// Inspect literal keys along this input path because Config.Get splits dots.
+// Keep this local to DHCP input; Incus resource keys intentionally contain dots.
+func rejectDottedEgressDHCPInput(effective *config.Config) error {
+	parts := strings.Split("gateway.egress.network.ipv4.dhcp", ".")
+	object := effective.Values()
+	for i, part := range parts {
+		remaining := strings.Join(parts[i:], ".")
+		for key := range object {
+			if strings.Contains(key, ".") && (key == remaining ||
+				strings.HasPrefix(key, remaining+".") || strings.HasPrefix(remaining, key+".")) {
+				return fmt.Errorf("gateway egress IPv4 DHCP input cannot use literal dotted keys; use nested objects with enabled and optional ranges")
+			}
+		}
+		object, _ = object[part].(map[string]any)
+	}
+	return nil
 }
 
 var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
