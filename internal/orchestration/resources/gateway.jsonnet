@@ -74,7 +74,11 @@ ag.orchestration(cfg.id,
         egress: {
           external: true,
           name: cfg.egressNetwork,
-        },
+        } + (if cfg.egressBridgeIPv4CIDR == '' then {} else {
+          'x-incus': {
+            'ipv4.address': cfg.egressBridgeIPv4CIDR,
+          },
+        }),
       }),
     },
   }),
