@@ -58,11 +58,11 @@ generally discoverable should be linked from this index.
   scoped virtual-key lifecycle for pilot inference.
 - [Gateway inference smoke](gateway-inference-smoke.md) —
   read-only inference smoke for the gateway path.
-- [Native Incus reconciliation](native-incus-reconciliation.md) —
-  v0.4 migration plan away from Apply/Compose.
 
-## Firewall and host policy
+## Security and host policy
 
+- [Security controls and limitations](security.md) — implemented boundaries,
+  hermetic/VM validation scope, and outstanding live pilot acceptance.
 - [Firewall host backends](firewall-host-backends.md) — iptables,
   nftables, and firewalld integration surfaces.
 - [Firewall pilot validation](firewall-pilot-validation.md) —
