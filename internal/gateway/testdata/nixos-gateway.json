@@ -1,0 +1,30 @@
+{
+  "defaults": {
+    "firewall": {"zone": "aginctus-dns"},
+    "gateway": {"compose": {"project": "aginctus-gateway"}, "id": "local", "images": {"litellm": "ghcr.io/berriai/litellm:v1.103.0", "postgres": "docker.io/library/postgres:17-alpine"}},
+    "incus": {"management": {"network": {"name": "aginctus-mgmt", "ipv4": {"address": "auto", "nat": false, "routing": false}, "ipv6": {"address": "none"}}}},
+    "infrastructure": {"herdr": {"name": "aginctus-herdr", "image": {"alias": "aginctus-herdr-client"}, "storage": {"pool": "default"}}},
+    "workloads": {"dev": {"image": {"alias": "aginctus-opencode-workload"}, "instance": {"name": "aginctus-dev"}, "isolation": "container", "runtime": {"type": "opencode"}, "storage": {"pool": "default"}}}
+  },
+  "disabled": {
+    "firewall": {"zone": "aginctus-dns"},
+    "gateway": {"compose": {"project": "aginctus-gateway"}, "id": "local", "images": {"litellm": "ghcr.io/berriai/litellm:v1.103.0", "postgres": "docker.io/library/postgres:17-alpine"}, "egress": {"network": {"name": ""}}},
+    "incus": {"management": {"network": {"name": "aginctus-mgmt", "ipv4": {"address": "auto", "nat": false, "routing": false}, "ipv6": {"address": "none"}}}},
+    "infrastructure": {"herdr": {"name": "aginctus-herdr", "image": {"alias": "aginctus-herdr-client"}, "storage": {"pool": "default"}}},
+    "workloads": {"dev": {"image": {"alias": "aginctus-opencode-workload"}, "instance": {"name": "aginctus-dev"}, "isolation": "container", "runtime": {"type": "opencode"}, "storage": {"pool": "default"}}}
+  },
+  "ranges": {
+    "firewall": {"zone": "aginctus-dns"},
+    "gateway": {"compose": {"project": "aginctus-gateway"}, "id": "local", "images": {"litellm": "ghcr.io/berriai/litellm:v1.103.0", "postgres": "docker.io/library/postgres:17-alpine"}, "egress": {"network": {"ipv4": {"address": "10.42.40.1/24", "dhcp": {"enabled": true, "ranges": "10.42.40.100-10.42.40.199"}}}, "ipv4": {"address": "10.42.40.25/24"}}},
+    "incus": {"management": {"network": {"name": "aginctus-mgmt", "ipv4": {"address": "10.42.0.1/24", "nat": false, "routing": false}, "ipv6": {"address": "none"}}}},
+    "infrastructure": {"herdr": {"name": "aginctus-herdr", "image": {"alias": "aginctus-herdr-client"}, "storage": {"pool": "default"}}},
+    "workloads": {"dev": {"image": {"alias": "aginctus-opencode-workload"}, "instance": {"name": "aginctus-dev"}, "isolation": "container", "runtime": {"type": "opencode"}, "storage": {"pool": "default"}}}
+  },
+  "static": {
+    "firewall": {"zone": "aginctus-dns"},
+    "gateway": {"compose": {"project": "aginctus-gateway"}, "id": "local", "images": {"litellm": "ghcr.io/berriai/litellm:v1.103.0", "postgres": "docker.io/library/postgres:17-alpine"}, "egress": {"network": {"ipv4": {"address": "10.42.40.1/24", "dhcp": {"enabled": false}}}, "ipv4": {"address": "10.42.40.25/24"}}},
+    "incus": {"management": {"network": {"name": "aginctus-mgmt", "ipv4": {"address": "10.42.0.1/24", "nat": false, "routing": false}, "ipv6": {"address": "none"}}}},
+    "infrastructure": {"herdr": {"name": "aginctus-herdr", "image": {"alias": "aginctus-herdr-client"}, "storage": {"pool": "default"}}},
+    "workloads": {"dev": {"image": {"alias": "aginctus-opencode-workload"}, "instance": {"name": "aginctus-dev"}, "isolation": "container", "runtime": {"type": "opencode"}, "storage": {"pool": "default"}}}
+  }
+}
