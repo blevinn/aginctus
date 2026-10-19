@@ -121,6 +121,53 @@ For example, a system file may define:
 
 and a user file may override only the name without repeating the rest of the object.
 
+## Gateway egress DHCP input
+
+`gateway.egress.network.ipv4.dhcp` is optional. Omitting it preserves the
+default enabled DHCP behavior without an explicit pool restriction. When set,
+it accepts either a legacy boolean (`true` enables DHCP, `false` disables it)
+or a nested object with a required boolean `enabled` and optional string
+`ranges`. No other object members are accepted. Missing or mistyped `enabled`,
+non-string `ranges` (including `null`), and unknown members are errors before
+an orchestration plan is returned.
+
+For example, this JSON restricts the egress bridge's DHCP pool:
+
+```json
+{
+  "gateway": {
+    "egress": {
+      "ipv4": { "address": "10.42.40.25/24" },
+      "network": {
+        "ipv4": {
+          "address": "10.42.40.1/24",
+          "dhcp": {
+            "enabled": true,
+            "ranges": "10.42.40.100-10.42.40.199"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Omitted or empty `ranges` means no explicit pool restriction. Nonempty ranges
+require enabled DHCP, explicit bridge and LiteLLM IPv4 CIDRs, and a valid pool
+that excludes the bridge, subnet and LiteLLM static addresses.
+Disabled DHCP requires both explicit CIDRs; it cannot be combined with a
+nonempty range.
+
+JSON keys along the DHCP input path must be nested: literal dotted keys such
+as `"dhcp.ranges"` beside `"dhcp"`, or `"ipv4.dhcp"`, are rejected even without
+a colliding nested value. Dotted CLI override paths and environment mappings
+still construct nested objects; set `dhcp.enabled` explicitly when setting
+`dhcp.ranges`. Nix attribute paths without quotes likewise produce nested JSON.
+This restriction is local to Aginctus DHCP input, not a global config-key rule.
+Rendered Incus resource keys remain literal `ipv4.dhcp` (set to `"false"` when
+disabled, otherwise omitted to retain Incus's enabled default) and
+`ipv4.dhcp.ranges` (the exact nonempty pool string).
+
 ## Inspecting effective configuration
 
 Print the complete merged configuration:
