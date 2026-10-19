@@ -228,7 +228,9 @@ networks:
 {{if .EgressNetwork}}  egress:
     external: true
     name: {{.EgressNetwork}}
-{{end}}`))
+{{if .EgressBridgeIPv4CIDR}}    x-incus:
+      ipv4.address: {{.EgressBridgeIPv4CIDR}}
+{{end}}{{end}}`))
 
 func (s Spec) RenderCompose() (string, error) {
 	if err := s.Validate(); err != nil {

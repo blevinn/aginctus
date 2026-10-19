@@ -153,6 +153,44 @@ func TestExplicitEgressBridgeCIDRInPlan(t *testing.T) {
 	if len(networkStep.Documents) != 1 || networkStep.Documents[0].Config["ipv4.address"] != "10.42.40.1/24" {
 		t.Fatalf("unexpected egress bridge IPv4 address in network plan")
 	}
+	var composeStep struct {
+		Compose struct {
+			Networks map[string]struct {
+				External bool              `json:"external"`
+				Name     string            `json:"name"`
+				XIncus   map[string]string `json:"x-incus"`
+			} `json:"networks"`
+		} `json:"compose"`
+	}
+	if err := json.Unmarshal(plan.Steps[2].Configuration, &composeStep); err != nil {
+		t.Fatal(err)
+	}
+	egressNetwork := composeStep.Compose.Networks["egress"]
+	if !egressNetwork.External || egressNetwork.Name != spec.EgressNetwork ||
+		egressNetwork.XIncus["ipv4.address"] != spec.EgressBridgeIPv4CIDR {
+		t.Fatalf("external egress Compose network missing explicit bridge CIDR: %+v", egressNetwork)
+	}
+	rendered, err := spec.RenderCompose()
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalized, err := yaml.YAMLToJSON([]byte(rendered))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var renderModel map[string]any
+	if err := json.Unmarshal(normalized, &renderModel); err != nil {
+		t.Fatal(err)
+	}
+	var deployment struct {
+		Compose map[string]any `json:"compose"`
+	}
+	if err := json.Unmarshal(plan.Steps[2].Configuration, &deployment); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(renderModel, deployment.Compose) {
+		t.Fatal("gateway render diverges from deployed Compose model")
+	}
 	for _, tc := range []struct {
 		bridge string
 		host   string
