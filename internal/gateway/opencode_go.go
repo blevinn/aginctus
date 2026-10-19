@@ -10,12 +10,14 @@ import (
 // Other OpenCode Go models may use protocols outside Responses.
 const openCodeGoResponsesBase = "https://opencode.ai/inference/go/openai/v1"
 
-var openCodeGoResponsesModels = map[string]bool{
-	"grok-4.7": true,
-	"gpt-6-luna": true,
-	"gpt-5.6-luna": true,
-	"muse-spark-1.3-contributor": true,
-	"muse-spark-1.2-contributor": true,
+func supportedOpenCodeGoResponsesModel(model string) bool {
+	switch model {
+	case "grok-4.7", "gpt-6-luna", "gpt-5.6-luna",
+		"muse-spark-1.3-contributor", "muse-spark-1.2-contributor":
+		return true
+	default:
+		return false
+	}
 }
 
 // OpenCodeGoModelRegistration previews a nonsecret LiteLLM Responses route.
@@ -25,7 +27,7 @@ func OpenCodeGoModelRegistration(name, source string) ([]byte, error) {
 		return nil, fmt.Errorf("invalid model name")
 	}
 	if !strings.HasPrefix(source, "openai/") ||
-		!openCodeGoResponsesModels[strings.TrimPrefix(source, "openai/")] {
+		!supportedOpenCodeGoResponsesModel(strings.TrimPrefix(source, "openai/")) {
 		return nil, fmt.Errorf("unsupported OpenCode Go native Responses model")
 	}
 	registration := struct {

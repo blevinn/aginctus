@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"io"
 	"strings"
 	"testing"
 
@@ -170,5 +171,16 @@ func TestOpenCodeGoRegistrationOffline(t *testing.T) {
 	}
 	if code, out, _ := run("model", "coding", "show"); code != 0 || !strings.Contains(out, "openai/gpt-6-luna") {
 		t.Fatalf("model show: %d %q", code, out)
+	}
+}
+
+func TestOpenCodeGoHelpIsDiscoverable(t *testing.T) {
+	for _, usage := range []func(io.Writer){printGatewayUsage, printUsage} {
+		var out bytes.Buffer
+		usage(&out)
+		if !strings.Contains(out.String(), "gateway provider opencode-go register") ||
+			!strings.Contains(out.String(), "--source=chatgpt/MODEL|openai/MODEL") {
+			t.Fatalf("missing OpenCode Go CLI usage: %s", out.String())
+		}
 	}
 }
