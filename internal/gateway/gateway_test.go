@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/blevinn/aginctus/internal/orchestration"
 )
 
 func TestRenderCompose(t *testing.T) {
@@ -215,6 +217,14 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 		NetworkIPv4Address: "10.42.0.1/24", NetworkIPv6Address: "none",
 		LiteLLMImage: "example/litellm:custom", PostgresImage: "example/postgres:custom",
 	}
+	plan, _ := assertRenderedGatewayComposeMatchesDeploymentModel(t, spec)
+	if len(plan.Steps) != 2 {
+		t.Fatalf("plan steps = %d, want 2", len(plan.Steps))
+	}
+}
+
+func assertRenderedGatewayComposeMatchesDeploymentModel(t *testing.T, spec Spec) (orchestration.Plan, map[string]any) {
+	t.Helper()
 	rendered, err := spec.RenderCompose()
 	if err != nil {
 		t.Fatal(err)
@@ -232,13 +242,13 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan.Steps) != 2 {
-		t.Fatalf("plan steps = %d", len(plan.Steps))
+	if len(plan.Steps) == 0 || plan.Steps[len(plan.Steps)-1].Driver != "compose" {
+		t.Fatalf("plan must end with Compose: %#v", plan.Steps)
 	}
 	var config struct {
 		Compose map[string]any `json:"compose"`
 	}
-	if err := json.Unmarshal(plan.Steps[1].Configuration, &config); err != nil {
+	if err := json.Unmarshal(plan.Steps[len(plan.Steps)-1].Configuration, &config); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(renderModel, config.Compose) {
@@ -246,6 +256,7 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 		deployJSON, _ := json.MarshalIndent(config.Compose, "", "  ")
 		t.Fatalf("render and deploy Compose models differ:\\nrender=%s\\ndeploy=%s", renderJSON, deployJSON)
 	}
+	return plan, config.Compose
 }
 
 func TestInitializeRuntimeEnvironmentConcurrentFirstUse(t *testing.T) {
