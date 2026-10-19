@@ -85,10 +85,24 @@ let
       workloads = [ "dev" ];
     };
   };
+  withReconcileGateway = evaluate {
+    services.aginctus.reconcile = {
+      enable = true;
+      gateway = true;
+      workloads = [ "dev" ];
+    };
+  };
+  withReconcileGatewayNoEnable = evaluate {
+    services.aginctus.reconcile = {
+      enable = false;
+      gateway = true;
+    };
+  };
 
   settings = base.services.aginctus.settings;
   imageUnit = base.systemd.services.aginctus-image-herdr-client;
   reconcile = withReconcile.systemd.services.aginctus-reconcile;
+  reconcileGateway = withReconcileGateway.systemd.services.aginctus-reconcile;
   noImagesReconcile = withoutImages.systemd.services.aginctus-reconcile;
 
   # NixOS may report other failed assertions for this deliberately minimal
@@ -142,6 +156,14 @@ assert builtins.elem "nftables.service"
 
 assert lib.hasInfix "aginctus-firewall-reconcile.service"
   withReconcile.systemd.services.aginctus-reconcile.script;
+# reconcile.gateway inserts the gateway apply between firewall and Herdr steps.
+assert lib.hasInfix "gateway apply" reconcileGateway.script;
+assert lib.hasInfix "herdr client ensure" reconcileGateway.script;
+assert !(lib.hasInfix "gateway apply" reconcile.script);
+# reconcile.gateway without reconcile.enable is rejected.
+assert builtins.length (failedAginctusAssertions withReconcileGatewayNoEnable) == 1;
+assert lib.hasInfix "reconcile.gateway requires"
+  (builtins.head (failedAginctusAssertions withReconcileGatewayNoEnable)).message;
 assert builtins.length secretAssertions == 1;
 assert lib.hasInfix "gateway.postgres.password" (builtins.head secretAssertions).message;
 assert lib.hasInfix "gateway.master.key" (builtins.head secretAssertions).message;
