@@ -170,6 +170,27 @@ func TestExplicitEgressBridgeCIDRInPlan(t *testing.T) {
 		egressNetwork.XIncus["ipv4.address"] != spec.EgressBridgeIPv4CIDR {
 		t.Fatalf("external egress Compose network missing explicit bridge CIDR: %+v", egressNetwork)
 	}
+	rendered, err := spec.RenderCompose()
+	if err != nil {
+		t.Fatal(err)
+	}
+	normalized, err := yaml.YAMLToJSON([]byte(rendered))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var renderModel map[string]any
+	if err := json.Unmarshal(normalized, &renderModel); err != nil {
+		t.Fatal(err)
+	}
+	var deployment struct {
+		Compose map[string]any `json:"compose"`
+	}
+	if err := json.Unmarshal(plan.Steps[2].Configuration, &deployment); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(renderModel, deployment.Compose) {
+		t.Fatal("gateway render diverges from deployed Compose model")
+	}
 	for _, tc := range []struct {
 		bridge string
 		host   string
