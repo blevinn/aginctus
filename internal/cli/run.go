@@ -61,13 +61,8 @@ func Run(
 		printUsage(stdout)
 		return 0
 	}
-	if args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		printUsage(stdout)
-		return 0
-	}
-	if args[0] == "version" || args[0] == "--version" {
-		fmt.Fprintf(stdout, "aginctus %s\n", Version)
-		return 0
+	if code, handled := runHelp(args, stdout, stderr); handled {
+		return code
 	}
 
 	options, commandArgs, err := parseGlobalOptions(args)
@@ -77,6 +72,13 @@ func Run(
 	}
 	if len(commandArgs) == 0 {
 		printUsage(stdout)
+		return 0
+	}
+	if code, handled := runHelp(commandArgs, stdout, stderr); handled {
+		return code
+	}
+	if len(commandArgs) == 1 && (commandArgs[0] == "version" || commandArgs[0] == "--version") {
+		fmt.Fprintf(stdout, "aginctus %s (revision %s)\n", Version, buildRevision())
 		return 0
 	}
 
@@ -124,6 +126,8 @@ func parseGlobalOptions(args []string) (config.Options, []string, error) {
 		}
 
 		switch {
+		case arg == "--help" || arg == "--version":
+			return options, args, nil
 		case strings.HasPrefix(arg, "--config="):
 			value := strings.TrimPrefix(arg, "--config=")
 			if value == "" {
@@ -361,6 +365,8 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network status")
 	fmt.Fprintln(w, "       aginctus [global options] network firewall policy")
 	fmt.Fprintln(w, "       aginctus [global options] network firewall reconcile  # privileged mutation")
+	fmt.Fprintln(w, "Aliases: network ensure = apply; network teardown = remove")
+	fmt.Fprintln(w, "Status/policy are read-only; apply/remove/reconcile mutate unless --dry-run is explicitly supported above.")
 }
 
 var ensureCredentialStorage = gateway.EnsureCredentialVolume
@@ -806,6 +812,15 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME show")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME render  (read-only, not activated)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway responses verify [--require-function-call] < stream.sse")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress preflight  (read-only; candidate is not reserved)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress audit  (read-only NIC declarations; not connectivity)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress dhcp plan --ranges=START-END  (read-only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress dhcp apply --ranges=START-END --confirm-bridge-only  (mutates bridge only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress reconcile --dry-run  (read-only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress reconcile --confirm-stopped-instance  (mutates NICs; leaves instance stopped)")
+	fmt.Fprintln(w, "Alias: gateway up = apply. No gateway apply --dry-run; use validate/render for offline review.")
+	fmt.Fprintln(w, "Validate/render/list/show/verify/audit and plans are read-only; apply/remove/ensure/attach/register mutate unless previewed with --dry-run.")
+	fmt.Fprintln(w, "Registration writes local metadata only; it does not authenticate or activate inference. Remove retains persistent volumes.")
 }
 
 func runHerdr(
@@ -908,7 +923,8 @@ func runHerdr(
 }
 
 func printHerdrClientUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] herdr authorize <workload-id>")
+	fmt.Fprintln(w, "Usage: aginctus [global options] herdr  (interactive console)")
+	fmt.Fprintln(w, "       aginctus [global options] herdr authorize <workload-id>")
 	fmt.Fprintln(w, "       aginctus [global options] herdr pin-host <workload-id>")
 	fmt.Fprintln(w, "       aginctus [global options] herdr register <workload-id>")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client apply [--dry-run] [--force]")
@@ -916,6 +932,8 @@ func printHerdrClientUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] herdr client status")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client start")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client stop")
+	fmt.Fprintln(w, "Aliases: herdr client ensure = apply; herdr client teardown = remove")
+	fmt.Fprintln(w, "Status is read-only; bootstrap/lifecycle operations mutate unless --dry-run is explicitly supported above.")
 }
 
 func runWorkload(
@@ -1053,10 +1071,13 @@ func printWorkloadUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] workload start [name]")
 	fmt.Fprintln(w, "       aginctus [global options] workload stop [name]")
 	fmt.Fprintln(w, "       aginctus [global options] workload status [name]")
+	fmt.Fprintln(w, "       aginctus [global options] workload gateway provision <workload-id> --model=ALIAS --key-file=PATH  (mutates guest configuration)")
+	fmt.Fprintln(w, "Aliases: workload list = ls; workload <name> ensure|teardown = apply|remove <name>")
+	fmt.Fprintln(w, "List/status are read-only; apply/remove/start/stop/provision mutate unless --dry-run is explicitly supported above.")
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, `Usage: aginctus [global options] <command>
+	fmt.Fprint(w, `Usage: aginctus [global options] <command>
 
 Global options:
   --config=path=value          Override one configuration value; may be repeated
@@ -1064,53 +1085,26 @@ Global options:
   --configuration-file=path    Load an explicit JSON configuration file
 
 Commands:
-  remove            Remove configured resources in reverse dependency order
-  status            Inspect all configured resource groups
-  apply             Deploy the complete configured orchestration
-  apply --render    Print one deterministic JSON orchestration plan (no mutation)
-  apply --from FILE Deploy a validated JSON orchestration plan
-  images list|ls    List local Incus images and aliases
-  images update NAME PATH   Safely import an image from a Nix result directory
+  remove            Remove configured resources in reverse dependency order (mutation)
+  status            Inspect all configured resource groups (read-only)
+  doctor [--fix]    Inspect Incus; --fix may configure a loopback HTTPS listener
+  images list|ls    List local Incus images and aliases (read-only)
+  images update NAME PATH   Import an image from a Nix result directory (mutation)
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
-  doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
-  gateway validate  Validate the AI gateway deployment configuration
-  gateway up       Alias for gateway apply
-  gateway apply    Reconcile the AI gateway
-  gateway egress preflight  Read-only owned egress network / DHCP safety check
-  gateway egress audit      Read-only LiteLLM NIC configuration audit
-  gateway egress dhcp plan --ranges=START-END  Inspect safe DHCP pool migration
-  gateway egress dhcp apply --ranges=START-END --confirm-bridge-only  Guarded bridge DHCP update
-  gateway egress reconcile --dry-run  Plan owned LiteLLM NIC repair without mutation
-  gateway status    Inspect gateway project and service state
-  gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
-  gateway remove [--force] Remove gateway instances, preserving data volumes
-  gateway render    Render the AI gateway Compose model
-  gateway provider chatgpt register [--alias=NAME] [--dry-run]  Register a provider alias
-  gateway provider list              List registered provider aliases
-  gateway provider ALIAS show        Show one registered provider alias
-  gateway model NAME register [--provider=ALIAS] [--source=chatgpt/MODEL] [--dry-run]  Register a model alias
-  gateway model list                 List registered model aliases
-  gateway model NAME show            Show one registered model alias
-  gateway model NAME render          Render the stored LiteLLM Responses model definition (read-only)
-  gateway credential-storage ensure   Create/verify dedicated unmounted gateway credential volume
-  gateway credential-storage attach   Attach the credential volume to LiteLLM
-  gateway credential-storage audit    Read-only credential attachment audit
-  herdr                  Launch interactive Herdr in its client container
-  herdr client apply     Create, reconcile, and bootstrap the Herdr client
-  herdr client remove    Delete the Herdr client container
-  herdr client status    Inspect the Herdr client instance
-  herdr client start     Start the Herdr client
-  herdr client stop      Stop the Herdr client
-  network apply          Create or reconcile the configured management network
-  network remove         Delete the configured management network
-  network status         Inspect the configured management network
-  workload ls            List active managed workloads
-  workload apply [NAME]  Reconcile one workload, or all configured workloads
-  workload remove [NAME] Stop and remove one workload, or all configured workloads
-  workload start [NAME]  Start one or all configured workloads
-  workload stop [NAME]   Stop one or all configured workloads
-  workload status [NAME] Inspect one or all configured workloads
-  version           Print the Aginctus CLI version
-  help              Show this help`)
+  version|--version Print the CLI version and source revision
+  help [command]    Show help without loading configuration or contacting Incus
+  <command> --help  Show command help (also -h)
+
+Inspection, validation, rendering, plans and --dry-run do not mutate resources.
+Apply, remove, start, stop, registration, provisioning and repair commands mutate
+unless explicitly previewed. Read-only Incus checks still require daemon access.
+Provider/model registration changes local metadata, not authentication or activation.
+Gateway remove preserves persistent volumes.
+`)
+	printApplyUsage(w)
+	printGatewayUsage(w)
+	printHerdrClientUsage(w)
+	printNetworkUsage(w)
+	printWorkloadUsage(w)
 }
