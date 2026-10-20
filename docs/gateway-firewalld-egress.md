@@ -93,3 +93,17 @@ then verify external HTTPS and negative management isolation. Aginctus does not
 offer an automatic activation command until the entire runtime state can be
 preserved or safely reconstructed. The existing stage and unstage commands are
 not a substitute for that proof.
+
+### Read-only global reload parity guard
+
+`aginctus gateway egress firewall reload-parity` compares a selected subset
+of permanent and runtime firewalld state, excluding the staged egress
+zone/policy from the permanent side. It refuses mismatches and makes no changes.
+**Passing is necessary but not sufficient:** it does not inspect all daemon
+settings, direct rules, the installed NixOS firewall module or nftables rules
+managed by other daemons. It never authorizes or executes a global reload.
+
+Firewalld's supported CLI only creates new named zones and policies in
+permanent configuration. A controlled reload may eventually be needed to
+activate these objects; do not replace that with an unrelated runtime rich
+rule that accidentally opens a broader path.
