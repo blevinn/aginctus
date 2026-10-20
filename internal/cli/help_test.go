@@ -92,6 +92,25 @@ func TestHelpGatewayRegistrationSyntax(t *testing.T) {
 	}
 }
 
+func TestHelpGatewayFirewalldSyntax(t *testing.T) {
+	for _, args := range [][]string{{"help"}, {"--help"}, {"help", "gateway"}, {"gateway", "--help"}, {"gateway", "-h"}, {"--configuration-file=/nonexistent", "gateway", "--help"}} {
+		var out, errOut bytes.Buffer
+		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
+			t.Fatalf("%v: code=%d stderr=%q", args, code, errOut.String())
+		}
+		for _, syntax := range []string{
+			"gateway egress firewall plan --uplink-zone=ZONE  (read-only)",
+			"gateway egress firewall audit --uplink-zone=ZONE  (read-only)",
+			"gateway egress firewall stage --uplink-zone=ZONE --confirm-permanent-no-reload  (mutates permanent policy; not activated)",
+			"gateway egress audit  (read-only NIC declarations; not connectivity)",
+		} {
+			if count := strings.Count(out.String(), syntax); count != 1 {
+				t.Errorf("%v: expected one occurrence of %q, got %d", args, syntax, count)
+			}
+		}
+	}
+}
+
 func TestHelpAdvertisedAliasesDispatch(t *testing.T) {
 	stubManagementNetwork(t, func(_ context.Context, _ managementnetwork.Spec, o managementnetwork.Options) error {
 		if !o.DryRun {

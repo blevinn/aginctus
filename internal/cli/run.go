@@ -380,6 +380,20 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "audit" && strings.HasPrefix(args[3], "--uplink-zone=") {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall configuration: %v\n", err)
+			return 1
+		}
+		audit, err := spec.AuditEgressFirewalldActivation(ctx, strings.TrimPrefix(args[3], "--uplink-zone="), gateway.SystemFirewalld)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall audit blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(audit))
+		return 0
+	}
 	if len(args) == 5 && args[0] == "egress" && args[1] == "firewall" && args[2] == "stage" && strings.HasPrefix(args[3], "--uplink-zone=") && args[4] == "--confirm-permanent-no-reload" {
 		spec, err := gateway.FromConfig(effective)
 		if err != nil {
@@ -825,6 +839,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall plan --uplink-zone=ZONE  (read-only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall audit --uplink-zone=ZONE  (read-only)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall stage --uplink-zone=ZONE --confirm-permanent-no-reload  (mutates permanent policy; not activated)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
