@@ -268,6 +268,16 @@ in
         default = false;
         description = "Reconcile the management network, Herdr client, and selected workloads at boot.";
       };
+      # Deploying the AI gateway from the reconciler applies the configured
+      # gateway settings, including the egress bridge, Compose project,
+      # LiteLLM and PostgreSQL instances, and protected runtime secrets
+      # under $XDG_STATE_HOME. Operators that prefer to manage that
+      # lifecycle outside Nix should leave this disabled.
+      gateway = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Apply the configured AI gateway as part of host reconciliation. Idempotent against the declared gateway settings.";
+      };
       workloads = mkOption {
         type = types.listOf types.str;
         default = [ ];
@@ -313,6 +323,10 @@ in
       {
         assertion = !cfg.reconcile.enable || unknownWorkloads == [ ];
         message = "services.aginctus.reconcile.workloads contains unknown workload IDs: ${lib.concatStringsSep ", " unknownWorkloads}";
+      }
+      {
+        assertion = !(cfg.reconcile.gateway && !cfg.reconcile.enable);
+        message = "services.aginctus.reconcile.gateway requires services.aginctus.reconcile.enable; the gateway apply runs as part of the host reconciliation flow.";
       }
     ];
 
@@ -472,6 +486,16 @@ in
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
+            # systemd oneshot services do not inherit $HOME; the gateway
+            # CLI's state-directory fallback (os.UserHomeDir) would fail
+            # with "$HOME is not defined" before any consumer can recover.
+            # Pin the gateway secret directory to a NixOS-managed location,
+            # mirroring the firewall reconcile unit's XDG_CONFIG_HOME
+            # isolation. Only set when `reconcile.gateway` is in scope; the
+            # other reconciler subcommands tolerate (or ignore) the var.
+          }
+          // lib.optionalAttrs cfg.reconcile.gateway {
+            Environment = [ "XDG_STATE_HOME=/var/lib/aginctus/state" ];
           };
           script = ''
             set -eu
@@ -479,6 +503,7 @@ in
             # Reconcile effective host filtering immediately after the managed
             # bridge is created, before starting dependent workloads.
             ${lib.optionalString cfg.firewall.enable "${pkgs.systemd}/bin/systemctl start aginctus-firewall-reconcile.service"}
+            ${lib.optionalString cfg.reconcile.gateway "${aginctusCommand} --configuration-file ${configFile} gateway apply"}
             ${aginctusCommand} --configuration-file ${configFile} herdr client ensure
             ${lib.concatMapStringsSep "\n" (
               id: "${aginctusCommand} --configuration-file ${configFile} workload ${lib.escapeShellArg id} ensure"

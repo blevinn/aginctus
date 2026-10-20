@@ -7,9 +7,8 @@ Aginctus uses Nix to provide a small, reproducible development environment.
 You need:
 
 - Nix with flakes enabled;
-- a Linux host; hermetic validation needs no Incus daemon;
-- a host capable of running Incus, with an initialized daemon, only when
-  exercising Incus-backed functionality.
+- a Linux host capable of running Incus for integration work;
+- an initialized Incus daemon when exercising Incus-backed functionality.
 
 The development shell supplies the Incus client and repository tooling. It does not install or manage the host's Incus daemon.
 
@@ -18,7 +17,7 @@ The development shell supplies the Incus client and repository tooling. It does 
 Run:
 
 ```sh
-nix --quiet develop
+nix develop
 ```
 
 The initial shell includes:
@@ -135,85 +134,18 @@ just fmt
 
 ## Validation tiers
 
-For the supported hermetic validation tier, run from the repository root:
+For routine development and required CI validation, run:
 
 ```sh
-nix --quiet develop -c just check-all
+just check
+nix flake check
 ```
 
-Inside the development shell, the same entrypoint is `just check-all`. It stops
-at the first failing command and composes these individually runnable recipes:
-
-| Recipe | Coverage |
-| --- | --- |
-| `check` | `go mod verify`, `go test ./...`, `go vet ./...` |
-| `test-python` | Verbose `unittest` discovery of `test_*.py`, separately in `guest/opencode`, `guest/ssh`, `scripts/acceptance`, `scripts/gateway`, and `tests` |
-| `test-shell` | `opencode-test.sh` and `opencode-live-adapter-test.sh`, using temporary fake adapters/hooks only |
-| `check-shell` | `bash -n` for every Git-tracked `*.sh` file, including the opt-in operator harnesses without executing them |
-| `check-nix` | `nix --quiet flake check --no-build --no-update-lock-file`, then `nix --quiet flake check --no-update-lock-file` |
-
-The Nix checks evaluate the flake and build the current system's lightweight
-NixOS module, gateway configuration parity, and workload socket alignment
-checks. They do not build guest images or run firewall/Incus VMs. Other
-architectures are not built by this command. This is a local validation
-entrypoint; it does not configure or establish CI gates.
-
-`check-all` overrides inherited Incus integration and live shell-acceptance opt-ins
-before dispatch. It disables Go module/checksum downloads and automatic toolchain
-selection (`GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local`), so populate the Go module
-cache first with `go mod download` in the development shell if needed. Nix may
-download locked inputs and build dependencies; test traffic is limited to
-loopback fakes. No real credentials, authentication, provider inference, privileged
-host commands, or running Incus are required. Tests write temporary fixtures and
-ordinary language/Nix caches, not host service configuration.
-
-The SSH host-trust suite requires Linux unprivileged user/mount namespaces and
-host `unshare`, `mount`, and `ssh-keygen` tools (util-linux and OpenSSH). It fails
-if namespaces are blocked; it never falls back to host-root execution. Its three
-foreign-ownership cases explicitly report skips when namespace UID mapping is
-unavailable. Stage new shell files before checking so Git-based syntax discovery
-includes them. New Python unit suites belong in the listed directories; audit
-their external calls before adding them to routine discovery.
-
-`tests/test_validation.py` runs the actual aggregate recipe in a temporary copy
-with inert Go/Python/Nix commands and fake shell fixtures. It checks exact suite
-dispatch, overrides hostile inherited opt-ins, and injects failures into every
-child command plus Bash syntax validation. To run that proof alone:
-
-```sh
-nix --quiet develop -c python3 -m unittest discover -s tests -p 'test_*.py' -v
-```
-
-### Separate static-analysis work
-
-Bash syntax checking is mandatory. Whole-tree `staticcheck`, `shellcheck`, and
-`ruff` gates remain separate pending [#297](https://github.com/blevinn/aginctus/issues/297),
-[#298](https://github.com/blevinn/aginctus/issues/298), and
-[#299](https://github.com/blevinn/aginctus/issues/299). `check-all` neither silently
-skips missing linters nor introduces competing configurations. For optional
-analysis, install staticcheck/ruff separately (shellcheck is in the dev shell):
-
-```sh
-staticcheck ./...
-git ls-files -z -- '*.sh' | xargs -0 -r shellcheck
-ruff check guest scripts tests
-```
-
-These may report the outstanding findings tracked by those issues.
-
-### Explicit opt-in validation
-
-The standalone `guest/opencode/test_real_runtime.py` is not a `unittest` suite:
-discovery imports it but does not execute its `main`. It needs a separately built
-pinned OpenCode binary, and is excluded from `check-all`. To exercise the real
-runtime against its loopback Responses mock, with synthetic credentials only:
-
-```sh
-nix --quiet build --no-link .#opencode-runtime
-nix --quiet develop -c python3 guest/opencode/test_real_runtime.py "$(nix --quiet path-info .#opencode-runtime)/bin/opencode"
-```
-
-This extended runtime check is not evidence of live gateway or provider inference.
+`just check` verifies Go modules and runs Go tests and vetting. `nix flake check`
+builds the lightweight NixOS module, gateway config parity, and workload socket
+alignment checks, but intentionally **does not execute**
+the firewall integration VMs. Those tests remain available as individually
+buildable flake packages on `x86_64-linux`.
 
 For the complete NixOS firewall VM suite, run:
 
@@ -224,10 +156,9 @@ just test-nix-firewall
 To run only the relevant firewall backend test:
 
 ```sh
-nix --quiet build -L --no-link .#firewall-iptables-integration
-nix --quiet build -L --no-link .#firewall-firewalld-integration
-nix --quiet build -L --no-link .#firewall-nixos-nft-integration
-nix --quiet build -L --no-link .#herdr-socket-integration
+nix build -L --no-link .#firewall-iptables-integration
+nix build -L --no-link .#firewall-firewalld-integration
+nix build -L --no-link .#firewall-nixos-nft-integration
 ```
 
 The VM tests exercise actual firewall enforcement, ownership revocation,
@@ -240,24 +171,6 @@ or manually triggered CI job can also run these builds without making them
 required checks; failures should remain visible.
 
 `just test-nix` remains the separate heavyweight Incus/QEMU acceptance harness.
-
-`just integration-test --unsafe` runs the opt-in Go integration cases against a
-real **disposable** Incus host, creating and deleting projects, containers and
-volumes. Never run it against a production daemon. `--retain` preserves its test
-projects for inspection. These tests are excluded even if the caller has exported
-the integration opt-in variables before running `check-all`.
-
-Live pilot, authentication, key/model registration, and inference helpers are
-operator commands, not hermetic suites. Their prerequisites and exact invocations
-are in [OpenCode acceptance](acceptance-opencode.md),
-[live adapters](acceptance-opencode-live.md),
-[Herdr acceptance](acceptance-opencode-herdr.md),
-[workload-key pilot](gateway-workload-key-pilot.md), and
-[inference smoke](gateway-inference-smoke.md). Review those runbooks and obtain
-explicit authorization for the disposable topology, credentials and possible
-billable inference before running them. No image import/update, CLI `doctor`,
-firewall reconciliation, guest provisioning or live preflight is part of
-`check-all`; only their isolated regression tests run.
 
 ### Gateway configuration parity
 
@@ -301,13 +214,16 @@ acceptance remain separate live gates under #257 and #122.
 
 ## Continuous integration
 
-`.github/workflows/hermetic.yml` enforces the supported hermetic validation
-tier on `pull_request` to and `push` to `main`, with `workflow_dispatch` for
-ad-hoc reruns. The job runs on `ubuntu-latest` with `permissions: contents: read`,
-pins actions to specific commits, and uses `cachix/install-nix-action` v31.
-It does not require or access Incus, secrets, OAuth credentials, or any
-third-party tokens; the only network egress is fetching locked Nix inputs,
-Go module cache, and the Nix binary cache.
+`.github/workflows/hermetic.yml` runs the supported hermetic validation tier
+on `pull_request` to and `push` to `main`, with `workflow_dispatch` for
+ad-hoc reruns. It requires #347 / PR #356's `check-all` recipe. The job uses
+`ubuntu-22.04`, `permissions: contents: read`, SHA-pinned actions, and
+`cachix/install-nix-action`. Weekly Dependabot PRs propose action updates.
+Checkout does not persist credentials. No production secrets or third-party
+tokens are configured. Fetching source, actions, locked Nix dependencies and
+Go modules requires network access; this workflow does not enforce an egress
+allowlist. SHA pins identify action code, not a guarantee about all
+network-fetched installer dependencies or hosted-runner software.
 
 The aggregate runs, in order, `nix --quiet develop -c just check-all` (added
 by #347 / PR #356), `nix --quiet build --no-update-lock-file
@@ -319,8 +235,11 @@ offline aggregate, because `just check-all` runs with `GOPROXY=off`.
 
 The job uses full-history checkout (`fetch-depth: 0`) so the diff step and
 the recorded `BUILD_HASH=${{ github.sha }}` reflect the exact commit under
-test. Skipped test counts are reported as expected skips in
-`$GITHUB_STEP_SUMMARY` rather than as passes.
+test. `$GITHUB_STEP_SUMMARY` reports step outcomes and observed Python test
+results, including actual skip reasons. If the aggregate fails, its results
+are partial: later suites have not run. Go and shell results remain in the
+aggregate log. Gateway parity also runs after an aggregate failure when the
+aggregate was attempted. Configured checks do not establish branch protection.
 
 ### Local reproduction
 
@@ -341,15 +260,22 @@ git diff --check origin/main...HEAD   # for a topic branch
 git diff --check HEAD~ HEAD           # for the most recent commit
 ```
 
-The aggregate fails rather than falling back to privileged execution if
-unprivileged user namespaces are unavailable. On hosts without `/etc/subuid`
-entries the three guest SSH host-trust tests
-(`test_rejects_non_root_owned_trust_directory`,
-`test_rejects_non_root_owned_state_root`,
-`test_rejects_non_root_owned_known_hosts`) report
-`skipped 'namespace UID mapping unavailable on this host'` and are tallied
-as unittest skips. The CI summary explicitly lists those expected skips so
-they are not mistaken for failures.
+The runner contract requires unprivileged user namespaces with root UID
+mapping, mount namespaces, and namespace-local bind mounts. A probe verifies
+these before installing Nix, including that the bind mount is invisible outside
+the namespace. If it fails, CI fails closed. Do not change host sysctls,
+AppArmor policy, or run the SSH suite with sudo to bypass the contract.
+The earlier `ubuntu-latest` verification run failed with
+`unshare: write failed /proc/self/uid_map: Operation not permitted`, causing
+four base-isolation test failures in addition to three foreign-ownership skips.
+Foreign-ownership tests can still report `namespace UID mapping unavailable on
+this host` independently of the mandatory base namespace contract; the summary
+reports observed skips without predicting their count or cause.
+
+The aggregate excludes live Incus/provider acceptance, real OpenCode runtime
+execution, guest image builds, and heavyweight firewall/Incus/Herdr VMs. See the
+validation tiers above for their separate commands. Whole-tree linters and link
+checker integration are tracked separately in #297–#299 and #361.
 
 ## direnv
 
