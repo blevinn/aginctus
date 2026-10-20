@@ -1,15 +1,17 @@
 # Aginctus
 
-Aginctus is a portable, configurable agentic lab built on [Incus](https://linuxcontainers.org/incus/). It provides a secure, observable control plane for running sandboxed agentic systems in containers or virtual machines, with explicit controls for model access, networking, MCP access, and workload lifecycle.
+Aginctus is a portable, configurable agentic lab built on [Incus](https://linuxcontainers.org/incus/). It provides a control plane for agent workloads with explicit networking, credential, and lifecycle controls.
 
 ## Project status
 
-Aginctus is in **v0.1 hardening**. The CLI, the NixOS module, the three guest images, and the pilot validation harnesses are shipping; this release is the result of a full-repo code-review inventory tracked in [issue #249](https://github.com/blevinn/aginctus/issues/249). The shipping surface includes:
+Aginctus is in **v0.1 hardening, with live pilot acceptance incomplete**. Available implementation includes:
 
 - a multi-command Go CLI (`aginctus apply` / `remove` / `status` / `network ...` / `workload ...` / `gateway ...` / `herdr ...` / `images ...` / `doctor` / `config ...`);
 - a NixOS module (`services.aginctus`) with `nix flake check` evaluation and three opt-in firewall VM tests;
 - three guest images: Herdr client, OpenCode workload, and an opt-in dedicated OAuth daemon image (deferred for v0.1 activation; see [architecture decision](docs/architecture/native-chatgpt-oauth.md));
-- a full acceptance harness covering host firewall reconciliation, OpenCode guest provisioning, and Herdr lifecycle phases.
+- acceptance tooling for firewall reconciliation, OpenCode provisioning, and Herdr lifecycle phases, including an opt-in live dispatcher that requires operator-supplied hooks.
+
+Hermetic tests, disposable firewall VM tests, and recorded offline real-Incus provisioning checks establish component behavior, not a successful live deployment. [Release acceptance #118](https://github.com/blevinn/aginctus/issues/118) still requires pilot evidence: [#257](https://github.com/blevinn/aginctus/issues/257) owns LiteLLM egress migration and isolation proof; [#122](https://github.com/blevinn/aginctus/issues/122) owns authenticated upstream inference and is on operator hold pending egress verification; [#123](https://github.com/blevinn/aginctus/issues/123) owns managed OpenCode-to-gateway inference; [#124](https://github.com/blevinn/aginctus/issues/124) owns the repeatable end-to-end coding task. Code merges, health checks, and synthetic responses do not complete these gates or establish production readiness.
 
 ## Quickstart
 
@@ -29,7 +31,7 @@ See the [development guide](docs/development.md) for prerequisites, direnv setup
 
 ## Documentation
 
-Project documentation lives in [docs/](docs/README.md). The current v0.1 threat model and pilot-validation records are in [docs/security/threat-model.md](docs/security/threat-model.md).
+Project documentation lives in [docs/](docs/README.md). See the [security controls and limitations](docs/security.md) for implemented boundaries, validation scope, and authoritative pilot acceptance links. This summary is not a completed threat model or security audit.
 
 ## Development
 

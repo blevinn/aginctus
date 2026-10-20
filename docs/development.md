@@ -153,9 +153,10 @@ at the first failing command and composes these individually runnable recipes:
 | `check-nix` | `nix --quiet flake check --no-build --no-update-lock-file`, then `nix --quiet flake check --no-update-lock-file` |
 
 The Nix checks evaluate the flake and build the current system's lightweight
-NixOS module and workload socket-alignment checks. They do not build guest images
-or run firewall/Incus VMs. Other architectures are not built by this command.
-This is a local validation entrypoint; it does not configure or establish CI gates.
+NixOS module, gateway configuration parity, and workload socket alignment
+checks. They do not build guest images or run firewall/Incus VMs. Other
+architectures are not built by this command. This is a local validation
+entrypoint; it does not configure or establish CI gates.
 
 `check-all` overrides inherited Incus integration and live shell-acceptance opt-ins
 before dispatch. It disables Go module/checksum downloads and automatic toolchain
@@ -257,6 +258,46 @@ explicit authorization for the disposable topology, credentials and possible
 billable inference before running them. No image import/update, CLI `doctor`,
 firewall reconciliation, guest provisioning or live preflight is part of
 `check-all`; only their isolated regression tests run.
+
+### Gateway configuration parity
+
+`TestNixOSGatewayConfigParity` loads system configuration documents through the
+production Go loader and `gateway.FromConfig`, then checks the generated Jsonnet
+network resources and semantic equality of the human Compose renderer and
+deployment Compose model. Cases cover module defaults, disabled egress, a
+restricted DHCP pool with static addressing, and disabled DHCP with static
+addressing. Assertions include management isolation, egress NAT/routing/IPv6,
+literal DHCP keys, ownership guards, PostgreSQL's management-only attachment,
+and LiteLLM's management gateway suppression and external egress CIDR metadata.
+
+Plain Go tests use `internal/gateway/testdata/nixos-gateway.json`. The
+`gateway-config-parity` flake check evaluates the NixOS module and builds its
+actual `environment.etc."aginctus/config.json".source` for each case. It verifies
+that the snapshot is semantically equal and runs the same Go test against those
+generated documents. The fixtures are examples of the existing configuration,
+not a second schema or a consolidation of Go/NixOS/guest defaults (#296).
+
+These commands need Nix with flakes and the locked development dependencies,
+but no Incus daemon, credentials, or running guests:
+
+```sh
+nix --quiet develop --command env -u AGINCTUS_INCUS_INTEGRATION -u AGINCTUS_INCUS_DISPOSABLE go test ./internal/config ./internal/gateway ./internal/orchestration ./internal/cli -count=1
+nix --quiet develop --command env -u AGINCTUS_INCUS_INTEGRATION -u AGINCTUS_INCUS_DISPOSABLE bash -c 'go test ./... -count=1 && go vet ./...'
+nix --quiet flake check
+git diff --check
+```
+
+When intentionally changing module settings, regenerate the snapshot from the
+module sources, review the resulting diff, and rerun the checks:
+
+```sh
+fixture=$(nix --quiet build --no-link --print-out-paths .#checks.x86_64-linux.gateway-config-parity.fixtures)
+cp "$fixture" internal/gateway/testdata/nixos-gateway.json
+```
+
+Use `aarch64-linux` instead on an aarch64 builder. The check is render-level
+proof only: actual OCI NIC addressing, default routes, TLS, and inference
+acceptance remain separate live gates under #257 and #122.
 
 ## direnv
 
