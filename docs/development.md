@@ -160,7 +160,8 @@ architectures are not built by this command. This is a local validation
 entrypoint; it does not configure or establish CI gates.
 
 `check-all` overrides inherited Incus integration and live shell-acceptance opt-ins
-before dispatch. It disables Go module/checksum downloads and automatic toolchain
+before dispatch. It clears `GOFLAGS` so inherited flags cannot suppress Go tests.
+It disables Go module/checksum downloads and automatic toolchain
 selection (`GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local`), so populate the Go module
 cache first with `go mod download` in the development shell if needed. Nix may
 download locked inputs and build dependencies; test traffic is limited to
