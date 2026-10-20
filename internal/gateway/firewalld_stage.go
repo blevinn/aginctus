@@ -64,7 +64,10 @@ func (s Spec) StageEgressFirewalld(ctx context.Context, uplinkZone string, run F
 	// Reject hosts where the target bridge belongs to any existing runtime
 	// zone. An unassigned bridge is the expected pilot starting state.
 	current, err := run(ctx, "--get-zone-of-interface="+s.EgressNetwork)
-	if err == nil && strings.TrimSpace(current) != "no zone" && strings.TrimSpace(current) != "" {
+	if err != nil {
+		return fmt.Errorf("inspect runtime firewalld interface zone: %w", err)
+	}
+	if strings.TrimSpace(current) != "no zone" {
 		return fmt.Errorf("bridge %q already assigned to firewalld zone %q", s.EgressNetwork, current)
 	}
 	// Verify the uplink is an existing permanent zone; a typos must not
@@ -143,6 +146,5 @@ func (s Spec) StageEgressFirewalld(ctx context.Context, uplinkZone string, run F
 		return rollback(e)
 	}
 	// Leave both objects in permanent store, unactivated.
-	zoneCreated = false
 	return nil
 }
