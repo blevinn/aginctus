@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/netip"
 	"regexp"
+
+	"github.com/blevinn/aginctus/internal/firewall"
 )
 
 // EgressFirewalldPlan describes a directional HTTPS exception. It is advisory:
@@ -43,16 +45,16 @@ func (s Spec) PlanEgressFirewalld(uplinkZone string) ([]byte, error) {
 	}
 	zone := "aginctus-egress"
 	policy := "aginctus-egress-https"
-	rejects := []string{}
-	for _, subnet := range []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "127.0.0.0/8", "100.64.0.0/10", "0.0.0.0/8", "224.0.0.0/4", "240.0.0.0/4"} {
-		rejects = append(rejects, fmt.Sprintf(`rule family="ipv4" priority="-300" source address="%s/32" destination address="%s" drop`, prefix.Addr(), subnet))
+	grant, err := firewall.EgressRules(s.EgressIPv4Address, s.EgressBridgeIPv4CIDR, uplinkZone, nil)
+	if err != nil {
+		return nil, err
 	}
 	out := EgressFirewalldPlan{
 		Zone: zone, Interface: s.EgressNetwork, UplinkZone: uplinkZone,
 		Policy: policy, Source: prefix.Addr().String() + "/32",
-		RichRules: rejects,
+		RichRules: grant.HTTPS[:len(grant.HTTPS)-1],
 		HTTPS:     true, Target: "CONTINUE",
-		Warning: "ADVISORY ONLY: no firewall changes made; permanent firewalld object creation requires operator-controlled activation and may affect other runtime rules. Verify uplink zone, management isolation, object ownership and rollback before applying. Deny rules cover common IPv4 non-public ranges, not an exhaustive destination authorization policy.",
+		Warning: "ADVISORY ONLY: no firewall changes made. NixOS owns the default-deny bootstrap. Runtime reconciliation additionally excludes live host routes and verifies bridge, NIC, address ownership and the uplink. This plan alone is not activation approval or a complete confinement policy.",
 	}
 	return json.MarshalIndent(out, "", "  ")
 }

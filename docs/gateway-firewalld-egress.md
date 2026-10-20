@@ -1,146 +1,201 @@
-# LiteLLM egress and firewalld forwarding
+# LiteLLM egress with firewalld
 
-The gateway's Incus-managed egress bridge provides NAT and IPv4 forwarding. On
-hosts with firewalld, a later forward base chain can still drop packets even
-when Incus permits them. This was confirmed on the pilot: the TCP SYN traversed
-the egress bridge and Incus chains but was dropped by
-`inet firewalld filter_FWD_nixos-fw-default_to_nixos-fw-default`.
+NixOS owns the durable security boundary. Aginctus owns narrowly scoped runtime
+permissions inside it, using firewalld's native D-Bus API. Incus owns bridge
+addressing, routing and NAT. Aginctus never reloads firewalld, changes permanent
+objects, assigns a trusted zone, or installs a second host filtering table.
 
-Aginctus currently does **not** install host firewalld forwarding policy. The
-read-only command
+## Ownership and evaluation order
 
-```sh
-aginctus gateway egress firewall plan --uplink-zone=nixos-fw-default
+Declaring an egress bridge on a firewalld NixOS host automatically enables
+`services.aginctus.firewall.egress.enable`. Initial activation provisions:
+
+| Object | Permanent definition | Runtime changes |
+| --- | --- | --- |
+| Zone `aginctus-egress` | DROP; configured bridge binding; no services or forwarding | None |
+| Policy `aginctus-egress-out` | Egress zone to ANY, DROP, priority -500 | None |
+| Policy `aginctus-egress-in` | ANY to egress zone, DROP, priority -500 | None |
+| Policy `aginctus-egress-input` | Egress zone to HOST, DROP, priority -500 | None |
+| Policy `aginctus-egress-https` | Egress ingress zone, no egress binding, CONTINUE, priority -1000; dormant | Named uplink and source-specific IPv4 rich rules |
+| Policy `aginctus-egress-host` | Egress zone to HOST, CONTINUE, priority -1000; no grants | Narrow IPv4 DNS/DHCP rich rules |
+
+ANY excludes HOST. The separate HOST policy therefore matters. The HTTPS policy
+accepts only the verified LiteLLM IPv4 source to TCP/443 through the configured
+uplink zone. Earlier rich-rule drops exclude non-public ranges and every
+nondefault IPv4 route from all host routing tables, including host-local public
+addresses and connected public networks. This conservative policy can also
+exclude a public endpoint reached through a more-specific route.
+
+The VM test's actual nftables output places the HTTPS policy before the outbound
+DROP policy in `filter_FORWARD_POLICIES`. The rich-rule ACCEPT terminates that
+firewalld forwarding traversal. An ACCEPT in an independent earlier base chain
+would not bypass a later rejecting firewalld chain. Positive and negative packet
+tests cover the actual path, not just generated text.
+
+The dedicated zone uses minimum ingress/egress classification priority so its
+interface binding precedes ordinary overlapping source-based zones, including
+trusted sources. Other administrators must not introduce competing minimum
+priority classifications or earlier accepting policies for this boundary.
+
+The integration also requires these host-wide firewalld settings:
+
+- `CleanupOnExit=false`: retain filtering while the daemon is stopped. Restart
+  must not temporarily leave forwarding unfiltered.
+- `StrictForwardPorts=true`: prevent the early conntrack-DNAT shortcut from
+  accepting traffic before the directional policies. Existing published ports
+  that depend on implicit Docker/Incus DNAT acceptance need review before host
+  activation.
+- nftables backend and table ownership, with flowtable bypass disabled.
+
+These requirements are checked both at NixOS evaluation and through D-Bus before
+runtime mutation. NixOS additionally requires DROP during reload and forbids a
+host-wide nftables flush/raw ruleset. Do not add preempting foreign ACCEPT policies for the egress
+zone. Root administrators are concurrent authorities and must serialize host
+firewall maintenance; the lifecycle lock cannot constrain unrelated root tools.
+
+Existing management-network policy is unchanged. LiteLLM intentionally has a
+second NIC for same-L2 PostgreSQL access, with its management default gateway
+suppressed. Routed egress filtering does not deny that database dependency or
+provide mutual isolation on the management L2. Additional ordinary workloads
+remain management-only. The provider bridge is single-tenant: inventory must
+show only the owned LiteLLM NIC, including parent-based bridge attachments, so
+another guest cannot spoof its permitted source.
+
+One declared provider bridge is supported per host integration. Its name and
+permanent binding are bootstrap topology. Changing that topology requires a
+reviewed declarative activation. Routine provider, workload, source-address and
+uplink changes do not require new host firewall exceptions or rebuilds.
+
+## Runtime lifecycle
+
+`aginctus-egress-firewall.service` reconciles every five seconds, with bounded
+timer coalescing. Management DNS/DHCP reconciliation uses the same interval when
+egress is enabled. Reload restores the empty permanent grants; successful
+reconciliation repairs them without another reload. Service execution and failed
+discovery can extend that interval; this is not zero-interruption DNS availability.
+
+Before granting access, reconciliation checks:
+
+- Complete structured permanent and runtime settings for all six objects. Only
+  known neutral defaults are accepted outside the ownership contract. Unknown
+  fields, helpers, source bindings, ports, ICMP inversion and other drift fail.
+- The root-owned previous/pending grant record, allowing recovery from partial
+  D-Bus writes or an interrupted process, and the current firewalld bus owner.
+- Live Incus bridge identity, ownership, NAT/routing, IPv6 disablement, actual
+  Linux bridge address, bounded/disabled DHCP, and all-project address inventory.
+- Exact LiteLLM ownership and its two NIC declarations, with no extra attachment.
+- A unique IPv4 default-route interface belonging to the explicit uplink zone.
+
+The operation is serialized by `/run/aginctus-firewall/lock`. It withdraws old
+grants before changing scope, prepares the complete HTTPS rule set while its
+policy has no egress binding, and activates it by binding the single named uplink
+in one native firewalld transaction. A concurrent reload resets the rules and
+binding to empty, never ANY, preventing a reload from widening a grant's scope.
+Discovery is repeated before and after activation. On mutation/discovery
+failure it attempts withdrawal with an independent bounded rollback context.
+Foreign ownership or invalid permanent structure is refused without taking over
+those objects. Runtime drift in verified owned objects withdraws our rich rules
+and reports an error; it does not silently adopt structural changes.
+
+Firewalld accepts established connections before policy evaluation. Withdrawal
+therefore also deletes only the recorded sources' IPv4 TCP/443 conntrack entries.
+There is no global conntrack flush. Conntrack failures are reported as incomplete
+withdrawal, never successful rollback. Bridge/instance removal or failed identity
+discovery withdraws grants; the durable bridge binding and DROP policies remain.
+
+Root-managed `/var/lib/aginctus-firewall/overrides.json` initially contains `{}`.
+It overlays `/etc/aginctus/config.json` for this service only. For example:
+
+```json
+{"firewall":{"egress":{"uplinkZone":"nixos-fw-default"}}}
 ```
 
-emits a scoped proposal based on the effective configuration. The uplink zone
-is an explicit operator input; it cannot be safely inferred from the gateway
-bridge CIDR alone. The proposal describes a dedicated `aginctus-egress` zone,
-the owned bridge interface, and a directional HTTPS policy to the specified
-uplink zone. It includes rich-rule rejects for common private IPv4 ranges,
-and deliberately keeps the policy target `CONTINUE` rather than trusting the
-interface or enabling blanket forwarding. This is **advisory only**, not a
-complete confinement policy.
+An empty uplink fails closed. Operators can update this file, or add a changed
+`gateway.egress.ipv4.address` after reconciling the actual NIC, without rebuilding
+NixOS. Runtime credentials do not belong in this file. The timer does not deploy
+gateways or change provider configuration.
 
-## Activation boundary
-
-Do not apply the output directly as commands. First verify the bridge's Incus
-ownership, the uplink zone and interface, policy/zone name ownership, all
-forwarded destinations that must be excluded (including local non-RFC1918
-nets), any existing policy, and rollback requirements.
-
-Creating named zones and policies through the supported CLI or D-Bus API
-requires permanent objects. Runtime `zone.setZoneSettings2` and
-`policy.setPolicySettings` update existing objects, not create them. The
-installed daemon's setters first look up the named runtime object. The
-`config.addZone2` and `config.addPolicy` methods create permanent configuration.
-Activating those objects with a reload replaces the runtime rule set;
-Aginctus must not reload firewalld as a side effect of `gateway apply`.
-This also means an extra nftables `accept` in an earlier base chain cannot
-replace a firewalld forwarding policy.
-
-## Further integration work
-
-A separate implementation is needed for lifecycle-aware, ownership-verified
-zone/policy management, supported firewall backends, safe activation without
-clobbering unrelated runtime-only rules, cleanup, and runtime verification.
-It must fail closed if the effective policy cannot be established. Until then,
-gateway egress cannot be considered production-ready on hosts with a rejecting
-firewalld forwarding policy.
-
-Revisit issue #257 acceptance only after HTTPS works from LiteLLM, management
-isolation still holds, and an authenticated Responses call succeeds.
-
-## Explicit permanent-only staging (experimental)
-
-`aginctus gateway egress firewall stage --uplink-zone=nixos-fw-default --confirm-permanent-no-reload` creates a dedicated zone and directional policy **in firewalld permanent configuration only**. It does not call reload or change runtime forwarding. It refuses existing zone/policy names instead of taking ownership of them and attempts rollback of objects created during a failed staging attempt. It is one-shot staging, not idempotent reconciliation or production lifecycle management. Operators must review the exact permanent objects and diff before activation.
-
-The dedicated zone uses the firewalld default target and explicitly permits DNS and DHCP to the host, preserving gateway name resolution and address allocation. It stages source-specific forwarded HTTPS acceptance and earlier private, loopback, link-local, multicast, and carrier-grade NAT destination drops, rather than adding a broad HTTPS service to the zone. It does not fully enforce public endpoint allowlisting. Existing Nix-managed host configuration can supersede firewalld permanent definitions, so do not activate on a NixOS system without reviewing the host firewall module.
-
-**Do not activate the staged policy yet:** staging is a review boundary. Once the PR has been validated, the operator must separately decide on activation semantics, runtime-only rule preservation, rollback, and NixOS declarative ownership. The existing `gateway apply` intentionally remains unaffected.
-
-## Read-only activation audit
-
-`aginctus gateway egress firewall audit --uplink-zone=nixos-fw-default` compares names and details of permanent and runtime firewalld zone/policy objects and the bridge's current zone assignment. It never activates, reloads, or writes configuration; `activation_approved` remains false even when all objects are present. Inspect its output to identify whether permanent staging exists and whether a runtime reload or other actor has activated a policy. No individual object detail should be taken as proof that the complete host firewall policy is safe. An explicit, host-aware activation mechanism and negative isolation tests remain separate work.
-
-## Ownership verification and rollback
-
-After operator-approved permanent staging, run
+In an authorized host maintenance context:
 
 ```sh
-aginctus gateway egress firewall verify-staged --uplink-zone=nixos-fw-default
+aginctus --configuration-file /var/lib/aginctus-firewall/overrides.json network firewall egress reconcile
+# Stop the timer first if withdrawing a still-running gateway deliberately.
+systemctl stop aginctus-egress-firewall.timer
+aginctus --configuration-file /var/lib/aginctus-firewall/overrides.json network firewall egress revoke
 ```
 
-The checker requests verbose object information to read ownership descriptions
-and verifies the expected zone ownership description, interface,
-host DNS/DHCP services, directional policy, priority, and source-limited HTTPS
-rules. It rejects additional protocols, source ports, masquerading, forward
-ports, zone rich rules, and incomplete configurations. Service order does not
-affect verification. Unsupported output formats fail closed. It does not
-authorize activation. To remove **unactivated** staging after successful
-verification:
+`revoke` leaves the default-deny boundary installed. Re-enabling the timer grants
+access again only after successful verification. Removing the entire NixOS
+integration is different: withdraw grants and stop/remove egress guests first,
+then retire the bridge or keep it quarantined in host policy.
+
+## Diagnostics and retired commands
+
+`gateway egress firewall plan --uplink-zone=ZONE` uses the same canonical rule
+generator but has no live route/ownership inventory. It is advisory.
+`gateway egress firewall audit --uplink-zone=ZONE` is a legacy name/detail report,
+not proof of the complete six-object boundary.
+
+`gateway egress firewall reload-parity` compares selected runtime/permanent CLI
+listings, ignoring active/default header annotations. It is diagnostic only. It
+does not inspect all direct rules, daemon settings, service/IP-set contents or
+cross-manager state, and never authorizes reload. Healthy runtime grants can
+make it report differences.
+
+`stage`, `verify-staged` and `unstage` are retired and return a migration error.
+There is no verification-to-permanent-deletion race: Aginctus no longer deletes
+NixOS-owned objects. Preexisting imperative staging must be reviewed before
+bootstrap; it is not automatically adopted or removed.
+
+## Verification and controlled activation
+
+Safe repository checks:
 
 ```sh
-aginctus gateway egress firewall unstage --uplink-zone=nixos-fw-default --confirm-permanent-only
+nix --quiet develop -c go test ./...
+nix --quiet develop -c go vet ./...
+nix --quiet flake check
+nix --quiet build --no-link .#firewall-firewalld-integration
+git diff --check origin/main...HEAD
 ```
 
-The cleanup checks ownership and refuses deletion if either named object is
-loaded in runtime, even if currently inactive or only partly activated. It
-deletes the permanent policy before the zone and never reloads. Operators must
-serialize firewall maintenance: the read/check/delete sequence is not atomic
-against another administrator or daemon. Partial failures are reported for
-manual recovery; a policy-deletion failure leaves the zone untouched.
+The disposable VM uses real firewalld, D-Bus, nftables, Incus bridges and network
+namespace peers. Synthetic gateway discovery avoids downloading an OCI image;
+separate Go tests cover production Incus/default-route discovery. It exercises
+HTTPS source/port restrictions, private and connected-public denial, trusted-zone
+ingress/egress, DNAT bypass denial, host service denial, IPv6 denial, DNS TCP/UDP,
+DHCP on both bridges, PostgreSQL L2 connectivity, management-only Internet denial,
+runtime drift refusal, established-flow withdrawal, timer recovery after reload,
+retained filtering while stopped, restart, and reboot. The result retains
+`egress-nftables.txt` as generated-rule evidence.
 
-### Activation constraint
+Build the host candidate without elevation, using an isolated snonix checkout
+and this worktree as the Aginctus input. Do not re-pin merely to test the CLI:
 
-Do not blindly run `firewall-cmd --reload` on the NixOS pilot. Reload replaces
-firewalld runtime-only configuration with its permanent configuration, and the
-pilot has unrelated security-critical policies. An operator must separately
-review those differences and choose a safe host-specific activation method,
-then verify external HTTPS and negative management isolation. Aginctus does not
-offer an automatic activation command until the entire runtime state can be
-preserved or safely reconstructed. The existing stage and unstage commands are
-not a substitute for that proof.
+```sh
+nix --quiet build --no-link --print-out-paths --accept-flake-config \
+  --override-input aginctus path:/tmp/opencode/aginctus-371 \
+  /tmp/opencode/snonix-371-activation#nixosConfigurations.boffo.config.system.build.toplevel
+```
 
-### Read-only global reload parity guard
+Before activation, review the candidate closure/unit diff, published-port impact,
+and the operator's SSH/Tailscale recovery path. Obtain explicit human approval.
+The activation changes firewalld configuration and may reload/restart it. Nothing
+in the repository checks authorizes this action.
 
-`aginctus gateway egress firewall reload-parity` compares a selected subset
-of permanent and runtime firewalld state, excluding the staged egress
-zone/policy from the permanent side. It refuses mismatches and makes no changes.
-Runtime header annotations such as `(active)` and `(default)` are ignored;
-interface bindings, permissions, and other property lines remain significant.
-**Passing is necessary but not sufficient:** it does not inspect all daemon
-settings (including the default zone), direct rules, service/IP-set contents,
-the installed NixOS firewall module or nftables rules managed by other daemons.
-It never authorizes or executes a global reload.
+For a temporary pilot, record `readlink -f /run/current-system`, then invoke the
+candidate's `bin/switch-to-configuration test` from an authorized root terminal.
+This activates the NixOS bootstrap without changing the boot generation. Keep
+the uplink override empty until inspecting the six objects, then set the named
+uplink and start reconciliation. Verify DNS and forced-IPv4 TLS, prohibited
+private/host-local access, management-only Internet denial, actual PostgreSQL
+connectivity, management DHCP/DNS, SSH and Tailscale. Authenticated Responses
+inference is separate and requires ready credentials/routing and cost approval.
 
-Firewalld's supported CLI only creates new named zones and policies in
-permanent configuration. A controlled reload may eventually be needed to
-activate these objects; do not replace that with an unrelated runtime rich
-rule that accidentally opens a broader path.
-
-## NixOS lifecycle boundary
-
-The host module predeclares the management DROP zone and forwarding-denial
-policies. Aginctus's `network firewall reconcile` verifies Incus bridge ownership
-and installs runtime-only IPv4 DNS rules to the bridge address plus UDP DHCP.
-Its timer periodically repairs these grants. A firewalld reload removes the
-grants until successful reconciliation; this is an availability interruption,
-not permission to replace ownership checks with permanent unrestricted DNS.
-NixOS supplies firewalld configuration through store-backed configuration paths
-and reload triggers, so imperative staging is not declarative deployment.
-
-There is no supported automatic egress activation or reconciliation yet.
-A safe lifecycle implementation needs predeclared, default-deny egress objects,
-an explicitly approved initial host activation, and ownership-verified runtime
-grants that can be withdrawn and restored without subsequent global reloads.
-It also needs independent bidirectional forwarding denials so unrelated trusted
-zones cannot provide an alternative route, destination exclusions including
-host-connected public networks, and actual packet-level regression tests.
-The current staged CONTINUE policy and common-private-range exclusions do not
-provide those guarantees. Do not activate them as a complete isolation policy.
-
-LiteLLM intentionally retains management-network access to PostgreSQL. Routed
-egress isolation cannot prohibit that same-L2 dependency. Acceptance must
-distinguish the required database connection from prohibited routed access;
-per-workload management isolation requires a separate network design.
+The minimum rollback is stopping the egress timer and invoking `revoke`, leaving
+the deny boundary in place. If the host activation itself must be reverted,
+stop LiteLLM first, then run the recorded previous system's
+`bin/switch-to-configuration test` and reconcile its management DNS/DHCP service.
+The prior boot generation remains selected. Keep the gateway stopped until its
+network isolation is reviewed again. No instance, volume, image or secret
+deletion is required.

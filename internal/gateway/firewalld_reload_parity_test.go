@@ -7,14 +7,6 @@ import (
 	"testing"
 )
 
-func TestOmitFirewalldObjectExactName(t *testing.T) {
-	input := "public\n  services: ssh\naginctus-egress\n  services: dns dhcp\naginctus-egress-other\n  services: ftp"
-	got := omitFirewalldObject(input, "aginctus-egress")
-	if strings.Contains(got, "services: dns dhcp") || !strings.Contains(got, "aginctus-egress-other") || !strings.Contains(got, "services: ssh") {
-		t.Fatal(got)
-	}
-}
-
 func TestCheckFirewalldReloadParity(t *testing.T) {
 	for _, drift := range []bool{false, true} {
 		var commands []string
@@ -29,15 +21,15 @@ func TestCheckFirewalldReloadParity(t *testing.T) {
 			}
 			if command == "--permanent --list-all-zones" {
 				if drift {
-					return "public\n  services: ssh http\naginctus-egress\n  services: dns dhcp", nil
+					return "public\n  services: ssh http", nil
 				}
-				return "public\n  services: ssh\naginctus-egress\n  services: dns dhcp", nil
+				return "public\n  services: ssh", nil
 			}
 			if command == "--list-all-policies" {
 				return "aginctus-in (active)\n  target: DROP", nil
 			}
 			if command == "--permanent --list-all-policies" {
-				return "aginctus-in\n  target: DROP\naginctus-egress-https\n  target: CONTINUE", nil
+				return "aginctus-in\n  target: DROP", nil
 			}
 			if strings.HasPrefix(command, "--permanent ") {
 				return "same", nil
