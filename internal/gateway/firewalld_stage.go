@@ -3,6 +3,7 @@ package gateway
 import (
  "context"
  "fmt"
+ "net/netip"
  "os/exec"
  "strings"
 )
@@ -61,10 +62,6 @@ func (s Spec) StageEgressFirewalld(ctx context.Context, uplinkZone string, run F
  if _,err=run(ctx,"--permanent","--new-zone="+egressFirewallZone);err!=nil{return err}
  zoneCreated:=true
  policyCreated:=false
- defer func(){
-  if zoneCreated { // Disarmed on success; best-effort rollback on failure is handled below.
-  }
- }()
  rollback:=func(cause error) error {
   var failures []string
   if policyCreated {if _,e:=run(ctx,"--permanent","--delete-policy="+egressFirewallPolicy);e!=nil {failures=append(failures,"policy: "+e.Error())}}
@@ -76,6 +73,7 @@ func (s Spec) StageEgressFirewalld(ctx context.Context, uplinkZone string, run F
  for _,args:=range [][]string{
   {"--permanent","--zone="+egressFirewallZone,"--set-description="+egressFirewallOwnership},
   {"--permanent","--zone="+egressFirewallZone,"--set-target=DROP"},
+  {"--permanent","--zone="+egressFirewallZone,"--add-interface="+s.EgressNetwork},
   {"--permanent","--new-policy="+egressFirewallPolicy},
  } {
   if e:=do(args...);e!=nil{return rollback(e)}
@@ -92,13 +90,15 @@ func (s Spec) StageEgressFirewalld(ctx context.Context, uplinkZone string, run F
  }
  // Only the owned LiteLLM source may establish HTTPS. No general
  // --add-service=https: it would permit any future guest on the bridge.
- accept:=fmt.Sprintf(`rule family="ipv4" priority="-200" source address="%s" port port="443" protocol="tcp" accept`,strings.TrimSuffix(s.EgressIPv4Address,"/"+strings.Split(s.EgressIPv4Address,"/")[1])+"/32")
- for _,rule:=range []string{
-  fmt.Sprintf(`rule family="ipv4" priority="-300" source address="%s" destination address="10.0.0.0/8" drop`,s.EgressIPv4Address),
-  accept,
- } {
+ prefix, _ := netip.ParsePrefix(s.EgressIPv4Address)
+ source := prefix.Addr().String()+"/32"
+ deny := []string{"10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","169.254.0.0/16","127.0.0.0/8","100.64.0.0/10","0.0.0.0/8","224.0.0.0/4","240.0.0.0/4"}
+ for _,subnet:=range deny {
+  rule:=fmt.Sprintf(`rule family="ipv4" priority="-300" source address="%s" destination address="%s" drop`,source,subnet)
   if e:=do("--permanent","--policy="+egressFirewallPolicy,"--add-rich-rule="+rule);e!=nil{return rollback(e)}
  }
+ accept:=fmt.Sprintf(`rule family="ipv4" priority="-200" source address="%s" port port="443" protocol="tcp" accept`,source)
+ if e:=do("--permanent","--policy="+egressFirewallPolicy,"--add-rich-rule="+accept);e!=nil{return rollback(e)}
  // Leave both objects in permanent store, unactivated.
  zoneCreated=false
  return nil
