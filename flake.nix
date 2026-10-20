@@ -371,6 +371,9 @@
 
       checks = forAllSystems (system: {
         nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
+        gateway-config-parity = import ./nix/gateway-config-parity-check.nix {
+          inherit self nixpkgs system;
+        };
         opencode-workload-socket-alignment = import ./nix/opencode-workload-check.nix {
           inherit self nixpkgs system;
         };
