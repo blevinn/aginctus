@@ -28,11 +28,12 @@ let
     };
     incus.management.network.ipv4.address = "10.42.0.1/24";
   };
+  moduleDefaults = configSource { };
   fixtures =
     pkgs.runCommand "aginctus-nixos-gateway-fixtures.json" { nativeBuildInputs = [ pkgs.jq ]; }
       ''
         jq -n \
-          --slurpfile defaults ${configSource { }} \
+          --slurpfile defaults ${moduleDefaults} \
           --slurpfile disabled ${configSource { gateway.egress.network.name = ""; }} \
           --slurpfile ranges ${
             configSource (
@@ -60,11 +61,13 @@ self.packages.${system}.aginctus.overrideAttrs (old: {
   checkPhase = ''
     runHook preCheck
     export AGINCTUS_NIXOS_GATEWAY_FIXTURES=${fixtures}
+    export AGINCTUS_NIXOS_MODULE_DEFAULTS=${moduleDefaults}
     unset AGINCTUS_INCUS_INTEGRATION AGINCTUS_INCUS_DISPOSABLE
     go test ./internal/gateway -run '^TestNixOSGatewayConfigParity$' -count=1 -v
+    go test ./internal/config -run '^TestDefaultsMatchNixOSModule$' -count=1 -v
     runHook postCheck
   '';
   passthru = (old.passthru or { }) // {
-    inherit fixtures;
+    inherit fixtures moduleDefaults;
   };
 })

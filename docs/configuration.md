@@ -212,6 +212,21 @@ These are defaults rather than hard-coded orchestration constants. `aginctus net
 
 Both network lifecycle commands support `--dry-run` and `--force`. Dry-run reports the intended mutation without applying it. Force only relaxes the Aginctus ownership check for a same-named Incus-managed bridge; it does not bypass network type checks or Incus API errors.
 
+### Where a default comes from
+
+Two registries describe the same effective configuration: the CLI's `defaults` map in `internal/config/config.go` and the module's typed options in `nix/nixos-module.nix`. The module renders its defaults into `/etc/aginctus/config.json`, which overrides the CLI fallbacks, so a value that differs between the two registries changes behavior depending on which layer supplies it.
+
+`TestDefaultsMatchNixOSModule` (`internal/config/nix_defaults_parity_test.go`) fails when the registries disagree in either direction. The `gateway-config-parity` flake check runs it against the module's actual rendered output; plain `go test ./internal/config` runs it against the committed snapshot in `internal/config/testdata`. Adding a default therefore requires adding it to both registries, or recording it as a CLI-only fallback.
+
+Two keys are CLI-only fallbacks today, listed explicitly in that test:
+
+| Key | Value | Why |
+| --- | --- | --- |
+| `gateway.credentials.storage.pool` | `default` | Incus pool for the gateway credential volume; the module has no option for it |
+| `gateway.egress.network.name` | `aginctus-egress` | Operators set this through the module's freeform JSON layer; the CLI value is the fallback when it is absent |
+
+`firewall.backend` is not a registry default. The module pins it per backend in the generated reconcile unit's command line (`firewalld`, `nixos-nft`, or `iptables-nft`), and the CLI reads it only to refuse a backend the host does not actually provide. Setting it by hand changes which reconciliation path is attempted and fails closed on any mismatch, so prefer the module-generated unit over a hand-written override.
+
 
 ## Herdr client container defaults
 
