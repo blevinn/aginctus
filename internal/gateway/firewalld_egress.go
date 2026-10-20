@@ -44,8 +44,8 @@ func (s Spec) PlanEgressFirewalld(uplinkZone string) ([]byte, error) {
 	zone := "aginctus-egress"
 	policy := "aginctus-egress-https"
 	rejects := []string{}
-	for _, subnet := range []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "127.0.0.0/8", "100.64.0.0/10"} {
-		rejects = append(rejects, fmt.Sprintf(`rule family="ipv4" priority="-100" source address="%s/32" destination address="%s" reject`, prefix.Addr(), subnet))
+	for _, subnet := range []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "127.0.0.0/8", "100.64.0.0/10", "0.0.0.0/8", "224.0.0.0/4", "240.0.0.0/4"} {
+		rejects = append(rejects, fmt.Sprintf(`rule family="ipv4" priority="-300" source address="%s/32" destination address="%s" drop`, prefix.Addr(), subnet))
 	}
 	out := EgressFirewalldPlan{
 		Zone: zone, Interface: s.EgressNetwork, UplinkZone: uplinkZone,

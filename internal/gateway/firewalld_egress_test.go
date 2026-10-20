@@ -23,12 +23,12 @@ func TestPlanEgressFirewalld(t *testing.T) {
 		p.Policy != "aginctus-egress-https" || p.Target != "CONTINUE" || !p.HTTPS {
 		t.Fatalf("incorrect policy scope: %+v", p)
 	}
-	if len(p.RichRules) != 6 {
+	if len(p.RichRules) != 9 {
 		t.Fatalf("missing private-network restrictions: %v", p.RichRules)
 	}
 	for _, rule := range p.RichRules {
 		if !strings.Contains(rule, `source address="10.42.40.25/32"`) ||
-			!strings.Contains(rule, ` reject`) {
+			!strings.Contains(rule, ` drop`) {
 			t.Fatalf("unsafe rich rule: %q", rule)
 		}
 	}
