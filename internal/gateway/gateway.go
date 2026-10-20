@@ -17,6 +17,7 @@ import (
 	"text/template"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/filestate"
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
@@ -434,32 +435,11 @@ func generateSecret() (string, error) {
 }
 
 func writeSecretState(path string, values map[string]string) error {
-	dir := filepath.Dir(path)
-	f, err := os.CreateTemp(dir, ".secrets-*.json")
+	data, err := json.MarshalIndent(values, "", "  ")
 	if err != nil {
-		return fmt.Errorf("create gateway secret state: %w", err)
-	}
-	tmp := f.Name()
-	defer func() { _ = os.Remove(tmp) }()
-
-	if err := f.Chmod(0o600); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("protect gateway secret state: %w", err)
-	}
-	encoder := json.NewEncoder(f)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(values); err != nil {
-		_ = f.Close()
 		return fmt.Errorf("encode gateway secret state: %w", err)
 	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("sync gateway secret state: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("close gateway secret state: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := filestate.WritePrivateFile(path, append(data, '\n')); err != nil {
 		return fmt.Errorf("persist gateway secret state: %w", err)
 	}
 	return nil
