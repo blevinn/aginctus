@@ -343,6 +343,70 @@ Use `aarch64-linux` instead on an aarch64 builder. The check is render-level
 proof only: actual OCI NIC addressing, default routes, TLS, and inference
 acceptance remain separate live gates under #257 and #122.
 
+## Continuous integration
+
+`.github/workflows/hermetic.yml` runs the supported hermetic validation tier
+on `pull_request` to and `push` to `main`, with `workflow_dispatch` for
+ad-hoc reruns. It requires #347 / PR #356's `check-all` recipe. The job uses
+`ubuntu-22.04`, `permissions: contents: read`, SHA-pinned actions, and
+`cachix/install-nix-action`. Weekly Dependabot PRs propose action updates.
+Checkout does not persist credentials. No production secrets or third-party
+tokens are configured. Fetching source, actions, locked Nix dependencies and
+Go modules requires network access; this workflow does not enforce an egress
+allowlist. SHA pins identify action code, not a guarantee about all
+network-fetched installer dependencies or hosted-runner software.
+
+The aggregate runs, in order, `nix --quiet develop -c just check-all` (added
+by #347 / PR #356), `nix --quiet build --no-update-lock-file
+.#checks.x86_64-linux.gateway-config-parity`, and `git diff --check` against
+the pre-push revision (pushes) or the PR base SHA (pull requests). Lock-file
+drift is rejected by `--no-update-lock-file`. The Go module cache is restored
+from `actions/cache` keyed on `go.sum` and populated online before the
+offline aggregate, because `just check-all` runs with `GOPROXY=off`.
+
+The job uses full-history checkout (`fetch-depth: 0`) so the diff step and
+the recorded `BUILD_HASH=${{ github.sha }}` reflect the exact commit under
+test. `$GITHUB_STEP_SUMMARY` reports step outcomes and observed Python test
+results, including actual skip reasons. If the aggregate fails, its results
+are partial: later suites have not run. Go and shell results remain in the
+aggregate log. Gateway parity also runs after an aggregate failure when the
+aggregate was attempted. Configured checks do not establish branch protection.
+
+### Local reproduction
+
+Reproduce the CI aggregate locally on a Linux host with flakes-enabled Nix:
+
+```sh
+# Optional: populate the Go module cache ahead of the offline aggregate.
+nix --quiet develop --no-update-lock-file -c go mod download
+
+# Run the same aggregate the workflow runs.
+nix --quiet develop --no-update-lock-file -c just check-all
+
+# Render-level NixOS gateway parity.
+nix --quiet build --no-update-lock-file .#checks.x86_64-linux.gateway-config-parity
+
+# Same whitespace check the workflow performs.
+git diff --check origin/main...HEAD   # for a topic branch
+git diff --check HEAD~ HEAD           # for the most recent commit
+```
+
+The runner contract requires unprivileged user namespaces with root UID
+mapping, mount namespaces, and namespace-local bind mounts. A probe verifies
+these before installing Nix, including that the bind mount is invisible outside
+the namespace. If it fails, CI fails closed. Do not change host sysctls,
+AppArmor policy, or run the SSH suite with sudo to bypass the contract.
+An error such as `unshare: write failed /proc/self/uid_map: Operation not
+permitted` is a blocking base-isolation platform failure, not an optional skip.
+Foreign-ownership tests can still report `namespace UID mapping unavailable on
+this host` independently of the mandatory base namespace contract; the summary
+reports observed skips without predicting their count or cause.
+
+The aggregate excludes live Incus/provider acceptance, real OpenCode runtime
+execution, guest image builds, and heavyweight firewall/Incus/Herdr VMs. See the
+validation tiers above for their separate commands. Whole-tree linters and link
+checker integration are tracked separately in #297–#299 and #361.
+
 ## direnv
 
 If you use direnv with nix-direnv support, the repository includes an `.envrc`:
