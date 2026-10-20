@@ -68,10 +68,7 @@ func (s Spec) CheckStagedEgressFirewalld(ctx context.Context, uplink string, run
 	prefix, _ := netip.ParsePrefix(s.EgressIPv4Address)
 	source := prefix.Addr().String()+"/32"
 	accept := fmt.Sprintf(`rule family="ipv4" priority="-200" source address="%s" port port="443" protocol="tcp" accept`, source)
-	plan, err := s.PlanEgressFirewalld(uplink)
-	if err != nil { return err }
-	_ = plan
-	// The exact rich rules are queried through the structured CLI interface
+ 	// The exact rich rules are queried through the structured CLI interface
 	// rather than relying on firewalld's multiline human-readable info format.
 	rules, err := run(ctx, "--permanent", "--policy="+egressFirewallPolicy, "--list-rich-rules")
 	if err != nil { return fmt.Errorf("read staged policy rules: %w",err) }
@@ -127,4 +124,18 @@ func equalLineSets(output string, expected []string) bool {
 	if len(seen)!=len(expected){return false}
 	for _,line:=range expected {if seen[line]!=1{return false}}
 	return true
+}
+
+// UnstageEgressFirewalld removes only an exact, ownership-verified permanent
+// staging configuration. It refuses drift and does not reload the firewall.
+// On partial failure, the caller must inspect the permanent objects.
+func (s Spec) UnstageEgressFirewalld(ctx context.Context, uplink string, run FirewalldExecutor) error {
+	if err:=s.CheckStagedEgressFirewalld(ctx,uplink,run);err!=nil{return err}
+	if _,err:=run(ctx,"--permanent","--delete-policy="+egressFirewallPolicy);err!=nil{
+		return fmt.Errorf("delete staged egress policy: %w",err)
+	}
+	if _,err:=run(ctx,"--permanent","--delete-zone="+egressFirewallZone);err!=nil{
+		return fmt.Errorf("delete staged egress zone (policy already removed): %w",err)
+	}
+	return nil
 }
