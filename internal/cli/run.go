@@ -1090,7 +1090,8 @@ Commands:
   gateway up       Alias for gateway apply
   gateway apply    Reconcile the AI gateway
   gateway egress preflight  Read-only owned egress network / DHCP safety check
-  gateway egress audit      Read-only LiteLLM NIC configuration audit\n  gateway egress firewall plan --uplink-zone=ZONE  Read-only firewalld forwarding proposal
+  gateway egress audit      Read-only LiteLLM NIC configuration audit
+  gateway egress firewall plan --uplink-zone=ZONE  Read-only firewalld forwarding proposal
   gateway egress dhcp plan --ranges=START-END  Inspect safe DHCP pool migration
   gateway egress dhcp apply --ranges=START-END --confirm-bridge-only  Guarded bridge DHCP update
   gateway egress reconcile --dry-run  Plan owned LiteLLM NIC repair without mutation
