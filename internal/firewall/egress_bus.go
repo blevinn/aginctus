@@ -18,6 +18,28 @@ type Busctl struct{}
 const firewalldBus = "org.fedoraproject.FirewallD1"
 const firewalldPath = "/org/fedoraproject/FirewallD1"
 
+// EffectiveZone includes implicit default-zone classification. Reconciliation
+// must not require an ad hoc permanent binding for a physical uplink.
+func (Busctl) EffectiveZone(ctx context.Context, iface string) (string, error) {
+	raw, err := busCall(ctx, firewalldPath, firewalldBus+".zone", "getZoneOfInterface", "s", iface)
+	if err != nil {
+		return "", err
+	}
+	var zone string
+	if err = json.Unmarshal(raw, &zone); err != nil {
+		return "", err
+	}
+	if zone != "" {
+		return zone, nil
+	}
+	raw, err = busCall(ctx, firewalldPath, firewalldBus, "getDefaultZone")
+	if err != nil {
+		return "", err
+	}
+	err = json.Unmarshal(raw, &zone)
+	return zone, err
+}
+
 func (Busctl) Forget(ctx context.Context, source string) error {
 	ip, err := netip.ParseAddr(source)
 	if err != nil || !ip.Is4() {

@@ -153,6 +153,7 @@ pkgs.testers.runNixOSTest {
         machine.succeed(f"ip -n world addr add {destination}/32 dev lo; ip route add {destination}/32 via 192.0.2.2 dev wan-host")
     firewall("--zone=public", "--add-interface=wan-host")
     firewall("--permanent", "--zone=public", "--add-interface=wan-host")
+    machine.succeed("AGINCTUS_DISPOSABLE_FIREWALL_PHASE=zone-fallback ${egressTest}/bin/aginctus-firewall-test -test.run=^TestEgressRealFirewalld$ -test.v")
     machine.succeed("systemd-run --unit=world-https --collect ip netns exec world ${pkgs.python3}/bin/python3 -m http.server 443 --bind 0.0.0.0")
     machine.succeed("systemd-run --unit=world-http --collect ip netns exec world ${pkgs.python3}/bin/python3 -m http.server 80 --bind 0.0.0.0")
     machine.wait_until_succeeds("ip netns exec world ss -lnt | grep -F ':443'")

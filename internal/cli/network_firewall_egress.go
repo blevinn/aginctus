@@ -9,7 +9,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/firewall"
@@ -20,6 +19,7 @@ import (
 type egressStateFile string
 
 var inspectEgressLink = firewall.InspectLink
+var effectiveEgressZone = firewall.Busctl{}.EffectiveZone
 
 func (path egressStateFile) Load() (firewall.EgressState, error) {
 	var state firewall.EgressState
@@ -154,8 +154,8 @@ func discoverEgressGrant(ctx context.Context, cfg *config.Config) (firewall.Egre
 			if route.Dev == "" || route.Dev == spec.EgressNetwork || route.Dev == spec.Network {
 				return empty, fmt.Errorf("unsafe default route")
 			}
-			zone, err := firewallCommand(ctx, "", "firewall-cmd", "--get-zone-of-interface="+route.Dev)
-			if err != nil || strings.TrimSpace(zone) != uplink {
+			zone, err := effectiveEgressZone(ctx, route.Dev)
+			if err != nil || zone != uplink {
 				return empty, fmt.Errorf("default-route interface does not belong to configured uplink zone")
 			}
 			defaults++

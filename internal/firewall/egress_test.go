@@ -315,6 +315,17 @@ func TestEgressRealFirewalld(t *testing.T) {
 	if marker, err := os.ReadFile("/etc/aginctus/disposable-firewall-vm"); err != nil || string(marker) != "YES" {
 		t.Fatal("real-firewalld test requires the disposable VM marker")
 	}
+	if phase == "zone-fallback" {
+		zone, err := (Busctl{}).EffectiveZone(context.Background(), "unbound0")
+		if err != nil || zone != "nixos-fw-default" {
+			t.Fatalf("implicit uplink classification: %q %v", zone, err)
+		}
+		zone, err = (Busctl{}).EffectiveZone(context.Background(), "wan-host")
+		if err != nil || zone != "public" {
+			t.Fatalf("explicit uplink classification: %q %v", zone, err)
+		}
+		return
+	}
 	path := "/run/egress-test-state.json"
 	store := &memoryEgressStore{}
 	if raw, e := os.ReadFile(path); e == nil {

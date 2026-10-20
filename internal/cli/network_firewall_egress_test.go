@@ -60,8 +60,10 @@ func TestEgressNoUnprivilegedMutationOrRetiredStaging(t *testing.T) {
 
 func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 	oldQuery, oldNetwork, oldCommand, oldInspect := gatewayEgressQuery, getFirewallNetwork, firewallCommand, inspectEgressLink
+	oldZone := effectiveEgressZone
 	t.Cleanup(func() {
 		gatewayEgressQuery, getFirewallNetwork, firewallCommand, inspectEgressLink = oldQuery, oldNetwork, oldCommand, oldInspect
+		effectiveEgressZone = oldZone
 	})
 	loader := config.NewLoader()
 	loader.SystemPath = ""
@@ -123,13 +125,13 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 				}
 				return nil
 			}
-			firewallCommand = func(_ context.Context, _ string, name string, args ...string) (string, error) {
-				if name == "firewall-cmd" {
-					if drift == "uplink" {
-						return "trusted", nil
-					}
-					return "public", nil
+			effectiveEgressZone = func(context.Context, string) (string, error) {
+				if drift == "uplink" {
+					return "trusted", nil
 				}
+				return "public", nil
+			}
+			firewallCommand = func(_ context.Context, _ string, name string, args ...string) (string, error) {
 				if drift == "multiple routes" {
 					return `[{"dst":"default","dev":"wan0"},{"dst":"default","dev":"wan1"}]`, nil
 				}

@@ -84,7 +84,8 @@ Before granting access, reconciliation checks:
 - Live Incus bridge identity, ownership, NAT/routing, IPv6 disablement, actual
   Linux bridge address, bounded/disabled DHCP, and all-project address inventory.
 - Exact LiteLLM ownership and its two NIC declarations, with no extra attachment.
-- A unique IPv4 default-route interface belonging to the explicit uplink zone.
+- A unique IPv4 default-route interface belonging to the configured uplink zone,
+  including implicit default-zone classification when no interface binding exists.
 
 The operation is serialized by `/run/aginctus-firewall/lock`. It withdraws old
 grants before changing scope, prepares the complete HTTPS rule set while its
