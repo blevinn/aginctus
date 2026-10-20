@@ -11,15 +11,15 @@ import (
 // applying it requires an explicit firewall lifecycle integration; gateway
 // deployment does not alter firewalld policy.
 type EgressFirewalldPlan struct {
-	Zone        string   `json:"zone"`
-	Interface   string   `json:"interface"`
-	UplinkZone  string   `json:"uplink_zone"`
-	Policy      string   `json:"policy"`
-	Source      string   `json:"source"`
-	RichRules   []string `json:"rich_rules"`
-	HTTPS       bool     `json:"https"`
-	Target      string   `json:"target"`
-	Warning     string   `json:"warning"`
+	Zone       string   `json:"zone"`
+	Interface  string   `json:"interface"`
+	UplinkZone string   `json:"uplink_zone"`
+	Policy     string   `json:"policy"`
+	Source     string   `json:"source"`
+	RichRules  []string `json:"rich_rules"`
+	HTTPS      bool     `json:"https"`
+	Target     string   `json:"target"`
+	Warning    string   `json:"warning"`
 }
 
 var firewalldZoneIdentifier = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
@@ -51,7 +51,7 @@ func (s Spec) PlanEgressFirewalld(uplinkZone string) ([]byte, error) {
 		Zone: zone, Interface: s.EgressNetwork, UplinkZone: uplinkZone,
 		Policy: policy, Source: prefix.Addr().String() + "/32",
 		RichRules: rejects,
-		HTTPS: true, Target: "CONTINUE",
+		HTTPS:     true, Target: "CONTINUE",
 		Warning: "ADVISORY ONLY: no firewall changes made; permanent firewalld object creation requires operator-controlled activation and may affect other runtime rules. Verify uplink zone, management isolation, object ownership and rollback before applying. Deny rules cover common IPv4 non-public ranges, not an exhaustive destination authorization policy.",
 	}
 	return json.MarshalIndent(out, "", "  ")
