@@ -49,7 +49,7 @@ func parseSavedHerdrMachines(raw string) ([]savedHerdrMachine, error) {
 			}
 		}
 		if machine.Label == "" || machine.SSHTarget == "" {
-			return nil, fmt.Errorf("Herdr machine inventory lacks required label or SSH target")
+			return nil, fmt.Errorf("herdr machine inventory lacks required label or SSH target")
 		}
 		result = append(result, machine)
 	}
@@ -62,7 +62,7 @@ func verifySavedHerdrMachine(machines []savedHerdrMachine, label, target string)
 			continue
 		}
 		if machine.SSHTarget != target || (machine.RemoteSession != "" && machine.RemoteSession != "default") {
-			return false, fmt.Errorf("Herdr machine label %q conflicts with an existing profile", label)
+			return false, fmt.Errorf("herdr machine label %q conflicts with an existing profile", label)
 		}
 		return true, nil
 	}
@@ -80,7 +80,7 @@ func registerHerdrMachine(ctx context.Context, cfg *config.Config, id string) er
 	}
 	if target.Runtime != "opencode" || target.Isolation != "container" ||
 		!managedSSHHostAlias.MatchString(target.Name) || client.Name == target.Name {
-		return fmt.Errorf("Herdr registration requires a distinct managed OpenCode container")
+		return fmt.Errorf("herdr registration requires a distinct managed OpenCode container")
 	}
 	instances, err := statusInstances(ctx)
 	if err != nil {
@@ -178,7 +178,7 @@ func registerHerdrMachine(ctx context.Context, cfg *config.Config, id string) er
 		return err
 	}
 	if !exists {
-		return fmt.Errorf("Herdr machine was not saved")
+		return fmt.Errorf("herdr machine was not saved")
 	}
 	return nil
 }

@@ -47,7 +47,7 @@ func InspectLink(name string, expected net.IP) error {
 		return fmt.Errorf("bridge interface not found: %w", err)
 	}
 	if _, err := os.Stat(filepath.Join("/sys/class/net", name, "bridge")); err != nil {
-		return fmt.Errorf("Incus interface is not a Linux bridge: %w", err)
+		return fmt.Errorf("selected interface is not an Incus Linux bridge: %w", err)
 	}
 	addresses, err := iface.Addrs()
 	if err != nil {
@@ -59,7 +59,7 @@ func InspectLink(name string, expected net.IP) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("Incus bridge address does not match live interface")
+	return fmt.Errorf("bridge address does not match the live interface")
 }
 
 // Derive checks the selected, expected managed network, not all resources
@@ -73,10 +73,10 @@ func Derive(network *api.Network, configuredName, configuredAddress string, insp
 		!network.Managed || network.Type != "bridge" ||
 		network.Config["user.aginctus.managed"] != "true" ||
 		network.Config["user.aginctus.resource"] != "management-network" {
-		return Policy{}, fmt.Errorf("Incus network identity or ownership mismatch")
+		return Policy{}, fmt.Errorf("network identity or ownership mismatch")
 	}
 	if network.Status != "" && network.Status != "Created" {
-		return Policy{}, fmt.Errorf("Incus bridge is not in Created state")
+		return Policy{}, fmt.Errorf("bridge is not in Created state")
 	}
 	if network.Config["ipv4.nat"] != "false" || network.Config["ipv4.routing"] != "false" ||
 		network.Config["ipv6.address"] != "none" {

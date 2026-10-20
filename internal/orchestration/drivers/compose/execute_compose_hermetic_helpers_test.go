@@ -92,14 +92,13 @@ func defaultComposeInstanceConfig(project string) api.InstanceFull {
 }
 
 // runHermeticExecuteCompose is the one entry point tests use to drive
-// executeCompose against the fake server. It returns the error executeCompose
-// produced, the call list the fake recorded, and any non-default helper the
-// test wants to invoke.
+// executeCompose against the fake server. It returns the call list the fake
+// recorded and the error executeCompose produced.
 //
 // Tests must close the underlying server when finished. The cleanup is not
 // registered automatically because some tests want to inspect Calls after the
 // driver has returned.
-func runHermeticExecuteCompose(t *testing.T, server *fakeIncusServer, conn *iclient.Connection, project string, compose []byte) (error, []incusCall) {
+func runHermeticExecuteCompose(t *testing.T, server *fakeIncusServer, conn *iclient.Connection, project string, compose []byte) ([]incusCall, error) {
 	t.Helper()
 	err := executeCompose(
 		context.Background(),
@@ -107,7 +106,7 @@ func runHermeticExecuteCompose(t *testing.T, server *fakeIncusServer, conn *icli
 		nil,
 		func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error) { return conn, nil },
 	)
-	return err, server.Calls
+	return server.Calls, err
 }
 
 // runHermeticExecuteComposeWithConfig drives executeCompose with the supplied
@@ -115,7 +114,7 @@ func runHermeticExecuteCompose(t *testing.T, server *fakeIncusServer, conn *icli
 // RecreateOnDrift opt-in or pass environment substitutions use this entry
 // point. The environment map is forwarded to loadProject, where it is written
 // to a private temp file the upstream library consumes.
-func runHermeticExecuteComposeWithConfig(t *testing.T, server *fakeIncusServer, conn *iclient.Connection, cfg Config, environment map[string]string) (error, []incusCall) {
+func runHermeticExecuteComposeWithConfig(t *testing.T, server *fakeIncusServer, conn *iclient.Connection, cfg Config, environment map[string]string) ([]incusCall, error) {
 	t.Helper()
 	err := executeCompose(
 		context.Background(),
@@ -123,5 +122,5 @@ func runHermeticExecuteComposeWithConfig(t *testing.T, server *fakeIncusServer, 
 		environment,
 		func(*iclient.ConfigRemoteInfo) (*iclient.Connection, error) { return conn, nil },
 	)
-	return err, server.Calls
+	return server.Calls, err
 }
