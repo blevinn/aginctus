@@ -67,6 +67,13 @@ jobs:
       - name: populate Go module cache
         run: nix --quiet develop --no-update-lock-file -c go mod download
 
+      # Verification-only branch: prove a discovered shell syntax failure
+      # propagates through the real aggregate to a failed Actions conclusion.
+      - name: inject controlled shell syntax failure
+        run: |
+          printf 'if then\n' > ci-failure-fixture.sh
+          git add -N ci-failure-fixture.sh
+
       - name: just check-all
         id: aggregate
         run: |
