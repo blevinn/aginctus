@@ -314,6 +314,8 @@ services.aginctus.reconcile = {
 
 This reconciles the management network, Herdr client, and selected workloads only after Incus and any enabled image update services have succeeded. The services include the host `incus` executable in their systemd `PATH`. An image import failure prevents dependent reconciliation instead of allowing workloads to start against an outdated alias. Reconciliation is disabled by default because it mutates Incus state.
 
+Set `services.aginctus.reconcile.gateway = true` to additionally invoke `aginctus gateway apply` during the same boot reconciliation, between the firewall reconcile and the Herdr client ensure. The apply runs the gateway orchestration plan against the configured `services.aginctus.settings.gateway` values, including the gateway egress bridge, Compose project, LiteLLM and PostgreSQL instances, and protected runtime secrets under `$XDG_STATE_HOME`. Re-runs are idempotent against the declared settings. The option requires `services.aginctus.reconcile.enable = true` and is rejected at evaluation when set without it. Operators that prefer to drive `aginctus gateway apply` themselves should leave it disabled.
+
 ### Host firewall reconciliation (default-on)
 
 Independent of the Incus-state reconcile above, the module defaults
@@ -353,6 +355,8 @@ NixOS evaluates image alias names before attempting a systemd import: each enabl
 When `services.aginctus.reconcile.enable = true`, the reconciliation oneshot is also restarted when the generated configuration, Aginctus CLI package, or any **enabled** image source derivation changes in a NixOS generation. It is ordered after and requires the enabled image-import units, so a failed import prevents the dependent reconciliation run. Disabled image sources do not trigger reconciliation. When reconciliation is disabled, no automatic ensure operations are added.
 
 These triggers re-run the existing idempotent `network ensure`, `herdr client ensure`, and selected `workload ensure` commands. They do **not** promise replacement of already-created Incus instances when an image alias points to a newer image; instance recreation requires a separate, explicit upgrade policy.
+
+When `services.aginctus.reconcile.gateway = true`, the same triggers also re-run `aginctus gateway apply` against the declared gateway settings. Like the other steps, the apply is idempotent: a re-run observes the current Compose project, instances, and egress bridge, and applies only the declared drift. Removing the option from a host that has previously applied the gateway does not by itself stop the gateway; explicit `aginctus gateway remove` is the destructive path.
 
 ### Image-import service activation on CLI updates
 
