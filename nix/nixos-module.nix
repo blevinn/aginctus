@@ -276,7 +276,7 @@ in
       gateway = mkOption {
         type = types.bool;
         default = false;
-        description = "Apply the configured AI gateway as part of host reconciliation. Idempotent against the declared gateway settings.";
+        description = "Apply the configured AI gateway before Herdr and workloads. Orders resource application only; does not verify application health or reachability. Reuses protected generated runtime secrets.";
       };
       workloads = mkOption {
         type = types.listOf types.str;
@@ -310,7 +310,7 @@ in
         assertion = configuredSecretPaths == [ ];
         message = "services.aginctus.settings cannot contain runtime gateway secrets: ${
           lib.concatStringsSep ", " (map (path: lib.concatStringsSep "." path) configuredSecretPaths)
-        }. Provide these through the supported runtime credential mechanism instead.";
+        }. Leave secrets unset to generate and persist protected runtime state; see docs/configuration.md.";
       }
       {
         assertion = builtins.all validImageAlias enabledImageAliases;
