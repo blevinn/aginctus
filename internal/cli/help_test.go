@@ -57,6 +57,8 @@ func TestHelpOfflineInventory(t *testing.T) {
 	for _, want := range []string{
 		"YAML/JSON multi-document", "--from=FILE", "not stdin or a symlink", "16 MiB",
 		"gateway egress preflight", "gateway egress audit",
+		"gateway egress firewall plan --uplink-zone=ZONE  (read-only)",
+		"gateway egress firewall stage --uplink-zone=ZONE --confirm-permanent-no-reload  (mutates permanent policy; not activated)",
 		"gateway egress dhcp plan --ranges=START-END",
 		"gateway egress dhcp apply --ranges=START-END --confirm-bridge-only",
 		"gateway egress reconcile --dry-run", "gateway egress reconcile --confirm-stopped-instance",
