@@ -67,6 +67,10 @@ jobs:
       - name: populate Go module cache
         run: nix --quiet develop --no-update-lock-file -c go mod download
 
+      - name: just check-lint
+        id: lint
+        run: nix --quiet develop --no-update-lock-file -c just check-lint
+
       - name: just check-all
         id: aggregate
         run: |
@@ -98,6 +102,7 @@ jobs:
         if: always()
         env:
           NAMESPACE_RESULT: ${{ steps.namespaces.outcome }}
+          LINT_RESULT: ${{ steps.lint.outcome }}
           AGGREGATE_RESULT: ${{ steps.aggregate.outcome }}
           PARITY_RESULT: ${{ steps.parity.outcome }}
           WHITESPACE_RESULT: ${{ steps.whitespace.outcome }}
@@ -113,7 +118,7 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write('## Hermetic CI\n\n')
               summary.write(f"Checkout: `{os.environ['BUILD_HASH']}`\n\n")
-              for label, key in [('Namespace contract', 'NAMESPACE_RESULT'), ('check-all', 'AGGREGATE_RESULT'), ('Gateway parity', 'PARITY_RESULT'), ('Whitespace', 'WHITESPACE_RESULT')]:
+              for label, key in [('Namespace contract', 'NAMESPACE_RESULT'), ('Lint', 'LINT_RESULT'), ('check-all', 'AGGREGATE_RESULT'), ('Gateway parity', 'PARITY_RESULT'), ('Whitespace', 'WHITESPACE_RESULT')]:
                   summary.write(f'- {label}: {os.environ[key]}\n')
               summary.write('\n### Observed Python results (partial if aggregate failed)\n\n```text\n')
               summary.write('\n'.join(observed) if observed else 'No Python test results observed; inspect step logs.')

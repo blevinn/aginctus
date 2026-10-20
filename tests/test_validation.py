@@ -1,13 +1,12 @@
 """Exercise the real just dispatch with inert children and injected failures."""
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,6 +17,9 @@ class ValidationDispatchTests(unittest.TestCase):
             "go mod verify",
             "go test ./...",
             "go vet ./...",
+            "golangci-lint run",
+            "ruff check .",
+            "git ls-files -z -- *.sh",
             *[
                 f"python3 -m unittest discover -s {directory} -p test_*.py -v"
                 for directory in (
@@ -28,6 +30,7 @@ class ValidationDispatchTests(unittest.TestCase):
             "shell opencode-test.sh",
             "shell opencode-live-adapter-test.sh",
             "git ls-files -z -- *.sh",
+            "shellcheck syntax.sh",
             "python3 scripts/check_markdown_links.py",
             "nix --quiet flake check --no-build --no-update-lock-file",
             "nix --quiet flake check --no-update-lock-file",
@@ -59,7 +62,8 @@ if command == os.environ.get("FAIL_COMMAND"):
 if name == "git":
     sys.stdout.buffer.write(b"syntax.sh\\0")
 '''
-            for name in ("go", "python3", "git", "nix"):
+            for name in ("go", "golangci-lint", "python3", "ruff", "git",
+                         "nix", "shellcheck"):
                 tool = tools / name
                 tool.write_text(stub)
                 tool.chmod(0o700)
@@ -104,7 +108,7 @@ if name == "git":
                     result = subprocess.run(
                         ["just", "check-all"], cwd=root,
                         env=dict(env, FAIL_COMMAND=failure),
-                        capture_output=True, text=True, timeout=30,
+                        capture_output=True, text=True, timeout=30, check=False,
                     )
                     seen = log.read_text().splitlines()
                     if not failure:
