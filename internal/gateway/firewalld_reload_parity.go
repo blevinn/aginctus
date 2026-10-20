@@ -15,7 +15,9 @@ func CheckFirewalldReloadParity(ctx context.Context, run FirewalldExecutor) erro
 	if run == nil {
 		return fmt.Errorf("firewalld executor required")
 	}
-	for _, query := range []string{"--list-all-zones", "--list-all-policies", "--get-default-zone", "--get-ipsets", "--get-services"} {
+	// --get-default-zone is standalone, not a --permanent query. Daemon
+	// settings are deliberately outside this selected-state comparison.
+	for _, query := range []string{"--list-all-zones", "--list-all-policies", "--get-ipsets", "--get-services"} {
 		runtime, err := run(ctx, query)
 		if err != nil {
 			return fmt.Errorf("runtime firewalld %s: %w", query, err)
@@ -30,11 +32,26 @@ func CheckFirewalldReloadParity(ctx context.Context, run FirewalldExecutor) erro
 		if query == "--list-all-policies" {
 			permanent = omitFirewalldObject(permanent, egressFirewallPolicy)
 		}
-		if strings.TrimSpace(runtime) != strings.TrimSpace(permanent) {
+		if normalizeFirewalldDisplay(runtime) != normalizeFirewalldDisplay(permanent) {
 			return fmt.Errorf("firewalld %s differs between runtime and permanent configuration; global reload unsafe", query)
 		}
 	}
 	return nil
+}
+
+// Active/default annotations describe runtime presentation, not permissions.
+// Keep every property line intact so bindings and rich-rule drift still fail.
+func normalizeFirewalldDisplay(output string) string {
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		if line != "" && line[0] != ' ' && line[0] != '\t' {
+			for _, suffix := range []string{" (active)", " (default)", " (default, active)"} {
+				line = strings.TrimSuffix(line, suffix)
+			}
+			lines[i] = line
+		}
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
 // list-all outputs contain a top-level unindented object header and its

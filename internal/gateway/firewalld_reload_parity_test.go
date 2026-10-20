@@ -21,8 +21,11 @@ func TestCheckFirewalldReloadParity(t *testing.T) {
 		run := func(_ context.Context, args ...string) (string, error) {
 			command := strings.Join(args, " ")
 			commands = append(commands, command)
+			if command == "--permanent --get-default-zone" {
+				return "", fmt.Errorf("standalone option does not support --permanent")
+			}
 			if command == "--list-all-zones" {
-				return "public\n  services: ssh", nil
+				return "public (default, active)\n  services: ssh", nil
 			}
 			if command == "--permanent --list-all-zones" {
 				if drift {
@@ -31,7 +34,7 @@ func TestCheckFirewalldReloadParity(t *testing.T) {
 				return "public\n  services: ssh\naginctus-egress\n  services: dns dhcp", nil
 			}
 			if command == "--list-all-policies" {
-				return "aginctus-in\n  target: DROP", nil
+				return "aginctus-in (active)\n  target: DROP", nil
 			}
 			if command == "--permanent --list-all-policies" {
 				return "aginctus-in\n  target: DROP\naginctus-egress-https\n  target: CONTINUE", nil

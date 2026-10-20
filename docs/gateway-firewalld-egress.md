@@ -29,8 +29,12 @@ ownership, the uplink zone and interface, policy/zone name ownership, all
 forwarded destinations that must be excluded (including local non-RFC1918
 nets), any existing policy, and rollback requirements.
 
-Creating firewalld zones and policies with `firewall-cmd` requires permanent
-objects. Activating those objects with a reload replaces the runtime rule set;
+Creating named zones and policies through the supported CLI or D-Bus API
+requires permanent objects. Runtime `zone.setZoneSettings2` and
+`policy.setPolicySettings` update existing objects, not create them. The
+installed daemon's setters first look up the named runtime object. The
+`config.addZone2` and `config.addPolicy` methods create permanent configuration.
+Activating those objects with a reload replaces the runtime rule set;
 Aginctus must not reload firewalld as a side effect of `gateway apply`.
 This also means an extra nftables `accept` in an earlier base chain cannot
 replace a firewalld forwarding policy.
@@ -67,9 +71,12 @@ After operator-approved permanent staging, run
 aginctus gateway egress firewall verify-staged --uplink-zone=nixos-fw-default
 ```
 
-The checker verifies the exact expected zone ownership description, interface,
+The checker requests verbose object information to read ownership descriptions
+and verifies the expected zone ownership description, interface,
 host DNS/DHCP services, directional policy, priority, and source-limited HTTPS
-rules, rejecting unknown additions and incomplete configurations. It does not
+rules. It rejects additional protocols, source ports, masquerading, forward
+ports, zone rich rules, and incomplete configurations. Service order does not
+affect verification. Unsupported output formats fail closed. It does not
 authorize activation. To remove **unactivated** staging after successful
 verification:
 
@@ -77,11 +84,12 @@ verification:
 aginctus gateway egress firewall unstage --uplink-zone=nixos-fw-default --confirm-permanent-only
 ```
 
-The cleanup checks exact ownership before deleting the policy and zone, and
-does not reload the runtime firewall. If these objects have already been
-activated, removing permanent objects alone will not immediately remove the
-runtime rules. Review the read-only audit first. The cleanup is not atomic;
-partial failures are reported for manual recovery.
+The cleanup checks ownership and refuses deletion if either named object is
+loaded in runtime, even if currently inactive or only partly activated. It
+deletes the permanent policy before the zone and never reloads. Operators must
+serialize firewall maintenance: the read/check/delete sequence is not atomic
+against another administrator or daemon. Partial failures are reported for
+manual recovery; a policy-deletion failure leaves the zone untouched.
 
 ### Activation constraint
 
@@ -99,11 +107,40 @@ not a substitute for that proof.
 `aginctus gateway egress firewall reload-parity` compares a selected subset
 of permanent and runtime firewalld state, excluding the staged egress
 zone/policy from the permanent side. It refuses mismatches and makes no changes.
+Runtime header annotations such as `(active)` and `(default)` are ignored;
+interface bindings, permissions, and other property lines remain significant.
 **Passing is necessary but not sufficient:** it does not inspect all daemon
-settings, direct rules, the installed NixOS firewall module or nftables rules
-managed by other daemons. It never authorizes or executes a global reload.
+settings (including the default zone), direct rules, service/IP-set contents,
+the installed NixOS firewall module or nftables rules managed by other daemons.
+It never authorizes or executes a global reload.
 
 Firewalld's supported CLI only creates new named zones and policies in
 permanent configuration. A controlled reload may eventually be needed to
 activate these objects; do not replace that with an unrelated runtime rich
 rule that accidentally opens a broader path.
+
+## NixOS lifecycle boundary
+
+The host module predeclares the management DROP zone and forwarding-denial
+policies. Aginctus's `network firewall reconcile` verifies Incus bridge ownership
+and installs runtime-only IPv4 DNS rules to the bridge address plus UDP DHCP.
+Its timer periodically repairs these grants. A firewalld reload removes the
+grants until successful reconciliation; this is an availability interruption,
+not permission to replace ownership checks with permanent unrestricted DNS.
+NixOS supplies firewalld configuration through store-backed configuration paths
+and reload triggers, so imperative staging is not declarative deployment.
+
+There is no supported automatic egress activation or reconciliation yet.
+A safe lifecycle implementation needs predeclared, default-deny egress objects,
+an explicitly approved initial host activation, and ownership-verified runtime
+grants that can be withdrawn and restored without subsequent global reloads.
+It also needs independent bidirectional forwarding denials so unrelated trusted
+zones cannot provide an alternative route, destination exclusions including
+host-connected public networks, and actual packet-level regression tests.
+The current staged CONTINUE policy and common-private-range exclusions do not
+provide those guarantees. Do not activate them as a complete isolation policy.
+
+LiteLLM intentionally retains management-network access to PostgreSQL. Routed
+egress isolation cannot prohibit that same-L2 dependency. Acceptance must
+distinguish the required database connection from prohibited routed access;
+per-workload management isolation requires a separate network design.
