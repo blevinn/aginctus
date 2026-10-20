@@ -58,3 +58,38 @@ The dedicated zone uses the firewalld default target and explicitly permits DNS 
 ## Read-only activation audit
 
 `aginctus gateway egress firewall audit --uplink-zone=nixos-fw-default` compares names and details of permanent and runtime firewalld zone/policy objects and the bridge's current zone assignment. It never activates, reloads, or writes configuration; `activation_approved` remains false even when all objects are present. Inspect its output to identify whether permanent staging exists and whether a runtime reload or other actor has activated a policy. No individual object detail should be taken as proof that the complete host firewall policy is safe. An explicit, host-aware activation mechanism and negative isolation tests remain separate work.
+
+## Ownership verification and rollback
+
+After operator-approved permanent staging, run
+
+```sh
+aginctus gateway egress firewall verify-staged --uplink-zone=nixos-fw-default
+```
+
+The checker verifies the exact expected zone ownership description, interface,
+host DNS/DHCP services, directional policy, priority, and source-limited HTTPS
+rules, rejecting unknown additions and incomplete configurations. It does not
+authorize activation. To remove **unactivated** staging after successful
+verification:
+
+```sh
+aginctus gateway egress firewall unstage --uplink-zone=nixos-fw-default --confirm-permanent-only
+```
+
+The cleanup checks exact ownership before deleting the policy and zone, and
+does not reload the runtime firewall. If these objects have already been
+activated, removing permanent objects alone will not immediately remove the
+runtime rules. Review the read-only audit first. The cleanup is not atomic;
+partial failures are reported for manual recovery.
+
+### Activation constraint
+
+Do not blindly run `firewall-cmd --reload` on the NixOS pilot. Reload replaces
+firewalld runtime-only configuration with its permanent configuration, and the
+pilot has unrelated security-critical policies. An operator must separately
+review those differences and choose a safe host-specific activation method,
+then verify external HTTPS and negative management isolation. Aginctus does not
+offer an automatic activation command until the entire runtime state can be
+preserved or safely reconstructed. The existing stage and unstage commands are
+not a substitute for that proof.
