@@ -309,5 +309,3 @@ class SmokeFinallyTests(unittest.TestCase):
                 any("close failed" in line for line in stderr_lines),
                 f"missing close-failure WARN line; stderr={stderr_lines}",
             )
-
-
