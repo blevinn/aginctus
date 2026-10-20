@@ -1,9 +1,9 @@
 import importlib.util
 import json
 import os
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("herdr_lifecycle", Path(__file__).with_name("herdr-lifecycle.py"))
@@ -67,9 +67,8 @@ class LifecycleTests(unittest.TestCase):
         invoke.assert_not_called()
 
     def test_partial_create_without_valid_ids_fails_closed(self):
-        with patch.object(mod, "invoke", return_value='{"result":{}}'):
-            with self.assertRaises(RuntimeError):
-                mod.phase("open", str(self.base), self.identity)
+        with patch.object(mod, "invoke", return_value='{"result":{}}'), self.assertRaises(RuntimeError):
+            mod.phase("open", str(self.base), self.identity)
         self.assertFalse(mod.state_path(self.base).exists())
 
     def test_rejects_cross_machine_close(self):

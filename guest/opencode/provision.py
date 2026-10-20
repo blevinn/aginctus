@@ -1,12 +1,11 @@
-#!/usr/bin/env python3
 """Install a private OpenCode gateway configuration from trusted Incus stdin."""
 import json
 import os
-from pathlib import Path
 import pwd
 import stat
 import sys
 import tempfile
+from pathlib import Path
 
 from gateway_endpoint import validate_endpoint, validate_key, validate_model
 

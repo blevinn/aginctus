@@ -1,0 +1,11 @@
+# Lint selection for the repository's Python surface (#299).
+#
+# The list is explicit because ruff changes its defaults between releases:
+# a pinned tool must fail on exactly these rules and nothing else.
+# TRY004 is deliberately absent. The guest and acceptance validators raise
+# ValueError for untrusted JSON, and their callers depend on that contract.
+target-version = "py313"
+extend-exclude = [".worktrees"]
+
+[lint]
+select = ["E4", "E7", "E9", "F", "I", "EXE", "RUF012", "PLW1510", "SIM117"]

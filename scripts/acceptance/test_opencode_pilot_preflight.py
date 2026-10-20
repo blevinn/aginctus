@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
 """No Incus daemon or model provider is needed."""
 import importlib.util
 import io
+import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
-import unittest
 from unittest.mock import patch
 
 path = Path(__file__).with_name("opencode-pilot-preflight.py")
@@ -43,25 +42,25 @@ class PreflightTests(unittest.TestCase):
     def test_rejects_unsafe_network(self):
         for options in ({"nat": "true"}, {"routing": "true"},
                         {"ipv6": "auto"}, {"network": False}):
-            with self.subTest(options=options), patch.object(module, "run", side_effect=response(**options)):
-                with self.assertRaises(RuntimeError):
-                    module.verify()
+            with self.subTest(options=options), patch.object(module, "run", side_effect=response(**options)), \
+                    self.assertRaises(RuntimeError):
+                module.verify()
 
     def test_rejects_stopped_instance(self):
-        with patch.object(module, "run", side_effect=response(status="Stopped")):
-            with self.assertRaisesRegex(RuntimeError, "not running"):
-                module.verify()
+        with patch.object(module, "run", side_effect=response(status="Stopped")), \
+                self.assertRaisesRegex(RuntimeError, "not running"):
+            module.verify()
 
     def test_rejects_missing_or_invalid_resource_name(self):
-        with patch.object(module, "run", return_value='"../other"'):
-            with self.assertRaisesRegex(RuntimeError, "invalid configured"):
-                module.verify()
+        with patch.object(module, "run", return_value='"../other"'), \
+                self.assertRaisesRegex(RuntimeError, "invalid configured"):
+            module.verify()
 
     def test_readonly_command_failures_are_redacted(self):
         import subprocess
-        with patch.object(module.subprocess, "run", side_effect=subprocess.CalledProcessError(1, ["incus"])):
-            with self.assertRaisesRegex(RuntimeError, "read-only query failed"):
-                module.run("incus", "query", "test")
+        with patch.object(module.subprocess, "run", side_effect=subprocess.CalledProcessError(1, ["incus"])), \
+                self.assertRaisesRegex(RuntimeError, "read-only query failed"):
+            module.run("incus", "query", "test")
 
 if __name__ == "__main__":
     unittest.main()
