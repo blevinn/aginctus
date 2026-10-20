@@ -37,8 +37,12 @@
           herdrPackage = herdr.packages.${system}.herdr;
           aginctusCli = pkgs.buildGoModule {
             pname = "aginctus";
-            version = "0.0.0-dev";
+            version = "0.0.0-dev+${self.shortRev or "source"}";
             src = ./.;
+            # Dirty trees and non-Git sources get content identity, not a false commit claim.
+            ldflags = [
+              "-X=github.com/blevinn/aginctus/internal/cli.Revision=${self.rev or "source-${self.narHash}"}"
+            ];
             # Recalculate after Go module graph changes. A stale hash can reuse
             # an incompatible vendor tree even when go.mod is newer.
             vendorHash = "sha256-ao0Q95mYJ8xWhKWwhBQsBjtdF8bWMAXRG+c/kNOZkSQ=";

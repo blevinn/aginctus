@@ -180,7 +180,7 @@ func runAggregateApply(ctx context.Context, args []string, stdout, stderr io.Wri
 	case len(args) == 1 && strings.HasPrefix(args[0], "--from="):
 		plan, err = readAggregatePlan(strings.TrimPrefix(args[0], "--from="))
 	default:
-		fmt.Fprintln(stderr, "Usage: aginctus [global options] apply [--render | --from FILE]")
+		printApplyUsage(stderr)
 		return 2
 	}
 	if err != nil {
