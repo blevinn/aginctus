@@ -228,7 +228,7 @@ network-fetched installer dependencies or hosted-runner software.
 The aggregate runs, in order, `nix --quiet develop -c just check-all` (added
 by #347 / PR #356), `nix --quiet build --no-update-lock-file
 .#checks.x86_64-linux.gateway-config-parity`, and `git diff --check` against
-the previous commit (pushes) or the PR base ref (pull requests). Lock-file
+the pre-push revision (pushes) or the PR base SHA (pull requests). Lock-file
 drift is rejected by `--no-update-lock-file`. The Go module cache is restored
 from `actions/cache` keyed on `go.sum` and populated online before the
 offline aggregate, because `just check-all` runs with `GOPROXY=off`.
@@ -247,10 +247,10 @@ Reproduce the CI aggregate locally on a Linux host with flakes-enabled Nix:
 
 ```sh
 # Optional: populate the Go module cache ahead of the offline aggregate.
-nix --quiet develop -c go mod download
+nix --quiet develop --no-update-lock-file -c go mod download
 
 # Run the same aggregate the workflow runs.
-nix --quiet develop -c just check-all
+nix --quiet develop --no-update-lock-file -c just check-all
 
 # Render-level NixOS gateway parity.
 nix --quiet build --no-update-lock-file .#checks.x86_64-linux.gateway-config-parity
@@ -265,9 +265,8 @@ mapping, mount namespaces, and namespace-local bind mounts. A probe verifies
 these before installing Nix, including that the bind mount is invisible outside
 the namespace. If it fails, CI fails closed. Do not change host sysctls,
 AppArmor policy, or run the SSH suite with sudo to bypass the contract.
-The earlier `ubuntu-latest` verification run failed with
-`unshare: write failed /proc/self/uid_map: Operation not permitted`, causing
-four base-isolation test failures in addition to three foreign-ownership skips.
+An error such as `unshare: write failed /proc/self/uid_map: Operation not
+permitted` is a blocking base-isolation platform failure, not an optional skip.
 Foreign-ownership tests can still report `namespace UID mapping unavailable on
 this host` independently of the mandatory base namespace contract; the summary
 reports observed skips without predicting their count or cause.
