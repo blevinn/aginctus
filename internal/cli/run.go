@@ -374,6 +374,14 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 3 && args[0] == "egress" && args[1] == "firewall" && args[2] == "reload-parity" {
+		if err := gateway.CheckFirewalldReloadParity(ctx, gateway.SystemFirewalld); err != nil {
+			fmt.Fprintf(stderr, "firewalld reload parity blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "selected runtime/permanent firewalld state matches (excluding staged Aginctus egress objects); global reload NOT approved or executed")
+		return 0
+	}
 	if len(args) >= 4 && args[0] == "egress" && args[1] == "firewall" &&
 		(args[2] == "verify-staged" || args[2] == "unstage") &&
 		strings.HasPrefix(args[3], "--uplink-zone=") {
@@ -866,6 +874,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall plan --uplink-zone=ZONE  (read-only)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall audit --uplink-zone=ZONE  (read-only)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall verify-staged --uplink-zone=ZONE  (read-only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall reload-parity  (read-only; NOT approval)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall unstage --uplink-zone=ZONE --confirm-permanent-only")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall stage --uplink-zone=ZONE --confirm-permanent-no-reload")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
