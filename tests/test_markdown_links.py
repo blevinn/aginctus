@@ -41,6 +41,7 @@ class MarkdownLinksTests(unittest.TestCase):
                 '[parens](nested_(file).md)\n'
                 r'[escaped path](nested_\(file\).md)' + '\n'
                 '[setext](#setext-heading-code) [unicode](#caf%C3%A9_%E4%B8%96%E7%95%8C)\n'
+                '[original](#repeat) [duplicate](#repeat-1)\n'
                 '![image](../asset.png) [directory](../docs/)\n'
             ),
             "docs/space name.md": "# Hello *world*\n",
@@ -80,12 +81,13 @@ class MarkdownLinksTests(unittest.TestCase):
             ("[nul](bad%00.md)", "NUL"),
             ("[absolute](/etc/passwd)", "absolute local paths"),
             ("[fake](target.md#fake)", "missing heading fragment #fake"),
+            ("[duplicate](target.md#real-2)", "missing heading fragment #real-2"),
         ]
         for text, message in cases:
             with self.subTest(text=text):
                 result = self.scan({
                     "templates/guide.markdown": "# Guide\n\n" + text + "\n",
-                    "templates/target.md": "```\n# Fake\n```\n# Real\n",
+                    "templates/target.md": "```\n# Fake\n```\n# Real\n# Real\n",
                 })
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertIn("templates/guide.markdown:3:", result.stderr)

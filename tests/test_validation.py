@@ -28,6 +28,7 @@ class ValidationDispatchTests(unittest.TestCase):
             "shell opencode-test.sh",
             "shell opencode-live-adapter-test.sh",
             "git ls-files -z -- *.sh",
+            "python3 scripts/check_markdown_links.py",
             "nix --quiet flake check --no-build --no-update-lock-file",
             "nix --quiet flake check --no-update-lock-file",
         ]
