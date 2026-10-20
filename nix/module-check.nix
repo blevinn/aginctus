@@ -160,10 +160,23 @@ assert lib.hasInfix "aginctus-firewall-reconcile.service"
 assert lib.hasInfix "gateway apply" reconcileGateway.script;
 assert lib.hasInfix "herdr client ensure" reconcileGateway.script;
 assert !(lib.hasInfix "gateway apply" reconcile.script);
+# reconcile.gateway must pin XDG_STATE_HOME so the gateway CLI's
+# os.UserHomeDir fallback (which fails inside systemd units that do not
+# export $HOME) does not abort the reconcile oneshot.
+assert builtins.elem "XDG_STATE_HOME=/var/lib/aginctus/state"
+  reconcileGateway.serviceConfig.Environment;
 # reconcile.gateway without reconcile.enable is rejected.
 assert builtins.length (failedAginctusAssertions withReconcileGatewayNoEnable) == 1;
 assert lib.hasInfix "reconcile.gateway requires"
   (builtins.head (failedAginctusAssertions withReconcileGatewayNoEnable)).message;
+# Without reconcile.gateway, the reconcile unit does not set
+# XDG_STATE_HOME; the gateway-only CLI subcommand keeps using its
+# built-in state-dir resolution (which still needs a usable HOME or
+# XDG_STATE_HOME at the call site, but is the caller's responsibility).
+assert
+  !(builtins.elem "XDG_STATE_HOME=/var/lib/aginctus/state"
+    reconcile.serviceConfig.Environment or [ ]
+  );
 assert builtins.length secretAssertions == 1;
 assert lib.hasInfix "gateway.postgres.password" (builtins.head secretAssertions).message;
 assert lib.hasInfix "gateway.master.key" (builtins.head secretAssertions).message;

@@ -486,6 +486,16 @@ in
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
+            # systemd oneshot services do not inherit $HOME; the gateway
+            # CLI's state-directory fallback (os.UserHomeDir) would fail
+            # with "$HOME is not defined" before any consumer can recover.
+            # Pin the gateway secret directory to a NixOS-managed location,
+            # mirroring the firewall reconcile unit's XDG_CONFIG_HOME
+            # isolation. Only set when `reconcile.gateway` is in scope; the
+            # other reconciler subcommands tolerate (or ignore) the var.
+          }
+          // lib.optionalAttrs cfg.reconcile.gateway {
+            Environment = [ "XDG_STATE_HOME=/var/lib/aginctus/state" ];
           };
           script = ''
             set -eu
