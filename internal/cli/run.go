@@ -805,6 +805,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway apply")
 	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall plan --uplink-zone=ZONE  (read-only)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage audit  (read-only; no authentication)")
