@@ -47,6 +47,7 @@ assert os.environ["AGINCTUS_INCUS_DISPOSABLE"] == "NO"
 assert not os.environ["AGINCTUS_ACCEPTANCE_LIVE"]
 assert not os.environ["AGINCTUS_ACCEPTANCE_LIVE_HOOKS"]
 assert not os.environ["ACCEPTANCE_TEST_FAIL"]
+assert not os.environ["GOFLAGS"]
 assert os.environ["GOPROXY"] == "off"
 assert os.environ["GOSUMDB"] == "off"
 assert os.environ["GOTOOLCHAIN"] == "local"
@@ -65,6 +66,16 @@ if name == "git":
             acceptance.mkdir(parents=True)
             for name in ("opencode-test.sh", "opencode-live-adapter-test.sh"):
                 (acceptance / name).write_text(
+                    'set -eu\n'
+                    '[[ "$AGINCTUS_INCUS_INTEGRATION" == 0 ]]\n'
+                    '[[ "$AGINCTUS_INCUS_DISPOSABLE" == NO ]]\n'
+                    '[[ -z "$AGINCTUS_ACCEPTANCE_LIVE" ]]\n'
+                    '[[ -z "$AGINCTUS_ACCEPTANCE_LIVE_HOOKS" ]]\n'
+                    '[[ -z "$ACCEPTANCE_TEST_FAIL" ]]\n'
+                    '[[ -z "$GOFLAGS" ]]\n'
+                    '[[ "$GOPROXY" == off ]]\n'
+                    '[[ "$GOSUMDB" == off ]]\n'
+                    '[[ "$GOTOOLCHAIN" == local ]]\n'
                     f'command="shell {name}"\n'
                     'printf "%s\\n" "$command" >> "$DISPATCH_LOG"\n'
                     '[[ "$command" != "${FAIL_COMMAND:-}" ]]\n'
@@ -80,6 +91,10 @@ if name == "git":
                 AGINCTUS_ACCEPTANCE_LIVE="I_UNDERSTAND",
                 AGINCTUS_ACCEPTANCE_LIVE_HOOKS="/must/not/execute",
                 ACCEPTANCE_TEST_FAIL="1",
+                GOFLAGS="-run=^$ -count=0",
+                GOPROXY="https://must.not.contact.invalid",
+                GOSUMDB="must.not.contact.invalid",
+                GOTOOLCHAIN="must-not-select",
             )
             for failure in ("", *expected, "syntax"):
                 with self.subTest(failure=failure or "success"):
