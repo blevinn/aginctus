@@ -374,6 +374,37 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) >= 4 && args[0] == "egress" && args[1] == "firewall" &&
+		(args[2] == "verify-staged" || args[2] == "unstage") &&
+		strings.HasPrefix(args[3], "--uplink-zone=") {
+		unstage := args[2] == "unstage"
+		if (!unstage && len(args) != 4) ||
+			(unstage && (len(args) != 5 || args[4] != "--confirm-permanent-only")) {
+			printGatewayUsage(stderr)
+			return 2
+		}
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall configuration: %v\n", err)
+			return 1
+		}
+		uplink := strings.TrimPrefix(args[3], "--uplink-zone=")
+		if unstage {
+			err = spec.UnstageEgressFirewalld(ctx, uplink, gateway.SystemFirewalld)
+		} else {
+			err = spec.CheckStagedEgressFirewalld(ctx, uplink, gateway.SystemFirewalld)
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall staged configuration: %v\n", err)
+			return 1
+		}
+		if unstage {
+			fmt.Fprintln(stdout, "exact owned permanent egress firewall objects removed; runtime firewall NOT changed")
+		} else {
+			fmt.Fprintln(stdout, "permanent egress firewall objects match expected settings; activation NOT approved, runtime firewall NOT changed")
+		}
+		return 0
+	}
 	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "audit" && strings.HasPrefix(args[3], "--uplink-zone=") {
 		spec, err := gateway.FromConfig(effective)
 		if err != nil {
@@ -834,6 +865,8 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall plan --uplink-zone=ZONE  (read-only)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall audit --uplink-zone=ZONE  (read-only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall verify-staged --uplink-zone=ZONE  (read-only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall unstage --uplink-zone=ZONE --confirm-permanent-only")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall stage --uplink-zone=ZONE --confirm-permanent-no-reload")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
