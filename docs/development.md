@@ -212,6 +212,58 @@ Use `aarch64-linux` instead on an aarch64 builder. The check is render-level
 proof only: actual OCI NIC addressing, default routes, TLS, and inference
 acceptance remain separate live gates under #257 and #122.
 
+## Continuous integration
+
+`.github/workflows/hermetic.yml` enforces the supported hermetic validation
+tier on `pull_request` to and `push` to `main`, with `workflow_dispatch` for
+ad-hoc reruns. The job runs on `ubuntu-latest` with `permissions: contents: read`,
+pins actions to specific commits, and uses `cachix/install-nix-action` v31.
+It does not require or access Incus, secrets, OAuth credentials, or any
+third-party tokens; the only network egress is fetching locked Nix inputs,
+Go module cache, and the Nix binary cache.
+
+The aggregate runs, in order, `nix --quiet develop -c just check-all` (added
+by #347 / PR #356), `nix --quiet build --no-update-lock-file
+.#checks.x86_64-linux.gateway-config-parity`, and `git diff --check` against
+the previous commit (pushes) or the PR base ref (pull requests). Lock-file
+drift is rejected by `--no-update-lock-file`. The Go module cache is restored
+from `actions/cache` keyed on `go.sum` and populated online before the
+offline aggregate, because `just check-all` runs with `GOPROXY=off`.
+
+The job uses full-history checkout (`fetch-depth: 0`) so the diff step and
+the recorded `BUILD_HASH=${{ github.sha }}` reflect the exact commit under
+test. Skipped test counts are reported as expected skips in
+`$GITHUB_STEP_SUMMARY` rather than as passes.
+
+### Local reproduction
+
+Reproduce the CI aggregate locally on a Linux host with flakes-enabled Nix:
+
+```sh
+# Optional: populate the Go module cache ahead of the offline aggregate.
+nix --quiet develop -c go mod download
+
+# Run the same aggregate the workflow runs.
+nix --quiet develop -c just check-all
+
+# Render-level NixOS gateway parity.
+nix --quiet build --no-update-lock-file .#checks.x86_64-linux.gateway-config-parity
+
+# Same whitespace check the workflow performs.
+git diff --check origin/main...HEAD   # for a topic branch
+git diff --check HEAD~ HEAD           # for the most recent commit
+```
+
+The aggregate fails rather than falling back to privileged execution if
+unprivileged user namespaces are unavailable. On hosts without `/etc/subuid`
+entries the three guest SSH host-trust tests
+(`test_rejects_non_root_owned_trust_directory`,
+`test_rejects_non_root_owned_state_root`,
+`test_rejects_non_root_owned_known_hosts`) report
+`skipped 'namespace UID mapping unavailable on this host'` and are tallied
+as unittest skips. The CI summary explicitly lists those expected skips so
+they are not mistaken for failures.
+
 ## direnv
 
 If you use direnv with nix-direnv support, the repository includes an `.envrc`:
