@@ -214,13 +214,16 @@ acceptance remain separate live gates under #257 and #122.
 
 ## Continuous integration
 
-`.github/workflows/hermetic.yml` enforces the supported hermetic validation
-tier on `pull_request` to and `push` to `main`, with `workflow_dispatch` for
-ad-hoc reruns. The job runs on `ubuntu-latest` with `permissions: contents: read`,
-pins actions to specific commits, and uses `cachix/install-nix-action` v31.
-It does not require or access Incus, secrets, OAuth credentials, or any
-third-party tokens; the only network egress is fetching locked Nix inputs,
-Go module cache, and the Nix binary cache.
+`.github/workflows/hermetic.yml` runs the supported hermetic validation tier
+on `pull_request` to and `push` to `main`, with `workflow_dispatch` for
+ad-hoc reruns. It requires #347 / PR #356's `check-all` recipe. The job uses
+`ubuntu-22.04`, `permissions: contents: read`, SHA-pinned actions, and
+`cachix/install-nix-action`. Weekly Dependabot PRs propose action updates.
+Checkout does not persist credentials. No production secrets or third-party
+tokens are configured. Fetching source, actions, locked Nix dependencies and
+Go modules requires network access; this workflow does not enforce an egress
+allowlist. SHA pins identify action code, not a guarantee about all
+network-fetched installer dependencies or hosted-runner software.
 
 The aggregate runs, in order, `nix --quiet develop -c just check-all` (added
 by #347 / PR #356), `nix --quiet build --no-update-lock-file
@@ -232,8 +235,11 @@ offline aggregate, because `just check-all` runs with `GOPROXY=off`.
 
 The job uses full-history checkout (`fetch-depth: 0`) so the diff step and
 the recorded `BUILD_HASH=${{ github.sha }}` reflect the exact commit under
-test. Skipped test counts are reported as expected skips in
-`$GITHUB_STEP_SUMMARY` rather than as passes.
+test. `$GITHUB_STEP_SUMMARY` reports step outcomes and observed Python test
+results, including actual skip reasons. If the aggregate fails, its results
+are partial: later suites have not run. Go and shell results remain in the
+aggregate log. Gateway parity also runs after an aggregate failure when the
+aggregate was attempted. Configured checks do not establish branch protection.
 
 ### Local reproduction
 
@@ -254,15 +260,22 @@ git diff --check origin/main...HEAD   # for a topic branch
 git diff --check HEAD~ HEAD           # for the most recent commit
 ```
 
-The aggregate fails rather than falling back to privileged execution if
-unprivileged user namespaces are unavailable. On hosts without `/etc/subuid`
-entries the three guest SSH host-trust tests
-(`test_rejects_non_root_owned_trust_directory`,
-`test_rejects_non_root_owned_state_root`,
-`test_rejects_non_root_owned_known_hosts`) report
-`skipped 'namespace UID mapping unavailable on this host'` and are tallied
-as unittest skips. The CI summary explicitly lists those expected skips so
-they are not mistaken for failures.
+The runner contract requires unprivileged user namespaces with root UID
+mapping, mount namespaces, and namespace-local bind mounts. A probe verifies
+these before installing Nix, including that the bind mount is invisible outside
+the namespace. If it fails, CI fails closed. Do not change host sysctls,
+AppArmor policy, or run the SSH suite with sudo to bypass the contract.
+The earlier `ubuntu-latest` verification run failed with
+`unshare: write failed /proc/self/uid_map: Operation not permitted`, causing
+four base-isolation test failures in addition to three foreign-ownership skips.
+Foreign-ownership tests can still report `namespace UID mapping unavailable on
+this host` independently of the mandatory base namespace contract; the summary
+reports observed skips without predicting their count or cause.
+
+The aggregate excludes live Incus/provider acceptance, real OpenCode runtime
+execution, guest image builds, and heavyweight firewall/Incus/Herdr VMs. See the
+validation tiers above for their separate commands. Whole-tree linters and link
+checker integration are tracked separately in #297–#299 and #361.
 
 ## direnv
 

@@ -14,8 +14,6 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    labels:
-        - "dependencies"
     groups:
       actions:
         patterns:
