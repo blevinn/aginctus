@@ -14,12 +14,35 @@ test-nix-firewall:
 # Builds and runs a disposable QEMU VM with real Incus and the packaged CLI.
 # Unlike 'just test', this is a heavyweight integration check.
 test-nix *args:
-    bash tests/nixos-incus-vm.sh {{args}}
+    bash tests/nixos-incus-vm.sh {{ args }}
 
 vet:
     go vet ./...
 
 check: modules test vet
+
+# Safe aggregate, even when the caller has opted into live acceptance elsewhere.
+check-all:
+    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local just check test-python test-shell check-shell check-nix
+
+test-python:
+    python3 -m unittest discover -s guest/opencode -p 'test_*.py' -v
+    python3 -m unittest discover -s guest/ssh -p 'test_*.py' -v
+    python3 -m unittest discover -s scripts/acceptance -p 'test_*.py' -v
+    python3 -m unittest discover -s scripts/gateway -p 'test_*.py' -v
+    python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+# Both adapters use only temporary fixtures, including the live-dispatch test.
+test-shell:
+    bash scripts/acceptance/opencode-test.sh
+    bash scripts/acceptance/opencode-live-adapter-test.sh
+
+check-shell:
+    git ls-files -z -- '*.sh' | xargs -0 -r -n1 bash -n
+
+check-nix:
+    nix --quiet flake check --no-build --no-update-lock-file
+    nix --quiet flake check --no-update-lock-file
 
 modules:
     go mod verify
