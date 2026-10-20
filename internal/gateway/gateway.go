@@ -17,6 +17,7 @@ import (
 	"text/template"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/filestate"
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
@@ -314,7 +315,7 @@ func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
 	if !gatewayIDPattern.MatchString(s.ID) {
 		return nil, fmt.Errorf("invalid gateway id: must start with an ASCII letter or digit and contain only letters, digits, hyphens or underscores")
 	}
-	stateDir, err := gatewayStateDir()
+	stateDir, err := filestate.StateRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -405,24 +406,6 @@ func readSecretState(path string) ([]byte, error) {
 		return nil, fmt.Errorf("gateway secret state must be a regular file with restrictive permissions")
 	}
 	return io.ReadAll(fd)
-}
-
-func gatewayStateDir() (string, error) {
-	if value := os.Getenv("XDG_STATE_HOME"); value != "" {
-		// Match internal/providerregistry: a relative XDG_STATE_HOME would
-		// land secret material under $PWD/aginctus/gateway/... and is
-		// never an operator intent. Fail closed with the same message so
-		// the two files that consume XDG_STATE_HOME disagree on shape.
-		if !filepath.IsAbs(value) {
-			return "", fmt.Errorf("state directory must be absolute")
-		}
-		return value, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory for gateway state: %w", err)
-	}
-	return filepath.Join(home, ".local", "state"), nil
 }
 
 func generateSecret() (string, error) {

@@ -27,16 +27,9 @@ func supportedType(providerType string) bool {
 
 // DefaultPath holds nonsecret provider identities in the current user's state.
 func DefaultPath() (string, error) {
-	root := os.Getenv("XDG_STATE_HOME")
-	if root == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		root = filepath.Join(home, ".local", "state")
-	}
-	if !filepath.IsAbs(root) {
-		return "", fmt.Errorf("state directory must be absolute")
+	root, err := filestate.StateRoot()
+	if err != nil {
+		return "", err
 	}
 	return filepath.Join(root, "aginctus", "gateway", "providers.json"), nil
 }
