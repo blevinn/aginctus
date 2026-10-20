@@ -374,6 +374,19 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 5 && args[0] == "egress" && args[1] == "firewall" && args[2] == "stage" && strings.HasPrefix(args[3], "--uplink-zone=") && args[4] == "--confirm-permanent-no-reload" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall configuration: %v\n", err)
+			return 1
+		}
+		if err := spec.StageEgressFirewalld(ctx, strings.TrimPrefix(args[3], "--uplink-zone="), gateway.SystemFirewalld); err != nil {
+			fmt.Fprintf(stderr, "egress firewall staging blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "firewalld egress zone/policy staged in permanent configuration only; NO reload, NO runtime activation; verify definitions before operator-controlled activation")
+		return 0
+	}
 	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "plan" && strings.HasPrefix(args[3], "--uplink-zone=") {
 		spec, err := gateway.FromConfig(effective)
 		if err != nil {
@@ -806,6 +819,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall plan --uplink-zone=ZONE  (read-only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall stage --uplink-zone=ZONE --confirm-permanent-no-reload")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage audit  (read-only; no authentication)")
@@ -1092,6 +1106,7 @@ Commands:
   gateway egress preflight  Read-only owned egress network / DHCP safety check
   gateway egress audit      Read-only LiteLLM NIC configuration audit
   gateway egress firewall plan --uplink-zone=ZONE  Read-only firewalld forwarding proposal
+  gateway egress firewall stage --uplink-zone=ZONE --confirm-permanent-no-reload  Stage permanent firewall policy (not activated)
   gateway egress dhcp plan --ranges=START-END  Inspect safe DHCP pool migration
   gateway egress dhcp apply --ranges=START-END --confirm-bridge-only  Guarded bridge DHCP update
   gateway egress reconcile --dry-run  Plan owned LiteLLM NIC repair without mutation
