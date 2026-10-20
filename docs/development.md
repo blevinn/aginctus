@@ -30,7 +30,7 @@ The initial shell includes:
 - `jq`;
 - `just`;
 - `nixfmt`;
-- `python3` (the guest provisioning / acceptance scripts use it directly);
+- `python3` with `markdown-it-py` (guest scripts, acceptance tests, and Markdown validation);
 - `shellcheck`;
 - `shfmt`.
 
@@ -150,6 +150,7 @@ at the first failing command and composes these individually runnable recipes:
 | `test-python` | Verbose `unittest` discovery of `test_*.py`, separately in `guest/opencode`, `guest/ssh`, `scripts/acceptance`, `scripts/gateway`, and `tests` |
 | `test-shell` | `opencode-test.sh` and `opencode-live-adapter-test.sh`, using temporary fake adapters/hooks only |
 | `check-shell` | `bash -n` for every Git-tracked `*.sh` file, including the opt-in operator harnesses without executing them |
+| `check-markdown-links` | Offline local paths, images, references, and heading fragments in every Git-tracked `*.md` and `*.markdown` document |
 | `check-nix` | `nix --quiet flake check --no-build --no-update-lock-file`, then `nix --quiet flake check --no-update-lock-file` |
 
 The Nix checks evaluate the flake and build the current system's lightweight
@@ -184,6 +185,48 @@ child command plus Bash syntax validation. To run that proof alone:
 ```sh
 nix --quiet develop -c python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
+
+### Offline Markdown validation
+
+Run the repository scan or its focused regression suite with:
+
+```sh
+nix --quiet develop -c just check-markdown-links
+nix --quiet develop -c python3 -m unittest discover -s tests -p 'test_markdown_links.py' -v
+```
+
+The checker uses maintained `markdown-it-py` from the existing locked nixpkgs
+input, without a separate dependency pin or runtime download. It checks every
+tracked Markdown document, including README, AGENTS and nested guides, with no
+directory exclusions. Stage new documents before scanning. Broken test inputs
+are generated only in temporary Git repositories, not tracked as documentation.
+
+Local targets resolve relative to the source document. Existing files and
+directories are accepted, including untracked targets in the working tree.
+Percent-encoded paths/fragments and angle-bracket destinations with spaces are
+supported, as are titles, balanced/escaped parentheses, inline images, and full,
+collapsed and defined shortcut references. Explicit/collapsed references without
+a definition fail. Diagnostics identify the source file, link's starting line,
+target or reference label, and reason; failures exit nonzero. Code fences,
+indented code, inline code, escaped syntax and HTML comments follow CommonMark
+parsing rather than regular-expression link matching.
+
+Heading fragments use ATX and setext headings, rendered inline text, Unicode
+lowercasing, punctuation/symbol removal (preserving `_` and `-`), spaces replaced
+by hyphens, and collision-aware numeric suffixes for duplicates. This is an
+approximation of GitHub heading IDs, not a GitHub renderer. Raw HTML links/IDs,
+HTML headings, emoji shortcodes, MDX, and extension-specific anchors are outside
+scope. Fragments on non-Markdown targets fail as unsupported. Absolute local
+paths and paths escaping the repository (including symlink escapes) fail.
+Malformed Markdown that CommonMark renders as literal text is not a link and
+is not diagnosed; in particular, use `<path with spaces.md>` or percent encoding,
+not bare spaces in a destination. Undefined shortcut labels are also literal
+text, not errors. Unused reference definitions are not link uses.
+
+The checker makes no network requests. All scheme/protocol-relative URLs
+(including HTTP(S) and mailto) are counted as unchecked; remote availability and
+remote fragments are outside this offline gate. It reads the working tree and
+Git index without modifying documents, credentials, guests, or host services.
 
 ### Separate static-analysis work
 

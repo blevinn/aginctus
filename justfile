@@ -23,7 +23,7 @@ check: modules test vet
 
 # Safe aggregate, even when the caller has opted into live acceptance elsewhere.
 check-all:
-    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local just check test-python test-shell check-shell check-nix
+    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local just check test-python test-shell check-shell check-markdown-links check-nix
 
 test-python:
     python3 -m unittest discover -s guest/opencode -p 'test_*.py' -v
@@ -46,6 +46,10 @@ check-nix:
 
 modules:
     go mod verify
+
+# Offline local targets and heading fragments in all tracked Markdown.
+check-markdown-links:
+    python3 scripts/check_markdown_links.py
 
 # Integration tests run only on disposable Incus. By default each test
 # deletes its uniquely named project (including test containers and volumes).

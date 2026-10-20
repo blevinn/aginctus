@@ -395,7 +395,7 @@
                 jq
                 just
                 nixfmt
-                python3
+                (python3.withPackages (ps: [ ps.markdown-it-py ]))
                 shellcheck
                 shfmt
               ])
