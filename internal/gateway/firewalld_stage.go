@@ -116,7 +116,9 @@ func (s Spec) StageEgressFirewalld(ctx context.Context, uplinkZone string, run F
 	do := func(args ...string) error { _, e := run(ctx, args...); return e }
 	for _, args := range [][]string{
 		{"--permanent", "--zone=" + egressFirewallZone, "--set-description=" + egressFirewallOwnership},
-		{"--permanent", "--zone=" + egressFirewallZone, "--set-target=DROP"},
+		{"--permanent", "--zone=" + egressFirewallZone, "--set-target=default"},
+		{"--permanent", "--zone=" + egressFirewallZone, "--add-service=dns"},
+		{"--permanent", "--zone=" + egressFirewallZone, "--add-service=dhcp"},
 		{"--permanent", "--zone=" + egressFirewallZone, "--add-interface=" + s.EgressNetwork},
 		{"--permanent", "--new-policy=" + egressFirewallPolicy},
 	} {
@@ -136,7 +138,8 @@ func (s Spec) StageEgressFirewalld(ctx context.Context, uplinkZone string, run F
 			return rollback(e)
 		}
 	}
-	// Only the owned LiteLLM source may establish HTTPS. No general
+	// The bridge zone admits DNS/DHCP to the host. Only the owned LiteLLM
+	// source may establish forwarded HTTPS. No general
 	// --add-service=https: it would permit any future guest on the bridge.
 	prefix, _ := netip.ParsePrefix(s.EgressIPv4Address)
 	source := prefix.Addr().String() + "/32"
