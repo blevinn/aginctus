@@ -66,12 +66,14 @@ func (s Spec) CheckStagedEgressFirewalld(ctx context.Context, uplink string, run
 		return fmt.Errorf("staged firewall policy has unexpected permissions or zones")
 	}
 	prefix, _ := netip.ParsePrefix(s.EgressIPv4Address)
-	source := prefix.Addr().String()+"/32"
+	source := prefix.Addr().String() + "/32"
 	accept := fmt.Sprintf(`rule family="ipv4" priority="-200" source address="%s" port port="443" protocol="tcp" accept`, source)
- 	// The exact rich rules are queried through the structured CLI interface
+	// The exact rich rules are queried through the structured CLI interface
 	// rather than relying on firewalld's multiline human-readable info format.
 	rules, err := run(ctx, "--permanent", "--policy="+egressFirewallPolicy, "--list-rich-rules")
-	if err != nil { return fmt.Errorf("read staged policy rules: %w",err) }
+	if err != nil {
+		return fmt.Errorf("read staged policy rules: %w", err)
+	}
 	expected := append([]string{}, egressDenyRules(source)...)
 	expected = append(expected, accept)
 	if !equalLineSets(rules, expected) {
@@ -81,48 +83,68 @@ func (s Spec) CheckStagedEgressFirewalld(ctx context.Context, uplink string, run
 }
 
 func egressDenyRules(source string) []string {
-	subnets:=[]string{"10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","169.254.0.0/16","127.0.0.0/8","100.64.0.0/10","0.0.0.0/8","224.0.0.0/4","240.0.0.0/4"}
-	rules:=make([]string,0,len(subnets))
-	for _,subnet:=range subnets {
-		rules=append(rules,fmt.Sprintf(`rule family="ipv4" priority="-300" source address="%s" destination address="%s" drop`,source,subnet))
+	subnets := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "127.0.0.0/8", "100.64.0.0/10", "0.0.0.0/8", "224.0.0.0/4", "240.0.0.0/4"}
+	rules := make([]string, 0, len(subnets))
+	for _, subnet := range subnets {
+		rules = append(rules, fmt.Sprintf(`rule family="ipv4" priority="-300" source address="%s" destination address="%s" drop`, source, subnet))
 	}
 	return rules
 }
 
 func containsExactLine(output, line string) bool {
-	for _,candidate:=range strings.Split(output,"\n") {
-		if strings.TrimSpace(candidate)==line {return true}
+	for _, candidate := range strings.Split(output, "\n") {
+		if strings.TrimSpace(candidate) == line {
+			return true
+		}
 	}
 	return false
 }
 func fieldTokensEqual(output, field string, expected []string) bool {
-	for _,candidate:=range strings.Split(output,"\n"){
-		candidate=strings.TrimSpace(candidate)
-		if strings.HasPrefix(candidate,field){
-			got:=strings.Fields(strings.TrimSpace(strings.TrimPrefix(candidate,field)))
-			if len(got)!=len(expected){return false}
-			for i,v:=range expected {if got[i]!=v{return false}}
+	for _, candidate := range strings.Split(output, "\n") {
+		candidate = strings.TrimSpace(candidate)
+		if strings.HasPrefix(candidate, field) {
+			got := strings.Fields(strings.TrimSpace(strings.TrimPrefix(candidate, field)))
+			if len(got) != len(expected) {
+				return false
+			}
+			for i, v := range expected {
+				if got[i] != v {
+					return false
+				}
+			}
 			return true
 		}
 	}
 	return false
 }
 func fieldIncludesToken(output, field, value string) bool {
-	for _,candidate:=range strings.Split(output,"\n") {
-		candidate=strings.TrimSpace(candidate)
-		if strings.HasPrefix(candidate,field) {
-			for _,token:=range strings.Fields(strings.TrimSpace(strings.TrimPrefix(candidate,field))) {
-				if token==value{return true}
+	for _, candidate := range strings.Split(output, "\n") {
+		candidate = strings.TrimSpace(candidate)
+		if strings.HasPrefix(candidate, field) {
+			for _, token := range strings.Fields(strings.TrimSpace(strings.TrimPrefix(candidate, field))) {
+				if token == value {
+					return true
+				}
 			}
 		}
 	}
 	return false
 }
 func equalLineSets(output string, expected []string) bool {
-	seen:=map[string]int{}
-	for _,line:=range strings.Split(strings.TrimSpace(output),"\n"){if strings.TrimSpace(line)!=""{seen[strings.TrimSpace(line)]++}}
-	if len(seen)!=len(expected){return false}
-	for _,line:=range expected {if seen[line]!=1{return false}}
+	seen := map[string]int{}
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if strings.TrimSpace(line) != "" {
+			seen[strings.TrimSpace(line)]++
+		}
+	}
+	if len(seen) != len(expected) {
+		return false
+	}
+	for _, line := range expected {
+		if seen[line] != 1 {
+			return false
+		}
+	}
 	return true
 }
 
@@ -130,12 +152,14 @@ func equalLineSets(output string, expected []string) bool {
 // staging configuration. It refuses drift and does not reload the firewall.
 // On partial failure, the caller must inspect the permanent objects.
 func (s Spec) UnstageEgressFirewalld(ctx context.Context, uplink string, run FirewalldExecutor) error {
-	if err:=s.CheckStagedEgressFirewalld(ctx,uplink,run);err!=nil{return err}
-	if _,err:=run(ctx,"--permanent","--delete-policy="+egressFirewallPolicy);err!=nil{
-		return fmt.Errorf("delete staged egress policy: %w",err)
+	if err := s.CheckStagedEgressFirewalld(ctx, uplink, run); err != nil {
+		return err
 	}
-	if _,err:=run(ctx,"--permanent","--delete-zone="+egressFirewallZone);err!=nil{
-		return fmt.Errorf("delete staged egress zone (policy already removed): %w",err)
+	if _, err := run(ctx, "--permanent", "--delete-policy="+egressFirewallPolicy); err != nil {
+		return fmt.Errorf("delete staged egress policy: %w", err)
+	}
+	if _, err := run(ctx, "--permanent", "--delete-zone="+egressFirewallZone); err != nil {
+		return fmt.Errorf("delete staged egress zone (policy already removed): %w", err)
 	}
 	return nil
 }
