@@ -374,6 +374,20 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "plan" && strings.HasPrefix(args[3], "--uplink-zone=") {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall configuration: %v\n", err)
+			return 1
+		}
+		plan, err := spec.PlanEgressFirewalld(strings.TrimPrefix(args[3], "--uplink-zone="))
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall plan blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(plan))
+		return 0
+	}
 	if len(args) == 5 && args[0] == "egress" && args[1] == "dhcp" && args[2] == "apply" && strings.HasPrefix(args[3], "--ranges=") && args[4] == "--confirm-bridge-only" {
 		spec, err := gateway.FromConfig(effective)
 		if err != nil {
@@ -1075,7 +1089,7 @@ Commands:
   gateway up       Alias for gateway apply
   gateway apply    Reconcile the AI gateway
   gateway egress preflight  Read-only owned egress network / DHCP safety check
-  gateway egress audit      Read-only LiteLLM NIC configuration audit
+  gateway egress audit      Read-only LiteLLM NIC configuration audit\n  gateway egress firewall plan --uplink-zone=ZONE  Read-only firewalld forwarding proposal
   gateway egress dhcp plan --ranges=START-END  Inspect safe DHCP pool migration
   gateway egress dhcp apply --ranges=START-END --confirm-bridge-only  Guarded bridge DHCP update
   gateway egress reconcile --dry-run  Plan owned LiteLLM NIC repair without mutation
