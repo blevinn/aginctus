@@ -63,6 +63,7 @@ func TestHelpOfflineInventory(t *testing.T) {
 		"gateway egress dhcp apply --ranges=START-END --confirm-bridge-only",
 		"gateway egress reconcile --dry-run", "gateway egress reconcile --confirm-stopped-instance",
 		"network firewall policy", "network firewall reconcile", "herdr authorize", "herdr pin-host", "herdr register",
+		"network firewall egress reconcile|revoke",
 		"workload gateway provision", "--require-function-call", "network ensure", "herdr client ensure", "workload <name> ensure|teardown",
 	} {
 		if !strings.Contains(top.String(), want) {

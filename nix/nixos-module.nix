@@ -100,6 +100,12 @@ let
       description = "Dedicated firewalld zone to manage for the selected Aginctus profile (max 17 characters, aginctus- prefix).";
     };
 
+    firewall.egress.uplinkZone = mkOption {
+      type = types.str;
+      default = "";
+      description = "Runtime HTTPS uplink zone, verified against the unique IPv4 default route. Empty fails closed.";
+    };
+
     gateway = {
       id = mkOption {
         type = types.str;
@@ -290,6 +296,14 @@ in
   config = mkIf cfg.enable {
     assertions = [
       {
+        assertion =
+          !cfg.firewall.egress.enable
+          || (
+            cfg.firewall.enable && firewalldBackend && (cfg.settings.gateway.egress.network.name or "") != ""
+          );
+        message = "services.aginctus.firewall.egress requires firewalld, firewall.enable and an explicit gateway.egress.network.name.";
+      }
+      {
         assertion = !cfg.firewall.enable || validFirewalldZone;
         message = "services.aginctus.settings.firewall.zone must begin with aginctus-, use only lowercase letters, digits and hyphens, and be no more than 17 characters long.";
       }
@@ -382,17 +396,64 @@ in
 
     environment.etc."aginctus/config.json".source = configFile;
 
+    systemd.timers.aginctus-egress-firewall = lib.mkIf cfg.firewall.egress.enable {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "5s";
+        OnUnitInactiveSec = "5s";
+        AccuracySec = "1s";
+        Unit = "aginctus-egress-firewall.service";
+      };
+    };
+
+    systemd.tmpfiles.rules = lib.mkIf cfg.firewall.egress.enable [
+      "d /var/lib/aginctus-firewall 0700 root root -"
+      "C /var/lib/aginctus-firewall/overrides.json 0600 root root - ${pkgs.writeText "aginctus-firewall-overrides.json" "{}"}"
+    ];
+    environment.systemPackages = lib.mkIf cfg.firewall.egress.enable [ pkgs.conntrack-tools ];
+
     systemd.timers.aginctus-firewall-reconcile = lib.mkIf cfg.firewall.enable {
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnBootSec = "15s";
-        OnUnitActiveSec = "30s";
+        OnUnitActiveSec = if cfg.firewall.egress.enable then "5s" else "30s";
+        AccuracySec = "1s";
         Unit = "aginctus-firewall-reconcile.service";
       };
     };
 
     systemd.services =
-      lib.optionalAttrs cfg.firewall.enable {
+      lib.optionalAttrs cfg.firewall.egress.enable {
+        aginctus-egress-firewall = {
+          description = "Reconcile verified LiteLLM runtime egress grants";
+          after = [
+            "incus.service"
+            "firewalld.service"
+          ];
+          wants = [
+            "incus.service"
+            "firewalld.service"
+          ];
+          path = [
+            pkgs.incus
+            pkgs.iproute2
+            pkgs.systemd
+            pkgs.firewalld
+            pkgs.conntrack-tools
+          ];
+          serviceConfig = {
+            Type = "oneshot";
+            User = "root";
+            Environment = [ "XDG_CONFIG_HOME=/var/empty" ];
+            NoNewPrivileges = true;
+            PrivateTmp = true;
+            ProtectHome = true;
+            CapabilityBoundingSet = [ "CAP_NET_ADMIN" ];
+            ExecStart = "${aginctusCommand} --configuration-file /var/lib/aginctus-firewall/overrides.json network firewall egress reconcile";
+          };
+        };
+      }
+      // lib.optionalAttrs cfg.firewall.enable {
         aginctus-firewall-reconcile = {
           description = "Reconcile Aginctus-owned Incus guest-to-host DNS/DHCP policy";
           wantedBy = [ "multi-user.target" ];

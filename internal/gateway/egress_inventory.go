@@ -42,7 +42,7 @@ func auditEgressInstances(ctx context.Context, network string, run func(context.
 				return nil, fmt.Errorf("instance inventory has no expanded device information in project %q", project.Name)
 			}
 			for _, device := range instance.ExpandedDevices {
-				if device["type"] != "nic" || device["network"] != network {
+				if device["type"] != "nic" || (device["network"] != network && device["parent"] != network) {
 					continue
 				}
 				value := device["ipv4.address"]

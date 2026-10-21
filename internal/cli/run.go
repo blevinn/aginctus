@@ -291,6 +291,9 @@ func runNetwork(
 	if len(args) == 2 && args[0] == "firewall" && args[1] == "reconcile" {
 		return runNetworkFirewallReconcile(ctx, stdout, stderr, effective)
 	}
+	if len(args) == 3 && args[0] == "firewall" && args[1] == "egress" && (args[2] == "reconcile" || args[2] == "revoke") {
+		return runNetworkFirewallEgress(ctx, stdout, stderr, effective, args[2] == "revoke")
+	}
 
 	action := args[0]
 	options, err := parseNetworkOptions(args[1:])
@@ -365,6 +368,7 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network status")
 	fmt.Fprintln(w, "       aginctus [global options] network firewall policy")
 	fmt.Fprintln(w, "       aginctus [global options] network firewall reconcile  # privileged mutation")
+	fmt.Fprintln(w, "       aginctus [global options] network firewall egress reconcile|revoke  # privileged runtime grants")
 	fmt.Fprintln(w, "Aliases: network ensure = apply; network teardown = remove")
 	fmt.Fprintln(w, "Status/policy are read-only; apply/remove/reconcile mutate unless --dry-run is explicitly supported above.")
 }
@@ -404,7 +408,7 @@ func runGateway(
 	}
 	if len(args) >= 3 && args[0] == "egress" && args[1] == "firewall" &&
 		(args[2] == "stage" || args[2] == "unstage" || args[2] == "verify-staged") {
-		fmt.Fprintln(stderr, "permanent staging commands are retired: NixOS owns egress objects; runtime integration is required for grants")
+		fmt.Fprintln(stderr, "permanent staging commands are retired: NixOS owns egress objects; use network firewall egress reconcile or revoke for runtime grants")
 		return 2
 	}
 	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "plan" && strings.HasPrefix(args[3], "--uplink-zone=") {
