@@ -93,8 +93,50 @@ Before granting access, reconciliation checks:
 - Exact LiteLLM ownership and its two NIC declarations, with no extra attachment.
 - A unique IPv4 default-route interface belonging to the configured uplink zone,
   including implicit default-zone classification when no interface binding exists.
-- Only the standard local/main/default IPv4 routing rules. Custom policy routing,
-  multipath routes, and nexthop IDs are refused rather than inferred safe.
+- The kernel local/main/default IPv4 routing rules, optionally with the complete
+  standard Tailscale rule layout described below. Unknown policy routing,
+  multipath/encapsulated routes, and nexthop IDs are refused rather than inferred safe.
+
+### Tailscale routing compatibility
+
+The supported Tailscale layout preserves the kernel rules at priorities
+0/32766/32767 and adds exactly these four IPv4 rules, all from `all`:
+
+| Priority | Selector | Action |
+| --- | --- | --- |
+| 5210 | fwmark `0x80000/0xff0000` | lookup main |
+| 5230 | fwmark `0x80000/0xff0000` | lookup default |
+| 5250 | fwmark `0x80000/0xff0000` | unreachable |
+| 5270 | no mark selector | lookup table 52 |
+
+These are the standard bypass rules in Tailscale's
+[Linux router](https://github.com/tailscale/tailscale/blob/main/wgengine/router/osrouter/router_linux.go).
+Matching this shape verifies routing semantics, not daemon ownership. Extra or
+changed selectors, priorities, actions, tables, and incomplete rule sets are
+refused. Equivalent numeric table/mark encodings and installation-protocol
+metadata do not change those semantics.
+
+Exactly one unicast IPv4 default route is required, in main, through the verified
+uplink zone. Defaults in table 52, including exit-node defaults, are unsupported.
+All nondefault destinations from every routing table remain excluded from HTTPS,
+including Tailscale peers, accepted private/public subnet routes, throw routes
+and host-local addresses. Even a table-52 route using the same interface/zone as
+the Internet uplink cannot grant access to that destination. No tailnet provider
+access is implied. Aginctus never changes Tailscale rules, routes or firewall
+configuration; network changes retain the eventual-reconciliation limitation.
+
+An optional read-only audit can verify the current host's routing inventory
+without contacting firewalld/Incus or invoking reconciliation:
+
+```sh
+AGINCTUS_READONLY_ROUTING_AUDIT=1 nix --quiet develop -c go test ./internal/firewall \
+  -run '^TestEgressRoutingReadOnlyHostInventory$' -count=1 -v
+```
+
+This checks routing compatibility only, not bridge/NIC ownership, effective
+uplink zone or end-to-end provider access.
+
+### Grant activation and withdrawal
 
 The operation is serialized by `/run/aginctus-firewall/lock`. It withdraws old
 grants before changing scope, prepares the complete HTTPS rule set while its
@@ -176,8 +218,13 @@ git diff --check origin/main...HEAD
 
 The disposable VM uses real firewalld, D-Bus, nftables, Incus bridges and network
 namespace peers. Synthetic gateway discovery avoids downloading an OCI image;
-separate Go tests cover production Incus/default-route discovery, policy-routing
-refusal, extra attachments, and parent-based bridge peers. The installed CLI is
+separate Go tests cover production Incus/default-route discovery, Tailscale rule
+acceptance, unknown-rule refusal, extra attachments, and parent-based bridge peers.
+The VM also replays the Tailscale RPDB layout with real kernel routing and the
+production routing validator: public TCP/443 remains usable, table-52 peer/public
+destinations stay denied, route additions are excluded on reconciliation, and
+unknown rules or exit defaults withdraw existing grants. This is a routing replay,
+not a live tailnet or authenticated Tailscale daemon deployment. The installed CLI is
 also exercised for failed discovery and established-flow revocation. It exercises
 HTTPS source/port restrictions, private and connected-public denial, trusted-zone
 ingress/egress, DNAT bypass denial, host service denial, IPv6 denial, DNS TCP/UDP,

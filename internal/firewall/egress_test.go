@@ -382,6 +382,29 @@ func TestEgressRealFirewalld(t *testing.T) {
 	if phase == "revoke" {
 		grant = EgressGrant{}
 	}
+	discover := func(ctx context.Context) (EgressGrant, error) {
+		if phase != "routing" {
+			return grant, nil
+		}
+		rules, err := exec.CommandContext(ctx, "ip", "-j", "-4", "rule", "show").Output()
+		if err != nil {
+			return EgressGrant{}, err
+		}
+		routes, err := exec.CommandContext(ctx, "ip", "-j", "-4", "route", "show", "table", "all").Output()
+		if err != nil {
+			return EgressGrant{}, err
+		}
+		iface, blocked, err := EgressRouting(string(rules), string(routes))
+		if err != nil {
+			return EgressGrant{}, err
+		}
+		zone, err := (Busctl{}).EffectiveZone(ctx, iface)
+		if err != nil || zone != "public" {
+			return EgressGrant{}, fmt.Errorf("fixture uplink zone not public: %s, %v", zone, err)
+		}
+		grant, err = EgressRules("10.247.83.25/24", "10.247.83.1/24", zone, blocked)
+		return grant, err
+	}
 	if phase == "reload-race" {
 		grant.HTTPS = append([]string{`rule priority="-300" family="ipv4" source address="10.247.83.25/32" destination address="11.12.14.0/24" drop`}, grant.HTTPS...)
 		bus := &reloadEgressBus{}
@@ -390,7 +413,7 @@ func TestEgressRealFirewalld(t *testing.T) {
 		}
 		return
 	}
-	if e = ReconcileEgress(context.Background(), Busctl{}, store, "aginctus-egress", func(context.Context) (EgressGrant, error) { return grant, nil }); e != nil {
+	if e = ReconcileEgress(context.Background(), Busctl{}, store, "aginctus-egress", discover); e != nil {
 		t.Fatal(e)
 	}
 	raw, _ := json.Marshal(store.state)
