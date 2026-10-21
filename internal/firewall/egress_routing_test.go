@@ -23,11 +23,11 @@ func tailscaleRoutingFixture(t *testing.T) []map[string]any {
 }
 
 func TestEgressRoutingRuleContracts(t *testing.T) {
-	for _, mode := range []string{"tailscale", "kernel", "numeric fields", "metadata", "extra", "partial", "duplicate", "priority", "mask", "mark", "table", "action", "source", "selector", "unknown"} {
+	for _, mode := range []string{"tailscale", "kernel", "tailscale disabled", "kernel disabled", "numeric fields", "metadata", "extra", "partial", "duplicate", "priority", "mask", "mark", "table", "action", "source", "selector", "unknown"} {
 		t.Run(mode, func(t *testing.T) {
 			rules := tailscaleRoutingFixture(t)
 			switch mode {
-			case "kernel":
+			case "kernel", "kernel disabled":
 				rules = append(rules[:1:1], rules[5:]...)
 			case "numeric fields":
 				rules[4]["table"] = 52
@@ -63,8 +63,8 @@ func TestEgressRoutingRuleContracts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = verifyEgressRoutingRules(string(raw))
-			accepted := mode == "tailscale" || mode == "kernel" || mode == "numeric fields" || mode == "metadata"
+			err = verifyEgressRoutingRules(string(raw), mode != "tailscale disabled" && mode != "kernel disabled")
+			accepted := mode == "tailscale" || mode == "kernel" || mode == "kernel disabled" || mode == "numeric fields" || mode == "metadata"
 			if (err == nil) != accepted {
 				t.Fatalf("accept=%v, error=%v", accepted, err)
 			}
@@ -81,7 +81,7 @@ func TestEgressRoutingExcludesEveryTable(t *testing.T) {
         {"dst":"11.12.15.16","type":"local","table":"local","dev":"lo"},
         {"dst":"192.168.0.0/16","type":"throw","table":"52"},
         {"dst":"11.12.16.0/24","dev":"wan0","table":99}
-    ]`)
+    ]`, true)
 	if err != nil || iface != "wan0" {
 		t.Fatalf("interface=%q error=%v", iface, err)
 	}
@@ -108,7 +108,7 @@ func TestEgressRoutingRefusesUnsafeDefaultsAndOpaqueRoutes(t *testing.T) {
 		`[{"dst":"default","dev":"wan0"},{"dst":"bad","table":52}]`,
 		`[{"dst":"default","dev":"wan0"},{"dst":"::/0"}]`,
 	} {
-		if _, _, err := EgressRouting(string(raw), routes); err == nil {
+		if _, _, err := EgressRouting(string(raw), routes, true); err == nil {
 			t.Fatalf("accepted unsafe routes %s", routes)
 		}
 	}
@@ -128,7 +128,7 @@ func TestEgressRoutingReadOnlyHostInventory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	iface, blocked, err := EgressRouting(string(rules), string(routes))
+	iface, blocked, err := EgressRouting(string(rules), string(routes), true)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -383,7 +383,7 @@ func TestEgressRealFirewalld(t *testing.T) {
 		grant = EgressGrant{}
 	}
 	discover := func(ctx context.Context) (EgressGrant, error) {
-		if phase != "routing" {
+		if phase != "routing" && phase != "routing-disabled" {
 			return grant, nil
 		}
 		rules, err := exec.CommandContext(ctx, "ip", "-j", "-4", "rule", "show").Output()
@@ -394,7 +394,7 @@ func TestEgressRealFirewalld(t *testing.T) {
 		if err != nil {
 			return EgressGrant{}, err
 		}
-		iface, blocked, err := EgressRouting(string(rules), string(routes))
+		iface, blocked, err := EgressRouting(string(rules), string(routes), phase != "routing-disabled")
 		if err != nil {
 			return EgressGrant{}, err
 		}

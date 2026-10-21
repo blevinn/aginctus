@@ -99,6 +99,22 @@ Before granting access, reconciliation checks:
 
 ### Tailscale routing compatibility
 
+`firewall.egress.allowTailscaleRouting` is a boolean setting, default `true` in
+both the CLI and NixOS module. It permits validation of **existing** standard
+Tailscale rules; it never installs rules, routes, Tailscale, or firewall objects.
+Hosts without Tailscale continue using the ordinary three-rule kernel layout.
+Set it to `false` to require kernel-only routing. A host with Tailscale rules
+then fails verification and withdraws owned grants on reconciliation rather than
+ignoring those rules or removing them.
+
+```nix
+services.aginctus.settings.firewall.egress.allowTailscaleRouting = false;
+```
+
+The equivalent CLI override is
+`--config firewall.egress.allowTailscaleRouting=false`. Hosts that use Tailscale
+can declare `true` explicitly to record their routing-policy choice.
+
 The supported Tailscale layout preserves the kernel rules at priorities
 0/32766/32767 and adds exactly these four IPv4 rules, all from `all`:
 
@@ -221,7 +237,8 @@ namespace peers. Synthetic gateway discovery avoids downloading an OCI image;
 separate Go tests cover production Incus/default-route discovery, Tailscale rule
 acceptance, unknown-rule refusal, extra attachments, and parent-based bridge peers.
 The VM also replays the Tailscale RPDB layout with real kernel routing and the
-production routing validator: public TCP/443 remains usable, table-52 peer/public
+production routing validator: public TCP/443 remains usable, opting out withdraws
+the grant without removing existing rules, table-52 peer/public
 destinations stay denied, route additions are excluded on reconciliation, and
 unknown rules or exit defaults withdraw existing grants. This is a routing replay,
 not a live tailnet or authenticated Tailscale daemon deployment. The installed CLI is

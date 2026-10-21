@@ -54,6 +54,10 @@ func discoverEgressGrant(ctx context.Context, cfg *config.Config) (firewall.Egre
 	if err != nil || uplink == "" {
 		return empty, fmt.Errorf("firewall.egress.uplinkZone must name a nontrusted uplink zone")
 	}
+	allowTailscaleRouting, err := cfg.Bool("firewall.egress.allowTailscaleRouting")
+	if err != nil {
+		return empty, err
+	}
 	spec, err := gateway.FromConfig(cfg)
 	if err != nil {
 		return empty, err
@@ -89,7 +93,7 @@ func discoverEgressGrant(ctx context.Context, cfg *config.Config) (firewall.Egre
 	if err != nil {
 		return empty, err
 	}
-	iface, blocked, err := firewall.EgressRouting(rules, raw)
+	iface, blocked, err := firewall.EgressRouting(rules, raw, allowTailscaleRouting)
 	if err != nil {
 		return empty, err
 	}

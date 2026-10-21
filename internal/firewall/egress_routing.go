@@ -11,8 +11,8 @@ import (
 // EgressRouting verifies the supported RPDB layouts and returns the sole main-
 // table default interface plus every nondefault destination from every table.
 // The caller must verify that interface's zone and exclude both guest bridges.
-func EgressRouting(rawRules, rawRoutes string) (string, []netip.Prefix, error) {
-	if err := verifyEgressRoutingRules(rawRules); err != nil {
+func EgressRouting(rawRules, rawRoutes string, allowTailscaleRouting bool) (string, []netip.Prefix, error) {
+	if err := verifyEgressRoutingRules(rawRules, allowTailscaleRouting); err != nil {
 		return "", nil, err
 	}
 	var routes []struct {
@@ -81,7 +81,7 @@ func routingTable(value any) string {
 
 // Only the kernel layout or the complete Tailscale bypass/table-52 layout is
 // supported; extra selectors and partially installed VPN rules fail closed.
-func verifyEgressRoutingRules(raw string) error {
+func verifyEgressRoutingRules(raw string, allowTailscaleRouting bool) error {
 	var rules []map[string]any
 	if err := json.Unmarshal([]byte(raw), &rules); err != nil {
 		return err
@@ -91,7 +91,7 @@ func verifyEgressRoutingRules(raw string) error {
 		{"priority": float64(32766), "src": "all", "table": "main"},
 		{"priority": float64(32767), "src": "all", "table": "default"},
 	}
-	if len(rules) == 7 {
+	if allowTailscaleRouting && len(rules) == 7 {
 		vpn := []map[string]any{
 			{"priority": float64(5210), "src": "all", "fwmark": "0x80000", "fwmask": "0xff0000", "table": "main"},
 			{"priority": float64(5230), "src": "all", "fwmark": "0x80000", "fwmask": "0xff0000", "table": "default"},

@@ -207,6 +207,12 @@ pkgs.testers.runNixOSTest {
     routing_test = "AGINCTUS_DISPOSABLE_FIREWALL_PHASE=routing ${egressTest}/bin/aginctus-firewall-test -test.run=^TestEgressRealFirewalld$ -test.v"
     machine.succeed(routing_test)
     machine.succeed(connects("8.8.4.4"))
+    # Opting out must withdraw the existing grant on the same VPN inventory.
+    machine.fail("AGINCTUS_DISPOSABLE_FIREWALL_PHASE=routing-disabled ${egressTest}/bin/aginctus-firewall-test -test.run=^TestEgressRealFirewalld$ -test.v")
+    machine.fail(connects("8.8.4.4"))
+    assert not firewall("--policy=aginctus-egress-https", "--list-egress-zones").strip()
+    machine.succeed(routing_test)
+    machine.succeed(connects("8.8.4.4"))
     for destination in ["100.101.102.103", "11.12.14.2", "10.66.0.2", "11.12.13.2"]:
         machine.fail(connects(destination))
     machine.fail(connects("10.247.82.1", 18082))

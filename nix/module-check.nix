@@ -27,6 +27,9 @@ let
     }).config;
 
   base = evaluate { };
+  kernelRoutingOnly = evaluate {
+    services.aginctus.settings.firewall.egress.allowTailscaleRouting = false;
+  };
   withoutImages = evaluate {
     services.aginctus.images.herdrClient.enable = false;
     services.aginctus.images.opencodeWorkload.enable = false;
@@ -161,6 +164,8 @@ assert !base.services.aginctus.reconcile.gateway;
 assert !(builtins.hasAttr "aginctus-reconcile" base.systemd.services);
 assert settings.incus.management.network.name == "integration-mgmt";
 assert settings.firewall.zone == "aginctus-dns";
+assert settings.firewall.egress.allowTailscaleRouting;
+assert !kernelRoutingOnly.services.aginctus.settings.firewall.egress.allowTailscaleRouting;
 assert builtins.hasAttr "firewalld/zones/aginctus-vm.xml" withCustomZone.environment.etc;
 assert builtins.all (
   cfg:

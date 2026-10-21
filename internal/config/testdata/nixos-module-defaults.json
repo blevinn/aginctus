@@ -1,6 +1,7 @@
 {
   "firewall": {
     "egress": {
+      "allowTailscaleRouting": true,
       "uplinkZone": ""
     },
     "zone": "aginctus-dns"
