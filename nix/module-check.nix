@@ -179,8 +179,9 @@ assert lib.hasInfix "custom-egress"
   egressHost.environment.etc."firewalld/zones/aginctus-egress.xml".text;
 assert !egressHost.services.firewalld.settings.CleanupOnExit;
 assert egressHost.services.firewalld.settings.StrictForwardPorts;
-assert !(builtins.hasAttr "aginctus-egress-firewall" egressHost.systemd.timers);
-assert !(builtins.hasAttr "aginctus-egress-firewall" egressHost.systemd.services);
+assert egressHost.systemd.timers.aginctus-egress-firewall.timerConfig.AccuracySec == "1s";
+assert lib.hasInfix "/var/lib/aginctus-firewall/overrides.json"
+  egressHost.systemd.services.aginctus-egress-firewall.serviceConfig.ExecStart;
 assert !(builtins.hasAttr "nixos-fw" base.networking.nftables.tables);
 assert nativeNftHost.networking.nftables.tables."nixos-fw".family == "inet";
 assert builtins.elem "firewalld.service"

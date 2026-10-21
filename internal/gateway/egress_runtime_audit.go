@@ -63,6 +63,8 @@ func AuditEgressRuntime(ctx context.Context, spec Spec, query func(context.Conte
 			if strings.EqualFold(device["ipv4.gateway"], "none") {
 				return fmt.Errorf("LiteLLM egress NIC default gateway is disabled")
 			}
+		default:
+			return fmt.Errorf("LiteLLM has an unexpected network attachment")
 		}
 	}
 	if management != 1 || egress != 1 {
@@ -70,5 +72,23 @@ func AuditEgressRuntime(ctx context.Context, spec Spec, query func(context.Conte
 	}
 	// This verifies declarative configuration only, not live OCI routes or
 	// reachability. Caller should run in-guest checks before inference.
+	return nil
+}
+
+// AuditEgressFirewallSource keeps the provider bridge single-tenant: another
+// guest on its L2 could spoof the permitted IPv4 source even without a lease
+// collision. Additional workloads belong on the isolated management network.
+func AuditEgressFirewallSource(ctx context.Context, spec Spec, query func(context.Context, ...string) ([]byte, error)) error {
+	if err := AuditEgressRuntime(ctx, spec, query); err != nil {
+		return err
+	}
+	addresses, err := auditEgressInstances(ctx, spec.EgressNetwork, query)
+	if err != nil {
+		return err
+	}
+	source, err := netip.ParsePrefix(spec.EgressIPv4Address)
+	if err != nil || len(addresses) != 1 || addresses[0] != source.Addr() {
+		return fmt.Errorf("provider egress bridge must have only the owned LiteLLM NIC")
+	}
 	return nil
 }
