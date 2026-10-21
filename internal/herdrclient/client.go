@@ -43,7 +43,7 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		return Spec{}, err
 	}
 	if name == "" || imageAlias == "" || storagePool == "" || network.Name == "" {
-		return Spec{}, fmt.Errorf("Herdr client name, image alias, storage pool, and management network must not be empty")
+		return Spec{}, fmt.Errorf("herdr client name, image alias, storage pool, and management network must not be empty")
 	}
 	return Spec{
 		Name:              name,
@@ -114,7 +114,7 @@ func (s Spec) Execute(ctx context.Context, options Options) error {
 		"state-volume": statevolume.NewDriver(),
 	})
 	if _, err := engine.Execute(ctx, plan, orchestration.ExecuteOptions{DryRun: options.DryRun}); err != nil {
-		return fmt.Errorf("Herdr client orchestration: %w", err)
+		return fmt.Errorf("herdr client orchestration: %w", err)
 	}
 	return nil
 }

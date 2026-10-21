@@ -68,7 +68,7 @@ func parseManagementAddress(output string) (string, error) {
 func pinHerdrHost(ctx context.Context, cfg *config.Config, id string) error {
 	client, err := herdrclient.FromConfig(cfg)
 	if err != nil {
-		return fmt.Errorf("Herdr client configuration: %w", err)
+		return fmt.Errorf("herdr client configuration: %w", err)
 	}
 	target, err := workload.FromConfig(cfg, id)
 	if err != nil {
