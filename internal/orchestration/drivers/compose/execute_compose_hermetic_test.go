@@ -30,7 +30,7 @@ func TestHermeticOwnershipFailureBeforeEnsureProject(t *testing.T) {
 		},
 	})
 
-	err, calls := runHermeticExecuteCompose(t, f.server, f.conn, project, []byte(defaultComposeDocument))
+	calls, err := runHermeticExecuteCompose(t, f.server, f.conn, project, []byte(defaultComposeDocument))
 	if err == nil {
 		t.Fatalf("expected pre-ensure ownership refusal, got success; calls=%v", calls)
 	}
@@ -75,7 +75,7 @@ func TestHermeticOwnershipFailureOnUnmarkedExistingProject(t *testing.T) {
 		},
 	})
 
-	err, _ := runHermeticExecuteCompose(t, f.server, f.conn, project, []byte(defaultComposeDocument))
+	_, err := runHermeticExecuteCompose(t, f.server, f.conn, project, []byte(defaultComposeDocument))
 	if err == nil {
 		t.Fatal("expected ownership refusal, got success")
 	}
@@ -109,7 +109,7 @@ func TestHermeticOwnershipFailureOnForeignInstanceInOwnedProject(t *testing.T) {
 		},
 	})
 
-	err, _ := runHermeticExecuteCompose(t, f.server, f.conn, project, []byte(defaultComposeDocument))
+	_, err := runHermeticExecuteCompose(t, f.server, f.conn, project, []byte(defaultComposeDocument))
 	if err == nil {
 		t.Fatal("expected pre-ensure ownership refusal, got success")
 	}
@@ -146,7 +146,7 @@ func TestHermeticInterruptedImageSeedToleratedAlongsideForeignService(t *testing
 		},
 	})
 
-	err, _ := runHermeticExecuteCompose(t, f.server, f.conn, project, []byte(defaultComposeDocument))
+	_, err := runHermeticExecuteCompose(t, f.server, f.conn, project, []byte(defaultComposeDocument))
 	// The pre-ensure inventory must accept the seed; the test then fails
 	// later in the lifecycle (the driver cannot finish on a hermetic fake
 	// without instance create), which is fine: the seed was tolerated.
@@ -176,7 +176,7 @@ func TestHermeticOwnershipReverificationAfterEnsureProject(t *testing.T) {
 	owned.Config["volatile.base_image"] = "fprnt-alpine-321"
 	f.server.PutInstance(project, owned)
 
-	_, calls := runHermeticExecuteCompose(t, f.server, f.conn, project, []byte(defaultComposeDocument))
+	calls, _ := runHermeticExecuteCompose(t, f.server, f.conn, project, []byte(defaultComposeDocument))
 	// The two driver-side gates (pre and post EnsureProject) each issue a
 	// GetProject, and verifyComposeDeploymentOwnership itself issues one too
 	// per call. So we expect at least four reads of /1.0/projects/{name}:
@@ -225,7 +225,7 @@ func TestHermeticImageAliasDriftDetectedOnExistingInstance(t *testing.T) {
     image: docker.io/library/alpine:3.22
     command: ["sleep", "3600"]
 `)
-	err, calls := runHermeticExecuteCompose(t, f.server, f.conn, project, doc)
+	calls, err := runHermeticExecuteCompose(t, f.server, f.conn, project, doc)
 	if err == nil {
 		t.Fatalf("expected drift error; calls=%v", calls)
 	}
