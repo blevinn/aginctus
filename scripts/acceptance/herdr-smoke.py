@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Opt-in real Herdr workspace lifecycle smoke test.
 
 Two opt-in levels (both gated by an ``I_UNDERSTAND`` acknowledgment):
@@ -16,12 +15,12 @@ level does not.
 """
 import json
 import os
-from pathlib import Path
 import re
 import secrets
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 PREFIX = "aginctus-acceptance."
 SAFE = re.compile(r"^/home/agent/aginctus-acceptance/[a-zA-Z0-9.-]+$")

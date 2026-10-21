@@ -18,7 +18,6 @@ workspace="$root/workspace"
 mkdir -p "$workspace"
 # Run identity is never taken from caller input, and no pre-existing workspace is touched.
 run_id="$(basename "$root")"
-report="$root/report.txt"
 started=0
 opened=0
 success=0
