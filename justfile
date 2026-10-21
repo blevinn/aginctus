@@ -23,7 +23,21 @@ check: modules test vet
 
 # Safe aggregate, even when the caller has opted into live acceptance elsewhere.
 check-all:
-    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local just check test-python test-shell check-shell check-markdown-links check-nix
+    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local just check check-lint test-python test-shell check-shell check-markdown-links check-nix
+
+# Linters run with the pinned development shell tools. Each tool owns its
+# selection: .golangci.yml for Go, ruff.toml for Python, and the file list
+# itself for shellcheck.
+check-lint: check-go-lint check-python-lint check-shell-lint
+
+check-go-lint:
+    golangci-lint run
+
+check-python-lint:
+    ruff check .
+
+check-shell-lint:
+    git ls-files -z -- '*.sh' | xargs -0 -r -n1 shellcheck
 
 test-python:
     python3 -m unittest discover -s guest/opencode -p 'test_*.py' -v

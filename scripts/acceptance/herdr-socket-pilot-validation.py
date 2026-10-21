@@ -37,7 +37,6 @@ Prerequisites:
   ``agent`` account.
 """
 import json
-import os
 import re
 import subprocess
 import sys
@@ -49,23 +48,6 @@ import sys
 EXPECTED_SOCKET_PATH = "/var/lib/herdr/config/herdr/herdr.sock"
 SAFE_MACHINE_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$")
 INSTANCE_NAME = "aginctus-dev"
-
-
-def run_local(args, *, timeout=20):
-    """Run a host-side command and return (rc, stdout)."""
-    try:
-        completed = subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return 124, ""
-    except FileNotFoundError:
-        return 127, ""
-    return completed.returncode, completed.stdout
 
 
 def run_remote(guest_exec_args, *, timeout=30):
@@ -107,21 +89,9 @@ def main():
 
     results = []
 
-    # Phase 1: sshd SetEnv and herdr systemd Environment agree.
-    _, sshd_env = run_local([
-        "sshd", "-T", "-C", "user=" + "agent",
-        "host=localhost", "addr=127.0.0.1", "laddr=127.0.0.1", "lport=2222",
-    ])
-    setenv_line = ""
-    for line in sshd_env.splitlines():
-        if line.lower().startswith("setenv "):
-            name_value = line[len("setenv "):]
-            if name_value.startswith("HERDR_SOCKET_PATH="):
-                setenv_line = name_value
-                break
-    # The on-host sshd query may not reflect the workload's sshd config
-    # because the workload runs in its own container. The authoritative
-    # source is the guest itself.
+    # Phase 1: sshd SetEnv and herdr systemd Environment agree. Both are
+    # read from the guest, which is authoritative: the on-host sshd query
+    # never reflected the workload's own sshd configuration.
     rc, stdout = run_remote([
         "sh", "-c",
         "sshd -T 2>/dev/null | grep -i '^setenv HERDR_SOCKET_PATH'",

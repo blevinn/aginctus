@@ -30,10 +30,7 @@ type Registry struct {
 var safeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
 func validModel(m Model) bool {
-	name := m.Name
-	if strings.HasPrefix(name, "chatgpt/") {
-		name = strings.TrimPrefix(name, "chatgpt/")
-	}
+	name := strings.TrimPrefix(m.Name, "chatgpt/")
 	if !safeName.MatchString(name) || !safeName.MatchString(m.Provider) {
 		return false
 	}

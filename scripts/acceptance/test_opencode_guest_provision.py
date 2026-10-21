@@ -1,12 +1,9 @@
-#!/usr/bin/env python3
 """Hermetic regression tests for scripts/acceptance/opencode-guest-provision.py."""
 import importlib.util
 import subprocess
-import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "acceptance" / "opencode-guest-provision.py"
@@ -102,11 +99,10 @@ class IncusExecRetryTests(unittest.TestCase):
         )
         with patch.object(
             self.mod.subprocess, "run", side_effect=persistent,
-        ):
-            with self.assertRaises(RuntimeError) as ctx:
-                self.mod.incus_exec_retry(
-                    "vm", "default", payload="probe", attempts=3, sleep_seconds=0,
-                )
+        ), self.assertRaises(RuntimeError) as ctx:
+            self.mod.incus_exec_retry(
+                "vm", "default", payload="probe", attempts=3, sleep_seconds=0,
+            )
         self.assertIn("3 attempts", str(ctx.exception))
 
     def test_raises_when_marker_never_appears(self):
@@ -116,11 +112,10 @@ class IncusExecRetryTests(unittest.TestCase):
         )
         with patch.object(
             self.mod.subprocess, "run", return_value=ready,
-        ):
-            with self.assertRaises(RuntimeError) as ctx:
-                self.mod.incus_exec_retry(
-                    "vm", "default", payload="probe", attempts=3, sleep_seconds=0,
-                )
+        ), self.assertRaises(RuntimeError) as ctx:
+            self.mod.incus_exec_retry(
+                "vm", "default", payload="probe", attempts=3, sleep_seconds=0,
+            )
         self.assertIn("did not activate", str(ctx.exception))
 
 

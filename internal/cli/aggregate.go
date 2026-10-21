@@ -32,7 +32,7 @@ func aggregateApplyPlan(effective *config.Config) (orchestration.Plan, error) {
 	}
 	client, err := herdrclient.FromConfig(effective)
 	if err != nil {
-		return orchestration.Plan{}, fmt.Errorf("Herdr client: %w", err)
+		return orchestration.Plan{}, fmt.Errorf("herdr client: %w", err)
 	}
 	clientPlan, err := client.Plan("upsert", false)
 	if err != nil {

@@ -1,11 +1,12 @@
 import importlib.util
-import os
 import json
-import subprocess
-import tempfile
+import os
 import os.path
-from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("herdr_smoke", Path(__file__).with_name("herdr-smoke.py"))
@@ -308,6 +309,3 @@ class SmokeFinallyTests(unittest.TestCase):
                 any("close failed" in line for line in stderr_lines),
                 f"missing close-failure WARN line; stderr={stderr_lines}",
             )
-
-
-import sys  # used inside SmokeFinallyTests runner closures
