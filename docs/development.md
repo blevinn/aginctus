@@ -25,12 +25,14 @@ The initial shell includes:
 
 - `git`;
 - `go`;
+- `golangci-lint` (pinned carrier for the Go static analysis in the lint tier);
 - `herdr` (the pinned CLI used by the OpenCode acceptance harness and the Herdr remote branches);
 - `incus`;
 - `jq`;
 - `just`;
 - `nixfmt`;
 - `python3` with `markdown-it-py` (guest scripts, acceptance tests, and Markdown validation);
+- `ruff` (Python lint in the lint tier);
 - `shellcheck`;
 - `shfmt`.
 
@@ -147,6 +149,7 @@ at the first failing command and composes these individually runnable recipes:
 | Recipe | Coverage |
 | --- | --- |
 | `check` | `go mod verify`, `go test ./...`, `go vet ./...` |
+| `check-lint` | `golangci-lint run` (`staticcheck` only), `ruff check .`, and `shellcheck` for every Git-tracked `*.sh` file |
 | `test-python` | Verbose `unittest` discovery of `test_*.py`, separately in `guest/opencode`, `guest/ssh`, `scripts/acceptance`, `scripts/gateway`, and `tests` |
 | `test-shell` | `opencode-test.sh` and `opencode-live-adapter-test.sh`, using temporary fake adapters/hooks only |
 | `check-shell` | `bash -n` for every Git-tracked `*.sh` file, including the opt-in operator harnesses without executing them |
@@ -228,22 +231,33 @@ The checker makes no network requests. All scheme/protocol-relative URLs
 remote fragments are outside this offline gate. It reads the working tree and
 Git index without modifying documents, credentials, guests, or host services.
 
-### Separate static-analysis work
+### Lint tier
 
-Bash syntax checking is mandatory. Whole-tree `staticcheck`, `shellcheck`, and
-`ruff` gates remain separate pending [#297](https://github.com/blevinn/aginctus/issues/297),
-[#298](https://github.com/blevinn/aginctus/issues/298), and
-[#299](https://github.com/blevinn/aginctus/issues/299). `check-all` neither silently
-skips missing linters nor introduces competing configurations. For optional
-analysis, install staticcheck/ruff separately (shellcheck is in the dev shell):
+`check-all` composes `check-lint`, which runs three pinned tools from the
+development shell:
 
 ```sh
-staticcheck ./...
-git ls-files -z -- '*.sh' | xargs -0 -r shellcheck
-ruff check guest scripts tests
+nix --quiet develop -c just check-lint
 ```
 
-These may report the outstanding findings tracked by those issues.
+| Tool | Selection | Configuration |
+| --- | --- | --- |
+| `golangci-lint` | `staticcheck` only, every occurrence reported | `.golangci.yml` |
+| `ruff` | `E4`, `E7`, `E9`, `F`, `I`, `EXE`, `RUF012`, `PLW1510`, `SIM117` | `ruff.toml` |
+| `shellcheck` | every Git-tracked `*.sh` file, invoked one file per run | the file list |
+
+Both configurations are checked in, so the gate does not depend on any tool's
+built-in defaults. `golangci-lint` is the pinned carrier for Go static analysis
+because nixpkgs no longer ships a standalone `staticcheck` attribute; its
+identical-diagnostic caps are disabled, since the default of three would hide
+most of a repo-wide finding class. `ruff.toml` records that `TRY004` is
+deliberately unselected: the guest and acceptance validators raise `ValueError`
+for untrusted JSON, and their callers depend on that contract.
+
+`golangci-lint` keeps a result cache outside the repository. After switching
+branches or worktrees, stale diagnostics can be replayed with misleading
+source paths; `golangci-lint cache clean` discards them. Findings themselves
+are recomputed from file contents, so the cache never hides a new violation.
 
 ### Explicit opt-in validation
 
@@ -321,6 +335,11 @@ that the snapshot is semantically equal and runs the same Go test against those
 generated documents. The fixtures are examples of the existing configuration,
 not a second schema or a consolidation of Go/NixOS/guest defaults (#296).
 
+The same check runs `TestDefaultsMatchNixOSModule`, which compares the module's
+rendered defaults against the CLI's `defaults` map in both directions, so the
+two registries cannot be changed independently. Plain Go tests read the snapshot
+in `internal/config/testdata`.
+
 These commands need Nix with flakes and the locked development dependencies,
 but no Incus daemon, credentials, or running guests:
 
@@ -359,10 +378,13 @@ network-fetched installer dependencies or hosted-runner software.
 The aggregate runs, in order, `nix --quiet develop -c just check-all` (added
 by #347 / PR #356), `nix --quiet build --no-update-lock-file
 .#checks.x86_64-linux.gateway-config-parity`, and `git diff --check` against
-the pre-push revision (pushes) or the PR base SHA (pull requests). Lock-file
-drift is rejected by `--no-update-lock-file`. The Go module cache is restored
-from `actions/cache` keyed on `go.sum` and populated online before the
-offline aggregate, because `just check-all` runs with `GOPROXY=off`.
+the pre-push revision (pushes) or the PR base SHA (pull requests). The lint
+tier runs once as its own earlier step, `just check-lint`, so a static-analysis
+failure is reported on its own instead of inside the aggregate log; the
+aggregate then runs it again as part of `check-all`. Lock-file drift is
+rejected by `--no-update-lock-file`. The Go module cache is restored from
+`actions/cache` keyed on `go.sum` and populated online before the offline
+aggregate, because `just check-all` runs with `GOPROXY=off`.
 
 The job uses full-history checkout (`fetch-depth: 0`) so the diff step and
 the recorded `BUILD_HASH=${{ github.sha }}` reflect the exact commit under
@@ -382,6 +404,9 @@ nix --quiet develop --no-update-lock-file -c go mod download
 
 # Run the same aggregate the workflow runs.
 nix --quiet develop --no-update-lock-file -c just check-all
+
+# Same lint step the workflow runs on its own.
+nix --quiet develop --no-update-lock-file -c just check-lint
 
 # Render-level NixOS gateway parity.
 nix --quiet build --no-update-lock-file .#checks.x86_64-linux.gateway-config-parity
@@ -404,8 +429,10 @@ reports observed skips without predicting their count or cause.
 
 The aggregate excludes live Incus/provider acceptance, real OpenCode runtime
 execution, guest image builds, and heavyweight firewall/Incus/Herdr VMs. See the
-validation tiers above for their separate commands. Whole-tree linters and link
-checker integration are tracked separately in #297–#299 and #361.
+validation tiers above for their separate commands. The Markdown link checker is
+part of the aggregate; whole-tree linting is tracked in
+[#297](https://github.com/blevinn/aginctus/issues/297)-[#299](https://github.com/blevinn/aginctus/issues/299)
+and the lint tier above.
 
 ## direnv
 

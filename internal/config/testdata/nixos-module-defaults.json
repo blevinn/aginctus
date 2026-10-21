@@ -1,0 +1,61 @@
+{
+  "firewall": {
+    "egress": {
+      "uplinkZone": ""
+    },
+    "zone": "aginctus-dns"
+  },
+  "gateway": {
+    "compose": {
+      "project": "aginctus-gateway"
+    },
+    "id": "local",
+    "images": {
+      "litellm": "ghcr.io/berriai/litellm:v1.103.0",
+      "postgres": "docker.io/library/postgres:17-alpine"
+    }
+  },
+  "incus": {
+    "management": {
+      "network": {
+        "ipv4": {
+          "address": "auto",
+          "nat": false,
+          "routing": false
+        },
+        "ipv6": {
+          "address": "none"
+        },
+        "name": "aginctus-mgmt"
+      }
+    }
+  },
+  "infrastructure": {
+    "herdr": {
+      "image": {
+        "alias": "aginctus-herdr-client"
+      },
+      "name": "aginctus-herdr",
+      "storage": {
+        "pool": "default"
+      }
+    }
+  },
+  "workloads": {
+    "dev": {
+      "image": {
+        "alias": "aginctus-opencode-workload"
+      },
+      "instance": {
+        "name": "aginctus-dev"
+      },
+      "isolation": "container",
+      "runtime": {
+        "type": "opencode"
+      },
+      "storage": {
+        "pool": "default"
+      }
+    }
+  }
+}
