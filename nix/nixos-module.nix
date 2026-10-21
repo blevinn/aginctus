@@ -201,6 +201,7 @@ let
   };
 in
 {
+  imports = [ ./egress-firewall.nix ];
   options.services.aginctus = {
     enable = mkEnableOption "Aginctus host integration";
 

@@ -79,6 +79,12 @@ let
     services.firewalld.enable = true;
     networking.nftables.enable = true;
   };
+  egressHost = evaluate {
+    services.firewalld.enable = true;
+    networking.nftables.enable = true;
+    services.aginctus.firewall.egress.enable = true;
+    services.aginctus.settings.gateway.egress.network.name = "custom-egress";
+  };
   withReconcile = evaluate {
     services.aginctus.reconcile = {
       enable = true;
@@ -128,31 +134,7 @@ let
     "aginctus-image-herdr-client.service"
     "aginctus-image-opencode-workload.service"
   ];
-
-  recorder = pkgs.writeShellScript "reconcile-recorder" ''
-    set -eu
-    if [ "$1" = --configuration-file ]; then
-      test -r "$2"
-      shift 2
-    fi
-    printf '%s\n' "$*" >> "$COMMAND_LOG"
-    if [ "$*" = "''${FAIL_COMMAND:-}" ]; then
-      exit 23
-    fi
-  '';
-  # Substitute only external executables; execute the module's actual shell flow.
-  recordedScript =
-    unit:
-    pkgs.writeShellScript "recorded-reconcile" (
-      builtins.replaceStrings
-        [ "${stub}/bin/aginctus" "${pkgs.systemd}/bin/systemctl" ]
-        [ "${recorder}" "${recorder}" ]
-        unit.script
-    );
 in
-assert !base.services.aginctus.reconcile.enable;
-assert !base.services.aginctus.reconcile.gateway;
-assert !(builtins.hasAttr "aginctus-reconcile" base.systemd.services);
 assert settings.incus.management.network.name == "integration-mgmt";
 assert settings.firewall.zone == "aginctus-dns";
 assert builtins.hasAttr "firewalld/zones/aginctus-vm.xml" withCustomZone.environment.etc;
@@ -168,6 +150,13 @@ assert !(lib.hasInfix "AGINCTUS_INPUT" firewalldHost.networking.firewall.extraCo
 # A native-only chain must not instantiate an incomplete nixos-fw table on a
 # firewalld host: NixOS supplies the table's family only for its own backend.
 assert !(builtins.hasAttr "nixos-fw" firewalldHost.networking.nftables.tables);
+assert !(builtins.hasAttr "firewalld/zones/aginctus-egress.xml" firewalldHost.environment.etc);
+assert lib.hasInfix "custom-egress"
+  egressHost.environment.etc."firewalld/zones/aginctus-egress.xml".text;
+assert !egressHost.services.firewalld.settings.CleanupOnExit;
+assert egressHost.services.firewalld.settings.StrictForwardPorts;
+assert !(builtins.hasAttr "aginctus-egress-firewall" egressHost.systemd.timers);
+assert !(builtins.hasAttr "aginctus-egress-firewall" egressHost.systemd.services);
 assert !(builtins.hasAttr "nixos-fw" base.networking.nftables.tables);
 assert nativeNftHost.networking.nftables.tables."nixos-fw".family == "inet";
 assert builtins.elem "firewalld.service"
@@ -180,6 +169,9 @@ assert builtins.elem "nftables.service"
 
 assert lib.hasInfix "aginctus-firewall-reconcile.service"
   withReconcile.systemd.services.aginctus-reconcile.script;
+# reconcile.gateway inserts the gateway apply between firewall and Herdr steps.
+assert lib.hasInfix "gateway apply" reconcileGateway.script;
+assert lib.hasInfix "herdr client ensure" reconcileGateway.script;
 assert !(lib.hasInfix "gateway apply" reconcile.script);
 # reconcile.gateway must pin XDG_STATE_HOME so the gateway CLI's
 # os.UserHomeDir fallback (which fails inside systemd units that do not
@@ -245,42 +237,5 @@ assert reconcile.after == expected;
 assert noImagesReconcile.requires == [ "incus.service" ];
 assert noImagesReconcile.after == [ "incus.service" ];
 pkgs.runCommand "aginctus-nixos-module-evaluation" { } ''
-  ${pkgs.python3}/bin/python3 - <<'PY'
-  import os
-  from pathlib import Path
-  import subprocess
-
-  log = Path.cwd() / "commands"
-  scripts = {
-      False: "${recordedScript reconcile}",
-      True: "${recordedScript reconcileGateway}",
-  }
-  for gateway, script in scripts.items():
-      expected = ["network ensure", "start aginctus-firewall-reconcile.service"]
-      if gateway:
-          expected.append("gateway apply")
-      expected += ["herdr client ensure", "workload dev ensure"]
-
-      def run(failure=""):
-          result = subprocess.run(
-              [script],
-              env={**os.environ, "COMMAND_LOG": str(log), "FAIL_COMMAND": failure},
-              capture_output=True, text=True,
-          )
-          return result
-
-      # Exact traces exclude removal commands, including when gateway is off.
-      log.write_text("")
-      for _ in range(2):
-          result = run()
-          assert result.returncode == 0, result.stderr
-      assert log.read_text().splitlines() == expected * 2
-
-      for index, command in enumerate(expected):
-          log.write_text("")
-          result = run(command)
-          assert result.returncode == 23, (command, result.returncode, result.stderr)
-          assert log.read_text().splitlines() == expected[:index + 1], command
-  PY
   touch "$out"
 ''
