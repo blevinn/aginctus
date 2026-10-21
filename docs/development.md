@@ -335,6 +335,11 @@ that the snapshot is semantically equal and runs the same Go test against those
 generated documents. The fixtures are examples of the existing configuration,
 not a second schema or a consolidation of Go/NixOS/guest defaults (#296).
 
+The same check runs `TestDefaultsMatchNixOSModule`, which compares the module's
+rendered defaults against the CLI's `defaults` map in both directions, so the
+two registries cannot be changed independently. Plain Go tests read the snapshot
+in `internal/config/testdata`.
+
 These commands need Nix with flakes and the locked development dependencies,
 but no Incus daemon, credentials, or running guests:
 

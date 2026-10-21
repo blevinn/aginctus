@@ -8,9 +8,10 @@ import (
 
 // WritePrivateFile replaces path with data through a private temporary file in
 // the same directory. The temporary file is chmod 0600 before any content is
-// written and is fsynced before the rename, so a reader never observes a
-// partially written or group/world-readable path, and a crash leaves the
-// previous contents or no file at all.
+// written and is fsynced before the rename. Atomic rename prevents readers
+// from seeing a partially written or group/world-readable replacement. This
+// does not fsync the parent directory, so rename durability across power loss
+// is not guaranteed.
 //
 // The caller owns the parent directory's creation and permission checks. A
 // symlink at path is replaced by the rename itself rather than followed, so the
