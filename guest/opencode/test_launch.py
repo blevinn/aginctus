@@ -1,20 +1,20 @@
-#!/usr/bin/env python3
 """Isolated end-to-end contract tests using a synthetic OpenAI-compatible gateway."""
 import http.server
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import threading
 import unittest
+from pathlib import Path
+from typing import ClassVar
 
 LAUNCHER = Path(__file__).with_name("launch.py")
 
 
 class Gateway(http.server.BaseHTTPRequestHandler):
-    calls = []
+    calls: ClassVar[list] = []
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -81,7 +81,7 @@ class LauncherTests(unittest.TestCase):
     def launch(self):
         env = dict(os.environ, AGINCTUS_OPENCODE_DIR=str(self.directory))
         return subprocess.run([sys.executable, str(LAUNCHER), str(self.client)],
-                              env=env, capture_output=True, text=True)
+                              env=env, capture_output=True, text=True, check=False)
 
     def test_authenticated_responses_and_tool_output(self):
         result = self.launch()

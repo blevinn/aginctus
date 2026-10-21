@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Exercise the *real pinned* OpenCode CLI against a loopback Responses mock.
 
 Run with: nix develop -c python3 guest/opencode/test_real_runtime.py /nix/store/.../bin/opencode
@@ -8,19 +7,19 @@ and consumes a complete SSE text response. Never needs a live LiteLLM gateway.
 import http.server
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import threading
-import unittest
+from pathlib import Path
+from typing import ClassVar
 
 LAUNCHER = Path(__file__).with_name("launch.py")
 EXPECTED = "AGINCTUS_MOCK_RESPONSE_OK"
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    calls = []
+    calls: ClassVar[list] = []
 
     def do_POST(self):
         payload = self.rfile.read(int(self.headers.get("Content-Length", "0")))
@@ -96,7 +95,7 @@ def main(binary):
             result = subprocess.run(
                 [sys.executable, str(LAUNCHER), binary, "run", "--model", "aginctus/test-model",
                  EXPECTED + " (repeat this marker verbatim)"],
-                cwd=root, env=env, capture_output=True, text=True, timeout=90)
+                cwd=root, env=env, capture_output=True, text=True, timeout=90, check=False)
             assert Handler.calls, "real OpenCode did not reach the mock gateway"
             assert all(p == "/v1/responses" and auth == "Bearer integration-only-key"
                        and model == "test-model" for p, auth, model in Handler.calls), (
