@@ -175,28 +175,8 @@ func Register(path string, model Model) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("encode model registry: %w", err)
 	}
-	tmp, err := os.CreateTemp(dir, ".models-*")
-	if err != nil {
-		return false, fmt.Errorf("create model registry file: %w", err)
-	}
-	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		return false, err
-	}
-	if _, err := tmp.Write(append(payload, '\n')); err != nil {
-		tmp.Close()
+	if err := filestate.WritePrivateFile(path, append(payload, '\n')); err != nil {
 		return false, fmt.Errorf("write model registry: %w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return false, fmt.Errorf("sync model registry: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return false, err
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		return false, fmt.Errorf("persist model registry: %w", err)
 	}
 	return true, nil
 }

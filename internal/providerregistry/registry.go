@@ -87,27 +87,7 @@ func Register(path string, p Provider) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	tmp, err := os.CreateTemp(dir, ".providers-*")
-	if err != nil {
-		return false, err
-	}
-	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		return false, err
-	}
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		tmp.Close()
-		return false, err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return false, err
-	}
-	if err := tmp.Close(); err != nil {
-		return false, err
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
+	if err := filestate.WritePrivateFile(path, append(data, '\n')); err != nil {
 		return false, err
 	}
 	return true, nil
