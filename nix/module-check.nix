@@ -79,6 +79,12 @@ let
     services.firewalld.enable = true;
     networking.nftables.enable = true;
   };
+  egressHost = evaluate {
+    services.firewalld.enable = true;
+    networking.nftables.enable = true;
+    services.aginctus.firewall.egress.enable = true;
+    services.aginctus.settings.gateway.egress.network.name = "custom-egress";
+  };
   withReconcile = evaluate {
     services.aginctus.reconcile = {
       enable = true;
@@ -168,6 +174,14 @@ assert !(lib.hasInfix "AGINCTUS_INPUT" firewalldHost.networking.firewall.extraCo
 # A native-only chain must not instantiate an incomplete nixos-fw table on a
 # firewalld host: NixOS supplies the table's family only for its own backend.
 assert !(builtins.hasAttr "nixos-fw" firewalldHost.networking.nftables.tables);
+assert !(builtins.hasAttr "firewalld/zones/aginctus-egress.xml" firewalldHost.environment.etc);
+assert lib.hasInfix "custom-egress"
+  egressHost.environment.etc."firewalld/zones/aginctus-egress.xml".text;
+assert !egressHost.services.firewalld.settings.CleanupOnExit;
+assert egressHost.services.firewalld.settings.StrictForwardPorts;
+assert egressHost.systemd.timers.aginctus-egress-firewall.timerConfig.AccuracySec == "1s";
+assert lib.hasInfix "/var/lib/aginctus-firewall/overrides.json"
+  egressHost.systemd.services.aginctus-egress-firewall.serviceConfig.ExecStart;
 assert !(builtins.hasAttr "nixos-fw" base.networking.nftables.tables);
 assert nativeNftHost.networking.nftables.tables."nixos-fw".family == "inet";
 assert builtins.elem "firewalld.service"

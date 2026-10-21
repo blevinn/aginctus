@@ -291,6 +291,9 @@ func runNetwork(
 	if len(args) == 2 && args[0] == "firewall" && args[1] == "reconcile" {
 		return runNetworkFirewallReconcile(ctx, stdout, stderr, effective)
 	}
+	if len(args) == 3 && args[0] == "firewall" && args[1] == "egress" && (args[2] == "reconcile" || args[2] == "revoke") {
+		return runNetworkFirewallEgress(ctx, stdout, stderr, effective, args[2] == "revoke")
+	}
 
 	action := args[0]
 	options, err := parseNetworkOptions(args[1:])
@@ -365,6 +368,7 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network status")
 	fmt.Fprintln(w, "       aginctus [global options] network firewall policy")
 	fmt.Fprintln(w, "       aginctus [global options] network firewall reconcile  # privileged mutation")
+	fmt.Fprintln(w, "       aginctus [global options] network firewall egress reconcile|revoke  # privileged runtime grants")
 	fmt.Fprintln(w, "Aliases: network ensure = apply; network teardown = remove")
 	fmt.Fprintln(w, "Status/policy are read-only; apply/remove/reconcile mutate unless --dry-run is explicitly supported above.")
 }
@@ -394,18 +398,18 @@ func runGateway(
 		fmt.Fprintln(stdout, string(audit))
 		return 0
 	}
-	if len(args) == 5 && args[0] == "egress" && args[1] == "firewall" && args[2] == "stage" && strings.HasPrefix(args[3], "--uplink-zone=") && args[4] == "--confirm-permanent-no-reload" {
-		spec, err := gateway.FromConfig(effective)
-		if err != nil {
-			fmt.Fprintf(stderr, "egress firewall configuration: %v\n", err)
+	if len(args) == 3 && args[0] == "egress" && args[1] == "firewall" && args[2] == "reload-parity" {
+		if err := gateway.CheckFirewalldReloadParity(ctx, gateway.SystemFirewalld); err != nil {
+			fmt.Fprintf(stderr, "firewalld reload parity blocked: %v\n", err)
 			return 1
 		}
-		if err := spec.StageEgressFirewalld(ctx, strings.TrimPrefix(args[3], "--uplink-zone="), gateway.SystemFirewalld); err != nil {
-			fmt.Fprintf(stderr, "egress firewall staging blocked: %v\n", err)
-			return 1
-		}
-		fmt.Fprintln(stdout, "firewalld egress zone/policy staged in permanent configuration only; NO reload, NO runtime activation; verify definitions before operator-controlled activation")
+		fmt.Fprintln(stdout, "selected runtime/permanent firewalld state matches; global reload NOT approved or executed")
 		return 0
+	}
+	if len(args) >= 3 && args[0] == "egress" && args[1] == "firewall" &&
+		(args[2] == "stage" || args[2] == "unstage" || args[2] == "verify-staged") {
+		fmt.Fprintln(stderr, "permanent staging commands are retired: NixOS owns egress objects; use network firewall egress reconcile or revoke for runtime grants")
+		return 2
 	}
 	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "plan" && strings.HasPrefix(args[3], "--uplink-zone=") {
 		spec, err := gateway.FromConfig(effective)
@@ -840,7 +844,7 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall plan --uplink-zone=ZONE  (read-only)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall audit --uplink-zone=ZONE  (read-only)")
-	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall stage --uplink-zone=ZONE --confirm-permanent-no-reload  (mutates permanent policy; not activated)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall reload-parity  (read-only; NOT approval)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage audit  (read-only; no authentication)")

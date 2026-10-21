@@ -355,6 +355,9 @@
           firewall-firewalld-integration = import ./nix/firewall-firewalld-test.nix {
             inherit self nixpkgs system;
           };
+          firewall-egress-bootstrap = import ./nix/firewall-egress-bootstrap-test.nix {
+            inherit self nixpkgs system;
+          };
           firewall-nixos-nft-integration = import ./nix/firewall-nixos-nft-test.nix {
             inherit self nixpkgs system;
           };
@@ -391,11 +394,13 @@
               (with pkgs; [
                 git
                 go
+                golangci-lint
                 incus
                 jq
                 just
                 nixfmt
                 (python3.withPackages (ps: [ ps.markdown-it-py ]))
+                ruff
                 shellcheck
                 shfmt
               ])

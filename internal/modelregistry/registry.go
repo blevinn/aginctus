@@ -30,10 +30,7 @@ type Registry struct {
 var safeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
 func validModel(m Model) bool {
-	name := m.Name
-	if strings.HasPrefix(name, "chatgpt/") {
-		name = strings.TrimPrefix(name, "chatgpt/")
-	}
+	name := strings.TrimPrefix(m.Name, "chatgpt/")
 	if !safeName.MatchString(name) || !safeName.MatchString(m.Provider) {
 		return false
 	}
@@ -178,28 +175,8 @@ func Register(path string, model Model) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("encode model registry: %w", err)
 	}
-	tmp, err := os.CreateTemp(dir, ".models-*")
-	if err != nil {
-		return false, fmt.Errorf("create model registry file: %w", err)
-	}
-	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		return false, err
-	}
-	if _, err := tmp.Write(append(payload, '\n')); err != nil {
-		tmp.Close()
+	if err := filestate.WritePrivateFile(path, append(payload, '\n')); err != nil {
 		return false, fmt.Errorf("write model registry: %w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return false, fmt.Errorf("sync model registry: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return false, err
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		return false, fmt.Errorf("persist model registry: %w", err)
 	}
 	return true, nil
 }

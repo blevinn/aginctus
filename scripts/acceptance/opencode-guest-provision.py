@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Live Incus guest-helper smoke test, independent of LiteLLM.
 
 Creates and destroys *only* its own disposable offline OpenCode instance.
@@ -43,7 +42,6 @@ def incus_exec_retry(name, project, *, payload, attempts=30, sleep_seconds=2):
     last attempt, a persistent failure is re-raised so the caller still
     fails closed on a real defect.
     """
-    last_exc = None
     for attempt in range(attempts):
         try:
             completed = subprocess.run(
@@ -53,7 +51,6 @@ def incus_exec_retry(name, project, *, payload, attempts=30, sleep_seconds=2):
                 capture_output=True, check=True, timeout=120,
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            last_exc = exc
             if attempt < attempts - 1:
                 time.sleep(sleep_seconds)
                 continue
@@ -64,12 +61,10 @@ def incus_exec_retry(name, project, *, payload, attempts=30, sleep_seconds=2):
             ) from None
         if "EXISTS /run/current-system/sw/bin/aginctus-opencode-gateway-provision" in completed.stdout:
             return completed, attempt + 1
-        last_exc = None
         if attempt < attempts - 1:
             time.sleep(sleep_seconds)
-    # Loop exhausted without ever observing the marker and without an
-    # ``incus exec`` exception to report. Surface the last successful
-    # stdout so the caller can print it for diagnostics.
+    # Loop exhausted without ever observing the marker. The caller
+    # reports its own timeout diagnostics.
     raise RuntimeError(
         f"guest did not activate NixOS system profile within "
         f"{attempts * sleep_seconds} seconds"
@@ -146,7 +141,7 @@ grep -Fq '"endpoint": "http://10.42.40.12:4000/v1"' "$dir/gateway.json"
         bad = subprocess.run(
             ["incus", "exec", name, "--project", project, "--",
              helper],
-            input=bad_payload, text=True, capture_output=True, timeout=120,
+            input=bad_payload, text=True, capture_output=True, timeout=120, check=False,
         )
         if bad.returncode == 0:
             raise RuntimeError("guest accepted invalid model")
