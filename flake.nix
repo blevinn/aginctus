@@ -394,11 +394,13 @@
               (with pkgs; [
                 git
                 go
+                golangci-lint
                 incus
                 jq
                 just
                 nixfmt
                 (python3.withPackages (ps: [ ps.markdown-it-py ]))
+                ruff
                 shellcheck
                 shfmt
               ])
