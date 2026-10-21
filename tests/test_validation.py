@@ -20,6 +20,7 @@ class ValidationDispatchTests(unittest.TestCase):
             "golangci-lint run",
             "ruff check .",
             "git ls-files -z -- *.sh",
+            "shellcheck syntax.sh",
             *[
                 f"python3 -m unittest discover -s {directory} -p test_*.py -v"
                 for directory in (
@@ -30,7 +31,6 @@ class ValidationDispatchTests(unittest.TestCase):
             "shell opencode-test.sh",
             "shell opencode-live-adapter-test.sh",
             "git ls-files -z -- *.sh",
-            "shellcheck syntax.sh",
             "python3 scripts/check_markdown_links.py",
             "nix --quiet flake check --no-build --no-update-lock-file",
             "nix --quiet flake check --no-update-lock-file",
@@ -117,7 +117,11 @@ if name == "git":
                     else:
                         self.assertNotEqual(result.returncode, 0, result.stderr)
                         last = "git ls-files -z -- *.sh" if failure == "syntax" else failure
-                        self.assertEqual(seen, expected[:expected.index(last) + 1])
+                        stop = expected.index(last)
+                        if failure == "syntax":
+                            # Bash syntax checking follows the second file-list dispatch.
+                            stop = len(expected) - 1 - expected[::-1].index(last)
+                        self.assertEqual(seen, expected[:stop + 1])
 
 
 if __name__ == "__main__":
