@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Tests for the shared gateway endpoint validator."""
 import importlib.util
 import unittest
