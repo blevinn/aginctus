@@ -1,5 +1,8 @@
 {
   "firewall": {
+    "egress": {
+      "uplinkZone": ""
+    },
     "zone": "aginctus-dns"
   },
   "gateway": {
