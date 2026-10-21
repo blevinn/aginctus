@@ -356,6 +356,19 @@ func TestGatewayStateDirRejectsRelativeXDGStateHome(t *testing.T) {
 	}
 }
 
+func TestGatewayStateDirRejectsRelativeHome(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("HOME", "relative/home")
+	for _, name := range requiredRuntimeEnvironment {
+		t.Setenv(name, "")
+	}
+	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted relative HOME fallback for gateway secret state")
+	} else if !strings.Contains(err.Error(), "absolute") {
+		t.Fatalf("error %q does not name the absolute-path requirement", err)
+	}
+}
+
 func TestGatewayStateDirAcceptsAbsoluteXDGStateHome(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", state)
