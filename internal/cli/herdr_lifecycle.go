@@ -26,7 +26,7 @@ var transitionHerdrClient = func(ctx context.Context, spec herdrclient.Spec, act
 		if action == "stop" {
 			return nil
 		}
-		return fmt.Errorf("Herdr client %q is absent; run herdr client apply first", spec.Name)
+		return fmt.Errorf("herdr client %q is absent; run herdr client apply first", spec.Name)
 	}
 	running := strings.EqualFold(state, "running")
 	if (action == "start" && running) || (action == "stop" && !running) {
