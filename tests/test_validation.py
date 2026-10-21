@@ -17,6 +17,10 @@ class ValidationDispatchTests(unittest.TestCase):
             "go mod verify",
             "go test ./...",
             "go vet ./...",
+            "golangci-lint run",
+            "ruff check .",
+            "git ls-files -z -- *.sh",
+            "shellcheck syntax.sh",
             *[
                 f"python3 -m unittest discover -s {directory} -p test_*.py -v"
                 for directory in (
@@ -58,7 +62,8 @@ if command == os.environ.get("FAIL_COMMAND"):
 if name == "git":
     sys.stdout.buffer.write(b"syntax.sh\\0")
 '''
-            for name in ("go", "python3", "git", "nix"):
+            for name in ("go", "golangci-lint", "python3", "ruff", "git",
+                         "nix", "shellcheck"):
                 tool = tools / name
                 tool.write_text(stub)
                 tool.chmod(0o700)
@@ -112,7 +117,11 @@ if name == "git":
                     else:
                         self.assertNotEqual(result.returncode, 0, result.stderr)
                         last = "git ls-files -z -- *.sh" if failure == "syntax" else failure
-                        self.assertEqual(seen, expected[:expected.index(last) + 1])
+                        stop = expected.index(last)
+                        if failure == "syntax":
+                            # Bash syntax checking follows the second file-list dispatch.
+                            stop = len(expected) - 1 - expected[::-1].index(last)
+                        self.assertEqual(seen, expected[:stop + 1])
 
 
 if __name__ == "__main__":
