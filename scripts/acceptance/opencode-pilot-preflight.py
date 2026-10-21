@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
 """Read-only pilot infrastructure preflight for #124; no Herdr or inference claims."""
 import json
 import subprocess
 import sys
 from urllib.parse import quote
+
 
 def run(*args):
     try:

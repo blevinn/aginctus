@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
 """Launch OpenCode with an Aginctus-only provider, never persisting credentials in Nix."""
 import json
 import os
-from pathlib import Path
 import stat
 import sys
+from pathlib import Path
 
 from gateway_endpoint import validate_endpoint, validate_model
 
@@ -58,7 +57,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, json.JSONDecodeError):
         # Do not print paths, source JSON or credential-bearing exceptions.
         print("aginctus opencode: gateway configuration unavailable or invalid", file=sys.stderr)
         sys.exit(1)

@@ -18,7 +18,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "guest" / "ssh" / "host-trust.sh"
 
@@ -36,7 +35,7 @@ def namespace_can_chown_to_foreign():
             ["unshare", "--user", "--map-root-user",
              "--map-users=1234:1000:1", "bash", "-c",
              f"chown 1234 {path}"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=10, check=False,
         )
         return probe.returncode == 0
     finally:
@@ -66,7 +65,7 @@ class _NamespaceTestCase(unittest.TestCase):
         ]
         return subprocess.run(
             cmd, input=stdin_text,
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, check=False,
         )
 
     def fresh_layout(self, perms_root="700", perms_trust="700"):

@@ -1,10 +1,10 @@
 """Check every Git-tracked Markdown document locally, without network access."""
 
 import argparse
-from pathlib import Path
 import subprocess
 import sys
 import unicodedata
+from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from markdown_it import MarkdownIt

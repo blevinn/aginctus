@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Owned guest directory stage/cleanup through authenticated Incus guest exec.
 
 Only for the empty Herdr workspace lifecycle smoke. Never removes fixture trees.
