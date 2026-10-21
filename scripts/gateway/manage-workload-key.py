@@ -1,20 +1,19 @@
-#!/usr/bin/env python3
 """Issue or revoke one short-lived, model-scoped LiteLLM pilot key (#122).
 
 Dry-run by default. Never prints provider, master or virtual key material.
 The pinned LiteLLM v1.103.0 /key/generate and /key/delete APIs own key state.
 """
 import argparse
-from datetime import datetime, timedelta, timezone
 import ipaddress
 import json
 import math
 import os
-from pathlib import Path
 import re
 import secrets
 import stat
 import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener

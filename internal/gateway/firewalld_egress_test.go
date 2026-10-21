@@ -23,7 +23,7 @@ func TestPlanEgressFirewalld(t *testing.T) {
 		p.Policy != "aginctus-egress-https" || p.Target != "CONTINUE" || !p.HTTPS {
 		t.Fatalf("incorrect policy scope: %+v", p)
 	}
-	if len(p.RichRules) != 9 {
+	if len(p.RichRules) != 14 {
 		t.Fatalf("missing private-network restrictions: %v", p.RichRules)
 	}
 	for _, rule := range p.RichRules {

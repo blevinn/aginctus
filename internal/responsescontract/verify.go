@@ -65,7 +65,7 @@ func Verify(input io.Reader, requireFunctionCall bool) (Summary, error) {
 			return nil
 		}
 		if completed || done {
-			return fmt.Errorf("Responses events followed terminal completion")
+			return fmt.Errorf("events followed the terminal completion marker in the Responses stream")
 		}
 		var payload eventPayload
 		if err := json.Unmarshal([]byte(body), &payload); err != nil {
@@ -75,26 +75,26 @@ func Verify(input io.Reader, requireFunctionCall bool) (Summary, error) {
 			return fmt.Errorf("missing Responses event type")
 		}
 		if eventNameLocal != "" && eventNameLocal != payload.Type {
-			return fmt.Errorf("Responses SSE event name and payload type differ")
+			return fmt.Errorf("SSE event name and payload type differ")
 		}
 		summary.Events++
 		switch payload.Type {
 		case "response.completed":
 			if payload.Response.Status != "completed" {
-				return fmt.Errorf("Responses completion has non-completed status")
+				return fmt.Errorf("completion event reports a non-completed status")
 			}
 			completed = true
 		case "response.failed", "response.incomplete":
-			return fmt.Errorf("Responses stream failed or was incomplete")
+			return fmt.Errorf("the Responses stream failed or was incomplete")
 		case "response.output_item.done":
 			if payload.Item.Type == "function_call" {
 				args := strings.TrimSpace(payload.Item.Arguments)
 				if payload.Item.CallID == "" || payload.Item.Name == "" ||
 					!strings.HasPrefix(args, "{") || !json.Valid([]byte(args)) {
-					return fmt.Errorf("Responses function-call item is incomplete")
+					return fmt.Errorf("function-call item is incomplete")
 				}
 				if seenCalls[payload.Item.CallID] {
-					return fmt.Errorf("Responses function-call item was completed more than once")
+					return fmt.Errorf("function-call item was completed more than once")
 				}
 				seenCalls[payload.Item.CallID] = true
 				summary.FunctionCalls++
@@ -108,7 +108,7 @@ func Verify(input io.Reader, requireFunctionCall bool) (Summary, error) {
 		line := scanner.Text()
 		bytesRead += len(line) + 1
 		if bytesRead > maxStreamBytes {
-			return Summary{}, fmt.Errorf("Responses stream exceeds allowed size")
+			return Summary{}, fmt.Errorf("the Responses stream exceeds the allowed size")
 		}
 		if line == "" {
 			if err := dispatch(); err != nil {
@@ -151,10 +151,10 @@ func Verify(input io.Reader, requireFunctionCall bool) (Summary, error) {
 		return Summary{}, err
 	}
 	if !completed {
-		return Summary{}, fmt.Errorf("Responses stream has no terminal completion")
+		return Summary{}, fmt.Errorf("the Responses stream has no terminal completion")
 	}
 	if requireFunctionCall && summary.FunctionCalls == 0 {
-		return Summary{}, fmt.Errorf("Responses stream has no completed function call")
+		return Summary{}, fmt.Errorf("the Responses stream has no completed function call")
 	}
 	return summary, nil
 }
