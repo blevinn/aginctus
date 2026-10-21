@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Opt-in, host-local LiteLLM API-key-backed model registration (#122).
 
 Never prints an admin/provider secret or an untrusted HTTP response. This tool
@@ -8,10 +7,10 @@ import argparse
 import ipaddress
 import json
 import os
-from pathlib import Path
 import re
 import stat
 import sys
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
