@@ -1,0 +1,24 @@
+# Dependabot configuration.
+#
+# Refresh SHA-pinned GitHub Actions used by .github/workflows/hermetic.yml
+# so the pins do not silently age. Each bump is treated as a supply-chain
+# change; reviewers must inspect the diff and the upstream release notes
+# before merging.
+#
+# Group bumps into a single PR per ecosystem to keep the review surface
+# narrow and the dependency history append-only.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      actions:
+        patterns:
+          - "*"
+    # Match the pin format used in hermetic.yml: SHA followed by `# vX.Y.Z`.
+    commit-message:
+      prefix: "ci"
+      include: "scope"

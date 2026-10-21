@@ -7,70 +7,18 @@ import (
 	"io"
 	"net"
 	"net/netip"
-	"os"
-	"path/filepath"
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/firewall"
 	"github.com/blevinn/aginctus/internal/gateway"
-	"golang.org/x/sys/unix"
 )
 
-type egressStateFile string
+type egressStateFile = firewall.EgressStateFile
+
+var lockEgress = firewall.LockEgress
 
 var inspectEgressLink = firewall.InspectLink
 var effectiveEgressZone = firewall.Busctl{}.EffectiveZone
-
-func (path egressStateFile) Load() (firewall.EgressState, error) {
-	var state firewall.EgressState
-	raw, err := os.ReadFile(string(path))
-	if os.IsNotExist(err) {
-		return state, nil
-	}
-	if err != nil {
-		return state, err
-	}
-	err = json.Unmarshal(raw, &state)
-	return state, err
-}
-
-func (path egressStateFile) Save(state firewall.EgressState) error {
-	raw, err := json.Marshal(state)
-	if err != nil {
-		return err
-	}
-	file, err := os.CreateTemp(filepath.Dir(string(path)), ".egress-state-")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(file.Name())
-	if _, err = file.Write(raw); err == nil {
-		err = file.Sync()
-	}
-	closeErr := file.Close()
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	return os.Rename(file.Name(), string(path))
-}
-
-func lockEgress(dir string) (func(), error) {
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return nil, err
-	}
-	fd, err := unix.Open(filepath.Join(dir, "lock"), unix.O_CREAT|unix.O_RDWR|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)
-	if err != nil {
-		return nil, err
-	}
-	if err = unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB); err != nil {
-		unix.Close(fd)
-		return nil, fmt.Errorf("another Aginctus firewall operation holds the lifecycle lock: %w", err)
-	}
-	return func() { unix.Close(fd) }, nil
-}
 
 func runNetworkFirewallEgress(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config, revoke bool) int {
 	if firewallEffectiveUID() != 0 {
@@ -135,14 +83,23 @@ func discoverEgressGrant(ctx context.Context, cfg *config.Config) (firewall.Egre
 	}
 	// Never use a guessed physical interface. Routing decides the uplink;
 	// its zone must match the explicit configuration before opening HTTPS.
+	rules, err := firewallCommand(ctx, "", "ip", "-j", "-4", "rule", "show")
+	if err != nil {
+		return empty, err
+	}
+	if err = verifyEgressRoutingRules(rules); err != nil {
+		return empty, err
+	}
 	raw, err := firewallCommand(ctx, "", "ip", "-j", "-4", "route", "show", "table", "all")
 	if err != nil {
 		return empty, err
 	}
 	var routes []struct {
-		Dst  string `json:"dst"`
-		Dev  string `json:"dev"`
-		Type string `json:"type"`
+		Dst      string            `json:"dst"`
+		Dev      string            `json:"dev"`
+		Type     string            `json:"type"`
+		Nexthops []json.RawMessage `json:"nexthops"`
+		NHID     json.RawMessage   `json:"nhid"`
 	}
 	if err = json.Unmarshal([]byte(raw), &routes); err != nil {
 		return empty, err
@@ -150,8 +107,11 @@ func discoverEgressGrant(ctx context.Context, cfg *config.Config) (firewall.Egre
 	var blocked []netip.Prefix
 	defaults := 0
 	for _, route := range routes {
+		if len(route.Nexthops) != 0 || len(route.NHID) != 0 {
+			return empty, fmt.Errorf("multipath routes are unsupported")
+		}
 		if route.Dst == "default" {
-			if route.Dev == "" || route.Dev == spec.EgressNetwork || route.Dev == spec.Network {
+			if (route.Type != "" && route.Type != "unicast") || route.Dev == "" || route.Dev == spec.EgressNetwork || route.Dev == spec.Network {
 				return empty, fmt.Errorf("unsafe default route")
 			}
 			zone, err := effectiveEgressZone(ctx, route.Dev)
@@ -178,4 +138,28 @@ func discoverEgressGrant(ctx context.Context, cfg *config.Config) (firewall.Egre
 		return empty, fmt.Errorf("exactly one IPv4 default route required")
 	}
 	return firewall.EgressRules(spec.EgressIPv4Address, spec.EgressBridgeIPv4CIDR, uplink, blocked)
+}
+
+// Custom routing rules can select paths not represented by the default route.
+// Refuse policy routing rather than infer a safe path from partial inventory.
+func verifyEgressRoutingRules(raw string) error {
+	var rules []map[string]any
+	if err := json.Unmarshal([]byte(raw), &rules); err != nil {
+		return err
+	}
+	if len(rules) != 3 {
+		return fmt.Errorf("custom IPv4 policy routing is unsupported")
+	}
+	for i, table := range []string{"local", "main", "default"} {
+		priority := []float64{0, 32766, 32767}[i]
+		if rules[i]["src"] != "all" || rules[i]["table"] != table || rules[i]["priority"] != priority {
+			return fmt.Errorf("custom IPv4 policy routing is unsupported")
+		}
+		for key := range rules[i] {
+			if key != "src" && key != "table" && key != "priority" && key != "protocol" {
+				return fmt.Errorf("unsupported IPv4 routing rule selector: %s", key)
+			}
+		}
+	}
+	return nil
 }

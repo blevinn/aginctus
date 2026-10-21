@@ -32,7 +32,7 @@ func TestHermeticRecreateOnDriftOptInProceedsPastDrift(t *testing.T) {
     image: docker.io/library/alpine:3.22
     command: ["sleep", "3600"]
 `)
-	err, calls := runHermeticExecuteComposeWithConfig(t, f.server, f.conn,
+	calls, err := runHermeticExecuteComposeWithConfig(t, f.server, f.conn,
 		Config{Project: project, Compose: doc, RecreateOnDrift: true}, nil)
 	if err == nil {
 		t.Fatal("expected downstream failure once the recreation path engages against the hermetic server")
@@ -96,7 +96,7 @@ func TestHermeticDriftErrorExcludesDiskSourcesInRecreationGuidance(t *testing.T)
     image: docker.io/library/alpine:3.22
     command: ["sleep", "3600"]
 `)
-	err, _ := runHermeticExecuteComposeWithConfig(t, f.server, f.conn,
+	_, err := runHermeticExecuteComposeWithConfig(t, f.server, f.conn,
 		Config{Project: project, Compose: doc, RecreateOnDrift: false}, nil)
 	if err == nil {
 		t.Fatal("expected drift refusal, got success")
@@ -164,7 +164,7 @@ func TestHermeticDriftErrorExcludesEnvironmentSecrets(t *testing.T) {
     image: docker.io/library/alpine:3.22
     command: ["sleep", "3600"]
 `)
-	err, _ := runHermeticExecuteComposeWithConfig(t, f.server, f.conn,
+	_, err := runHermeticExecuteComposeWithConfig(t, f.server, f.conn,
 		Config{Project: project, Compose: doc, RecreateOnDrift: false}, environment)
 	if err == nil {
 		t.Fatal("expected drift refusal, got success")
@@ -204,7 +204,7 @@ func TestHermeticRecreateOnDriftOmitsSecretsAcrossAllDriftKinds(t *testing.T) {
     image: docker.io/library/alpine:3.22
     command: ["sleep", "3600"]
 `)
-	err, _ := runHermeticExecuteComposeWithConfig(t, f.server, f.conn,
+	_, err := runHermeticExecuteComposeWithConfig(t, f.server, f.conn,
 		Config{Project: project, Compose: doc, RecreateOnDrift: false}, nil)
 	if err == nil {
 		t.Fatal("expected drift refusal")

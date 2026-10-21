@@ -221,28 +221,79 @@ func ruleSubset(actual, allowed any) bool {
 // Root administrators remain concurrent authorities: they must serialize host
 // maintenance; neither Incus nor firewalld supplies a cross-daemon transaction.
 func ReconcileEgress(ctx context.Context, bus EgressBus, store EgressStore, bridge string, discover func(context.Context) (EgressGrant, error)) (err error) {
-	if err := bus.Guard(ctx); err != nil {
-		return err
-	}
-	state, err := store.Load()
-	if err != nil {
-		return err
-	}
-	owner, err := bus.Owner(ctx)
-	if err != nil {
-		return err
-	}
+	guardErr := bus.Guard(ctx)
+	state, loadErr := store.Load()
+	owner, ownerErr := bus.Owner(ctx)
 	objects := EgressObjects(bridge)
 	sources := []string{state.Current.Source}
 	if state.Pending != nil {
 		sources = append(sources, state.Pending.Source)
 	}
 	runtimes := map[string]Settings{}
+	owned := map[string]bool{}
 	names := make([]string, 0, len(objects))
 	for name := range objects {
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	// Establish each grant object's ownership independently before any early
+	// exit. A foreign object is never modified, even during best-effort cleanup.
+	var ownershipErr error
+	for _, name := range []string{EgressHTTPS, EgressDNS} {
+		runtime, e := bus.Read(ctx, "policy", name, false)
+		if e != nil {
+			ownershipErr = errors.Join(ownershipErr, e)
+			continue
+		}
+		if runtime["description"] != EgressOwner {
+			ownershipErr = errors.Join(ownershipErr, fmt.Errorf("runtime %s ownership collision", name))
+			continue
+		}
+		owned[name] = true
+		// Recover source-specific conntrack withdrawal even if the journal is
+		// unreadable. Only exact IPv4 /32 source tokens are eligible.
+		raw, _ := json.Marshal(runtime["rich_rules"])
+		var rules []string
+		if json.Unmarshal(raw, &rules) == nil {
+			for _, rule := range rules {
+				for _, match := range regexp.MustCompile(`source address="([0-9.]+)/32"`).FindAllStringSubmatch(rule, -1) {
+					if ip, e := netip.ParseAddr(match[1]); e == nil && ip.Is4() {
+						sources = append(sources, ip.String())
+					}
+				}
+			}
+		}
+	}
+	clear := func(c context.Context) error {
+		var cleanupErr error
+		if owned[EgressHTTPS] {
+			cleanupErr = errors.Join(cleanupErr, bus.Write(c, EgressHTTPS, "egress_zones", nil), bus.Write(c, EgressHTTPS, "rich_rules", nil))
+		}
+		if owned[EgressDNS] {
+			cleanupErr = errors.Join(cleanupErr, bus.Write(c, EgressDNS, "rich_rules", nil))
+		}
+		// firewalld accepts established flows before evaluating policies.
+		// Withdraw only our sources' HTTPS conntrack entries, never a global flush.
+		sort.Strings(sources)
+		for _, source := range slices.Compact(sources) {
+			if source != "" {
+				cleanupErr = errors.Join(cleanupErr, bus.Forget(c, source))
+			}
+		}
+		return cleanupErr
+	}
+	defer func() {
+		if err != nil {
+			rollback, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			if e := clear(rollback); e != nil {
+				err = errors.Join(err, fmt.Errorf("runtime grant rollback incomplete: %w", e))
+			}
+		}
+	}()
+	if err = errors.Join(guardErr, loadErr, ownerErr, ownershipErr); err != nil {
+		return err
+	}
 	for _, name := range names {
 		kind := "policy"
 		if name == EgressZone {
@@ -264,35 +315,6 @@ func ReconcileEgress(ctx context.Context, bus EgressBus, store EgressStore, brid
 		}
 		runtimes[name] = runtime
 	}
-	clear := func(c context.Context) error {
-		err := errors.Join(bus.Write(c, EgressHTTPS, "rich_rules", nil), bus.Write(c, EgressDNS, "rich_rules", nil))
-		if err != nil {
-			return err
-		}
-		if err = bus.Write(c, EgressHTTPS, "egress_zones", nil); err != nil {
-			return err
-		}
-		// firewalld accepts established flows before evaluating policies.
-		// Withdraw only our sources' HTTPS conntrack entries, never a global flush.
-		sort.Strings(sources)
-		for _, source := range slices.Compact(sources) {
-			if source != "" {
-				if err = bus.Forget(c, source); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-	defer func() {
-		if err != nil {
-			rollback, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-			defer cancel()
-			if e := clear(rollback); e != nil {
-				err = errors.Join(err, fmt.Errorf("runtime grant rollback incomplete: %w", e))
-			}
-		}
-	}()
 	for _, name := range names {
 		if err = verifyRuntime(runtimes[name], objects[name], name, state); err != nil {
 			return err

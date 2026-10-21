@@ -36,6 +36,11 @@ let
   };
 in
 {
+  options.services.aginctus.firewall.egress.enable = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = "Provision the NixOS default-deny egress boundary. This bootstrap alone never installs runtime grants.";
+  };
   config = lib.mkIf (cfg.enable && cfg.firewall.egress.enable) {
     # Retain the last rules while the daemon is stopped, and prevent the
     # pre-policy DNAT shortcut from admitting externally forwarded traffic.
@@ -44,6 +49,13 @@ in
       StrictForwardPorts = lib.mkDefault true;
     };
     assertions = [
+      {
+        assertion =
+          cfg.firewall.enable
+          && config.services.firewalld.enable
+          && (cfg.settings.gateway.egress.network.name or "") != "";
+        message = "services.aginctus.firewall.egress requires firewalld, firewall.enable and an explicit gateway.egress.network.name.";
+      }
       {
         assertion =
           !config.services.firewalld.settings.CleanupOnExit

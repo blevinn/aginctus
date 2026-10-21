@@ -14,11 +14,12 @@ import (
 )
 
 type memoryEgressStore struct {
-	state EgressState
-	fail  bool
+	state   EgressState
+	fail    bool
+	loadErr error
 }
 
-func (s *memoryEgressStore) Load() (EgressState, error) { return s.state, nil }
+func (s *memoryEgressStore) Load() (EgressState, error) { return s.state, s.loadErr }
 func (s *memoryEgressStore) Save(state EgressState) error {
 	if s.fail {
 		return errors.New("state write failed")
@@ -35,9 +36,12 @@ type testEgressBus struct {
 	forgetErr          bool
 	forgot             []string
 	onWrite            func(string, string)
+	guardErr           error
+	ownerErr           error
+	readErr            string
 }
 
-func (b *testEgressBus) Guard(context.Context) error { return nil }
+func (b *testEgressBus) Guard(context.Context) error { return b.guardErr }
 func (b *testEgressBus) Forget(_ context.Context, source string) error {
 	b.forgot = append(b.forgot, source)
 	if b.forgetErr {
@@ -60,12 +64,15 @@ func newTestEgressBus() *testEgressBus {
 	return b
 }
 func (b *testEgressBus) Read(_ context.Context, kind, name string, permanent bool) (Settings, error) {
+	if b.readErr == name {
+		return nil, errors.New("read failure")
+	}
 	if permanent {
 		return cloneSettings(b.permanent[name]), nil
 	}
 	return cloneSettings(b.runtime[name]), nil
 }
-func (b *testEgressBus) Owner(context.Context) (string, error) { return b.generation, nil }
+func (b *testEgressBus) Owner(context.Context) (string, error) { return b.generation, b.ownerErr }
 func (b *testEgressBus) Write(_ context.Context, name, key string, values []string) error {
 	b.writes++
 	if b.writes == b.failAt {
@@ -239,7 +246,6 @@ func TestEgressOwnershipAndDrift(t *testing.T) {
 			if e := ReconcileEgress(context.Background(), bus, store, "egress-test", discover); e != nil {
 				t.Fatal(e)
 			}
-			before := bus.writes
 			switch kind {
 			case "foreign permanent":
 				bus.permanent[EgressDNS]["description"] = "someone else"
@@ -261,18 +267,54 @@ func TestEgressOwnershipAndDrift(t *testing.T) {
 			if e := ReconcileEgress(context.Background(), bus, store, "egress-test", discover); e == nil {
 				t.Fatal("accepted security drift")
 			}
-			if strings.HasPrefix(kind, "foreign") {
-				if bus.writes != before {
-					t.Fatal("mutated foreign objects")
-				}
-			} else if !ruleSubset(bus.runtime[EgressHTTPS]["rich_rules"], nil) {
+			if !ruleSubset(bus.runtime[EgressHTTPS]["rich_rules"], nil) {
 				t.Fatal("drift retained owned HTTPS permission")
+			}
+			if kind == "foreign runtime" && !settingsEqual(bus.runtime[EgressDNS]["rich_rules"], grant.DNS) {
+				t.Fatal("modified foreign DNS object")
 			}
 		})
 	}
 }
 
-func TestEgressUnsafeDestinations(t *testing.T) {
+func TestEgressEarlyFailureWithdrawsOwnedGrants(t *testing.T) {
+	for _, failure := range []string{"guard", "journal", "owner", "permanent", "deny read", "grant read"} {
+		t.Run(failure, func(t *testing.T) {
+			bus := newTestEgressBus()
+			store := &memoryEgressStore{}
+			grant := testEgressGrant(t)
+			discover := func(context.Context) (EgressGrant, error) { return grant, nil }
+			if err := ReconcileEgress(context.Background(), bus, store, "egress-test", discover); err != nil {
+				t.Fatal(err)
+			}
+			switch failure {
+			case "guard":
+				bus.guardErr = errors.New("unsafe daemon setting")
+			case "journal":
+				store.loadErr = errors.New("corrupt journal")
+			case "owner":
+				bus.ownerErr = errors.New("owner unavailable")
+			case "permanent":
+				bus.permanent[EgressHTTPS]["target"] = "ACCEPT"
+			case "deny read":
+				bus.readErr = "aginctus-egress-in"
+			case "grant read":
+				bus.readErr = EgressDNS
+			}
+			if err := ReconcileEgress(context.Background(), bus, store, "egress-test", discover); err == nil {
+				t.Fatal("accepted failure")
+			}
+			if !ruleSubset(bus.runtime[EgressHTTPS]["rich_rules"], nil) || !settingsEqual(bus.runtime[EgressHTTPS]["egress_zones"], []string{}) {
+				t.Fatal("owned HTTPS permission survived failure")
+			}
+			if len(bus.forgot) == 0 {
+				t.Fatal("conntrack withdrawal omitted")
+			}
+		})
+	}
+}
+
+func TestEgressUnsafeDestinationsLifecycle(t *testing.T) {
 	grant := testEgressGrant(t)
 	for _, dest := range []string{"10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "192.0.0.0/24", "198.18.0.0/15", "11.12.13.0/24"} {
 		if !strings.Contains(strings.Join(grant.HTTPS, "\n"), `destination address="`+dest+`" drop`) {

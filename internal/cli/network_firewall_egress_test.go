@@ -73,7 +73,7 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, drift := range []string{"", "ownership", "NIC", "collision", "unrestricted DHCP", "IPv6", "link", "uplink", "multiple routes", "opaque route"} {
+	for _, drift := range []string{"", "ownership", "NIC", "collision", "unrestricted DHCP", "IPv6", "link", "uplink", "multiple routes", "opaque route", "policy routing", "multipath", "extra NIC", "bridged peer"} {
 		t.Run(drift, func(t *testing.T) {
 			bridge := map[string]any{"name": "aginctus-egress", "type": "bridge", "managed": true, "config": map[string]string{"user.aginctus.managed": "true", "user.aginctus.resource": "gateway-egress-network", "ipv4.address": "10.42.40.1/24", "ipv4.nat": "true", "ipv4.routing": "true", "ipv4.dhcp": "false", "ipv6.address": "none"}}
 			bc := bridge["config"].(map[string]string)
@@ -90,6 +90,9 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 			if drift == "NIC" {
 				instance["devices"].(map[string]map[string]string)["eth0"]["ipv4.gateway"] = "auto"
 			}
+			if drift == "extra NIC" {
+				instance["devices"].(map[string]map[string]string)["eth2"] = map[string]string{"type": "nic", "network": "other"}
+			}
 			instance["expanded_devices"] = instance["devices"]
 			gatewayEgressQuery = func(_ context.Context, args ...string) ([]byte, error) {
 				path := args[len(args)-1]
@@ -105,6 +108,9 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 					value = []any{instance}
 					if drift == "collision" {
 						value = []any{instance, map[string]any{"name": "other", "expanded_devices": instance["devices"]}}
+					}
+					if drift == "bridged peer" {
+						value = []any{instance, map[string]any{"name": "other", "expanded_devices": map[string]map[string]string{"eth0": {"type": "nic", "parent": "aginctus-egress", "ipv4.address": "10.42.40.26/24"}}}}
 					}
 				case strings.Contains(path, "/instances/litellm-1?"):
 					value = instance
@@ -132,6 +138,15 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 				return "public", nil
 			}
 			firewallCommand = func(_ context.Context, _ string, name string, args ...string) (string, error) {
+				if strings.Join(args, " ") == "-j -4 rule show" {
+					if drift == "policy routing" {
+						return `[{"priority":0,"src":"all","table":"local"},{"priority":100,"src":"10.42.40.0/24","table":"other"}]`, nil
+					}
+					return `[{"priority":0,"src":"all","table":"local"},{"priority":32766,"src":"all","table":"main"},{"priority":32767,"src":"all","table":"default"}]`, nil
+				}
+				if drift == "multipath" {
+					return `[{"dst":"default","dev":"wan0","nexthops":[{"dev":"wan1"}]}]`, nil
+				}
 				if drift == "multiple routes" {
 					return `[{"dst":"default","dev":"wan0"},{"dst":"default","dev":"wan1"}]`, nil
 				}

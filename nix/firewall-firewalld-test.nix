@@ -169,6 +169,16 @@ pkgs.testers.runNixOSTest {
     machine.succeed("systemctl start aginctus-egress-firewall.service; systemctl start aginctus-firewall-reconcile.service")
     machine.succeed(connects("8.8.4.4"))
     machine.fail(connects("8.8.4.4", 80))
+    # Exercise the installed CLI and its lock/journal against the real daemon.
+    # No LiteLLM OCI image is present, so production discovery must withdraw
+    # an existing grant instead of treating missing inventory as a no-op.
+    machine.succeed("install -d -m 0700 /run/aginctus-firewall; install -m 0600 /run/egress-test-state.json /run/aginctus-firewall/state.json")
+    machine.fail("${
+      self.packages.${system}.aginctus
+    }/bin/aginctus --configuration-file /etc/aginctus/config.json --config firewall.egress.uplinkZone=public network firewall egress reconcile")
+    machine.fail(connects("8.8.4.4"))
+    machine.succeed("systemctl start aginctus-egress-firewall.service")
+    machine.succeed(connects("8.8.4.4"))
     machine.fail(connects("8.8.4.4", source="10.247.83.26"))
     # Interface classification outranks overlapping source-based trusted zones.
     firewall("--zone=trusted", "--add-source=10.247.83.25/32")
@@ -235,7 +245,10 @@ pkgs.testers.runNixOSTest {
     machine.succeed("systemd-run --unit=egress-conntrack-probe --collect ip netns exec litellm ${pkgs.python3}/bin/python3 ${conntrackProbe}")
     machine.wait_until_succeeds("test -e /tmp/egress-connected")
     machine.succeed("conntrack -L -f ipv4 -p tcp --orig-src 10.247.83.25 --orig-port-src 45000 --orig-port-dst 443 | grep ESTABLISHED")
-    machine.succeed("AGINCTUS_DISPOSABLE_FIREWALL_PHASE=revoke ${egressTest}/bin/aginctus-firewall-test -test.run=^TestEgressRealFirewalld$ -test.v")
+    machine.succeed("install -m 0600 /run/egress-test-state.json /run/aginctus-firewall/state.json")
+    machine.succeed("${
+      self.packages.${system}.aginctus
+    }/bin/aginctus --configuration-file /etc/aginctus/config.json network firewall egress revoke")
     machine.fail("conntrack -L -f ipv4 -p tcp --orig-src 10.247.83.25 --orig-port-src 45000 --orig-port-dst 443 | grep ESTABLISHED")
     machine.succeed("touch /tmp/egress-send-after-revoke")
     machine.wait_until_succeeds("test -e /tmp/egress-isolated")

@@ -269,12 +269,6 @@ in
       description = "Reconcile ownership-scoped Incus DNS/DHCP exceptions with the NixOS iptables-nft or firewalld backend.";
     };
 
-    firewall.egress.enable = mkOption {
-      type = types.bool;
-      default = firewalldBackend && (cfg.settings.gateway.egress.network.name or "") != "";
-      description = "Provision the default-deny boundary for a declared egress bridge and reconcile verified runtime grants. Initial host activation is required; an empty uplink grants nothing.";
-    };
-
     reconcile = {
       enable = mkOption {
         type = types.bool;
@@ -289,7 +283,7 @@ in
       gateway = mkOption {
         type = types.bool;
         default = false;
-        description = "Apply the configured AI gateway as part of host reconciliation. Idempotent against the declared gateway settings.";
+        description = "Apply the configured AI gateway before Herdr and workloads. Orders resource application only; does not verify application health or reachability. Reuses protected generated runtime secrets.";
       };
       workloads = mkOption {
         type = types.listOf types.str;
@@ -331,7 +325,7 @@ in
         assertion = configuredSecretPaths == [ ];
         message = "services.aginctus.settings cannot contain runtime gateway secrets: ${
           lib.concatStringsSep ", " (map (path: lib.concatStringsSep "." path) configuredSecretPaths)
-        }. Provide these through the supported runtime credential mechanism instead.";
+        }. Leave secrets unset to generate and persist protected runtime state; see docs/configuration.md.";
       }
       {
         assertion = builtins.all validImageAlias enabledImageAliases;
