@@ -1,13 +1,12 @@
 """Exercise the real just dispatch with inert children and injected failures."""
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -104,7 +103,7 @@ if name == "git":
                     result = subprocess.run(
                         ["just", "check-all"], cwd=root,
                         env=dict(env, FAIL_COMMAND=failure),
-                        capture_output=True, text=True, timeout=30,
+                        capture_output=True, text=True, timeout=30, check=False,
                     )
                     seen = log.read_text().splitlines()
                     if not failure:

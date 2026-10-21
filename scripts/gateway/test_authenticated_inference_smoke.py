@@ -3,9 +3,9 @@ import contextlib
 import importlib.util
 import io
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 spec = importlib.util.spec_from_file_location(
     "gateway_smoke", Path(__file__).with_name("authenticated-inference-smoke.py"))

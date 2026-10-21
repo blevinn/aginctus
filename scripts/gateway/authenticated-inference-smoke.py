@@ -1,14 +1,13 @@
-#!/usr/bin/env python3
 """Explicit live LiteLLM Responses smoke test (#122); never logs secret/model text."""
 import argparse
 import ipaddress
 import json
 import os
-from pathlib import Path
 import re
 import secrets
 import stat
 import sys
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener

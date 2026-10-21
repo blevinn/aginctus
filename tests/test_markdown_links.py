@@ -1,11 +1,10 @@
 """End-to-end offline checks in disposable Git repositories, without broken docs."""
 
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
-
+from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/check_markdown_links.py"
 
@@ -24,7 +23,7 @@ class MarkdownLinksTests(unittest.TestCase):
                 (root / name).write_text(text, encoding="utf-8")
             return subprocess.run(
                 [sys.executable, str(SCRIPT), "--root", str(root)],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, timeout=30, check=False,
             )
 
     def test_commonmark_links_and_heading_collisions(self):
@@ -120,7 +119,7 @@ class MarkdownLinksTests(unittest.TestCase):
             subprocess.run(["git", "add", "."], cwd=root, check=True)
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), "--root", str(root)],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, timeout=30, check=False,
             )
             self.assertEqual(result.returncode, 1)
             self.assertIn("missing.md:1: cannot read Markdown", result.stderr)
