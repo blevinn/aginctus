@@ -8,9 +8,6 @@ generally discoverable should be linked from this index.
 
 - [Getting started](getting-started.md) — prerequisites, NixOS side effects, non-mutating inspection, and explicitly approved deployment.
 - [CLI operations](cli.md) — supported command families, mutation boundaries, dry-run and force semantics.
-- [Configuration](configuration.md) — precedence, module settings and runtime secret exclusions.
-- [Security controls and limitations](security.md) — existing boundaries and verification limits.
-- [Development](development.md) — reproducible developer environment and validation tiers.
 
 ## Overview
 
