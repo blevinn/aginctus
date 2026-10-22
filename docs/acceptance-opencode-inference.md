@@ -1,17 +1,46 @@
-# OpenCode gateway runtime readiness gate (#124)
+# Read-only OpenCode gateway runtime readiness (#124)
 
-This narrow follow-up to #233 checks whether the **real pilot guest** has the provisioned OpenCode Responses runtime configuration needed before enabling model-backed Herdr prompts. It runs only read-only Incus guest commands, including protected metadata and DNS checks. It **never reads the workload key**, calls a model, or emits secret configuration values.
+This is a **necessary, not sufficient** gate for the separately opted-in
+[OpenCode live acceptance harness](acceptance-opencode.md). It complements the
+[Incus topology preflight](acceptance-opencode-preflight.md), the
+[Herdr lifecycle checks](acceptance-opencode-herdr.md), and the
+[managed gateway provisioning contract](workloads/opencode.md). It does
+not execute any model request, change a guest, or inspect secret contents.
 
-Run from the NixOS pilot checkout:
+The v0.1 managed CLI's \`aginctus workload gateway provision dev\` command
+discovers **one private IPv4 on LiteLLM's management NIC** and writes
+\`http://<discovered-ip>:4000/v1\` to the agent's nonsecret
+\`gateway.json\`. Therefore this gate checks the configured IPv4 address
+against RFC 1918 ranges and the expected port/path, **not a fictitious
+LiteLLM hostname or a DNS lookup**. These syntax checks do not prove that
+the address still belongs to LiteLLM, is reachable, or cannot be spoofed.
 
-```sh
+From a host-independent checkout (no Incus execution):
+
+\`\`\`sh
 nix develop -c python3 -m unittest discover -s scripts/acceptance -p 'test_opencode_inference_preflight.py' -v
 nix develop -c python3 -m py_compile scripts/acceptance/opencode-inference-preflight.py
+\`\`\`
+
+For a separately authorized, **read-only** pilot inspection only:
+
+\`\`\`sh
 nix develop -c python3 scripts/acceptance/opencode-inference-preflight.py
-```
+\`\`\`
 
-The gate requires a regular `/var/lib/aginctus/opencode/workload-key` with mode 0600, owned by `agent`, and readable by that account. It reads the **non-secret** `gateway.json` only, validates Responses protocol, endpoint syntax and approved model presence, and resolves the configured hostname from the guest.
+The script runs \`incus --project default exec\` against the managed
+\`aginctus-dev\` guest (override only with a reviewed
+\`AGINCTUS_ACCEPTANCE_WORKLOAD\` name). It checks that the workload
+credential is an agent-owned regular 0600 file readable by \`agent\`,
+**without opening or emitting the key**. It reads only the nonsecret
+\`gateway.json\` as \`agent\`, validating the Responses protocol, model
+alias syntax, and managed private IPv4 endpoint shape. Command failures
+have static redacted labels; subprocess output and runtime values are not
+included in reports.
 
-**This check is necessary, not sufficient.** It does not establish that the hostname resolves to an isolated gateway, that requests reach LiteLLM, that a credential is authorized, or that a real upstream model responds. Those require independent gateway-side audit, a proven working live prompt, and network/credential isolation assertions. Failures produce categorized text without printing actual keys, endpoint or model data.
-
-After it passes, operator can consider the separately opted-in prompt test in `docs/acceptance-opencode-herdr.md`. Do not use synthetic gateway evidence to close #124.
+**Not verified:** managed gateway ownership, network isolation, key
+authorization, actual LiteLLM reachability, streaming Responses tool
+compatibility, upstream inference, Herdr agent execution, workspace changes,
+or gateway-side correlation. Those require the full live harness and
+independent gateway/network evidence. Do **not** close #124, authorize
+inference, or change Incus/firewall/key state based on this check alone.

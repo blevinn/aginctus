@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/blevinn/aginctus/internal/filestate"
+	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/providerregistry"
 )
 
@@ -28,13 +30,15 @@ type Registry struct {
 var safeName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
 func validModel(m Model) bool {
-	name := m.Name
-	if strings.HasPrefix(name, "chatgpt/") {
-		name = strings.TrimPrefix(name, "chatgpt/")
+	name := strings.TrimPrefix(m.Name, "chatgpt/")
+	if !safeName.MatchString(name) || !safeName.MatchString(m.Provider) {
+		return false
 	}
-	return safeName.MatchString(name) && safeName.MatchString(m.Provider) &&
-		strings.HasPrefix(m.Source, "chatgpt/") &&
-		safeName.MatchString(strings.TrimPrefix(m.Source, "chatgpt/"))
+	if strings.HasPrefix(m.Source, "chatgpt/") {
+		return safeName.MatchString(strings.TrimPrefix(m.Source, "chatgpt/"))
+	}
+	_, err := gateway.OpenCodeGoModelRegistration(m.Name, m.Source)
+	return err == nil
 }
 
 // DefaultPath is local nonsecret control-plane state, not a LiteLLM model config.
@@ -102,8 +106,8 @@ func Load(path string) (Registry, error) {
 	return reg, nil
 }
 
-// Register persists only an alias intent. It requires a locally registered
-// ChatGPT provider but neither tests account authorization nor enables a route.
+// Register persists only an alias intent. It verifies the local provider
+// type and source, but neither authenticates an account nor enables a route.
 func Register(path string, model Model) (bool, error) {
 	if !validModel(model) || !filepath.IsAbs(path) {
 		return false, fmt.Errorf("invalid model registration")
@@ -118,13 +122,26 @@ func Register(path string, model Model) (bool, error) {
 	}
 	found := false
 	for _, p := range providers.Providers {
-		if p.Alias == model.Provider && p.Type == "chatgpt" {
-			found = true
-			break
+		if p.Alias != model.Provider {
+			continue
 		}
+		found = true
+		var previewErr error
+		switch p.Type {
+		case "chatgpt":
+			_, previewErr = gateway.ChatGPTModelRegistration(model.Name, model.Source)
+		case "opencode-go":
+			_, previewErr = gateway.OpenCodeGoModelRegistration(model.Name, model.Source)
+		default:
+			return false, fmt.Errorf("unsupported model provider type")
+		}
+		if previewErr != nil {
+			return false, fmt.Errorf("model source is incompatible with provider type %q", p.Type)
+		}
+		break
 	}
 	if !found {
-		return false, fmt.Errorf("ChatGPT provider alias %q is not registered locally", model.Provider)
+		return false, fmt.Errorf("model provider alias %q is not registered locally", model.Provider)
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -134,11 +151,13 @@ func Register(path string, model Model) (bool, error) {
 	if err != nil || !d.IsDir() || d.Mode().Perm()&0077 != 0 {
 		return false, fmt.Errorf("model state directory must be private")
 	}
-	lock := path + ".lock"
-	if err := os.Mkdir(lock, 0700); err != nil {
-		return false, fmt.Errorf("model registry busy or lock exists")
+	// Keep the advisory lock across read/modify/atomic-replace; the kernel
+	// releases it on Close or process death without deleting the lock inode.
+	lock, err := filestate.LockRegistry(path)
+	if err != nil {
+		return false, fmt.Errorf("acquire model registry write lock: %w", err)
 	}
-	defer os.Remove(lock)
+	defer lock.Close()
 	reg, err := Load(path)
 	if err != nil {
 		return false, err
@@ -156,28 +175,8 @@ func Register(path string, model Model) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("encode model registry: %w", err)
 	}
-	tmp, err := os.CreateTemp(dir, ".models-*")
-	if err != nil {
-		return false, fmt.Errorf("create model registry file: %w", err)
-	}
-	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		return false, err
-	}
-	if _, err := tmp.Write(append(payload, '\n')); err != nil {
-		tmp.Close()
+	if err := filestate.WritePrivateFile(path, append(payload, '\n')); err != nil {
 		return false, fmt.Errorf("write model registry: %w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return false, fmt.Errorf("sync model registry: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return false, err
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		return false, fmt.Errorf("persist model registry: %w", err)
 	}
 	return true, nil
 }

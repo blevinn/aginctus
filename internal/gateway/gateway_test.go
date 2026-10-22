@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/blevinn/aginctus/internal/orchestration"
 )
 
 func TestRenderCompose(t *testing.T) {
@@ -215,6 +217,14 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 		NetworkIPv4Address: "10.42.0.1/24", NetworkIPv6Address: "none",
 		LiteLLMImage: "example/litellm:custom", PostgresImage: "example/postgres:custom",
 	}
+	plan, _ := assertRenderedGatewayComposeMatchesDeploymentModel(t, spec)
+	if len(plan.Steps) != 2 {
+		t.Fatalf("plan steps = %d, want 2", len(plan.Steps))
+	}
+}
+
+func assertRenderedGatewayComposeMatchesDeploymentModel(t *testing.T, spec Spec) (orchestration.Plan, map[string]any) {
+	t.Helper()
 	rendered, err := spec.RenderCompose()
 	if err != nil {
 		t.Fatal(err)
@@ -232,13 +242,13 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan.Steps) != 2 {
-		t.Fatalf("plan steps = %d", len(plan.Steps))
+	if len(plan.Steps) == 0 || plan.Steps[len(plan.Steps)-1].Driver != "compose" {
+		t.Fatalf("plan must end with Compose: %#v", plan.Steps)
 	}
 	var config struct {
 		Compose map[string]any `json:"compose"`
 	}
-	if err := json.Unmarshal(plan.Steps[1].Configuration, &config); err != nil {
+	if err := json.Unmarshal(plan.Steps[len(plan.Steps)-1].Configuration, &config); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(renderModel, config.Compose) {
@@ -246,6 +256,7 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 		deployJSON, _ := json.MarshalIndent(config.Compose, "", "  ")
 		t.Fatalf("render and deploy Compose models differ:\\nrender=%s\\ndeploy=%s", renderJSON, deployJSON)
 	}
+	return plan, config.Compose
 }
 
 func TestInitializeRuntimeEnvironmentConcurrentFirstUse(t *testing.T) {
@@ -318,5 +329,114 @@ func TestGatewayAcceptsSafeCredentialSeed(t *testing.T) {
 	}
 	if values["AGINCTUS_GATEWAY_POSTGRES_PASSWORD"] != "AZaz09_-safe" {
 		t.Fatal("valid seed changed unexpectedly")
+	}
+}
+
+func TestGatewayStateDirRejectsRelativeXDGStateHome(t *testing.T) {
+	// A relative XDG_STATE_HOME would land secret material under
+	// $PWD/aginctus/gateway/... and is never an operator intent. The
+	// gateway package must agree with internal/providerregistry on this
+	// fail-closed contract so the two consumers of XDG_STATE_HOME
+	// disagree on shape.
+	t.Setenv("XDG_STATE_HOME", "relative/path")
+	for _, name := range requiredRuntimeEnvironment {
+		t.Setenv(name, "")
+	}
+	spec := Spec{ID: "local"}
+	if _, err := spec.InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted relative XDG_STATE_HOME")
+	} else if !strings.Contains(err.Error(), "absolute") {
+		t.Fatalf("error %q does not name the absolute-path requirement", err)
+	}
+	// A bare XDG_STATE_HOME without a separator is also relative and
+	// must be rejected.
+	t.Setenv("XDG_STATE_HOME", ".")
+	if _, err := spec.InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted bare XDG_STATE_HOME='.'")
+	}
+}
+
+func TestGatewayStateDirRejectsRelativeHome(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("HOME", "relative/home")
+	for _, name := range requiredRuntimeEnvironment {
+		t.Setenv(name, "")
+	}
+	if _, err := (Spec{ID: "local"}).InitializeRuntimeEnvironment(); err == nil {
+		t.Fatal("accepted relative HOME fallback for gateway secret state")
+	} else if !strings.Contains(err.Error(), "absolute") {
+		t.Fatalf("error %q does not name the absolute-path requirement", err)
+	}
+}
+
+func TestGatewayStateDirAcceptsAbsoluteXDGStateHome(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	for _, name := range requiredRuntimeEnvironment {
+		t.Setenv(name, "")
+	}
+	spec := Spec{ID: "local"}
+	if _, err := spec.InitializeRuntimeEnvironment(); err != nil {
+		t.Fatalf("rejected absolute XDG_STATE_HOME: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(state, "aginctus", "gateway", "local")); err != nil {
+		t.Fatalf("expected state directory under absolute XDG_STATE_HOME: %v", err)
+	}
+}
+
+// Compose project name and management network name are validated with the
+// same charset as the gateway ID. Both flow into the rendered Compose YAML
+// and into Incus CLI args, so a permissive check lets an accidental newline
+// split the rendered document or escape the arg boundary.
+func TestGatewayProjectAndNetworkRejectTraversalAndSeparators(t *testing.T) {
+	unsafe := []string{
+		"",
+		"../outside",
+		".",
+		"..",
+		"nested/path",
+		"a b",
+		"a\nb",
+		"a:b",
+		"a@b",
+		"a;rm",
+		"\"escape",
+		"a'b",
+	}
+	for _, name := range []struct {
+		field string
+		set   func(*Spec, string)
+	}{
+		{"Project", func(s *Spec, v string) { s.Project = v }},
+		{"Network", func(s *Spec, v string) { s.Network = v }},
+	} {
+		for _, value := range unsafe {
+			t.Run(fmt.Sprintf("%s=%q", name.field, value), func(t *testing.T) {
+				spec := Spec{
+					ID:            "local",
+					Project:       "gateway",
+					Network:       "mgmt",
+					LiteLLMImage:  "litellm",
+					PostgresImage: "postgres",
+				}
+				name.set(&spec, value)
+				if err := spec.Validate(); err == nil {
+					t.Fatalf("accepted unsafe %s %q", name.field, value)
+				}
+			})
+		}
+	}
+
+	for _, value := range []string{"gateway", "gateway-01", "gateway_01", "MgmtNet2"} {
+		spec := Spec{
+			ID:            "local",
+			Project:       value,
+			Network:       value,
+			LiteLLMImage:  "litellm",
+			PostgresImage: "postgres",
+		}
+		if err := spec.Validate(); err != nil {
+			t.Fatalf("valid value %q rejected by Validate: %v", value, err)
+		}
 	}
 }

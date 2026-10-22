@@ -100,6 +100,18 @@ let
       description = "Dedicated firewalld zone to manage for the selected Aginctus profile (max 17 characters, aginctus- prefix).";
     };
 
+    firewall.egress.allowTailscaleRouting = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Accept existing standard Tailscale IPv4 policy-routing rules during egress verification. Set false to require kernel-only rules. Never installs or modifies routing rules.";
+    };
+
+    firewall.egress.uplinkZone = mkOption {
+      type = types.str;
+      default = "";
+      description = "Runtime HTTPS uplink zone, verified against the unique IPv4 default route. Empty fails closed.";
+    };
+
     gateway = {
       id = mkOption {
         type = types.str;
@@ -201,6 +213,7 @@ let
   };
 in
 {
+  imports = [ ./egress-firewall.nix ];
   options.services.aginctus = {
     enable = mkEnableOption "Aginctus host integration";
 
@@ -268,6 +281,16 @@ in
         default = false;
         description = "Reconcile the management network, Herdr client, and selected workloads at boot.";
       };
+      # Deploying the AI gateway from the reconciler applies the configured
+      # gateway settings, including the egress bridge, Compose project,
+      # LiteLLM and PostgreSQL instances, and protected runtime secrets
+      # under $XDG_STATE_HOME. Operators that prefer to manage that
+      # lifecycle outside Nix should leave this disabled.
+      gateway = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Apply the configured AI gateway before Herdr and workloads. Orders resource application only; does not verify application health or reachability. Reuses protected generated runtime secrets.";
+      };
       workloads = mkOption {
         type = types.listOf types.str;
         default = [ ];
@@ -278,6 +301,14 @@ in
 
   config = mkIf cfg.enable {
     assertions = [
+      {
+        assertion =
+          !cfg.firewall.egress.enable
+          || (
+            cfg.firewall.enable && firewalldBackend && (cfg.settings.gateway.egress.network.name or "") != ""
+          );
+        message = "services.aginctus.firewall.egress requires firewalld, firewall.enable and an explicit gateway.egress.network.name.";
+      }
       {
         assertion = !cfg.firewall.enable || validFirewalldZone;
         message = "services.aginctus.settings.firewall.zone must begin with aginctus-, use only lowercase letters, digits and hyphens, and be no more than 17 characters long.";
@@ -300,7 +331,7 @@ in
         assertion = configuredSecretPaths == [ ];
         message = "services.aginctus.settings cannot contain runtime gateway secrets: ${
           lib.concatStringsSep ", " (map (path: lib.concatStringsSep "." path) configuredSecretPaths)
-        }. Provide these through the supported runtime credential mechanism instead.";
+        }. Leave secrets unset to generate and persist protected runtime state; see docs/configuration.md.";
       }
       {
         assertion = builtins.all validImageAlias enabledImageAliases;
@@ -313,6 +344,10 @@ in
       {
         assertion = !cfg.reconcile.enable || unknownWorkloads == [ ];
         message = "services.aginctus.reconcile.workloads contains unknown workload IDs: ${lib.concatStringsSep ", " unknownWorkloads}";
+      }
+      {
+        assertion = !(cfg.reconcile.gateway && !cfg.reconcile.enable);
+        message = "services.aginctus.reconcile.gateway requires services.aginctus.reconcile.enable; the gateway apply runs as part of the host reconciliation flow.";
       }
     ];
 
@@ -367,17 +402,64 @@ in
 
     environment.etc."aginctus/config.json".source = configFile;
 
+    systemd.timers.aginctus-egress-firewall = lib.mkIf cfg.firewall.egress.enable {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "5s";
+        OnUnitInactiveSec = "5s";
+        AccuracySec = "1s";
+        Unit = "aginctus-egress-firewall.service";
+      };
+    };
+
+    systemd.tmpfiles.rules = lib.mkIf cfg.firewall.egress.enable [
+      "d /var/lib/aginctus-firewall 0700 root root -"
+      "C /var/lib/aginctus-firewall/overrides.json 0600 root root - ${pkgs.writeText "aginctus-firewall-overrides.json" "{}"}"
+    ];
+    environment.systemPackages = lib.mkIf cfg.firewall.egress.enable [ pkgs.conntrack-tools ];
+
     systemd.timers.aginctus-firewall-reconcile = lib.mkIf cfg.firewall.enable {
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnBootSec = "15s";
-        OnUnitActiveSec = "30s";
+        OnUnitActiveSec = if cfg.firewall.egress.enable then "5s" else "30s";
+        AccuracySec = "1s";
         Unit = "aginctus-firewall-reconcile.service";
       };
     };
 
     systemd.services =
-      lib.optionalAttrs cfg.firewall.enable {
+      lib.optionalAttrs cfg.firewall.egress.enable {
+        aginctus-egress-firewall = {
+          description = "Reconcile verified LiteLLM runtime egress grants";
+          after = [
+            "incus.service"
+            "firewalld.service"
+          ];
+          wants = [
+            "incus.service"
+            "firewalld.service"
+          ];
+          path = [
+            pkgs.incus
+            pkgs.iproute2
+            pkgs.systemd
+            pkgs.firewalld
+            pkgs.conntrack-tools
+          ];
+          serviceConfig = {
+            Type = "oneshot";
+            User = "root";
+            Environment = [ "XDG_CONFIG_HOME=/var/empty" ];
+            NoNewPrivileges = true;
+            PrivateTmp = true;
+            ProtectHome = true;
+            CapabilityBoundingSet = [ "CAP_NET_ADMIN" ];
+            ExecStart = "${aginctusCommand} --configuration-file /var/lib/aginctus-firewall/overrides.json network firewall egress reconcile";
+          };
+        };
+      }
+      // lib.optionalAttrs cfg.firewall.enable {
         aginctus-firewall-reconcile = {
           description = "Reconcile Aginctus-owned Incus guest-to-host DNS/DHCP policy";
           wantedBy = [ "multi-user.target" ];
@@ -472,6 +554,16 @@ in
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
+            # systemd oneshot services do not inherit $HOME; the gateway
+            # CLI's state-directory fallback (os.UserHomeDir) would fail
+            # with "$HOME is not defined" before any consumer can recover.
+            # Pin the gateway secret directory to a NixOS-managed location,
+            # mirroring the firewall reconcile unit's XDG_CONFIG_HOME
+            # isolation. Only set when `reconcile.gateway` is in scope; the
+            # other reconciler subcommands tolerate (or ignore) the var.
+          }
+          // lib.optionalAttrs cfg.reconcile.gateway {
+            Environment = [ "XDG_STATE_HOME=/var/lib/aginctus/state" ];
           };
           script = ''
             set -eu
@@ -479,6 +571,7 @@ in
             # Reconcile effective host filtering immediately after the managed
             # bridge is created, before starting dependent workloads.
             ${lib.optionalString cfg.firewall.enable "${pkgs.systemd}/bin/systemctl start aginctus-firewall-reconcile.service"}
+            ${lib.optionalString cfg.reconcile.gateway "${aginctusCommand} --configuration-file ${configFile} gateway apply"}
             ${aginctusCommand} --configuration-file ${configFile} herdr client ensure
             ${lib.concatMapStringsSep "\n" (
               id: "${aginctusCommand} --configuration-file ${configFile} workload ${lib.escapeShellArg id} ensure"

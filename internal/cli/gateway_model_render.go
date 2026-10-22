@@ -8,14 +8,9 @@ import (
 	"github.com/blevinn/aginctus/internal/providerregistry"
 )
 
-// renderRegisteredChatGPTModel resolves a previously stored *local intent*
-// to LiteLLM's native Responses model shape. It is strictly read-only:
-// registration with a running gateway, credentials, and OAuth are untouched.
-//
-// LiteLLM v1.103.0 uses one CHATGPT_TOKEN_DIR/auth.json for its native
-// authenticator, rather than a per-route credential identity. Refuse multiple
-// local identities until the account-to-route binding is explicitly designed.
-func renderRegisteredChatGPTModel(name string) ([]byte, error) {
+// renderRegisteredModel resolves a stored nonsecret intent to a read-only
+// LiteLLM Responses model definition. It never touches gateway credentials.
+func renderRegisteredModel(name string) ([]byte, error) {
 	path, err := modelregistry.DefaultPath()
 	if err != nil {
 		return nil, fmt.Errorf("resolve local model registry: %w", err)
@@ -43,12 +38,31 @@ func renderRegisteredChatGPTModel(name string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read private provider registry: %w", err)
 	}
-	if len(providers.Providers) != 1 {
-		return nil, fmt.Errorf("native ChatGPT rendering requires exactly one locally registered provider identity")
+	var owner *providerregistry.Provider
+	nativeChatGPTOwners := 0
+	for i := range providers.Providers {
+		p := &providers.Providers[i]
+		if p.Type == "chatgpt" {
+			nativeChatGPTOwners++
+		}
+		if p.Alias == selected.Provider {
+			owner = p
+		}
 	}
-	p := providers.Providers[0]
-	if p.Type != "chatgpt" || p.Alias != selected.Provider {
-		return nil, fmt.Errorf("registered model provider identity does not match the sole native ChatGPT credential owner")
+	if owner == nil {
+		return nil, fmt.Errorf("registered model provider identity does not match any local provider")
 	}
-	return gateway.ChatGPTModelRegistration(selected.Name, selected.Source)
+	switch owner.Type {
+	case "chatgpt":
+		// Pinned LiteLLM uses one native CHATGPT_TOKEN_DIR/auth.json, not
+		// a per-model credential. Other provider types are independent.
+		if nativeChatGPTOwners != 1 {
+			return nil, fmt.Errorf("native ChatGPT rendering requires exactly one locally registered ChatGPT identity")
+		}
+		return gateway.ChatGPTModelRegistration(selected.Name, selected.Source)
+	case "opencode-go":
+		return gateway.OpenCodeGoModelRegistration(selected.Name, selected.Source)
+	default:
+		return nil, fmt.Errorf("unsupported model provider type")
+	}
 }

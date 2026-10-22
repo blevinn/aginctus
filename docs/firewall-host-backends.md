@@ -83,7 +83,10 @@ allowances**. The privileged
    runtime exceptions before installing anything new. On failed verification,
    leave the exceptions empty (fail closed) and return a nonzero status.
 3. Verify the selected Incus network's ownership labels, isolation flags,
-   bridge interface, subnet, and configured name/address.
+   bridge interface, subnet, and configured name/address. The three renderer
+   backends reject any policy containing a non-IPv4 address or subnet,
+   including IPv6 `::/0` and IPv4-mapped IPv6 CIDRs; they never interpolate
+   these into IPv4-family accept rules.
 4. Add source/subnet-and-destination-constrained UDP/TCP DNS 53 rich rules
    and interface-scoped DHCPv4 UDP 67, then bind **only the verified bridge**
    to the dedicated zone. Unrelated interface bindings are rejected.
@@ -102,6 +105,17 @@ source-port constraint. It is narrower than a trusted interface or arbitrary
 host-port allowance, but is not equivalent to the earlier iptables-nft
 source-port-68 matcher. The production deployment must retain the default
 DROP zone and be assessed against this distinction.
+
+**Conntrack INVALID asymmetry:** the iptables-nft and nixos-nft backends
+both emit a `ct state invalid return` (or `-m conntrack --ctstate INVALID
+-j RETURN`) rule that runs *before* the DNS/DHCP accept rules, so a
+DNS-shaped spoofed packet on the verified bridge cannot reach the accept
+rules. The firewalld backend has no equivalent rich-rule primitive; the
+firewalld zone is DROP-by-default and inherits the host's INVALID policy
+implicitly, so a firewalld-only deployment relies on the kernel nftables
+INPUT path rather than on Aginctus-owned rules. Do not "fix" the firewalld
+backend by emulating the iptables/nft RETURN rule via a separate rich rule;
+the asymmetry is documented and intentional.
 
 The dedicated zone owns only runtime rules, not NAT or forwarding. It never
 calls `--runtime-to-permanent`, `--change-interface`, or `--reload`. If the

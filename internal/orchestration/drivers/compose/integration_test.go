@@ -34,7 +34,7 @@ func TestIncusComposeReconciliationIntegration(t *testing.T) {
 `, image))
 	}
 	run := func(image string, recreate bool) error {
-		return executeCompose(ctx, Config{Project: name, Compose: composeDoc(image), RecreateOnDrift: recreate}, nil)
+		return executeCompose(ctx, Config{Project: name, Compose: composeDoc(image), RecreateOnDrift: recreate}, nil, iclient.NewConnection)
 	}
 	const first = "docker.io/library/alpine:3.21"
 	const second = "docker.io/library/alpine:3.22"

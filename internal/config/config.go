@@ -72,7 +72,8 @@ func (c *Config) Bool(path string) (bool, error) {
 }
 
 // Runtime gateway credentials are out-of-band inputs, not configuration keys.
-// Do not permit either environment mapping or explicit overrides to expose them.
+// Reject them in every configuration source (including nested JSON objects),
+// while leaving standalone runtime environment variables to their consumer.
 func isRuntimeSecretPath(path string) bool {
 	switch strings.ToLower(path) {
 	case "gateway.postgres.password", "gateway.master.key", "gateway.salt.key":
@@ -80,6 +81,29 @@ func isRuntimeSecretPath(path string) bool {
 	default:
 		return false
 	}
+}
+
+// rejectRuntimeSecretValues examines a prospective configuration subtree
+// before any merge or assignment. It recognizes both nested JSON objects and
+// dotted JSON keys, irrespective of key case, without printing secret values.
+func rejectRuntimeSecretValues(path string, value any) error {
+	if isRuntimeSecretPath(path) {
+		return fmt.Errorf("runtime gateway secret keys cannot be set through configuration")
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	for key, child := range object {
+		nested := key
+		if path != "" {
+			nested = path + "." + key
+		}
+		if err := rejectRuntimeSecretValues(nested, child); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type Loader struct {
@@ -120,7 +144,8 @@ func (l *Loader) Load(options Options) (*Config, error) {
 	}
 	for _, override := range options.Overrides {
 		if err := mergeOverride(values, override); err != nil {
-			return nil, fmt.Errorf("apply command-line configuration %q: %w", override, err)
+			// Never echo the raw override: it may contain a credential.
+			return nil, fmt.Errorf("apply command-line configuration: %w", err)
 		}
 	}
 
@@ -129,7 +154,8 @@ func (l *Loader) Load(options Options) (*Config, error) {
 
 var defaults = map[string]any{
 	"firewall": map[string]any{
-		"zone": "aginctus-dns",
+		"zone":   "aginctus-dns",
+		"egress": map[string]any{"uplinkZone": "", "allowTailscaleRouting": true},
 	},
 	"gateway": map[string]any{
 		"id":          "local",
@@ -222,6 +248,9 @@ func mergeJSON(dst map[string]any, data []byte) error {
 	if src == nil {
 		return fmt.Errorf("configuration document must be a JSON object, not null")
 	}
+	if err := rejectRuntimeSecretValues("", src); err != nil {
+		return err
+	}
 	mergeMaps(dst, src)
 	return nil
 }
@@ -254,9 +283,6 @@ func mergeOverride(dst map[string]any, override string) error {
 	if !ok {
 		return fmt.Errorf("expected path=value")
 	}
-	if isRuntimeSecretPath(path) {
-		return fmt.Errorf("runtime gateway secret keys cannot be set through configuration")
-	}
 	return setPath(dst, path, parseValue(value))
 }
 
@@ -271,6 +297,9 @@ func parseValue(value string) any {
 func setPath(dst map[string]any, path string, value any) error {
 	parts, err := splitPath(path)
 	if err != nil {
+		return err
+	}
+	if err := rejectRuntimeSecretValues(strings.Join(parts, "."), value); err != nil {
 		return err
 	}
 

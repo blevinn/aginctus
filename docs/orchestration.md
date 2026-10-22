@@ -80,7 +80,7 @@ Initial shape:
           {
             "kind": "network",
             "name": "aginctus-mgmt",
-            "type": "bridge",
+            "networkType": "bridge",
             "config": {
               "ipv4.address": "auto",
               "ipv4.nat": "false",
@@ -268,8 +268,7 @@ internal/orchestration/
     management-network.jsonnet
     herdr-client.jsonnet
     gateway.jsonnet
-    workloads/
-      opencode.jsonnet
+    workload.jsonnet
 ```
 
 The `resources` tree is embedded in the Aginctus binary.

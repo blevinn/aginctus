@@ -2,7 +2,6 @@ package firewall
 
 import (
 	"fmt"
-	"net"
 	"regexp"
 )
 
@@ -19,10 +18,7 @@ func Render(policy *Policy) (string, error) {
 	if policy == nil {
 		return transaction + "COMMIT\n", nil
 	}
-	ip := net.ParseIP(policy.Address)
-	_, subnet, err := net.ParseCIDR(policy.Subnet)
-	if !bridgeName.MatchString(policy.Interface) || ip == nil || ip.To4() == nil ||
-		subnet == nil || !subnet.Contains(ip) || err != nil {
+	if !validIPv4Policy(policy) {
 		return "", fmt.Errorf("invalid owned-bridge firewall policy")
 	}
 	// Our jump may be ahead of the host conntrack-invalid filter. Do not

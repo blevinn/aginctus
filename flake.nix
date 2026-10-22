@@ -37,8 +37,12 @@
           herdrPackage = herdr.packages.${system}.herdr;
           aginctusCli = pkgs.buildGoModule {
             pname = "aginctus";
-            version = "0.0.0-dev";
+            version = "0.0.0-dev+${self.shortRev or "source"}";
             src = ./.;
+            # Dirty trees and non-Git sources get content identity, not a false commit claim.
+            ldflags = [
+              "-X=github.com/blevinn/aginctus/internal/cli.Revision=${self.rev or "source-${self.narHash}"}"
+            ];
             # Recalculate after Go module graph changes. A stale hash can reuse
             # an incompatible vendor tree even when go.mod is newer.
             vendorHash = "sha256-ao0Q95mYJ8xWhKWwhBQsBjtdF8bWMAXRG+c/kNOZkSQ=";
@@ -168,14 +172,24 @@
             ];
           };
 
+          # Bundle the OpenCode guest Python scripts into a single store
+          # directory so the shared validator module sits alongside
+          # provision.py and launch.py and is importable at runtime.
+          opencodeGuestScripts = pkgs.runCommand "aginctus-opencode-guest-scripts" { } ''
+            mkdir -p $out
+            cp ${./guest/opencode/provision.py} $out/provision.py
+            cp ${./guest/opencode/launch.py} $out/launch.py
+            cp ${./guest/opencode/gateway_endpoint.py} $out/gateway_endpoint.py
+          '';
+
           # Runtime-only gateway configuration: no endpoint, model or key is
           # materialized into the Nix store. Herdr's PATH resolves this wrapper.
           aginctusOpenCode = pkgs.writeShellScriptBin "opencode" ''
-            exec ${pkgs.python3}/bin/python3 ${./guest/opencode/launch.py} ${pkgs.opencode}/bin/opencode "$@"
+            exec ${pkgs.python3}/bin/python3 ${opencodeGuestScripts}/launch.py ${pkgs.opencode}/bin/opencode "$@"
           '';
 
           gatewayProvisionHelper = pkgs.writeShellScriptBin "aginctus-opencode-gateway-provision" ''
-            exec ${pkgs.python3}/bin/python3 ${./guest/opencode/provision.py}
+            exec ${pkgs.python3}/bin/python3 ${opencodeGuestScripts}/provision.py
           '';
 
           opencodeWorkloadSystem = nixpkgs.lib.nixosSystem {
@@ -216,6 +230,16 @@
                       PermitTunnel = false;
                       PermitUserRC = false;
                     };
+                    # The remote Herdr CLI resolves its API socket from
+                    # HERDR_SOCKET_PATH; declare it once via sshd's SetEnv so
+                    # every SSH session (including Herdr's `herdr --machine
+                    # <label> workspace list`) reaches the systemd-managed
+                    # server socket without a per-call wrapper, shell export
+                    # or user-writable symlink. The path mirrors the systemd
+                    # service's XDG_CONFIG_HOME (see below).
+                    extraConfig = ''
+                      SetEnv HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock
+                    '';
                   };
 
                   systemd.services.herdr = {
@@ -231,6 +255,12 @@
                         "XDG_CONFIG_HOME=/var/lib/herdr/config"
                         "XDG_RUNTIME_DIR=/run/herdr"
                         "XDG_STATE_HOME=/var/lib/herdr"
+                        # Belt-and-braces: the server is a managed daemon and
+                        # must answer the same socket the SSH CLI declares
+                        # above. Without this, `HERDR_SOCKET_PATH` would be
+                        # ignored on the server side and the CLI would probe
+                        # an unrelated path on first contact.
+                        "HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock"
                       ];
                       ExecStart = "${herdrPackage}/bin/herdr server";
                       Restart = "on-failure";
@@ -316,13 +346,8 @@
             ln -s ${opencodeWorkloadMetadata} "$out/metadata"
           '';
         }
-      );
-
-      checks = forAllSystems (
-        system:
-        {
-          nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
-        }
+        # Keep VM integration tests explicitly buildable, outside the default
+        # flake checks, so routine validation does not execute heavyweight VMs.
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           firewall-iptables-integration = import ./nix/firewall-iptables-test.nix {
             inherit self nixpkgs system;
@@ -330,11 +355,32 @@
           firewall-firewalld-integration = import ./nix/firewall-firewalld-test.nix {
             inherit self nixpkgs system;
           };
+          firewall-egress-bootstrap = import ./nix/firewall-egress-bootstrap-test.nix {
+            inherit self nixpkgs system;
+          };
           firewall-nixos-nft-integration = import ./nix/firewall-nixos-nft-test.nix {
             inherit self nixpkgs system;
           };
+          herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
+            inherit
+              self
+              nixpkgs
+              herdr
+              system
+              ;
+          };
         }
       );
+
+      checks = forAllSystems (system: {
+        nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
+        gateway-config-parity = import ./nix/gateway-config-parity-check.nix {
+          inherit self nixpkgs system;
+        };
+        opencode-workload-socket-alignment = import ./nix/opencode-workload-check.nix {
+          inherit self nixpkgs system;
+        };
+      });
 
       devShells = forAllSystems (
         system:
@@ -348,11 +394,13 @@
               (with pkgs; [
                 git
                 go
+                golangci-lint
                 incus
                 jq
                 just
                 nixfmt
-                python3
+                (python3.withPackages (ps: [ ps.markdown-it-py ]))
+                ruff
                 shellcheck
                 shfmt
               ])

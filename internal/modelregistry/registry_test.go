@@ -1,11 +1,13 @@
 package modelregistry
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/blevinn/aginctus/internal/filestate"
 	"github.com/blevinn/aginctus/internal/providerregistry"
 )
 
@@ -90,13 +92,14 @@ func TestRegistryRejectsInsecureAndConcurrentState(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(path+".lock", 0700); err != nil {
+	lock, err := filestate.LockRegistry(path)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Register(path, m); err == nil {
-		t.Fatal("accepted existing transaction lock")
+	if _, err := Register(path, m); !errors.Is(err, filestate.ErrRegistryBusy) {
+		t.Fatalf("concurrent writer did not fail busy: %v", err)
 	}
-	if err := os.Remove(path + ".lock"); err != nil {
+	if err := lock.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Register(path, m); err != nil {
@@ -117,5 +120,38 @@ func TestRegistryRejectsCorruptedEntries(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("accepted duplicate persisted model aliases")
+	}
+}
+
+func TestRegisterOpenCodeGoModelRequiresMatchingProvider(t *testing.T) {
+	path := registeredProvider(t, "personal")
+	providersPath, err := providerregistry.DefaultPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := providerregistry.Register(providersPath, providerregistry.Provider{Type: "opencode-go", Alias: "go"}); err != nil {
+		t.Fatal(err)
+	}
+	model := Model{Name: "go-coding", Provider: "go", Source: "openai/gpt-6-luna"}
+	if changed, err := Register(path, model); err != nil || !changed {
+		t.Fatalf("register OpenCode Go model: changed=%v err=%v", changed, err)
+	}
+	if changed, err := Register(path, model); err != nil || changed {
+		t.Fatalf("idempotent OpenCode Go model: changed=%v err=%v", changed, err)
+	}
+	for _, invalid := range []Model{
+		{Name: "wrong-chatgpt", Provider: "personal", Source: "openai/gpt-6-luna"},
+		{Name: "wrong-go", Provider: "go", Source: "chatgpt/gpt-5"},
+		{Name: "unknown-go", Provider: "go", Source: "openai/gpt-4o"},
+		{Name: "bad-name", Provider: "go", Source: "openai/gpt-6-luna/../../foo"},
+		{Name: "unregistered", Provider: "missing", Source: "openai/gpt-6-luna"},
+	} {
+		if _, err := Register(path, invalid); err == nil {
+			t.Fatalf("accepted invalid provider/source: %+v", invalid)
+		}
+	}
+	got, err := Load(path)
+	if err != nil || len(got.Models) != 1 || got.Models[0] != model {
+		t.Fatalf("invalid registrations affected state: %+v %v", got, err)
 	}
 }

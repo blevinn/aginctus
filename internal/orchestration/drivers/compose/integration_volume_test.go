@@ -42,7 +42,7 @@ volumes:
 	initial := doc("docker.io/library/alpine:3.21", "echo aginctus-volume-sentinel > /data/sentinel; sleep 3600")
 	replacement := doc("docker.io/library/alpine:3.22", "test \"$(cat /data/sentinel)\" = aginctus-volume-sentinel && sleep 3600")
 	run := func(contents []byte, recreate bool) error {
-		return executeCompose(ctx, Config{Project: name, Compose: contents, RecreateOnDrift: recreate}, nil)
+		return executeCompose(ctx, Config{Project: name, Compose: contents, RecreateOnDrift: recreate}, nil, iclient.NewConnection)
 	}
 	if err := run(initial, false); err != nil {
 		t.Fatalf("create initial volume-bearing instance: %v", err)

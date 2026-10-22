@@ -1,11 +1,11 @@
-#!/usr/bin/env python3
 """Launch OpenCode with an Aginctus-only provider, never persisting credentials in Nix."""
 import json
 import os
-from pathlib import Path
 import stat
 import sys
-from urllib.parse import urlsplit
+from pathlib import Path
+
+from gateway_endpoint import validate_endpoint, validate_model
 
 DEFAULT_DIR = "/var/lib/aginctus/opencode"
 
@@ -19,20 +19,8 @@ def load(directory):
     protocol = data.get("protocol", "responses")
     if not isinstance(endpoint, str) or not isinstance(model, str):
         raise ValueError("gateway endpoint and model must be strings")
-    url = urlsplit(endpoint)
-    if (
-        url.scheme != "http"
-        or not url.hostname
-        or url.username is not None
-        or url.password is not None
-        or url.query
-        or url.fragment
-        or url.path.rstrip("/") != "/v1"
-        or any(c.isspace() for c in endpoint)
-    ):
-        raise ValueError("gateway endpoint must be a private HTTP /v1 URL without credentials")
-    if not model or model.strip() != model or "/" in model:
-        raise ValueError("invalid gateway model alias")
+    validate_endpoint(endpoint)
+    validate_model(model)
     if protocol not in ("responses", "chat-completions"):
         raise ValueError("unsupported gateway protocol")
     info = key_path.lstat()
@@ -69,7 +57,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+    except (OSError, ValueError, json.JSONDecodeError):
         # Do not print paths, source JSON or credential-bearing exceptions.
         print("aginctus opencode: gateway configuration unavailable or invalid", file=sys.stderr)
         sys.exit(1)

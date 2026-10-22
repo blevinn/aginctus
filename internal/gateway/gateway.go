@@ -8,29 +8,36 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"syscall"
 	"text/template"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/filestate"
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
 )
 
 type Spec struct {
-	ID                 string
-	Project            string
-	Network            string
-	EgressNetwork      string
-	NetworkIPv4Address string
-	NetworkIPv4NAT     bool
-	NetworkIPv4Routing bool
-	NetworkIPv6Address string
-	LiteLLMImage       string
-	PostgresImage      string
+	ID                   string
+	Project              string
+	Network              string
+	EgressNetwork        string
+	EgressIPv4Address    string
+	EgressBridgeIPv4CIDR string
+	EgressDHCPDisabled   bool
+	EgressDHCPRanges     string
+	NetworkIPv4Address   string
+	NetworkIPv4NAT       bool
+	NetworkIPv4Routing   bool
+	NetworkIPv6Address   string
+	LiteLLMImage         string
+	PostgresImage        string
 }
 
 func FromConfig(effective *config.Config) (Spec, error) {
@@ -57,6 +64,53 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		*key.dst = value
 	}
 
+	if value, ok := effective.Get("gateway.egress.network.ipv4.address"); ok {
+		cidr, valid := value.(string)
+		if !valid {
+			return Spec{}, fmt.Errorf("gateway egress bridge IPv4 address must be a CIDR string")
+		}
+		spec.EgressBridgeIPv4CIDR = cidr
+	}
+
+	if err := rejectDottedEgressDHCPInput(effective); err != nil {
+		return Spec{}, err
+	}
+	// The input contract is documented in docs/configuration.md.
+	if raw, ok := effective.Get("gateway.egress.network.ipv4.dhcp"); ok {
+		switch value := raw.(type) {
+		case bool:
+			spec.EgressDHCPDisabled = !value
+		case map[string]any:
+			for key := range value {
+				if key != "enabled" && key != "ranges" {
+					return Spec{}, fmt.Errorf("gateway egress IPv4 DHCP object accepts only enabled and ranges")
+				}
+			}
+			enabled, ok := value["enabled"].(bool)
+			if !ok {
+				return Spec{}, fmt.Errorf("gateway egress IPv4 DHCP enabled must be a boolean")
+			}
+			spec.EgressDHCPDisabled = !enabled
+			if rawRanges, present := value["ranges"]; present {
+				ranges, ok := rawRanges.(string)
+				if !ok {
+					return Spec{}, fmt.Errorf("gateway egress IPv4 DHCP ranges must be a string")
+				}
+				spec.EgressDHCPRanges = ranges
+			}
+		default:
+			return Spec{}, fmt.Errorf("gateway egress IPv4 DHCP must be a boolean or an object with `enabled` and `ranges`")
+		}
+	}
+
+	if value, ok := effective.Get("gateway.egress.ipv4.address"); ok {
+		address, valid := value.(string)
+		if !valid {
+			return Spec{}, fmt.Errorf("gateway egress IPv4 address must be a CIDR string")
+		}
+		spec.EgressIPv4Address = address
+	}
+
 	var err error
 	spec.NetworkIPv4NAT, err = effective.Bool("incus.management.network.ipv4.nat")
 	if err != nil {
@@ -73,18 +127,87 @@ func FromConfig(effective *config.Config) (Spec, error) {
 	return spec, nil
 }
 
+// Inspect literal keys along this input path because Config.Get splits dots.
+// Keep this local to DHCP input; Incus resource keys intentionally contain dots.
+func rejectDottedEgressDHCPInput(effective *config.Config) error {
+	parts := strings.Split("gateway.egress.network.ipv4.dhcp", ".")
+	object := effective.Values()
+	for i, part := range parts {
+		remaining := strings.Join(parts[i:], ".")
+		for key := range object {
+			if strings.Contains(key, ".") && (key == remaining ||
+				strings.HasPrefix(key, remaining+".") || strings.HasPrefix(remaining, key+".")) {
+				return fmt.Errorf("gateway egress IPv4 DHCP input cannot use literal dotted keys; use nested objects with enabled and optional ranges")
+			}
+		}
+		object, _ = object[part].(map[string]any)
+	}
+	return nil
+}
+
 var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 func (s Spec) Validate() error {
+	if s.EgressDHCPRanges != "" {
+		if s.EgressDHCPDisabled || s.EgressBridgeIPv4CIDR == "" || s.EgressIPv4Address == "" {
+			return fmt.Errorf("egress DHCP ranges require enabled DHCP and explicit bridge and LiteLLM IPv4 CIDRs")
+		}
+		pool, err := parseEgressDHCPRanges(s.EgressBridgeIPv4CIDR, s.EgressDHCPRanges)
+		if err != nil {
+			return fmt.Errorf("gateway egress DHCP ranges: %w", err)
+		}
+		bridge, _ := netip.ParsePrefix(s.EgressBridgeIPv4CIDR)
+		host, _ := netip.ParsePrefix(s.EgressIPv4Address)
+		for _, addr := range pool {
+			if addr == bridge.Addr() || addr == bridge.Masked().Addr() || addr == host.Addr() {
+				return fmt.Errorf("egress DHCP range includes bridge gateway, subnet address or LiteLLM static address")
+			}
+		}
+	}
+	if s.EgressDHCPDisabled && (s.EgressBridgeIPv4CIDR == "" || s.EgressIPv4Address == "") {
+		return fmt.Errorf("disabled egress DHCP requires both explicit bridge gateway and LiteLLM static IPv4 CIDRs")
+	}
+	if s.EgressBridgeIPv4CIDR != "" {
+		bridge, err := netip.ParsePrefix(s.EgressBridgeIPv4CIDR)
+		if err != nil || !bridge.Addr().Is4() || !bridge.Addr().IsGlobalUnicast() ||
+			bridge.Bits() < 16 || bridge.Bits() > 30 ||
+			bridge.Addr() == bridge.Masked().Addr() {
+			return fmt.Errorf("gateway egress bridge requires a usable IPv4 gateway CIDR (/16 through /30)")
+		}
+		if s.EgressNetwork == "" {
+			return fmt.Errorf("gateway egress bridge CIDR requires an egress network")
+		}
+		if s.EgressIPv4Address != "" {
+			address, err := netip.ParsePrefix(s.EgressIPv4Address)
+			if err != nil || !bridge.Masked().Contains(address.Addr()) ||
+				address.Bits() != bridge.Bits() || address.Addr() == bridge.Addr() {
+				return fmt.Errorf("gateway LiteLLM egress IPv4 address must be a distinct host within the configured egress bridge subnet")
+			}
+		}
+	}
+	if s.EgressIPv4Address != "" {
+		prefix, err := netip.ParsePrefix(s.EgressIPv4Address)
+		if err != nil || !prefix.Addr().Is4() || !prefix.Addr().IsGlobalUnicast() ||
+			prefix.Bits() >= 31 || prefix.Addr() == prefix.Masked().Addr() {
+			return fmt.Errorf("gateway egress IPv4 address must be an IPv4 host CIDR with usable host bits")
+		}
+		if s.EgressNetwork == "" {
+			return fmt.Errorf("gateway egress IPv4 address requires an egress network")
+		}
+	}
 	switch {
 	case !gatewayIDPattern.MatchString(s.ID):
 		return fmt.Errorf("gateway id %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.ID)
 	case s.EgressNetwork != "" && (!gatewayIDPattern.MatchString(s.EgressNetwork) || s.EgressNetwork == s.Network):
 		return fmt.Errorf("gateway egress network must be a valid and distinct bridge name")
-	case s.Project == "":
-		return fmt.Errorf("gateway compose project must not be empty")
-	case s.Network == "":
-		return fmt.Errorf("gateway management network must not be empty")
+	case !gatewayIDPattern.MatchString(s.Project):
+		// Project is interpolated into the rendered Compose YAML and
+		// every Incus CLI arg that targets this deployment; a permissive
+		// charset here would let a malicious or accidental newline-split
+		// value corrupt the rendered document or escape the arg boundary.
+		return fmt.Errorf("gateway compose project %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.Project)
+	case !gatewayIDPattern.MatchString(s.Network):
+		return fmt.Errorf("gateway management network %q must contain only ASCII letters, digits, hyphens or underscores and start with a letter or digit", s.Network)
 	case s.LiteLLMImage == "":
 		return fmt.Errorf("LiteLLM image must not be empty")
 	case s.PostgresImage == "":
@@ -117,8 +240,12 @@ services:
       LITELLM_SALT_KEY: ${AGINCTUS_GATEWAY_SALT_KEY}
       STORE_MODEL_IN_DB: "True"
     networks:
-      - management
-{{if .EgressNetwork}}      - egress
+{{if .EgressNetwork}}      management:
+        x-incus-compose:
+          internal: true
+      egress:{{if .EgressIPv4Address}}
+        ipv4_address: {{.EgressIPv4Address}}{{else}} {}{{end}}
+{{else}}      - management
 {{end}}
 volumes:
   gateway-postgres: {}
@@ -130,7 +257,9 @@ networks:
 {{if .EgressNetwork}}  egress:
     external: true
     name: {{.EgressNetwork}}
-{{end}}`))
+{{if .EgressBridgeIPv4CIDR}}    x-incus:
+      ipv4.address: {{.EgressBridgeIPv4CIDR}}
+{{end}}{{end}}`))
 
 func (s Spec) RenderCompose() (string, error) {
 	if err := s.Validate(); err != nil {
@@ -162,9 +291,13 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 	return generator.Evaluate(
 		"import 'aginctus/gateway.jsonnet'",
 		map[string]any{
-			"id":            s.ID,
-			"egressNetwork": s.EgressNetwork,
-			"project":       s.Project,
+			"id":                   s.ID,
+			"egressNetwork":        s.EgressNetwork,
+			"egressIPv4Address":    s.EgressIPv4Address,
+			"egressBridgeIPv4CIDR": s.EgressBridgeIPv4CIDR,
+			"egressDHCPDisabled":   s.EgressDHCPDisabled,
+			"egressDHCPRanges":     s.EgressDHCPRanges,
+			"project":              s.Project,
 			"network": map[string]any{
 				"name":        s.Network,
 				"ipv4Address": s.NetworkIPv4Address,
@@ -182,7 +315,7 @@ func (s Spec) InitializeRuntimeEnvironment() (map[string]string, error) {
 	if !gatewayIDPattern.MatchString(s.ID) {
 		return nil, fmt.Errorf("invalid gateway id: must start with an ASCII letter or digit and contain only letters, digits, hyphens or underscores")
 	}
-	stateDir, err := gatewayStateDir()
+	stateDir, err := filestate.StateRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -275,17 +408,6 @@ func readSecretState(path string) ([]byte, error) {
 	return io.ReadAll(fd)
 }
 
-func gatewayStateDir() (string, error) {
-	if value := os.Getenv("XDG_STATE_HOME"); value != "" {
-		return value, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory for gateway state: %w", err)
-	}
-	return filepath.Join(home, ".local", "state"), nil
-}
-
 func generateSecret() (string, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
@@ -295,32 +417,11 @@ func generateSecret() (string, error) {
 }
 
 func writeSecretState(path string, values map[string]string) error {
-	dir := filepath.Dir(path)
-	f, err := os.CreateTemp(dir, ".secrets-*.json")
+	data, err := json.MarshalIndent(values, "", "  ")
 	if err != nil {
-		return fmt.Errorf("create gateway secret state: %w", err)
-	}
-	tmp := f.Name()
-	defer func() { _ = os.Remove(tmp) }()
-
-	if err := f.Chmod(0o600); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("protect gateway secret state: %w", err)
-	}
-	encoder := json.NewEncoder(f)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(values); err != nil {
-		_ = f.Close()
 		return fmt.Errorf("encode gateway secret state: %w", err)
 	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("sync gateway secret state: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("close gateway secret state: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := filestate.WritePrivateFile(path, append(data, '\n')); err != nil {
 		return fmt.Errorf("persist gateway secret state: %w", err)
 	}
 	return nil

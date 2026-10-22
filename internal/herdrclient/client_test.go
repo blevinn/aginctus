@@ -46,17 +46,32 @@ func TestPlanEnsureOrdersNetworkBeforeRunningHerdrClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
-	if len(plan.Steps) != 2 {
+	if len(plan.Steps) != 3 {
 		t.Fatalf("steps = %#v", plan.Steps)
 	}
 	if plan.Steps[0].ID != "management-network" || plan.Steps[0].Driver != "apply" {
 		t.Fatalf("first step = %#v", plan.Steps[0])
 	}
-	if plan.Steps[1].ID != "herdr-client" || plan.Steps[1].Driver != "apply" {
-		t.Fatalf("second step = %#v", plan.Steps[1])
+	if plan.Steps[1].ID != "herdr-system-state" || plan.Steps[1].Driver != "state-volume" {
+		t.Fatalf("state prerequisite = %#v", plan.Steps[1])
+	}
+	var state struct {
+		Operation string `json:"operation"`
+		Pool      string `json:"pool"`
+		Instance  string `json:"instance"`
+		Class     string `json:"class"`
+	}
+	if err := json.Unmarshal(plan.Steps[1].Configuration, &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.Operation != "ensure" || state.Pool != "default" || state.Instance != "aginctus-herdr" || state.Class != "system" {
+		t.Fatalf("state prerequisite config = %#v", state)
+	}
+	if plan.Steps[2].ID != "herdr-client" || plan.Steps[2].Driver != "apply" {
+		t.Fatalf("Herdr instance step = %#v", plan.Steps[2])
 	}
 
-	cfg := decodeApplyConfig(t, plan.Steps[1].Configuration)
+	cfg := decodeApplyConfig(t, plan.Steps[2].Configuration)
 	if cfg.Operation != "upsert" || !cfg.EnsureRunning || !cfg.RejectUnsupportedChanges {
 		t.Fatalf("Herdr apply config = %#v", cfg)
 	}
@@ -70,7 +85,7 @@ func TestPlanEnsureOrdersNetworkBeforeRunningHerdrClient(t *testing.T) {
 		}
 	}
 
-	rendered := string(plan.Steps[1].Configuration)
+	rendered := string(plan.Steps[2].Configuration)
 	for _, want := range []string{
 		"aginctus-herdr-client",
 		"aginctus-mgmt",
@@ -114,6 +129,32 @@ func TestPlanForceOmitsHerdrOwnershipGuard(t *testing.T) {
 	}
 }
 
+func TestPlanForcePreservesManagementNetworkOwnershipGuard(t *testing.T) {
+	plan, err := testSpec().Plan("upsert", true)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if len(plan.Steps) != 3 {
+		t.Fatalf("steps = %#v", plan.Steps)
+	}
+	if plan.Steps[0].ID != "management-network" {
+		t.Fatalf("first step = %#v", plan.Steps[0])
+	}
+	network := decodeApplyConfig(t, plan.Steps[0].Configuration)
+	for key, want := range map[string]string{
+		"user.aginctus.managed":  "true",
+		"user.aginctus.resource": "management-network",
+	} {
+		if got := network.RequireExistingConfig[key]; got != want {
+			t.Fatalf("network guard %s = %q, want %q", key, got, want)
+		}
+	}
+	herdr := decodeApplyConfig(t, plan.Steps[2].Configuration)
+	if len(herdr.RequireExistingConfig) != 0 {
+		t.Fatalf("force did not relax Herdr instance guard: %#v", herdr.RequireExistingConfig)
+	}
+}
+
 func TestPlanUsesCanonicalSystemStateVolume(t *testing.T) {
 	plan, err := testSpec().Plan("upsert", false)
 	if err != nil {
@@ -125,7 +166,7 @@ func TestPlanUsesCanonicalSystemStateVolume(t *testing.T) {
 			Devices map[string]map[string]string `json:"devices"`
 		} `json:"documents"`
 	}
-	if err := json.Unmarshal(plan.Steps[1].Configuration, &apply); err != nil {
+	if err := json.Unmarshal(plan.Steps[2].Configuration, &apply); err != nil {
 		t.Fatalf("decode instance resource: %v", err)
 	}
 	if len(apply.Documents) != 1 || apply.Documents[0].Kind != "instance" {

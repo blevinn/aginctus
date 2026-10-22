@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/blevinn/aginctus/internal/filestate"
 )
 
 type Provider struct {
@@ -19,23 +21,20 @@ type Registry struct {
 
 var safeAlias = regexp.MustCompile("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
+func supportedType(providerType string) bool {
+	return providerType == "chatgpt" || providerType == "opencode-go"
+}
+
 // DefaultPath holds nonsecret provider identities in the current user's state.
 func DefaultPath() (string, error) {
-	root := os.Getenv("XDG_STATE_HOME")
-	if root == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		root = filepath.Join(home, ".local", "state")
-	}
-	if !filepath.IsAbs(root) {
-		return "", fmt.Errorf("state directory must be absolute")
+	root, err := filestate.StateRoot()
+	if err != nil {
+		return "", err
 	}
 	return filepath.Join(root, "aginctus", "gateway", "providers.json"), nil
 }
 func Register(path string, p Provider) (bool, error) {
-	if p.Type != "chatgpt" || !safeAlias.MatchString(p.Alias) {
+	if !supportedType(p.Type) || !safeAlias.MatchString(p.Alias) {
 		return false, fmt.Errorf("invalid or unsupported provider registration")
 	}
 	if !filepath.IsAbs(path) {
@@ -52,26 +51,21 @@ func Register(path string, p Provider) (bool, error) {
 	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
 		return false, fmt.Errorf("provider state directory must be private")
 	}
-	lock := path + ".lock"
-	if err := os.Mkdir(lock, 0700); err != nil {
-		return false, fmt.Errorf("registry busy or lock exists: %w", err)
+	// Hold the kernel lock through the entire read/modify/atomic-replace.
+	// File.Close also releases the lock after interrupted transactions.
+	lock, err := filestate.LockRegistry(path)
+	if err != nil {
+		return false, fmt.Errorf("acquire provider registry write lock: %w", err)
 	}
-	defer os.Remove(lock)
+	defer lock.Close()
 	reg := Registry{Providers: []Provider{}}
-	info, err = os.Lstat(path)
+	data, err := filestate.ReadPrivateFile(path, 1<<20)
 	if err == nil {
-		if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-			return false, fmt.Errorf("provider registry must be a private regular file")
-		}
-		bytes, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return false, readErr
-		}
-		if err := json.Unmarshal(bytes, &reg); err != nil {
+		if err := json.Unmarshal(data, &reg); err != nil {
 			return false, fmt.Errorf("parse provider registry: %w", err)
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return false, err
+		return false, fmt.Errorf("read existing provider registry: %w", err)
 	}
 	for _, existing := range reg.Providers {
 		if existing.Alias == p.Alias {
@@ -82,31 +76,11 @@ func Register(path string, p Provider) (bool, error) {
 		}
 	}
 	reg.Providers = append(reg.Providers, p)
-	data, err := json.MarshalIndent(reg, "", "  ")
+	data, err = json.MarshalIndent(reg, "", "  ")
 	if err != nil {
 		return false, err
 	}
-	tmp, err := os.CreateTemp(dir, ".providers-*")
-	if err != nil {
-		return false, err
-	}
-	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0600); err != nil {
-		tmp.Close()
-		return false, err
-	}
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		tmp.Close()
-		return false, err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return false, err
-	}
-	if err := tmp.Close(); err != nil {
-		return false, err
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
+	if err := filestate.WritePrivateFile(path, append(data, '\n')); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -130,19 +104,12 @@ func Load(path string) (Registry, error) {
 	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
 		return empty, fmt.Errorf("provider state directory must be private")
 	}
-	info, err = os.Lstat(path)
+	data, err := filestate.ReadPrivateFile(path, 1<<20)
 	if errors.Is(err, os.ErrNotExist) {
 		return empty, nil
 	}
 	if err != nil {
-		return empty, err
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-		return empty, fmt.Errorf("provider registry must be a private regular file")
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return empty, err
+		return empty, fmt.Errorf("read provider registry: %w", err)
 	}
 	var result Registry
 	if err := json.Unmarshal(data, &result); err != nil {
@@ -150,7 +117,7 @@ func Load(path string) (Registry, error) {
 	}
 	seen := map[string]bool{}
 	for _, p := range result.Providers {
-		if p.Type != "chatgpt" || !safeAlias.MatchString(p.Alias) || seen[p.Alias] {
+		if !supportedType(p.Type) || !safeAlias.MatchString(p.Alias) || seen[p.Alias] {
 			return empty, fmt.Errorf("invalid or duplicate provider registry entry")
 		}
 		seen[p.Alias] = true

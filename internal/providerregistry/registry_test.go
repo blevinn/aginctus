@@ -1,10 +1,13 @@
 package providerregistry
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/blevinn/aginctus/internal/filestate"
 )
 
 func TestRegisterIdempotent(t *testing.T) {
@@ -47,12 +50,28 @@ func TestRejectInsecureOrUnsupported(t *testing.T) {
 	}
 }
 func TestRegistryLockFailsClosed(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "providers.json")
-	if err := os.Mkdir(path+".lock", 0700); err != nil {
+	// Provider registration requires a private directory, not merely a
+	// non-writable one (the shared lock helper has a broader policy).
+	dir := filepath.Join(t.TempDir(), "registry")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "chatgpt"}); err == nil {
-		t.Fatal("accepted concurrent lock")
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "providers.json")
+	lock, err := filestate.LockRegistry(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "chatgpt"}); !errors.Is(err, filestate.ErrRegistryBusy) {
+		t.Fatalf("concurrent registration did not fail busy: %v", err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := Register(path, Provider{Type: "chatgpt", Alias: "chatgpt"}); err != nil || !changed {
+		t.Fatalf("registration failed after releasing lock: changed=%t err=%v", changed, err)
 	}
 }
 
@@ -76,6 +95,37 @@ func TestLoadPrivateRegistry(t *testing.T) {
 		t.Fatal("insecure file accepted")
 	}
 }
+func TestProviderRegistryReadRejectsUnsafeParentAndOversize(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "registry")
+	path := filepath.Join(dir, "providers.json")
+	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "personal"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("load accepted unsafe provider state directory")
+	}
+	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "another"}); err == nil {
+		t.Fatal("register accepted unsafe provider state directory")
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// A bounded read protects registry parsing even when a private file
+	// contains unexpectedly large data.
+	if err := os.WriteFile(path, make([]byte, (1<<20)+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err == nil {
+		t.Fatal("load accepted oversized registry")
+	}
+	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "another"}); err == nil {
+		t.Fatal("register accepted oversized registry")
+	}
+}
+
 func TestLoadRejectsSymlink(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "providers.json")
@@ -84,5 +134,60 @@ func TestLoadRejectsSymlink(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("symlink accepted")
+	}
+}
+
+// TestDefaultPathRejectsRelativeXDGStateHome asserts that the
+// providerregistry fails closed on a relative XDG_STATE_HOME rather
+// than silently landing the provider file under $PWD. The error
+// message must match the gateway package so the two consumers of
+// XDG_STATE_HOME agree on shape.
+func TestDefaultPathRejectsRelativeXDGStateHome(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "relative/path")
+	if _, err := DefaultPath(); err == nil {
+		t.Fatal("accepted relative XDG_STATE_HOME")
+	} else if !strings.Contains(err.Error(), "absolute") {
+		t.Fatalf("error %q does not name the absolute-path requirement", err)
+	}
+	t.Setenv("XDG_STATE_HOME", ".")
+	if _, err := DefaultPath(); err == nil {
+		t.Fatal("accepted bare XDG_STATE_HOME='.'")
+	}
+}
+
+// TestDefaultPathAcceptsAbsoluteXDGStateHome asserts the safe path
+// still resolves to the expected registry location under an absolute
+// XDG_STATE_HOME.
+func TestDefaultPathAcceptsAbsoluteXDGStateHome(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	got, err := DefaultPath()
+	if err != nil {
+		t.Fatalf("DefaultPath: %v", err)
+	}
+	want := filepath.Join(state, "aginctus", "gateway", "providers.json")
+	if got != want {
+		t.Fatalf("DefaultPath = %q, want %q", got, want)
+	}
+}
+
+func TestOpenCodeGoProviderIdentity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry", "providers.json")
+	provider := Provider{Type: "opencode-go", Alias: "go"}
+	if changed, err := Register(path, provider); err != nil || !changed {
+		t.Fatalf("register: changed=%v err=%v", changed, err)
+	}
+	if changed, err := Register(path, provider); err != nil || changed {
+		t.Fatalf("idempotent: changed=%v err=%v", changed, err)
+	}
+	got, err := Load(path)
+	if err != nil || len(got.Providers) != 1 || got.Providers[0] != provider {
+		t.Fatalf("load: %+v %v", got, err)
+	}
+	if _, err := Register(path, Provider{Type: "chatgpt", Alias: "go"}); err == nil {
+		t.Fatal("accepted provider alias reused with another type")
+	}
+	if _, err := Register(path, Provider{Type: "opencode-go", Alias: "../bad"}); err == nil {
+		t.Fatal("accepted unsafe OpenCode Go provider alias")
 	}
 }

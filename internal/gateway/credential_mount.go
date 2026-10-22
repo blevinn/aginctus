@@ -27,6 +27,12 @@ func (a CredentialAttachment) volume() statevolume.GatewayCredentials {
 	return statevolume.GatewayCredentials{Pool: a.Pool, GatewayID: a.GatewayID, Project: a.ComposeProject}
 }
 
+// VolumeName is the stable, owned credential volume name shared by ensure,
+// attachment, and audit; it does not expose or read credential contents.
+func (a CredentialAttachment) VolumeName() string {
+	return a.volume().Name()
+}
+
 func (a CredentialAttachment) Validate() error {
 	if err := a.volume().Validate(); err != nil {
 		return err
@@ -36,6 +42,22 @@ func (a CredentialAttachment) Validate() error {
 	}
 	if a.ComposeProject == "default" {
 		return fmt.Errorf("credential mount requires an isolated compose project")
+	}
+	return nil
+}
+
+// verifyCredentialComposeProject gates access to credentials before any volume
+// provisioning or instance update. A matching project name and isolated
+// storage are insufficient without Aginctus Compose ownership markers.
+func verifyCredentialComposeProject(project *api.Project, expected string) error {
+	if project == nil || project.Name != expected ||
+		project.Config["user.aginctus.managed"] != "true" ||
+		project.Config["user.aginctus.resource"] != "compose-project" ||
+		project.Config["user.aginctus.deployment"] != expected {
+		return fmt.Errorf("gateway Compose project is missing or its ownership markers do not match")
+	}
+	if project.Config["features.storage.volumes"] != "true" {
+		return fmt.Errorf("gateway Compose project must isolate its storage volumes; refusing default-project credential volume")
 	}
 	return nil
 }
@@ -113,6 +135,46 @@ func plannedCredentialDevice(instance *api.Instance, a CredentialAttachment) (bo
 	return !alreadyAttached, nil
 }
 
+// ensureCredentialVolume checks the same project ownership and storage
+// isolation as attachment before any volume mutation. Injecting the actual
+// ensure operation keeps the reject-before-create boundary testable.
+func ensureCredentialVolume(
+	ctx context.Context,
+	a CredentialAttachment,
+	project *api.Project,
+	ensure func(context.Context, statevolume.GatewayCredentials) error,
+) error {
+	if err := a.Validate(); err != nil {
+		return err
+	}
+	if err := verifyCredentialComposeProject(project, a.ComposeProject); err != nil {
+		return err
+	}
+	return ensure(ctx, a.volume())
+}
+
+// EnsureCredentialVolume prepares the gateway's *project-local* owned
+// credential volume without mounting it or activating authentication.
+// An absent, foreign or non-isolated Compose project fails before creation.
+// Legacy default-project volumes are neither adopted nor modified.
+func EnsureCredentialVolume(ctx context.Context, a CredentialAttachment) error {
+	if err := a.Validate(); err != nil {
+		return err
+	}
+	client, err := incusclient.ConnectIncusUnixWithContext(ctx, "", &incusclient.ConnectionArgs{SkipGetServer: true})
+	if err != nil {
+		return fmt.Errorf("connect local Incus for credential storage: %w", err)
+	}
+	project, _, err := client.GetProject(a.ComposeProject)
+	if err != nil {
+		return fmt.Errorf("inspect gateway Compose project: %w", err)
+	}
+	if err := ensureCredentialVolume(ctx, a, project, statevolume.EnsureGatewayCredentialsOnHost); err != nil {
+		return fmt.Errorf("ensure project-local gateway credential volume: %w", err)
+	}
+	return nil
+}
+
 // AttachCredentialVolume explicitly adds a private device to an existing
 // owned LiteLLM instance. It never deploys the gateway or enables OAuth.
 func AttachCredentialVolume(ctx context.Context, a CredentialAttachment) error {
@@ -127,8 +189,8 @@ func AttachCredentialVolume(ctx context.Context, a CredentialAttachment) error {
 	if err != nil {
 		return fmt.Errorf("inspect gateway Compose project: %w", err)
 	}
-	if project.Config["features.storage.volumes"] != "true" {
-		return fmt.Errorf("gateway Compose project must have isolated storage volumes; refusing default-project credential volume")
+	if err := verifyCredentialComposeProject(project, a.ComposeProject); err != nil {
+		return err
 	}
 	server := client.UseProject(a.ComposeProject)
 	inst, etag, err := server.GetInstance(liteLLMServiceInstance)

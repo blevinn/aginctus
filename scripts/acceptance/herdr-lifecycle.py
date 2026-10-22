@@ -1,12 +1,11 @@
-#!/usr/bin/env python3
 """Owned Herdr workspace/agent phases for #124. Does not assert gateway inference."""
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 PHASES = ("open", "start", "prompt", "wait", "stop", "close")
 ID = re.compile(r"^aginctus-acceptance\.[A-Za-z0-9]{8}$")

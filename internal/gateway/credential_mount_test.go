@@ -1,9 +1,11 @@
 package gateway
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/blevinn/aginctus/internal/statevolume"
 	"github.com/lxc/incus/v7/shared/api"
 )
 
@@ -49,6 +51,42 @@ func TestPrivateMountPlacement(t *testing.T) {
 		t.Fatalf("expected idempotence, needed=%v err=%v", needed, err)
 	}
 }
+
+func TestCredentialAttachmentRequiresOwnedComposeProject(t *testing.T) {
+	a := attachmentFixture()
+	cases := []struct {
+		name string
+		edit func(*api.Project) *api.Project
+		want string
+	}{
+		{"valid owned isolated project", func(p *api.Project) *api.Project { return p }, ""},
+		{"missing project", func(*api.Project) *api.Project { return nil }, "ownership"},
+		{"wrong project name", func(p *api.Project) *api.Project { p.Name = "other"; return p }, "ownership"},
+		{"missing managed marker", func(p *api.Project) *api.Project { delete(p.Config, "user.aginctus.managed"); return p }, "ownership"},
+		{"false managed marker", func(p *api.Project) *api.Project { p.Config["user.aginctus.managed"] = "false"; return p }, "ownership"},
+		{"wrong resource marker", func(p *api.Project) *api.Project { p.Config["user.aginctus.resource"] = "infrastructure"; return p }, "ownership"},
+		{"missing deployment marker", func(p *api.Project) *api.Project { delete(p.Config, "user.aginctus.deployment"); return p }, "ownership"},
+		{"wrong deployment marker", func(p *api.Project) *api.Project { p.Config["user.aginctus.deployment"] = "other"; return p }, "ownership"},
+		{"missing isolation", func(p *api.Project) *api.Project { delete(p.Config, "features.storage.volumes"); return p }, "isolate"},
+		{"disabled isolation", func(p *api.Project) *api.Project { p.Config["features.storage.volumes"] = "false"; return p }, "isolate"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			project := tc.edit(ownedAuditProject())
+			err := verifyCredentialComposeProject(project, a.ComposeProject)
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("valid project rejected: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q rejection, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
 func TestAttachmentFailsClosedOnOwnershipAndCollisions(t *testing.T) {
 	a := attachmentFixture()
 	inst := ownedInstance()
@@ -101,5 +139,58 @@ func TestAttachmentRejectsUnsafeProject(t *testing.T) {
 	a = attachmentFixture()
 	if strings.Contains(a.device()["source"], "oauth") {
 		t.Fatal("OAuth-specific mount")
+	}
+}
+
+// A1: ensure must enforce the same project ownership/isolation gate as
+// attach and audit before calling the state-volume mutation path.
+func TestCredentialEnsureProjectGuardBeforeVolumeMutation(t *testing.T) {
+	a := attachmentFixture()
+	cases := []struct {
+		name   string
+		edit   func(*api.Project) *api.Project
+		reject bool
+	}{
+		{"owned isolated", func(p *api.Project) *api.Project { return p }, false},
+		{"absent", func(*api.Project) *api.Project { return nil }, true},
+		{"wrong name", func(p *api.Project) *api.Project { p.Name = "foreign"; return p }, true},
+		{"unmanaged", func(p *api.Project) *api.Project { delete(p.Config, "user.aginctus.managed"); return p }, true},
+		{"foreign resource", func(p *api.Project) *api.Project { p.Config["user.aginctus.resource"] = "foreign"; return p }, true},
+		{"wrong deployment", func(p *api.Project) *api.Project { p.Config["user.aginctus.deployment"] = "other"; return p }, true},
+		{"shared volumes", func(p *api.Project) *api.Project { p.Config["features.storage.volumes"] = "false"; return p }, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			project := tc.edit(ownedAuditProject())
+			calls := 0
+			ensure := func(_ context.Context, v statevolume.GatewayCredentials) error {
+				calls++
+				if v.Project != a.ComposeProject || v.Pool != a.Pool || v.GatewayID != a.GatewayID {
+					t.Fatalf("wrong volume target: %+v", v)
+				}
+				return nil
+			}
+			err := ensureCredentialVolume(context.Background(), a, project, ensure)
+			if tc.reject {
+				if err == nil || calls != 0 {
+					t.Fatalf("rejected project reached volume mutation: calls=%d err=%v", calls, err)
+				}
+			} else if err != nil || calls != 1 {
+				t.Fatalf("owned project ensure: calls=%d err=%v", calls, err)
+			}
+		})
+	}
+	for _, bad := range []string{"default", "", "../invalid"} {
+		badSpec := a
+		badSpec.ComposeProject = bad
+		calls := 0
+		err := ensureCredentialVolume(context.Background(), badSpec, ownedAuditProject(),
+			func(context.Context, statevolume.GatewayCredentials) error {
+				calls++
+				return nil
+			})
+		if err == nil || calls != 0 {
+			t.Fatalf("invalid project %q called ensure: calls=%d err=%v", bad, calls, err)
+		}
 	}
 }

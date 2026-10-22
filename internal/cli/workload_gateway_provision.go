@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/filestate"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -26,10 +26,11 @@ var provisionGatewayGuest = func(ctx context.Context, instance string, payload [
 }
 
 type gatewayDiscoveryInstance struct {
-	Name   string            `json:"name"`
-	Status string            `json:"status"`
-	Config map[string]string `json:"config"`
-	State  struct {
+	Name            string                       `json:"name"`
+	Status          string                       `json:"status"`
+	Config          map[string]string            `json:"config"`
+	ExpandedDevices map[string]map[string]string `json:"expanded_devices"`
+	State           struct {
 		Network map[string]struct {
 			Addresses []struct {
 				Family  string `json:"family"`
@@ -40,13 +41,17 @@ type gatewayDiscoveryInstance struct {
 	} `json:"state"`
 }
 
-func discoverGatewayIPv4(data []byte, project string) (string, error) {
+func discoverGatewayIPv4(data []byte, project, managementNetwork string) (string, error) {
+	if managementNetwork == "" {
+		return "", errors.New("gateway management network not configured")
+	}
 	var instances []gatewayDiscoveryInstance
 	if err := json.Unmarshal(data, &instances); err != nil {
 		return "", fmt.Errorf("decode gateway instances: %w", err)
 	}
 	addresses := map[string]bool{}
 	count := 0
+	managementNICs := 0
 	for _, instance := range instances {
 		if instance.Name != "litellm" && !strings.HasPrefix(instance.Name, "litellm-") {
 			continue
@@ -58,43 +63,46 @@ func discoverGatewayIPv4(data []byte, project string) (string, error) {
 			return "", fmt.Errorf("LiteLLM not running or not owned")
 		}
 		count++
-		for _, iface := range instance.State.Network {
-			for _, a := range iface.Addresses {
-				ip := net.ParseIP(a.Address)
-				if a.Family == "inet" && ip != nil && ip.To4() != nil && ip.IsPrivate() && !ip.IsLoopback() {
+		// The egress bridge also gives LiteLLM a private IPv4 address. Trust
+		// the configured management attachment, not address classification or
+		// interface ordering (eth0/eth1 can change across configurations).
+		for _, device := range instance.ExpandedDevices {
+			if device["type"] != "nic" || device["network"] != managementNetwork {
+				continue
+			}
+			managementNICs++
+			name := device["name"]
+			if name == "" {
+				return "", errors.New("LiteLLM management NIC lacks a guest interface name")
+			}
+			iface, ok := instance.State.Network[name]
+			if !ok {
+				return "", errors.New("LiteLLM management NIC state unavailable")
+			}
+			for _, address := range iface.Addresses {
+				ip := net.ParseIP(address.Address)
+				if address.Family == "inet" && ip != nil && ip.To4() != nil && ip.IsPrivate() && !ip.IsLoopback() {
 					addresses[ip.String()] = true
 				}
 			}
 		}
 	}
-	if count != 1 || len(addresses) != 1 {
-		return "", fmt.Errorf("expected exactly one owned running LiteLLM instance with one private IPv4 address")
+	if count != 1 || managementNICs != 1 || len(addresses) != 1 {
+		return "", errors.New("expected one owned running LiteLLM with exactly one management NIC and private IPv4")
 	}
 	for address := range addresses {
 		return address, nil
 	}
-	return "", errors.New("LiteLLM IP unavailable")
+	return "", errors.New("LiteLLM management IPv4 unavailable")
 }
 
 func readWorkloadKey(path string) (string, error) {
-	info, err := os.Lstat(path)
+	raw, err := filestate.ReadPrivateFile(path, 8192)
 	if err != nil {
-		return "", fmt.Errorf("open workload key: %w", err)
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return "", errors.New("workload key must be a private regular file")
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	raw, err := io.ReadAll(io.LimitReader(f, 8193))
-	if err != nil {
-		return "", errors.New("read workload key failed")
+		return "", errors.New("workload key unavailable or invalid")
 	}
 	key := strings.TrimSpace(string(raw))
-	if len(raw) > 8192 || key == "" || strings.ContainsAny(key, "\r\n") {
+	if key == "" || strings.ContainsAny(key, "\r\n") {
 		return "", errors.New("invalid workload key")
 	}
 	return key, nil
@@ -135,6 +143,11 @@ func runWorkloadGatewayProvision(ctx context.Context, args []string, stdout, std
 		fmt.Fprintln(stderr, "gateway project missing")
 		return 1
 	}
+	managementNetwork, err := cfg.String("incus.management.network.name")
+	if err != nil || managementNetwork == "" {
+		fmt.Fprintln(stderr, "gateway management network missing")
+		return 1
+	}
 	raw, err := inspectGatewayProjects(ctx)
 	if err != nil {
 		fmt.Fprintln(stderr, "cannot inspect gateway ownership")
@@ -161,7 +174,7 @@ func runWorkloadGatewayProvision(ctx context.Context, args []string, stdout, std
 		fmt.Fprintln(stderr, "cannot inspect gateway instances")
 		return 1
 	}
-	address, err := discoverGatewayIPv4(raw, project)
+	address, err := discoverGatewayIPv4(raw, project, managementNetwork)
 	if err != nil {
 		fmt.Fprintln(stderr, "private LiteLLM endpoint not uniquely discoverable")
 		return 1

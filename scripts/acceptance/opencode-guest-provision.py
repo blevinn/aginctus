@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Live Incus guest-helper smoke test, independent of LiteLLM.
 
 Creates and destroys *only* its own disposable offline OpenCode instance.
@@ -24,6 +23,52 @@ def incus(operation, *args, input_data=None, stage=None):
         # the operation and exit code, never raw command output or payload.
         code = getattr(exc, "returncode", "timeout")
         raise RuntimeError(f"{stage or operation} failed (status {code})") from None
+
+
+def incus_exec_retry(name, project, *, payload, attempts=30, sleep_seconds=2):
+    """Run ``incus exec`` against ``name`` and retry transient boot errors.
+
+    The NixOS first boot activates ``/run/current-system`` asynchronously,
+    so the very first ``incus exec`` calls frequently race the console
+    and instance state. ``incus exec`` itself can raise transient
+    ``CalledProcessError`` / ``TimeoutExpired`` errors during that
+    window (instance not running yet, console not up) that must not
+    abort the readiness loop. The previous implementation only retried
+    when the call succeeded but the marker was missing, which raised
+    out of the very race the loop was designed to absorb.
+
+    Returns the final ``subprocess.CompletedProcess`` (whose stdout
+    contains the marker) and the number of attempts used. After the
+    last attempt, a persistent failure is re-raised so the caller still
+    fails closed on a real defect.
+    """
+    for attempt in range(attempts):
+        try:
+            completed = subprocess.run(
+                ["incus", "exec", name, "--project", project, "--",
+                 "/bin/sh", "-c", payload],
+                input=None, text=True,
+                capture_output=True, check=True, timeout=120,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            if attempt < attempts - 1:
+                time.sleep(sleep_seconds)
+                continue
+            code = getattr(exc, "returncode", "timeout")
+            raise RuntimeError(
+                f"guest boot readiness failed after {attempts} attempts "
+                f"(status {code})"
+            ) from None
+        if "EXISTS /run/current-system/sw/bin/aginctus-opencode-gateway-provision" in completed.stdout:
+            return completed, attempt + 1
+        if attempt < attempts - 1:
+            time.sleep(sleep_seconds)
+    # Loop exhausted without ever observing the marker. The caller
+    # reports its own timeout diagnostics.
+    raise RuntimeError(
+        f"guest did not activate NixOS system profile within "
+        f"{attempts * sleep_seconds} seconds"
+    )
 
 
 def main():
@@ -58,17 +103,10 @@ done
 """
         # NixOS first boot activates /run/current-system asynchronously.
         # Keep this offline, bounded, and credential-free until ready.
-        result = None
-        for attempt in range(30):
-            result = incus("exec", name, "--project", project, "--",
-                           "/bin/sh", "-c", probe, stage="guest boot readiness")
-            if "EXISTS /run/current-system/sw/bin/aginctus-opencode-gateway-provision" in result.stdout:
-                break
-            if attempt < 29:
-                time.sleep(2)
-        else:
-            print(result.stdout, end="")
-            raise RuntimeError("guest did not activate NixOS system profile within 60 seconds")
+        # The retry helper absorbs both the "marker not yet present"
+        # case and the transient ``incus exec`` failures that happen
+        # while the instance is starting up.
+        result, _ = incus_exec_retry(name, project, payload=probe)
 
         incus("exec", name, "--project", project, "--",
               helper, input_data=payload, stage="guest helper provisioning")
@@ -103,7 +141,7 @@ grep -Fq '"endpoint": "http://10.42.40.12:4000/v1"' "$dir/gateway.json"
         bad = subprocess.run(
             ["incus", "exec", name, "--project", project, "--",
              helper],
-            input=bad_payload, text=True, capture_output=True, timeout=120,
+            input=bad_payload, text=True, capture_output=True, timeout=120, check=False,
         )
         if bad.returncode == 0:
             raise RuntimeError("guest accepted invalid model")

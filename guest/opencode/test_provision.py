@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
 """Guest provisioning tests with an isolated runtime directory."""
 import importlib.util
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("provision", Path(__file__).with_name("provision.py"))
@@ -52,6 +51,20 @@ class GuestProvisionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.install()
         self.assertFalse((real / "workload-key").exists())
+
+    def test_reject_password_userinfo(self):
+        # Provision previously accepted this because ``url.username:`` is
+        # truthiness on "". The shared validator now refuses any userinfo,
+        # matching launch and the Go CLI.
+        with self.assertRaises(ValueError):
+            self.install(endpoint="http://:secret@10.42.40.12:4000/v1")
+
+    def test_reject_whitespace_endpoint(self):
+        # Provision previously did not reject whitespace; the shared
+        # validator now does, including the newline that urlsplit would
+        # otherwise strip silently.
+        with self.assertRaises(ValueError):
+            self.install(endpoint="http://10.42.40.12:4000/v1\n")
 
 
 if __name__ == "__main__":

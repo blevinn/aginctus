@@ -15,7 +15,6 @@ import (
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 	"github.com/blevinn/aginctus/internal/modelregistry"
 	"github.com/blevinn/aginctus/internal/providerregistry"
-	"github.com/blevinn/aginctus/internal/statevolume"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -62,13 +61,8 @@ func Run(
 		printUsage(stdout)
 		return 0
 	}
-	if args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		printUsage(stdout)
-		return 0
-	}
-	if args[0] == "version" || args[0] == "--version" {
-		fmt.Fprintf(stdout, "aginctus %s\n", Version)
-		return 0
+	if code, handled := runHelp(args, stdout, stderr); handled {
+		return code
 	}
 
 	options, commandArgs, err := parseGlobalOptions(args)
@@ -78,6 +72,13 @@ func Run(
 	}
 	if len(commandArgs) == 0 {
 		printUsage(stdout)
+		return 0
+	}
+	if code, handled := runHelp(commandArgs, stdout, stderr); handled {
+		return code
+	}
+	if len(commandArgs) == 1 && (commandArgs[0] == "version" || commandArgs[0] == "--version") {
+		fmt.Fprintf(stdout, "aginctus %s (revision %s)\n", Version, buildRevision())
 		return 0
 	}
 
@@ -125,6 +126,8 @@ func parseGlobalOptions(args []string) (config.Options, []string, error) {
 		}
 
 		switch {
+		case arg == "--help" || arg == "--version":
+			return options, args, nil
 		case strings.HasPrefix(arg, "--config="):
 			value := strings.TrimPrefix(arg, "--config=")
 			if value == "" {
@@ -214,6 +217,12 @@ func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer, inc
 		return 1
 	}
 	if address != "" {
+		if !isLoopbackHTTPSAddress(address) {
+			// Do not rewrite a pre-existing listener even with --fix: doing
+			// so can sever another operator's deliberate remote connection.
+			fmt.Fprintln(stderr, "incus HTTPS listener: unsafe or invalid (requires a numeric loopback IP and TCP port); inspect core.https_address and remediate explicitly")
+			return 1
+		}
 		fmt.Fprintf(stdout, "incus HTTPS listener: configured (%s)\n", address)
 		return 0
 	}
@@ -281,6 +290,9 @@ func runNetwork(
 	}
 	if len(args) == 2 && args[0] == "firewall" && args[1] == "reconcile" {
 		return runNetworkFirewallReconcile(ctx, stdout, stderr, effective)
+	}
+	if len(args) == 3 && args[0] == "firewall" && args[1] == "egress" && (args[2] == "reconcile" || args[2] == "revoke") {
+		return runNetworkFirewallEgress(ctx, stdout, stderr, effective, args[2] == "revoke")
 	}
 
 	action := args[0]
@@ -356,9 +368,12 @@ func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] network status")
 	fmt.Fprintln(w, "       aginctus [global options] network firewall policy")
 	fmt.Fprintln(w, "       aginctus [global options] network firewall reconcile  # privileged mutation")
+	fmt.Fprintln(w, "       aginctus [global options] network firewall egress reconcile|revoke  # privileged runtime grants")
+	fmt.Fprintln(w, "Aliases: network ensure = apply; network teardown = remove")
+	fmt.Fprintln(w, "Status/policy are read-only; apply/remove/reconcile mutate unless --dry-run is explicitly supported above.")
 }
 
-var ensureCredentialStorage = statevolume.EnsureGatewayCredentialsOnHost
+var ensureCredentialStorage = gateway.EnsureCredentialVolume
 var attachGatewayCredentials = gateway.AttachCredentialVolume
 var auditGatewayCredentials = gateway.AuditCredentialAttachment
 
@@ -369,6 +384,129 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "audit" && strings.HasPrefix(args[3], "--uplink-zone=") {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall configuration: %v\n", err)
+			return 1
+		}
+		audit, err := spec.AuditEgressFirewalldActivation(ctx, strings.TrimPrefix(args[3], "--uplink-zone="), gateway.SystemFirewalld)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall audit blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(audit))
+		return 0
+	}
+	if len(args) == 3 && args[0] == "egress" && args[1] == "firewall" && args[2] == "reload-parity" {
+		if err := gateway.CheckFirewalldReloadParity(ctx, gateway.SystemFirewalld); err != nil {
+			fmt.Fprintf(stderr, "firewalld reload parity blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "selected runtime/permanent firewalld state matches; global reload NOT approved or executed")
+		return 0
+	}
+	if len(args) >= 3 && args[0] == "egress" && args[1] == "firewall" &&
+		(args[2] == "stage" || args[2] == "unstage" || args[2] == "verify-staged") {
+		fmt.Fprintln(stderr, "permanent staging commands are retired: NixOS owns egress objects; use network firewall egress reconcile or revoke for runtime grants")
+		return 2
+	}
+	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "plan" && strings.HasPrefix(args[3], "--uplink-zone=") {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall configuration: %v\n", err)
+			return 1
+		}
+		plan, err := spec.PlanEgressFirewalld(strings.TrimPrefix(args[3], "--uplink-zone="))
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall plan blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(plan))
+		return 0
+	}
+	if len(args) == 5 && args[0] == "egress" && args[1] == "dhcp" && args[2] == "apply" && strings.HasPrefix(args[3], "--ranges=") && args[4] == "--confirm-bridge-only" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress DHCP configuration: %v\n", err)
+			return 1
+		}
+		ranges := strings.TrimPrefix(args[3], "--ranges=")
+		if err := gateway.ApplyEgressDHCPMigration(ctx, spec, ranges, gatewayEgressQuery); err != nil {
+			fmt.Fprintf(stderr, "egress DHCP migration blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "owned egress bridge DHCP range updated; LiteLLM networking NOT reconciled")
+		return 0
+	}
+	if len(args) == 4 && args[0] == "egress" && args[1] == "dhcp" && args[2] == "plan" && strings.HasPrefix(args[3], "--ranges=") {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress DHCP migration configuration: %v\n", err)
+			return 1
+		}
+		plan, err := gateway.PlanEgressDHCPMigration(ctx, spec, strings.TrimPrefix(args[3], "--ranges="), gatewayEgressQuery)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress DHCP migration blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, plan)
+		return 0
+	}
+	if len(args) == 3 && args[0] == "egress" && args[1] == "reconcile" && args[2] == "--confirm-stopped-instance" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation configuration: %v\n", err)
+			return 1
+		}
+		if err := gateway.ReconcileStoppedEgressNICs(ctx, spec, gatewayEgressQuery); err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "LiteLLM NIC settings updated; instance remains stopped; inspect and start separately")
+		return 0
+	}
+	if len(args) == 3 && args[0] == "egress" && args[1] == "reconcile" && args[2] == "--dry-run" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation configuration: %v\n", err)
+			return 1
+		}
+		plan, err := gateway.PlanEgressReconciliation(ctx, spec, gatewayEgressQuery)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, plan)
+		return 0
+	}
+	if len(args) == 2 && args[0] == "egress" && args[1] == "audit" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress audit configuration: %v\n", err)
+			return 1
+		}
+		if err := gateway.AuditEgressRuntime(ctx, spec, gatewayEgressQuery); err != nil {
+			fmt.Fprintf(stderr, "egress runtime audit blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "LiteLLM NIC declarations verified (in-guest routes and upstream connectivity NOT verified)")
+		return 0
+	}
+	if len(args) == 2 && args[0] == "egress" && args[1] == "preflight" {
+		name, err := effective.String("gateway.egress.network.name")
+		if err != nil {
+			fmt.Fprintf(stderr, "egress configuration: %v\n", err)
+			return 1
+		}
+		candidate, err := gateway.EgressAddressPreflight(ctx, name)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress preflight blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "egress candidate: %s (advisory only; NOT RESERVED, do not deploy without full inventory and atomic allocation)\n", candidate)
+		return 0
+	}
 	if len(args) >= 2 && args[0] == "responses" && args[1] == "verify" {
 		return verifyGatewayResponsesStream(args[2:], stdout, stderr)
 	}
@@ -422,13 +560,13 @@ func runGateway(
 	}
 
 	if len(args) == 3 && args[0] == "model" && args[2] == "render" {
-		definition, err := renderRegisteredChatGPTModel(args[1])
+		definition, err := renderRegisteredModel(args[1])
 		if err != nil {
-			fmt.Fprintf(stderr, "render registered ChatGPT model: %v\n", err)
+			fmt.Fprintf(stderr, "render registered model: %v\n", err)
 			return 1
 		}
 		fmt.Fprintln(stdout, string(definition))
-		fmt.Fprintln(stderr, "model definition rendered for review only; gateway routing and OAuth remain inactive")
+		fmt.Fprintln(stderr, "model definition rendered for review only; gateway routing and credentials remain inactive")
 		return 0
 	}
 	if len(args) > 0 && args[0] == "model" && (len(args) == 2 && args[1] == "list" || len(args) == 3 && args[2] == "show") {
@@ -505,45 +643,28 @@ func runGateway(
 				return 2
 			}
 		}
-		if !dryRun {
-			if kind == "model" {
-				if source == "" {
-					source = name
-				}
-				if provider == "" && strings.HasPrefix(source, "chatgpt/") {
-					provider = "chatgpt"
-				}
-				if _, err := gateway.ChatGPTModelRegistration(name, source); err != nil || provider == "" {
-					fmt.Fprintln(stderr, "invalid ChatGPT Responses model registration")
-					return 2
-				}
-				path, err := modelregistry.DefaultPath()
-				if err != nil {
-					fmt.Fprintln(stderr, "resolve model registry: unavailable")
-					return 1
-				}
-				changed, err := modelregistry.Register(path, modelregistry.Model{Name: name, Provider: provider, Source: source})
-				if err != nil {
-					fmt.Fprintf(stderr, "register model: %v\n", err)
-					return 1
-				}
-				if changed {
-					fmt.Fprintf(stdout, "model %q: registered locally (authorization and activation pending)\n", name)
-				} else {
-					fmt.Fprintf(stdout, "model %q: already registered (authorization and activation pending)\n", name)
-				}
-				return 0
-			}
-			if name != "chatgpt" {
-				fmt.Fprintln(stderr, "only chatgpt provider is supported")
-				return 2
-			}
+		if kind == "provider" {
 			if alias == "" {
 				alias = name
 			}
-			if _, err := gateway.ChatGPTProviderRegistration(alias); err != nil {
+			var rendered []byte
+			var err error
+			switch name {
+			case "chatgpt":
+				rendered, err = gateway.ChatGPTProviderRegistration(alias)
+			case "opencode-go":
+				rendered, err = gateway.OpenCodeGoProviderRegistration(alias)
+			default:
+				fmt.Fprintln(stderr, "unsupported provider type")
+				return 2
+			}
+			if err != nil {
 				fmt.Fprintf(stderr, "gateway provider: %v\n", err)
 				return 2
+			}
+			if dryRun {
+				fmt.Fprintln(stdout, string(rendered))
+				return 0
 			}
 			path, err := providerregistry.DefaultPath()
 			if err != nil {
@@ -562,56 +683,74 @@ func runGateway(
 			}
 			return 0
 		}
-		var rendered []byte
-		var err error
-		if kind == "provider" {
-			if name != "chatgpt" {
-				fmt.Fprintln(stderr, "only chatgpt provider is supported")
-				return 2
-			}
-			if alias == "" {
-				alias = name
-			}
-			rendered, err = gateway.ChatGPTProviderRegistration(alias)
-		} else {
-			if source == "" {
-				source = name
-			}
-			if provider == "" {
-				if strings.HasPrefix(source, "chatgpt/") {
-					provider = "chatgpt"
-				}
-			}
-			if provider != "chatgpt" {
-				path, pathErr := providerregistry.DefaultPath()
-				if pathErr != nil {
-					fmt.Fprintln(stderr, "cannot verify provider alias")
-					return 1
-				}
-				providers, loadErr := providerregistry.Load(path)
-				if loadErr != nil {
-					fmt.Fprintln(stderr, "cannot read private provider registry")
-					return 1
-				}
-				registered := false
-				for _, p := range providers.Providers {
-					if p.Type == "chatgpt" && p.Alias == provider {
-						registered = true
-						break
-					}
-				}
-				if !registered {
-					fmt.Fprintln(stderr, "model provider alias is not registered")
-					return 2
-				}
-			}
-			rendered, err = gateway.ChatGPTModelRegistration(name, source)
+
+		if source == "" {
+			source = name
 		}
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway registration preview: %v\n", err)
+		if provider == "" && strings.HasPrefix(source, "chatgpt/") {
+			provider = "chatgpt"
+		}
+		if provider == "" {
+			fmt.Fprintln(stderr, "model registration requires --provider=ALIAS (or --source=chatgpt/...)")
 			return 2
 		}
-		fmt.Fprintln(stdout, string(rendered))
+		path, err := providerregistry.DefaultPath()
+		if err != nil {
+			fmt.Fprintln(stderr, "cannot verify provider alias")
+			return 1
+		}
+		providers, err := providerregistry.Load(path)
+		if err != nil {
+			fmt.Fprintln(stderr, "cannot read private provider registry")
+			return 1
+		}
+		providerType := ""
+		for _, p := range providers.Providers {
+			if p.Alias == provider {
+				providerType = p.Type
+				break
+			}
+		}
+		if providerType == "" {
+			fmt.Fprintf(stderr, "model provider alias %q is not registered locally\n", provider)
+			if dryRun {
+				return 2
+			}
+			return 1
+		}
+		var rendered []byte
+		switch providerType {
+		case "chatgpt":
+			rendered, err = gateway.ChatGPTModelRegistration(name, source)
+		case "opencode-go":
+			rendered, err = gateway.OpenCodeGoModelRegistration(name, source)
+		default:
+			fmt.Fprintln(stderr, "unsupported model provider type")
+			return 2
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "invalid %s Responses model registration: %v\n", providerType, err)
+			return 2
+		}
+		if dryRun {
+			fmt.Fprintln(stdout, string(rendered))
+			return 0
+		}
+		modelPath, err := modelregistry.DefaultPath()
+		if err != nil {
+			fmt.Fprintln(stderr, "resolve model registry: unavailable")
+			return 1
+		}
+		changed, err := modelregistry.Register(modelPath, modelregistry.Model{Name: name, Provider: provider, Source: source})
+		if err != nil {
+			fmt.Fprintf(stderr, "register model: %v\n", err)
+			return 1
+		}
+		if changed {
+			fmt.Fprintf(stdout, "model %q: registered locally (authorization and activation pending)\n", name)
+		} else {
+			fmt.Fprintf(stdout, "model %q: already registered (authorization and activation pending)\n", name)
+		}
 		return 0
 	}
 	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
@@ -620,17 +759,26 @@ func runGateway(
 			fmt.Fprintf(stderr, "gateway credential storage gateway ID: %v\n", err)
 			return 1
 		}
+		project, err := effective.String("gateway.compose.project")
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway credential storage Compose project: %v\n", err)
+			return 1
+		}
 		pool, err := effective.String("gateway.credentials.storage.pool")
 		if err != nil {
 			fmt.Fprintf(stderr, "gateway credential storage pool: %v\n", err)
 			return 1
 		}
-		v := statevolume.GatewayCredentials{Pool: pool, GatewayID: id}
-		if err := ensureCredentialStorage(ctx, v); err != nil {
+		a := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
+		if err := a.Validate(); err != nil {
+			fmt.Fprintf(stderr, "gateway credential storage configuration: %v\n", err)
+			return 1
+		}
+		if err := ensureCredentialStorage(ctx, a); err != nil {
 			fmt.Fprintf(stderr, "gateway credential storage: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "gateway credential volume %q: ready (unmounted; no credentials imported)\n", v.Name())
+		fmt.Fprintf(stdout, "gateway credential volume %q: ready in Compose project %q (attachment unchanged; no credentials imported)\n", a.VolumeName(), project)
 		return 0
 	}
 	if len(args) == 0 || len(args) > 2 {
@@ -658,7 +806,7 @@ func runGateway(
 		}
 		fmt.Fprintf(stdout, "gateway %q: gateway instances removed (persistent volumes retained)\n", spec.ID)
 		return 0
-	case "apply":
+	case "apply", "up":
 		runtimeEnvironment, err := spec.InitializeRuntimeEnvironment()
 		if err != nil {
 			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
@@ -681,18 +829,6 @@ func runGateway(
 		}
 		fmt.Fprint(stdout, rendered)
 		return 0
-	case "up":
-		runtimeEnvironment, err := spec.InitializeRuntimeEnvironment()
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
-			return 1
-		}
-		if err := spec.Deploy(ctx, runtimeEnvironment); err != nil {
-			fmt.Fprintf(stderr, "gateway deployment: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "gateway %q: started (application readiness not verified)\n", spec.ID)
-		return 0
 	default:
 		printGatewayUsage(stderr)
 		return 2
@@ -706,17 +842,30 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] gateway apply")
 	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway status")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall plan --uplink-zone=ZONE  (read-only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall audit --uplink-zone=ZONE  (read-only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall reload-parity  (read-only; NOT approval)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
 	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage audit  (read-only; no authentication)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider chatgpt register [--alias=NAME] [--dry-run]")
+	fmt.Fprintln(w, "       aginctus [global options] gateway provider opencode-go register [--alias=NAME] [--dry-run]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider list")
 	fmt.Fprintln(w, "       aginctus [global options] gateway provider ALIAS show")
-	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME register [--provider=ALIAS] [--source=chatgpt/MODEL] [--dry-run]")
+	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME register [--provider=ALIAS] [--source=chatgpt/MODEL|openai/MODEL] [--dry-run]")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model list")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME show")
 	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME render  (read-only, not activated)")
 	fmt.Fprintln(w, "       aginctus [global options] gateway responses verify [--require-function-call] < stream.sse")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress preflight  (read-only; candidate is not reserved)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress audit  (read-only NIC declarations; not connectivity)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress dhcp plan --ranges=START-END  (read-only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress dhcp apply --ranges=START-END --confirm-bridge-only  (mutates bridge only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress reconcile --dry-run  (read-only)")
+	fmt.Fprintln(w, "       aginctus [global options] gateway egress reconcile --confirm-stopped-instance  (mutates NICs; leaves instance stopped)")
+	fmt.Fprintln(w, "Alias: gateway up = apply. No gateway apply --dry-run; use validate/render for offline review.")
+	fmt.Fprintln(w, "Validate/render/list/show/verify/audit and plans are read-only; apply/remove/ensure/attach/register mutate unless previewed with --dry-run.")
+	fmt.Fprintln(w, "Registration writes local metadata only; it does not authenticate or activate inference. Remove retains persistent volumes.")
 }
 
 func runHerdr(
@@ -819,7 +968,8 @@ func runHerdr(
 }
 
 func printHerdrClientUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] herdr authorize <workload-id>")
+	fmt.Fprintln(w, "Usage: aginctus [global options] herdr  (interactive console)")
+	fmt.Fprintln(w, "       aginctus [global options] herdr authorize <workload-id>")
 	fmt.Fprintln(w, "       aginctus [global options] herdr pin-host <workload-id>")
 	fmt.Fprintln(w, "       aginctus [global options] herdr register <workload-id>")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client apply [--dry-run] [--force]")
@@ -827,6 +977,8 @@ func printHerdrClientUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] herdr client status")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client start")
 	fmt.Fprintln(w, "       aginctus [global options] herdr client stop")
+	fmt.Fprintln(w, "Aliases: herdr client ensure = apply; herdr client teardown = remove")
+	fmt.Fprintln(w, "Status is read-only; bootstrap/lifecycle operations mutate unless --dry-run is explicitly supported above.")
 }
 
 func runWorkload(
@@ -964,10 +1116,13 @@ func printWorkloadUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] workload start [name]")
 	fmt.Fprintln(w, "       aginctus [global options] workload stop [name]")
 	fmt.Fprintln(w, "       aginctus [global options] workload status [name]")
+	fmt.Fprintln(w, "       aginctus [global options] workload gateway provision <workload-id> --model=ALIAS --key-file=PATH  (mutates guest configuration)")
+	fmt.Fprintln(w, "Aliases: workload list = ls; workload <name> ensure|teardown = apply|remove <name>")
+	fmt.Fprintln(w, "List/status are read-only; apply/remove/start/stop/provision mutate unless --dry-run is explicitly supported above.")
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, `Usage: aginctus [global options] <command>
+	fmt.Fprint(w, `Usage: aginctus [global options] <command>
 
 Global options:
   --config=path=value          Override one configuration value; may be repeated
@@ -975,39 +1130,26 @@ Global options:
   --configuration-file=path    Load an explicit JSON configuration file
 
 Commands:
-  remove            Remove configured resources in reverse dependency order
-  status            Inspect all configured resource groups
-  apply             Deploy the complete configured orchestration
-  apply --render    Print one deterministic JSON orchestration plan (no mutation)
-  apply --from FILE Deploy a validated JSON orchestration plan
-  images list|ls    List local Incus images and aliases
-  images update NAME PATH   Safely import an image from a Nix result directory
+  remove            Remove configured resources in reverse dependency order (mutation)
+  status            Inspect all configured resource groups (read-only)
+  doctor [--fix]    Inspect Incus; --fix may configure a loopback HTTPS listener
+  images list|ls    List local Incus images and aliases (read-only)
+  images update NAME PATH   Import an image from a Nix result directory (mutation)
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
-  doctor [--fix]    Check Incus connectivity and HTTPS listener; --fix binds loopback
-  gateway validate  Validate the AI gateway deployment configuration
-  gateway apply     Reconcile the AI gateway
-  gateway status    Inspect gateway project and service state
-  gateway responses verify  Validate an observed Responses SSE stream offline (stdin)
-  gateway remove [--force] Remove gateway instances, preserving data volumes
-  gateway render    Render the AI gateway Compose model
-  gateway chatgpt model render MODEL  Render native LiteLLM Responses model registration
-  gateway credential-storage ensure  Create/verify dedicated unmounted gateway credential volume
-  herdr                  Launch interactive Herdr in its client container
-  herdr client apply     Create, reconcile, and bootstrap the Herdr client
-  herdr client remove    Delete the Herdr client container
-  herdr client status    Inspect the Herdr client instance
-  herdr client start     Start the Herdr client
-  herdr client stop      Stop the Herdr client
-  network apply          Create or reconcile the configured management network
-  network remove         Delete the configured management network
-  network status         Inspect the configured management network
-  workload ls            List active managed workloads
-  workload apply [NAME]  Reconcile one workload, or all configured workloads
-  workload remove [NAME] Stop and remove one workload, or all configured workloads
-  workload start [NAME]  Start one or all configured workloads
-  workload stop [NAME]   Stop one or all configured workloads
-  workload status [NAME] Inspect one or all configured workloads
-  version           Print the Aginctus CLI version
-  help              Show this help`)
+  version|--version Print the CLI version and source revision
+  help [command]    Show help without loading configuration or contacting Incus
+  <command> --help  Show command help (also -h)
+
+Inspection, validation, rendering, plans and --dry-run do not mutate resources.
+Apply, remove, start, stop, registration, provisioning and repair commands mutate
+unless explicitly previewed. Read-only Incus checks still require daemon access.
+Provider/model registration changes local metadata, not authentication or activation.
+Gateway remove preserves persistent volumes.
+`)
+	printApplyUsage(w)
+	printGatewayUsage(w)
+	printHerdrClientUsage(w)
+	printNetworkUsage(w)
+	printWorkloadUsage(w)
 }

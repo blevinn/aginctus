@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
-	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
 	"io"
 	"os"
 	"strings"
@@ -15,6 +13,9 @@ import (
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 	"github.com/blevinn/aginctus/internal/orchestration"
+	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
+	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
+	"github.com/blevinn/aginctus/internal/statevolume"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -31,7 +32,7 @@ func aggregateApplyPlan(effective *config.Config) (orchestration.Plan, error) {
 	}
 	client, err := herdrclient.FromConfig(effective)
 	if err != nil {
-		return orchestration.Plan{}, fmt.Errorf("Herdr client: %w", err)
+		return orchestration.Plan{}, fmt.Errorf("herdr client: %w", err)
 	}
 	clientPlan, err := client.Plan("upsert", false)
 	if err != nil {
@@ -120,7 +121,9 @@ var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, ef
 	// First validate without side effects, including unknown drivers and
 	// malformed Compose documents.
 	validator := orchestration.NewEngine(map[string]orchestration.Driver{
-		"apply": applydriver.New(), "compose": composedriver.New(),
+		"apply":        applydriver.New(),
+		"compose":      composedriver.New(),
+		"state-volume": statevolume.NewDriver(),
 	})
 	if err := validator.Validate(plan, orchestration.ExecuteOptions{}); err != nil {
 		return err
@@ -146,7 +149,9 @@ var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, ef
 		}
 	}
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
-		"apply": applydriver.New(), "compose": composedriver.NewWithEnvironment(environment),
+		"apply":        applydriver.New(),
+		"compose":      composedriver.NewWithEnvironment(environment),
+		"state-volume": statevolume.NewDriver(),
 	})
 	_, err = engine.Execute(ctx, plan, orchestration.ExecuteOptions{})
 	return err
@@ -175,7 +180,7 @@ func runAggregateApply(ctx context.Context, args []string, stdout, stderr io.Wri
 	case len(args) == 1 && strings.HasPrefix(args[0], "--from="):
 		plan, err = readAggregatePlan(strings.TrimPrefix(args[0], "--from="))
 	default:
-		fmt.Fprintln(stderr, "Usage: aginctus [global options] apply [--render | --from FILE]")
+		printApplyUsage(stderr)
 		return 2
 	}
 	if err != nil {

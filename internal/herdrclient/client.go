@@ -43,7 +43,7 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		return Spec{}, err
 	}
 	if name == "" || imageAlias == "" || storagePool == "" || network.Name == "" {
-		return Spec{}, fmt.Errorf("Herdr client name, image alias, storage pool, and management network must not be empty")
+		return Spec{}, fmt.Errorf("herdr client name, image alias, storage pool, and management network must not be empty")
 	}
 	return Spec{
 		Name:              name,
@@ -67,9 +67,17 @@ func (s Spec) Plan(operation string, force bool) (orchestration.Plan, error) {
 local network = import 'aginctus/management-network.jsonnet';
 local herdr = import 'aginctus/herdr-client.jsonnet';
 local cfg = std.extVar('config');
+local state = ag.step('herdr-system-state', 'state-volume', {
+  operation: 'ensure',
+  pool: cfg.client.storagePool,
+  instance: cfg.client.name,
+  class: 'system',
+});
 local steps = if cfg.operation == 'delete'
   then [herdr(cfg.client)]
-  else [network(cfg.network), herdr(cfg.client)];
+  else [network(cfg.network)] +
+    (if cfg.operation == 'upsert' then [state] else []) +
+    [herdr(cfg.client)];
 ag.orchestration('herdr-client', steps)`,
 		map[string]any{
 			"operation": operation,
@@ -80,7 +88,7 @@ ag.orchestration('herdr-client', steps)`,
 				"ipv4Routing": s.Network.IPv4Routing,
 				"ipv6Address": s.Network.IPv6Address,
 				"operation":   "upsert",
-				"force":       force,
+				"force":       false, // Herdr force must not adopt the shared management network.
 			},
 			"client": map[string]any{
 				"name":              s.Name,
@@ -94,27 +102,19 @@ ag.orchestration('herdr-client', steps)`,
 	)
 }
 
-// provisionSystemState uses the local Incus API, independent of the host OS.
-// Injectable to test validation and mutation boundaries.
-var provisionSystemState = statevolume.EnsureSystem
-
 func (s Spec) Execute(ctx context.Context, options Options) error {
 	plan, err := s.Plan(options.Operation, options.Force)
 	if err != nil {
 		return err
 	}
-	// Provision only for a real upsert. Delete and dry-run preserve volumes,
-	// and no CLI-initiated volume creation occurs on read-only plans.
-	if !options.DryRun && (options.Operation == "" || options.Operation == "upsert") {
-		if err := provisionSystemState(ctx, s.StoragePool, s.Name); err != nil {
-			return fmt.Errorf("Herdr system state volume: %w", err)
-		}
-	}
+	// The ordered state-volume step reconciles the persistent disk before
+	// the Herdr instance. Dry-run and delete never create volumes.
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
-		"apply": applydriver.New(),
+		"apply":        applydriver.New(),
+		"state-volume": statevolume.NewDriver(),
 	})
 	if _, err := engine.Execute(ctx, plan, orchestration.ExecuteOptions{DryRun: options.DryRun}); err != nil {
-		return fmt.Errorf("Herdr client orchestration: %w", err)
+		return fmt.Errorf("herdr client orchestration: %w", err)
 	}
 	return nil
 }

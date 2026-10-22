@@ -45,7 +45,7 @@ volumes:
 	compose := doc("test \"$(cat /data/sentinel)\" = recovery-sentinel && sleep 3600")
 	first := doc("echo recovery-sentinel > /data/sentinel; sleep 3600")
 	run := func(doc []byte) error {
-		return executeCompose(ctx, Config{Project: project, Compose: doc}, nil)
+		return executeCompose(ctx, Config{Project: project, Compose: doc}, nil, iclient.NewConnection)
 	}
 	if err := run(first); err != nil {
 		t.Fatalf("first apply: %v", err)

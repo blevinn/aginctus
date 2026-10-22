@@ -2,7 +2,7 @@
 
 This is the **first, read-only validation pass** for the v0.1 Herdr client. It verifies the deployed client instance, management NIC, Herdr binary, and the client-side SSH identity without modifying workloads or printing private credentials.
 
-Aginctus uses a dedicated Herdr client container; it is not an HTTP client for a central Herdr API. Per [ADR 0001](../adr/0001-herdr-client-topology.md), the client connects over SSH to Herdr servers **inside managed workloads**. Successful container startup alone does not establish end-to-end connectivity. Workload SSH authorization, pinned host trust, address discovery, remote registration, and an interactive Herdr session are separate requirements.
+Aginctus uses a dedicated Herdr client container; it is not an HTTP client for a central Herdr API. Per [ADR 0001](adr/0001-herdr-client-topology.md), the client connects over SSH to Herdr servers **inside managed workloads**. Successful container startup alone does not establish end-to-end connectivity. Workload SSH authorization, pinned host trust, address discovery, remote registration, and an interactive Herdr session are separate requirements.
 
 ## Prerequisites
 

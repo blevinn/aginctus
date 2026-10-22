@@ -17,7 +17,8 @@ ag.orchestration(cfg.id,
         name: cfg.egressNetwork,
         networkType: 'bridge',
         config: {
-          'ipv4.address': 'auto',
+          'ipv4.address': if cfg.egressBridgeIPv4CIDR == '' then 'auto' else cfg.egressBridgeIPv4CIDR,
+          } + (if cfg.egressDHCPDisabled then { 'ipv4.dhcp': 'false' } else {}) + (if cfg.egressDHCPRanges != '' then { 'ipv4.dhcp.ranges': cfg.egressDHCPRanges } else {}) + {
           'ipv4.nat': 'true',
           'ipv4.routing': 'true',
           'ipv6.address': 'none',
@@ -53,7 +54,12 @@ ag.orchestration(cfg.id,
             LITELLM_SALT_KEY: '${AGINCTUS_GATEWAY_SALT_KEY}',
             STORE_MODEL_IN_DB: 'True',
           },
-          networks: if cfg.egressNetwork == '' then ['management'] else ['management', 'egress'],
+          networks: if cfg.egressNetwork == '' then ['management'] else {
+            management: {
+              'x-incus-compose': { internal: true },
+            },
+            egress: if cfg.egressIPv4Address == '' then {} else { ipv4_address: cfg.egressIPv4Address },
+          },
         },
       },
       volumes: {
@@ -68,7 +74,11 @@ ag.orchestration(cfg.id,
         egress: {
           external: true,
           name: cfg.egressNetwork,
-        },
+        } + (if cfg.egressBridgeIPv4CIDR == '' then {} else {
+          'x-incus': {
+            'ipv4.address': cfg.egressBridgeIPv4CIDR,
+          },
+        }),
       }),
     },
   }),

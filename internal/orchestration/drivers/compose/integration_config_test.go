@@ -35,7 +35,7 @@ func TestIncusComposeConfigurationIntegration(t *testing.T) {
 `, envValue, cmdValue))
 	}
 	run := func(envValue, cmdValue string, recreate bool) error {
-		return executeCompose(ctx, Config{Project: name, Compose: doc(envValue, cmdValue), RecreateOnDrift: recreate}, nil)
+		return executeCompose(ctx, Config{Project: name, Compose: doc(envValue, cmdValue), RecreateOnDrift: recreate}, nil, iclient.NewConnection)
 	}
 	firstCmd := "sleep 3600"
 	secondCmd := "echo changed; sleep 3600"

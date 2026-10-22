@@ -1,13 +1,26 @@
-#!/usr/bin/env python3
-"""Opt-in real Herdr workspace lifecycle smoke test. No agent or inference needed."""
+"""Opt-in real Herdr workspace lifecycle smoke test.
+
+Two opt-in levels (both gated by an ``I_UNDERSTAND`` acknowledgment):
+
+- base (``AGINCTUS_ACCEPTANCE_HERDR_SMOKE=I_UNDERSTAND``): runs the
+  Herdr workspace lifecycle through ``open`` / ``inspect`` against a
+  registered managed machine. No agent is launched.
+- agent (``AGINCTUS_ACCEPTANCE_HERDR_AGENT_SMOKE=I_UNDERSTAND``):
+  additionally launches the OpenCode agent, inspects it via
+  ``herdr agent get``, and (if ``AGINCTUS_ACCEPTANCE_HERDR_AGENT_PROMPT``
+  is also set) issues a single constrained prompt.
+
+The agent level requires an inference-capable environment; the base
+level does not.
+"""
 import json
 import os
-from pathlib import Path
 import re
 import secrets
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 PREFIX = "aginctus-acceptance."
 SAFE = re.compile(r"^/home/agent/aginctus-acceptance/[a-zA-Z0-9.-]+$")
@@ -109,10 +122,16 @@ def main():
                                            env=env, check=True, timeout=180, capture_output=True, text=True)
                         except (OSError, subprocess.SubprocessError):
                             print("WARN: agent interrupt failed; closing owned workspace", file=sys.stderr)
-                    subprocess.run([sys.executable, str(fixture), "close", str(base), identity],
-                                   env=env, check=True, timeout=180, capture_output=True, text=True)
-                subprocess.run([sys.executable, cleanup, "cleanup", str(base), identity, guest], check=True, timeout=60,
-                               capture_output=True, text=True)
+                    try:
+                        subprocess.run([sys.executable, str(fixture), "close", str(base), identity],
+                                       env=env, check=True, timeout=180, capture_output=True, text=True)
+                    except (OSError, subprocess.SubprocessError):
+                        print("WARN: workspace close failed; cleanup helper will still run", file=sys.stderr)
+                try:
+                    subprocess.run([sys.executable, cleanup, "cleanup", str(base), identity, guest], check=True, timeout=60,
+                                   capture_output=True, text=True)
+                except (OSError, subprocess.SubprocessError):
+                    print("WARN: guest cleanup helper failed; staged directory may leak", file=sys.stderr)
             print(f"PASS: remote Herdr workspace create/get/close, iteration {iteration+1}")
     print("NOT VERIFIED: agent prompt/wait, guest task execution, gateway inference, and credentials" if agent_smoke else "NOT VERIFIED: OpenCode agent, guest task execution, gateway inference, and credentials")
 
