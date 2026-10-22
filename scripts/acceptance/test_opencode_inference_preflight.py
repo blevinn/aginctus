@@ -122,12 +122,12 @@ class ReadinessTests(unittest.TestCase):
 
     def test_rejects_invalid_instance_without_exec(self):
         for name in ("--bad", "../other", "bad name", ""):
-            with self.subTest(name=name), patch.dict(
-                    "os.environ", {"AGINCTUS_ACCEPTANCE_WORKLOAD": name}):
-                with patch.object(mod, "guest") as guest, self.assertRaisesRegex(
-                        RuntimeError, "workload"):
-                    mod.check()
-                guest.assert_not_called()
+            with (self.subTest(name=name),
+                  patch.dict("os.environ", {"AGINCTUS_ACCEPTANCE_WORKLOAD": name}),
+                  patch.object(mod, "guest") as guest,
+                  self.assertRaisesRegex(RuntimeError, "workload")):
+                mod.check()
+            guest.assert_not_called()
 
 
 if __name__ == "__main__":
