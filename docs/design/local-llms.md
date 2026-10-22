@@ -4,7 +4,7 @@ Status: proposed design; no local-provider configuration, connectivity policy, o
 
 ## Problem and scope
 
-Aginctus's [AI gateway](ai-gateway.md) currently targets hosted OpenAI and OpenCode Go upstreams. Operators also need to run inference on hardware they control for privacy, offline operation, and predictable resource use. Local models must retain the same workload identity, model permissions, and audit path as hosted models.
+Aginctus's [AI gateway](../ai-gateway.md) currently targets hosted OpenAI and OpenCode Go upstreams. Operators also need to run inference on hardware they control for privacy, offline operation, and predictable resource use. Local models must retain the same workload identity, model permissions, and audit path as hosted models.
 
 The first slice manages an OpenAI-compatible inference server as an Aginctus-owned Incus workload and connects the existing LiteLLM gateway to it over the management network. Ollama, llama.cpp server, and vLLM are candidate runtimes; compatibility is verified per pinned server version and model, not inferred from the product name. External host or trusted-LAN servers remain a supported extension point, but they are not the primary lifecycle.
 
