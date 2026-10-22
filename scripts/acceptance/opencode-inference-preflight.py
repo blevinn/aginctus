@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Read-only #124 runtime readiness gate; never reads the workload key."""
 import ipaddress
 import json
