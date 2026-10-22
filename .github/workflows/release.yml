@@ -29,12 +29,12 @@ jobs:
       - name: verify annotated tag, main ancestry and release collateral
         env:
           TAG: ${{ github.ref_name }}
-          COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
           test "$(git cat-file -t "refs/tags/$TAG")" = tag
-          test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$COMMIT"
-          git merge-base --is-ancestor "$COMMIT" origin/main
+          tagged_commit="$(git rev-parse "refs/tags/$TAG^{commit}")"
+          test "$tagged_commit" = "$(git rev-parse HEAD)"
+          git merge-base --is-ancestor "$tagged_commit" origin/main
           python3 scripts/release/check.py --tag "$TAG"
 
       - name: install pinned Nix environment
@@ -71,7 +71,6 @@ jobs:
       NIX_CONFIG: experimental-features = nix-command flakes
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ github.ref_name }}
-      BUILD_SHA: ${{ github.sha }}
     steps:
       - name: checkout tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -92,6 +91,7 @@ jobs:
       - name: build Linux amd64 archive and checksum
         run: |
           set -euo pipefail
+          BUILD_SHA="$(git rev-parse HEAD)"
           nix --quiet develop --no-update-lock-file -c go mod download
           mkdir -p dist/stage
           nix --quiet develop --no-update-lock-file -c env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
