@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -69,12 +70,25 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 	loader.SystemPath = ""
 	loader.UserPath = ""
 	loader.Environment = nil
-	cfg, err := loader.Load(config.Options{Overrides: []string{"gateway.egress.network.name=aginctus-egress", "gateway.egress.network.ipv4.address=10.42.40.1/24", "gateway.egress.ipv4.address=10.42.40.25/24", "firewall.egress.uplinkZone=public"}})
+	overrides := []string{"gateway.egress.network.name=aginctus-egress", "gateway.egress.network.ipv4.address=10.42.40.1/24", "gateway.egress.ipv4.address=10.42.40.25/24", "firewall.egress.uplinkZone=public"}
+	cfg, err := loader.Load(config.Options{Overrides: overrides})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, drift := range []string{"", "ownership", "NIC", "collision", "unrestricted DHCP", "IPv6", "link", "uplink", "multiple routes", "opaque route", "policy routing", "multipath", "extra NIC", "bridged peer"} {
+	for _, drift := range []string{"", "tailscale", "tailscale disabled", "kernel disabled", "invalid option", "ownership", "NIC", "collision", "unrestricted DHCP", "IPv6", "link", "uplink", "multiple routes", "opaque route", "policy routing", "multipath", "extra NIC", "bridged peer"} {
 		t.Run(drift, func(t *testing.T) {
+			effective := cfg
+			if drift == "tailscale disabled" || drift == "kernel disabled" || drift == "invalid option" {
+				value := "false"
+				if drift == "invalid option" {
+					value = "not-a-boolean"
+				}
+				var err error
+				effective, err = loader.Load(config.Options{Overrides: append(append([]string{}, overrides...), "firewall.egress.allowTailscaleRouting="+value)})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
 			bridge := map[string]any{"name": "aginctus-egress", "type": "bridge", "managed": true, "config": map[string]string{"user.aginctus.managed": "true", "user.aginctus.resource": "gateway-egress-network", "ipv4.address": "10.42.40.1/24", "ipv4.nat": "true", "ipv4.routing": "true", "ipv4.dhcp": "false", "ipv6.address": "none"}}
 			bc := bridge["config"].(map[string]string)
 			if drift == "ownership" {
@@ -139,6 +153,10 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 			}
 			firewallCommand = func(_ context.Context, _ string, name string, args ...string) (string, error) {
 				if strings.Join(args, " ") == "-j -4 rule show" {
+					if strings.HasPrefix(drift, "tailscale") {
+						raw, err := os.ReadFile("../firewall/testdata/tailscale-ipv4-rules.json")
+						return string(raw), err
+					}
 					if drift == "policy routing" {
 						return `[{"priority":0,"src":"all","table":"local"},{"priority":100,"src":"10.42.40.0/24","table":"other"}]`, nil
 					}
@@ -155,8 +173,8 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 				}
 				return `[{"dst":"default","dev":"wan0"},{"dst":"11.12.13.0/24","dev":"lan0"},{"dst":"11.13.14.15","dev":"lo","type":"local"}]`, nil
 			}
-			grant, err := discoverEgressGrant(context.Background(), cfg)
-			if drift != "" {
+			grant, err := discoverEgressGrant(context.Background(), effective)
+			if drift != "" && drift != "tailscale" && drift != "kernel disabled" {
 				if err == nil {
 					t.Fatal("accepted unsafe discovery")
 				}

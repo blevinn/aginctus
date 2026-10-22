@@ -197,6 +197,50 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds("ss -lnt | grep -F ':18082'")
     machine.fail(connects("10.247.83.1", 18082))
     machine.fail(connects("10.247.82.1", 18082))
+    # Replay Tailscale's actual RPDB layout without tailnet credentials. The
+    # production routing validator sees real kernel rules/routes and D-Bus.
+    machine.succeed("ip -4 route flush default; ip route add default via 192.0.2.2 dev wan-host; ip route del 8.8.4.4/32")
+    machine.succeed("ip -4 rule add pref 5210 fwmark 0x80000/0xff0000 table main; ip -4 rule add pref 5230 fwmark 0x80000/0xff0000 table default; ip -4 rule add pref 5250 fwmark 0x80000/0xff0000 unreachable; ip -4 rule add pref 5270 table 52")
+    for destination in ["100.101.102.103", "11.12.14.2"]:
+        machine.succeed(f"ip -n world addr add {destination}/32 dev lo; ip route add {destination}/32 via 192.0.2.2 dev wan-host table 52")
+        machine.succeed(f"nc -z -w 1 {destination} 443")
+    routing_test = "AGINCTUS_DISPOSABLE_FIREWALL_PHASE=routing ${egressTest}/bin/aginctus-firewall-test -test.run=^TestEgressRealFirewalld$ -test.v"
+    machine.succeed(routing_test)
+    machine.succeed(connects("8.8.4.4"))
+    # Opting out must withdraw the existing grant on the same VPN inventory.
+    machine.fail("AGINCTUS_DISPOSABLE_FIREWALL_PHASE=routing-disabled ${egressTest}/bin/aginctus-firewall-test -test.run=^TestEgressRealFirewalld$ -test.v")
+    machine.fail(connects("8.8.4.4"))
+    assert not firewall("--policy=aginctus-egress-https", "--list-egress-zones").strip()
+    machine.succeed(routing_test)
+    machine.succeed(connects("8.8.4.4"))
+    for destination in ["100.101.102.103", "11.12.14.2", "10.66.0.2", "11.12.13.2"]:
+        machine.fail(connects(destination))
+    machine.fail(connects("10.247.82.1", 18082))
+    machine.fail(connects("8.8.4.4", 80))
+    machine.fail(connects("8.8.4.4", source="10.247.83.26"))
+    machine.succeed("ip -n world addr add 11.12.15.2/32 dev lo; ip route add 11.12.15.2/32 via 192.0.2.2 dev wan-host table 52")
+    machine.succeed("nc -z -w 1 11.12.15.2 443")
+    machine.succeed(routing_test)
+    machine.fail(connects("11.12.15.2"))
+    machine.succeed(connects("8.8.4.4"))
+    # A changed rule must withdraw the previously working grant.
+    machine.succeed("ip -4 rule add pref 5260 table 52")
+    machine.fail(routing_test)
+    machine.fail(connects("8.8.4.4"))
+    assert not firewall("--policy=aginctus-egress-https", "--list-egress-zones").strip()
+    machine.succeed("ip -4 rule del pref 5260")
+    machine.succeed(routing_test)
+    machine.succeed(connects("8.8.4.4"))
+    # An exit-node default is refused even when its device has the uplink zone.
+    machine.succeed("ip route add default via 192.0.2.2 dev wan-host table 52")
+    machine.fail(routing_test)
+    machine.fail(connects("8.8.4.4"))
+    assert not firewall("--policy=aginctus-egress-https", "--list-egress-zones").strip()
+    machine.succeed("ip route del default table 52")
+    machine.succeed(routing_test)
+    machine.succeed(connects("8.8.4.4"))
+    # Resume the existing synthetic-identity lifecycle regression fixture.
+    machine.succeed("systemctl start aginctus-egress-firewall.service")
     machine.succeed("ip netns exec litellm dig +time=1 +tries=1 @10.247.83.1 fixture.incus A | grep -F 10.247.83.1")
     machine.succeed("ip netns exec litellm dig +tcp +time=1 +tries=1 @10.247.83.1 fixture.incus A | grep -F 10.247.83.1")
     machine.fail("ip netns exec litellm dig +time=1 +tries=1 @10.247.82.1 fixture.incus A")

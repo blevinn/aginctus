@@ -2,11 +2,9 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
-	"net/netip"
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/firewall"
@@ -56,6 +54,10 @@ func discoverEgressGrant(ctx context.Context, cfg *config.Config) (firewall.Egre
 	if err != nil || uplink == "" {
 		return empty, fmt.Errorf("firewall.egress.uplinkZone must name a nontrusted uplink zone")
 	}
+	allowTailscaleRouting, err := cfg.Bool("firewall.egress.allowTailscaleRouting")
+	if err != nil {
+		return empty, err
+	}
 	spec, err := gateway.FromConfig(cfg)
 	if err != nil {
 		return empty, err
@@ -87,79 +89,20 @@ func discoverEgressGrant(ctx context.Context, cfg *config.Config) (firewall.Egre
 	if err != nil {
 		return empty, err
 	}
-	if err = verifyEgressRoutingRules(rules); err != nil {
-		return empty, err
-	}
 	raw, err := firewallCommand(ctx, "", "ip", "-j", "-4", "route", "show", "table", "all")
 	if err != nil {
 		return empty, err
 	}
-	var routes []struct {
-		Dst      string            `json:"dst"`
-		Dev      string            `json:"dev"`
-		Type     string            `json:"type"`
-		Nexthops []json.RawMessage `json:"nexthops"`
-		NHID     json.RawMessage   `json:"nhid"`
-	}
-	if err = json.Unmarshal([]byte(raw), &routes); err != nil {
+	iface, blocked, err := firewall.EgressRouting(rules, raw, allowTailscaleRouting)
+	if err != nil {
 		return empty, err
 	}
-	var blocked []netip.Prefix
-	defaults := 0
-	for _, route := range routes {
-		if len(route.Nexthops) != 0 || len(route.NHID) != 0 {
-			return empty, fmt.Errorf("multipath routes are unsupported")
-		}
-		if route.Dst == "default" {
-			if (route.Type != "" && route.Type != "unicast") || route.Dev == "" || route.Dev == spec.EgressNetwork || route.Dev == spec.Network {
-				return empty, fmt.Errorf("unsafe default route")
-			}
-			zone, err := effectiveEgressZone(ctx, route.Dev)
-			if err != nil || zone != uplink {
-				return empty, fmt.Errorf("default-route interface does not belong to configured uplink zone")
-			}
-			defaults++
-			continue
-		}
-		if route.Dst == "" {
-			return empty, fmt.Errorf("opaque route inventory")
-		}
-		prefix, err := netip.ParsePrefix(route.Dst)
-		if err != nil {
-			if address, e := netip.ParseAddr(route.Dst); e == nil {
-				prefix = netip.PrefixFrom(address, 32)
-			} else {
-				return empty, err
-			}
-		}
-		blocked = append(blocked, prefix)
+	if iface == spec.EgressNetwork || iface == spec.Network {
+		return empty, fmt.Errorf("unsafe default route")
 	}
-	if defaults != 1 {
-		return empty, fmt.Errorf("exactly one IPv4 default route required")
+	zone, err := effectiveEgressZone(ctx, iface)
+	if err != nil || zone != uplink {
+		return empty, fmt.Errorf("default-route interface does not belong to configured uplink zone")
 	}
 	return firewall.EgressRules(spec.EgressIPv4Address, spec.EgressBridgeIPv4CIDR, uplink, blocked)
-}
-
-// Custom routing rules can select paths not represented by the default route.
-// Refuse policy routing rather than infer a safe path from partial inventory.
-func verifyEgressRoutingRules(raw string) error {
-	var rules []map[string]any
-	if err := json.Unmarshal([]byte(raw), &rules); err != nil {
-		return err
-	}
-	if len(rules) != 3 {
-		return fmt.Errorf("custom IPv4 policy routing is unsupported")
-	}
-	for i, table := range []string{"local", "main", "default"} {
-		priority := []float64{0, 32766, 32767}[i]
-		if rules[i]["src"] != "all" || rules[i]["table"] != table || rules[i]["priority"] != priority {
-			return fmt.Errorf("custom IPv4 policy routing is unsupported")
-		}
-		for key := range rules[i] {
-			if key != "src" && key != "table" && key != "priority" && key != "protocol" {
-				return fmt.Errorf("unsupported IPv4 routing rule selector: %s", key)
-			}
-		}
-	}
-	return nil
 }

@@ -100,6 +100,12 @@ let
       description = "Dedicated firewalld zone to manage for the selected Aginctus profile (max 17 characters, aginctus- prefix).";
     };
 
+    firewall.egress.allowTailscaleRouting = mkOption {
+      type = types.bool;
+      default = true;
+      description = "Accept existing standard Tailscale IPv4 policy-routing rules during egress verification. Set false to require kernel-only rules. Never installs or modifies routing rules.";
+    };
+
     firewall.egress.uplinkZone = mkOption {
       type = types.str;
       default = "";
