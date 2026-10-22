@@ -50,7 +50,7 @@ Call out changes involving sandboxing, network controls, credentials, secrets, M
   Link particularly relevant documents from the index deliberately.
 - Keep `docs/getting-started.md`, `docs/cli.md`, and the Herdr operator
   runbook's literal `aginctus` shell examples aligned with generated
-  `aginctus help` usage. Run `just check-docs-examples`; it checks
+  `aginctus help` usage. Run `just check docs-examples` (or the legacy `just check-docs-examples` alias); it checks
   syntax shapes but **never runs the documented operations**. Use the CLI's
   actual help for authoritative syntax; do not create a parallel flag table.
 - Run `just check-markdown-links` for links, fragments and index coverage.

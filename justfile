@@ -3,9 +3,50 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 mod build '.just/build.just'
 mod update '.just/update.just'
 mod fmt '.just/fmt.just'
+mod check '.just/check.just'
 
+# Compatibility entry points; new work should use 'just check <recipe>'.
 test:
-    go test ./...
+    just check test
+
+vet:
+    just check vet
+
+modules:
+    just check modules
+
+check-all:
+    just check all
+
+check-lint:
+    just check lint
+
+check-go-lint:
+    just check go-lint
+
+check-python-lint:
+    just check python-lint
+
+check-shell-lint:
+    just check shell-lint
+
+test-python:
+    just check python
+
+test-shell:
+    just check shell-tests
+
+check-shell:
+    just check shell
+
+check-nix:
+    just check nix
+
+check-markdown-links:
+    just check markdown
+
+check-docs-examples:
+    just check docs-examples
 
 # Run the heavyweight NixOS firewall VM tests explicitly (x86_64-linux).
 test-nix-firewall:
@@ -15,59 +56,6 @@ test-nix-firewall:
 # Unlike 'just test', this is a heavyweight integration check.
 test-nix *args:
     bash tests/nixos-incus-vm.sh {{ args }}
-
-vet:
-    go vet ./...
-
-check: modules test vet
-
-# Safe aggregate, even when the caller has opted into live acceptance elsewhere.
-check-all:
-    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local just check check-lint test-python test-shell check-shell check-markdown-links check-docs-examples check-nix
-
-# Linters run with the pinned development shell tools. Each tool owns its
-# selection: .golangci.yml for Go, ruff.toml for Python, and the file list
-# itself for shellcheck.
-check-lint: check-go-lint check-python-lint check-shell-lint
-
-check-go-lint:
-    golangci-lint run
-
-check-python-lint:
-    ruff check .
-
-check-shell-lint:
-    git ls-files -z -- '*.sh' | xargs -0 -r -n1 shellcheck
-
-test-python:
-    python3 -m unittest discover -s guest/opencode -p 'test_*.py' -v
-    python3 -m unittest discover -s guest/ssh -p 'test_*.py' -v
-    python3 -m unittest discover -s scripts/acceptance -p 'test_*.py' -v
-    python3 -m unittest discover -s scripts/gateway -p 'test_*.py' -v
-    python3 -m unittest discover -s tests -p 'test_*.py' -v
-
-# Both adapters use only temporary fixtures, including the live-dispatch test.
-test-shell:
-    bash scripts/acceptance/opencode-test.sh
-    bash scripts/acceptance/opencode-live-adapter-test.sh
-
-check-shell:
-    git ls-files -z -- '*.sh' | xargs -0 -r -n1 bash -n
-
-check-nix:
-    nix --quiet flake check --no-build --no-update-lock-file
-    nix --quiet flake check --no-update-lock-file
-
-modules:
-    go mod verify
-
-# Offline local targets and heading fragments in all tracked Markdown.
-check-markdown-links:
-    python3 scripts/check_markdown_links.py
-
-# Compare canonical operator examples with CLI-generated help; never run examples.
-check-docs-examples:
-    go run ./cmd/aginctus help | python3 scripts/check_docs_examples.py
 
 # Integration tests run only on disposable Incus. By default each test
 # deletes its uniquely named project (including test containers and volumes).
