@@ -83,6 +83,37 @@ def heading_ids(tokens):
     return used
 
 
+def check_index(root, names, md):
+    """Require discoverability for current docs; exempt future/internal archives."""
+    index = root / "docs" / "README.md"
+    try:
+        parsed = md.parse(index.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return [f"docs/README.md: cannot read index: {exc}"]
+    covered = set()
+    for block in parsed:
+        if block.type != "inline":
+            continue
+        for token in block.children:
+            if token.type != "link_open":
+                continue
+            target = urlsplit(token.attrGet("href") or "")
+            if target.scheme or target.netloc or not target.path:
+                continue
+            resolved = (index.parent / unquote(target.path)).resolve()
+            if resolved.is_relative_to(root):
+                covered.add(resolved.relative_to(root).as_posix())
+    exceptions = {"adr", "design", "internal", "milestones", "releases"}
+    required = sorted(
+        name for name in names
+        if name.startswith("docs/") and name != "docs/README.md"
+        and len(Path(name).parts) >= 2
+        and not (len(Path(name).parts) > 2 and Path(name).parts[1] in exceptions)
+    )
+    return [f"{name}: active doc not linked from docs/README.md"
+            for name in required if name not in covered]
+
+
 def check(root):
     names = subprocess.run(
         ["git", "ls-files", "-z", "--", "*.md", "*.markdown"],
@@ -140,6 +171,7 @@ def check(root):
                             raise ValueError(f"missing heading fragment #{fragment}")
                 except (ValueError, OSError, UnicodeError) as exc:
                     failures.append(f"{name}:{line}: {target!r}: {exc}")
+    failures.extend(check_index(root, list(filter(None, names)), md))
     for failure in failures:
         print(failure, file=sys.stderr)
     print(f"Markdown: {len(list(filter(None, names)))} files, {local} local links, "

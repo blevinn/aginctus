@@ -23,7 +23,7 @@ check: modules test vet
 
 # Safe aggregate, even when the caller has opted into live acceptance elsewhere.
 check-all:
-    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local just check check-lint test-python test-shell check-shell check-markdown-links check-nix
+    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local just check check-lint test-python test-shell check-shell check-markdown-links check-docs-examples check-nix
 
 # Linters run with the pinned development shell tools. Each tool owns its
 # selection: .golangci.yml for Go, ruff.toml for Python, and the file list
@@ -64,6 +64,10 @@ modules:
 # Offline local targets and heading fragments in all tracked Markdown.
 check-markdown-links:
     python3 scripts/check_markdown_links.py
+
+# Compare canonical operator examples with CLI-generated help; never run examples.
+check-docs-examples:
+    go run ./cmd/aginctus help | python3 scripts/check_docs_examples.py
 
 # Integration tests run only on disposable Incus. By default each test
 # deletes its uniquely named project (including test containers and volumes).

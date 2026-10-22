@@ -98,6 +98,8 @@ currently supported configuration or a release acceptance claim.
 - [Acceptance: OpenCode Herdr](acceptance-opencode-herdr.md) —
   Herdr-managed workspace lifecycle, including the agent and
   prompt opt-ins.
+- [Acceptance: OpenCode gateway readiness](acceptance-opencode-inference.md) —
+  read-only guest runtime configuration and key-file preflight (not inference).
 - [Acceptance: OpenCode live](acceptance-opencode-live.md) —
   live OpenCode→LiteLLM acceptance and what stays unverified.
 

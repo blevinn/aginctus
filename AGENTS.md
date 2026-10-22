@@ -40,6 +40,23 @@ Apply appropriate GitHub labels and milestones to issues and PRs where possible,
 
 Call out changes involving sandboxing, network controls, credentials, secrets, MCP permissions, model access, authentication, authorization, or host capabilities explicitly.
 
+## Documentation maintenance
+
+- Link new current/operator-facing documents from `docs/README.md`; the
+  Markdown checker requires discoverability for all such pages, including
+  subdirectories. The `docs/adr/`, `docs/design/`, `docs/internal/`,
+  `docs/milestones/`, and `docs/releases/` areas are exempt because they
+  contain decisions, proposals, internal notes, or historical artifacts.
+  Link particularly relevant documents from the index deliberately.
+- Keep `docs/getting-started.md`, `docs/cli.md`, and the Herdr operator
+  runbook's literal `aginctus` shell examples aligned with generated
+  `aginctus help` usage. Run `just check-docs-examples`; it checks
+  syntax shapes but **never runs the documented operations**. Use the CLI's
+  actual help for authoritative syntax; do not create a parallel flag table.
+- Run `just check-markdown-links` for links, fragments and index coverage.
+  Keep planned designs and historical release notes distinct from current
+  supported behavior.
+
 ## Working rules
 
 - Read the relevant repository documentation and nearby code before making non-trivial changes.
