@@ -71,6 +71,14 @@ git tag -a v0.1.0 -m "Aginctus v0.1.0"
 git push origin refs/tags/v0.1.0
 ```
 
+The ordinary `hermetic` CI workflow also builds and verifies the Linux amd64
+archive with `scripts/release/package.sh` using the current source version
+(`0.0.0-dev` on the development branch). This is a **non-publishing**
+preview: it checks the CLI's embedded version and exact Git revision, archive
+contents, and SHA256 checksum without creating a tag or GitHub release.
+The tagged workflow invokes the same packaging script after its release
+collateral and hermetic validation gate.
+
 The `release` GitHub Actions workflow checks that the **annotated** tag
 points to a commit reachable from `origin/main`, that the version/changelog/
 notes match, and that pinned hermetic tests, gateway parity and CLI packaging
@@ -102,6 +110,13 @@ and update their `flake.lock` intentionally; do not silently update pilot
 hosts. Confirm both CLI version and pinned revision after deployment. Retain
 the old pin to allow source rollback; runtime state migrations require an
 independent rollback plan.
+
+After tagging, promptly open a normal PR to advance `internal/cli/VERSION`
+on `main` to the next **development** version (for example `0.2.0-dev`),
+and leave a fresh `[Unreleased]` changelog section. This is a separate,
+reviewed commit, never an edit to the release tag. Until it merges, builds
+of current `main` will still identify as the just-released version;
+consumers should pin immutable tags or commit SHAs instead.
 
 ## Failures and corrections
 
