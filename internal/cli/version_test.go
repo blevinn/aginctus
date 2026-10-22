@@ -41,10 +41,10 @@ func TestVersionInjectedRevisionOffline(t *testing.T) {
 }
 
 func TestVersionEmbeddedSource(t *testing.T) {
-    if Version != strings.TrimSpace(embeddedVersion) || Version == "" {
-        t.Fatalf("invalid embedded version %q", Version)
-    }
-    if strings.ContainsAny(Version, " \t\r\n") {
-        t.Fatalf("version contains whitespace: %q", Version)
-    }
+	if Version != strings.TrimSpace(embeddedVersion) || Version == "" {
+		t.Fatalf("invalid embedded version %q", Version)
+	}
+	if strings.ContainsAny(Version, " \\t\\r\\n") {
+		t.Fatalf("version contains whitespace: %q", Version)
+	}
 }

@@ -38,7 +38,7 @@
           releaseVersion = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./internal/cli/VERSION);
           aginctusCli = pkgs.buildGoModule {
             pname = "aginctus";
-            version = "${releaseVersion}+${self.shortRev or \"source\"}";
+            version = "${releaseVersion}+${self.shortRev or "source"}";
             src = ./.;
             # Dirty trees and non-Git sources get content identity, not a false commit claim.
             ldflags = [

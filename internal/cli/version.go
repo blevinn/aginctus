@@ -1,9 +1,9 @@
 package cli
 
 import (
-    _ "embed"
-    "runtime/debug"
-    "strings"
+	_ "embed"
+	"runtime/debug"
+	"strings"
 )
 
 //go:embed VERSION
