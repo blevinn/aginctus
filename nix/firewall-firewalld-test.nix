@@ -122,6 +122,14 @@ pkgs.testers.runNixOSTest {
     machine.wait_until_succeeds(
         "ip -4 address show aginctus-test | grep -F 10.247.82.1"
     )
+    machine.succeed(
+        "systemd-run --unit=aginctus-incus-client-query --collect --wait "
+        "--property=ProtectHome=true "
+        "--property=RuntimeDirectory=aginctus-incus-query "
+        "--property=RuntimeDirectoryMode=0700 "
+        "--setenv=XDG_CONFIG_HOME=/run/aginctus-incus-query "
+        "incus query /1.0/networks/aginctus-test >/dev/null"
+    )
     machine.succeed("systemctl reset-failed aginctus-firewall-reconcile.service || true")
     machine.succeed("systemctl start aginctus-firewall-reconcile.service")
 

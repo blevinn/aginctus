@@ -450,7 +450,9 @@ in
           serviceConfig = {
             Type = "oneshot";
             User = "root";
-            Environment = [ "XDG_CONFIG_HOME=/var/empty" ];
+            RuntimeDirectory = "aginctus-egress-firewall";
+            RuntimeDirectoryMode = "0700";
+            Environment = [ "XDG_CONFIG_HOME=/run/aginctus-egress-firewall" ];
             NoNewPrivileges = true;
             PrivateTmp = true;
             ProtectHome = true;
