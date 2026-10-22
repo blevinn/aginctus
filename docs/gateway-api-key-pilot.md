@@ -189,14 +189,11 @@ confirmed. Keep the selected account's own usage controls in place.
 
 No native ChatGPT OAuth, added network permissions, gateway restart,
 public listener, Go subscription checkout or billable inference
-belongs to this opt-in model-registration PR.
+belongs to this opt-in registration workflow.
 
 ## Full validation
 
 ~~~sh
-git fetch origin
-git switch feat/122-opencode-go-registration
-git pull --ff-only
 nix develop -c python3 -m unittest discover \
   -s scripts/gateway -p 'test_register_openai_model.py' -v
 nix develop -c python3 -m py_compile \
@@ -209,5 +206,4 @@ git status --short
 ~~~
 
 The Python tests are deterministic and offline; they **do not** contact a
-real LiteLLM instance or an upstream provider. Run the above validation on
-the PR head before approving any live state-changing operation.
+real LiteLLM instance or an upstream provider. Run the above checks from the current checkout. They do not authorize any live state-changing operation.

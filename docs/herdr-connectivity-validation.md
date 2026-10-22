@@ -1,6 +1,6 @@
 # v0.1 Herdr client connectivity validation (#120)
 
-This is the **first, read-only validation pass** for the v0.1 Herdr client. It verifies the deployed client instance, management NIC, Herdr binary, and the client-side SSH identity without modifying workloads or printing private credentials.
+This is a **read-only, repeatable host validation** for the v0.1 Herdr client. It verifies the deployed client instance, management NIC, Herdr binary, and the client-side SSH identity without modifying workloads or printing private credentials.
 
 Aginctus uses a dedicated Herdr client container; it is not an HTTP client for a central Herdr API. Per [ADR 0001](adr/0001-herdr-client-topology.md), the client connects over SSH to Herdr servers **inside managed workloads**. Successful container startup alone does not establish end-to-end connectivity. Workload SSH authorization, pinned host trust, address discovery, remote registration, and an interactive Herdr session are separate requirements.
 
@@ -21,7 +21,7 @@ go test ./internal/herdrclient ./internal/cli ./internal/managementnetwork
 go run ./cmd/aginctus doctor
 go run ./cmd/aginctus status
 incus list "$HERDR_INSTANCE"
-incus config show "$HERDR_INSTANCE" --expanded
+incus query "/1.0/instances/${HERDR_INSTANCE}?recursion=1" | jq '{name, status, ownership: {managed: .config["user.aginctus.managed"], resource: .config["user.aginctus.resource"]}, nic_networks: [(.expanded_devices // {}) | to_entries[] | select(.value.type == "nic") | {device: .key, network: .value.network}]}'
 incus network show "$MGMT_NETWORK"
 incus exec "$HERDR_INSTANCE" --project default -- sh -c '
   set -eu
@@ -31,7 +31,7 @@ incus exec "$HERDR_INSTANCE" --project default -- sh -c '
 '
 ```
 
-Check that the instance is running, carries the Aginctus ownership metadata and has a NIC on the configured management network. Verify that the realized IPv4 address and route match the intended network. `ip route` output does not by itself prove reachability.
+The `incus query` output intentionally selects only ownership markers and NIC network names; never paste unfiltered expanded Incus configuration into logs, issues or chat, as it may contain secrets. Check that the instance is running, has the expected Aginctus ownership metadata and a NIC on the configured management network. Verify that the realized IPv4 address and route match the intended network. `ip route` output does not by itself prove reachability.
 
 ## Client identity (read-only)
 
@@ -50,7 +50,7 @@ Replace `WORKLOAD` with an Aginctus-owned workload name. These checks inspect st
 set -eu
 WORKLOAD="${WORKLOAD:?Set WORKLOAD to an Aginctus-owned workload name}"
 incus list "$WORKLOAD"
-incus config show "$WORKLOAD" --expanded
+incus query "/1.0/instances/${WORKLOAD}?recursion=1" | jq '{name, status, ownership: {managed: .config["user.aginctus.managed"], resource: .config["user.aginctus.resource"]}, nic_networks: [(.expanded_devices // {}) | to_entries[] | select(.value.type == "nic") | {device: .key, network: .value.network}]}'
 incus exec "$WORKLOAD" --project default -- sh -c '
   set -eu
   ip -4 addr show dev eth0
@@ -74,31 +74,9 @@ go run ./cmd/aginctus herdr
 Inside Herdr, verify the intended managed workload is available and that a remote session can execute a harmless command. Record whether the session connects and exits cleanly. Do not disable `StrictHostKeyChecking`, use `ssh-keyscan` as an unauthenticated trust source, or copy the private identity to the host.
 
 
-## Deployed-host findings (2026-10-11)
+## Interpreting current results
 
-The first on-host validation confirmed an Aginctus-owned management bridge, a running Herdr client on its management subnet, a working Herdr 0.9.3 systemd service, and SSH identity generation 1. The bridge address did not respond to ICMP; successful neighbor discovery makes this an insufficient test of workload-to-workload SSH, and no NAT/routing or firewall change is justified by the ping result alone. The dev workload was absent but its reconciliation dry run succeeded.
-
-**CLI/server environment:** the Herdr systemd unit explicitly sets `XDG_CONFIG_HOME=/var/lib/herdr/config`, `XDG_RUNTIME_DIR=/run/herdr`, and `XDG_STATE_HOME=/var/lib/herdr`. Running `herdr status` directly under `incus exec` instead consults `/root/.config/herdr/herdr.sock` and reports the server absent, even though the service is active. With `XDG_CONFIG_HOME=/var/lib/herdr/config`, status correctly reports the active server with a compatible protocol. The `aginctus herdr` command also opened a window before the launcher fix, but that alone did not establish which socket/session it used. The updated launcher passes the managed environment explicitly.
-
-Validate the managed service and console context on the deployed host:
-
-```sh
-set -eu
-nix develop -c go test ./internal/cli ./internal/herdrclient
-nix develop -c go test ./...
-nix flake check
-incus exec aginctus-herdr --project default -- \
-  env XDG_CONFIG_HOME=/var/lib/herdr/config XDG_RUNTIME_DIR=/run/herdr \
-  XDG_STATE_HOME=/var/lib/herdr herdr status
-incus exec aginctus-herdr --project default -- \
-  env XDG_CONFIG_HOME=/var/lib/herdr/config XDG_RUNTIME_DIR=/run/herdr \
-  XDG_STATE_HOME=/var/lib/herdr herdr machine list
-# Interactive: after updating the local CLI to this PR, verify it opens
-# the managed server session and exits normally.
-nix develop -c go run ./cmd/aginctus herdr
-```
-
-The machine list currently has no saved SSH machines. A successful interactive window is **not** remote workload acceptance; deploy the workload and establish authorized SSH, pinned host keys, and remote machine registration before considering #120 complete.
+[#120](https://github.com/blevinn/aginctus/issues/120) closed after real-Incus strict SSH authorization, host trust, registration and connectivity validation. That result applies to the tested deployment, **not automatically to this host or a replacement workload**. Reconfirm the present guest identity, Herdr service environment and saved machine entries before interactive use. A Herdr window opening does not prove model-backed OpenCode inference: the separate gateway and acceptance gates remain [#122](https://github.com/blevinn/aginctus/issues/122), [#123](https://github.com/blevinn/aginctus/issues/123) and [#124](https://github.com/blevinn/aginctus/issues/124).
 
 ## Reporting results
 
@@ -111,4 +89,4 @@ Record the instance name, management network, workload name (if applicable), obs
 5. Pinned host trust and SSH authentication
 6. Herdr remote registration and interactive control
 
-**Issue #120 remains incomplete until stages 5–6 pass on a real host.** This runbook is a validation baseline, not a claim that connectivity has been established.
+Record any newly discovered host-specific failure against the appropriate active issue. Passing these checks does not complete #122/#123/#124 or prove upstream inference.

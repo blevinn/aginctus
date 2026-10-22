@@ -1,12 +1,12 @@
 # Herdr SSH bootstrap workflow
 
-This document explains the two SSH guest helpers introduced by the SSH bootstrap work, where they run, and how their outputs are connected.
+This document explains the implemented SSH guest-helper contract, the host-controlled public-key handoff, and the boundaries of the Herdr remote bootstrap.
 
 For the full credential lifecycle and security model, see [Herdr SSH credential lifecycle](ssh-credentials.md).
 
-## What this PR does
+## Guest-side helpers
 
-This PR installs two fixed helper programs into two different Incus images:
+Two fixed helper programs are installed into separate Incus guest images:
 
 | Helper | Installed in | Purpose |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ The helpers do **not** invoke each other.
 
 The Aginctus host process is the coordinator. It runs each helper independently through authenticated Incus guest exec and carries only the public key from the Herdr client guest to the workload guest.
 
-This PR provides the guest-side contract and image configuration. It does **not** yet wire the host-side invocation into an Aginctus CLI command. The follow-up remote lifecycle invokes these helpers through the Incus Go API.
+The host-side CLI now coordinates these helpers through `aginctus herdr authorize <workload>`, followed by `aginctus herdr pin-host <workload>` and `aginctus herdr register <workload>`. Authorization alone never proves SSH connectivity or publishes a Herdr machine. Use the explicit CLI workflow for normal operations; the helper commands below document the lower-level contract.
 
 ## Components
 
@@ -143,9 +143,9 @@ aginctus-ssh-authorize remove agent
 
 Removal is idempotent and leaves ordinary administrator authorization untouched.
 
-## Manual end-to-end example
+## Manual guest-helper contract example (diagnostic only)
 
-Until host-side orchestration is wired, the contract can be exercised manually through Incus.
+The same public-key handoff can be exercised on **disposable, operator-owned** instances through Incus. This is not the normal bootstrap workflow and mutates guest key/authorization state. Prefer the managed `aginctus herdr` commands above; never copy a private key or use this example against an unrelated guest.
 
 First ensure the identity and capture only the public key:
 
@@ -210,7 +210,7 @@ The host-side caller should treat status 3 as "not provisioned" only for `inspec
 
 Installing the public key is only the first half of making a workload a usable Herdr remote.
 
-The host-side remote lifecycle must additionally:
+The host-side remote lifecycle additionally:
 
 1. read the workload SSH host public key through Incus;
 2. discover the realized management address;
