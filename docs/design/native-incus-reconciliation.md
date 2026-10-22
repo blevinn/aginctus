@@ -1,6 +1,6 @@
 # Native Incus reconciliation: staged migration design
 
-Status: **planned post-v0.1 architecture**, not implemented. See [ADR 0002](adr/0002-native-incus-reconciliation.md) and [epic #153](https://github.com/blevinn/aginctus/issues/153).
+Status: **planned post-v0.1 architecture**, not implemented. See [ADR 0002](../adr/0002-native-incus-reconciliation.md) and [epic #153](https://github.com/blevinn/aginctus/issues/153).
 
 ## Release guardrails
 
