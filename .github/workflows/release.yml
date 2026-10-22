@@ -69,7 +69,6 @@ jobs:
       contents: write
     env:
       NIX_CONFIG: experimental-features = nix-command flakes
-      GH_TOKEN: ${{ github.token }}
       TAG: ${{ github.ref_name }}
     steps:
       - name: checkout tag
@@ -108,6 +107,7 @@ jobs:
       - name: create draft release, never overwrite existing release
         env:
           GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
