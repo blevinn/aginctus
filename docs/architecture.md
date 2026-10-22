@@ -1,244 +1,72 @@
-# Architecture
-
-Aginctus is an orchestration layer for building and operating isolated agentic environments on Incus.
-
-The architecture should be driven by a small usable vertical slice before expanding into the full control-plane vision.
-
-## First target
-
-The first target is intentionally narrow:
-
-> Run a dedicated Herdr client inside an Aginctus-managed infrastructure container and use it to connect over SSH to Herdr servers running inside Aginctus-managed agent workloads.
-
-The human starts the console from the Incus host with an Aginctus command such as `aginctus herdr`. Aginctus uses `incus exec` to enter the Herdr client container and launch the client there.
-
-Each agent workload owns its own Herdr server, panes, and agent processes. The Herdr client container is presentation and control infrastructure; it does not host the agent workloads themselves.
-
-This target forces the project to solve useful platform concerns early:
-
-- instance creation and lifecycle;
-- infrastructure workloads versus agent workloads;
-- guest bootstrap;
-- an internal management network;
-- SSH identity and trust bootstrap;
-- service discovery and generated Herdr machine configuration;
-- container and VM targets behind the same connection model;
-- ownership and cleanup of Incus resources;
-- separation between portable workload intent and Incus-specific implementation.
-
-## Initial component boundaries
-
-### Aginctus CLI
-
-The first user-facing control surface will be an `aginctus` CLI running on the Incus host. The initial CLI implementation is written in Go.
-
-Initially, the CLI may be a thin orchestration layer over Incus. It should not merely proxy arbitrary `incus` commands: Aginctus commands should operate on Aginctus concepts and preserve Aginctus invariants.
-
-For the first milestone, `aginctus herdr` should enter the managed Herdr client container with `incus exec` and launch or attach to the Herdr client.
-
-The CLI is expected to provide the first executable interface to orchestration logic that can later be shared with an API service.
-
-### Orchestration core
-
-The orchestration layer owns the translation from Aginctus configuration into concrete operations.
-
-Its responsibilities include:
-
-- validating configuration;
-- creating or reconciling Incus resources;
-- bootstrapping infrastructure and agent workloads;
-- provisioning management-network connectivity;
-- managing SSH client identity and target authorization;
-- discovering runtime state and workload addresses;
-- generating Herdr machine configuration;
-- reporting status and errors;
-- destroying resources owned by Aginctus.
-
-The orchestration layer should not expose Incus implementation details in the public workload model unless they are intentionally part of the Aginctus contract.
-
-### Incus adapter
-
-Direct interaction with Incus belongs behind a narrow adapter.
-
-The adapter is responsible for operations such as:
-
-- creating, starting, stopping, and deleting instances;
-- selecting container or VM execution;
-- attaching networks and storage;
-- reading instance state and addresses;
-- applying Aginctus ownership metadata;
-- performing `incus exec` operations needed by higher-level workflows.
-
-This boundary exists so higher-level configuration remains portable and testable.
-
-### Guest bootstrap
-
-Guest bootstrap configures the software required inside an instance.
-
-Shared orchestration must not assume a particular package manager, init system, or filesystem layout.
-
-NixOS is the first-class initial guest path, but the bootstrap contract should allow other Linux distributions to implement the same requirements.
-
-The first milestone has two guest roles.
-
-#### Herdr client infrastructure
-
-The Herdr client container needs:
-
-- Herdr installed;
-- an Aginctus-managed SSH client identity;
-- generated SSH host-trust data;
-- generated Herdr machine configuration for managed agent workloads.
-
-#### Agent workload
-
-Each agent workload needs:
-
-- an SSH server reachable on the management network;
-- the Aginctus Herdr-client public key authorized for the intended login account;
-- Herdr installed and available to the SSH session;
-- the agent runtime and dependencies required by that workload.
-
-### Workload model
-
-A workload describes desired behavior rather than Incus machinery.
-
-The initial model should be able to express:
-
-- workload name;
-- role or runtime;
-- isolation mode: `container` or `vm`;
-- guest image or guest profile;
-- resource requirements;
-- workspace or mounted data;
-- management access;
-- lifecycle intent.
-
-Infrastructure workloads such as the Herdr client are Aginctus-managed resources but should remain distinguishable from agent workloads.
-
-Herdr is the first frontend we will exercise, but Herdr-specific concepts should not become generic platform concepts without a clear need.
-
-## Management network
-
-Aginctus should create or select an internal management network for control-plane communication between infrastructure workloads and agent workloads.
-
-For the first milestone:
-
-1. the Herdr client container joins the management network;
-2. each managed agent workload joins the management network;
-3. the Herdr client can reach the SSH service of each agent workload;
-4. agent workloads do not require public SSH exposure;
-5. management connectivity does not imply unrestricted workload-to-workload trust;
-6. workload internet egress remains a separate policy concern.
-
-The initial implementation may use an Incus-managed bridge. Address assignment is an implementation detail; Aginctus should discover realized addresses and generate client configuration from them.
-
-As policy support matures, Incus ACLs or equivalent controls should restrict the management network so the Herdr client has the access it needs without turning it into a generally trusted flat network.
-
-## SSH identity and trust
-
-SSH is the first management transport between the Herdr client tier and agent workloads.
-
-Aginctus should manage this path explicitly rather than relying on ambient user SSH state.
-
-The initial design should include:
-
-- an Aginctus-managed SSH keypair for the Herdr client environment;
-- the private key present only in the Herdr client container and Aginctus-controlled secret material;
-- the public key provisioned only to agent workloads intended to be reachable from that client;
-- host-key verification enabled;
-- generated `known_hosts` or equivalent trust data for managed targets;
-- predictable key rotation and cleanup behavior.
-
-A single deployment-scoped keypair is sufficient for the first milestone. Per-workload keys or an SSH CA may be introduced later if they materially improve isolation or operations.
-
-The human host does not need direct SSH credentials for agent workloads in order to use Herdr.
-
-The proposed [Herdr SSH credential lifecycle](ssh-credentials.md) specifies generation, guest delivery, host-trust bootstrap, rotation, revocation, and orchestration integration for this path.
-
-## Herdr machine discovery
-
-Aginctus owns the mapping between managed agent workloads and the machine entries consumed by the Herdr client.
-
-When agent workloads are created, removed, or addressed differently, Aginctus should reconcile the Herdr client configuration accordingly.
-
-A Herdr machine entry should be derived from Aginctus runtime state rather than requiring users to manually copy IP addresses or edit SSH targets.
-
-## Resource ownership
-
-Aginctus must be able to distinguish resources it owns from unrelated Incus resources.
-
-Created resources should carry stable ownership metadata sufficient to:
-
-- map an Incus object back to an Aginctus deployment and workload;
-- distinguish infrastructure from agent workloads;
-- discover existing resources during reconciliation;
-- avoid deleting unrelated resources;
-- make cleanup predictable.
-
-The exact naming and metadata schema can be defined alongside the CLI implementation.
-
-## Desired state and runtime state
-
-Configuration describes desired state. Incus and the guests provide runtime state.
-
-Aginctus should not require its own persistent database for the first milestone unless implementation experience demonstrates a need for one. Configuration plus discoverable Incus metadata should be sufficient to bootstrap the initial CLI.
-
-This keeps the first implementation small while preserving a path toward a daemon or API-backed control plane later.
-
-## Initial configuration shape
-
-The configuration format is not yet stable, but the first milestone should be expressible without Incus-specific plumbing leaking into the manifest.
-
-For example:
-
-```yaml
-infrastructure:
-  herdr:
-    isolation: container
-    guest:
-      distribution: nixos
-
-workloads:
-  dev:
-    isolation: container
-    guest:
-      distribution: nixos
-    runtime:
-      type: opencode
-    console:
-      herdr: true
-
-  research:
-    isolation: vm
-    guest:
-      distribution: nixos
-    runtime:
-      type: hermes
-    console:
-      herdr: true
+# Architecture: current single-host deployment
+
+Aginctus is a Go CLI and NixOS/Incus integration for managing a private agent lab. This page describes **what the v0.1 implementation can deploy**, not the later API, multi-host or multi-runtime vision. Its components can be provisioned without the whole pilot passing live model-backed acceptance.
+
+## Runtime topology
+
+```text
+Operator on trusted Incus host
+  aginctus CLI  <--- effective JSON configuration / NixOS module
+      |
+      +-- Incus resource lifecycle: network, state volumes, guests
+      |    |
+      |    +-- aginctus-mgmt (managed bridge; no IPv4 routing/NAT)
+      |         |
+      |         +-- Herdr client (NixOS container, persistent SSH state)
+      |         |      |
+      |         |      +-- strict, pinned SSH ---> OpenCode workload
+      |         |                                     (NixOS container)
+      |         |                                     Herdr server + agent
+      |         |                                           |
+      |         |                                  scoped runtime key
+      |         |                                           |
+      |         +-- LiteLLM (OCI gateway) <--- private HTTP /v1
+      |         |      |
+      |         +-- PostgreSQL (gateway persistence)
+      |                |
+      +-- aginctus-egress: separate LiteLLM-only NIC and guarded
+           upstream HTTPS path, subject to host firewall policy
 ```
 
-Aginctus would derive the management network, SSH authorization, Herdr server setup, and Herdr machine entries from this intent.
+The drawing shows **intended connectivity**, not proof that the deployed pilot currently reaches an upstream model. The management bridge is shared at v0.1: network membership alone is not per-workload segmentation. PostgreSQL and normal workloads have no intended direct public egress; LiteLLM's dedicated egress path has separate routing and filtering prerequisites.
 
-These examples are illustrative contracts, not a committed schema.
+## Host control and orchestration
 
-## Deferred decisions
+- **CLI/configuration:** `cmd/aginctus` and `internal/cli` implement status, lifecycle, gateway and Herdr commands. `internal/config` merges defaults, configuration files, environment and explicit overrides. The [configuration guide](configuration.md) is authoritative for precedence and values; [CLI operations](cli.md) documents effects and preview limits.
+- **NixOS integration:** `nix/nixos-module.nix` packages the CLI, typed host settings and optional image imports. `services.aginctus.firewall.enable` defaults **on**, reconciling selected host DNS/DHCP firewall rules; `services.aginctus.reconcile.enable` defaults **off**, leaving Incus resource deployment explicit unless opted in. `reconcile.gateway` is a further opt-in. These are **independent mutation boundaries**.
+- **Incus planning:** Jsonnet generates ordered resource plans, prevalidated by `internal/orchestration`. The current resource drivers use Incus Apply and Compose integration, plus an owned state-volume driver. A migration to native Incus reconciliation is [planned](native-incus-reconciliation.md), **not the current driver**. `aginctus apply --render` is an offline plan; `apply` and `apply --from FILE` execute and mutate resources.
+- **Ownership and discovery:** network, instances, Compose resources and persistent state carry Aginctus ownership markers and are checked before ordinary mutations. `--force` may relax selected guards; it is not a general safe repair mechanism. The current CLI/Herdr guest paths use the default Incus project; independent named Incus projects are future work.
 
-The subsequent [AI gateway design](ai-gateway.md) defines a single-operator LiteLLM/PostgreSQL slice with CLI-managed provider authentication and workload credentials. Its illustrative interfaces do not change the first Herdr milestone or establish a stable public schema.
+The Incus host and its administrators are in the trusted computing base. Ownership metadata helps reject accidents and foreign collisions, not privileged tampering.
 
-The first architectural slice does not need to settle:
+## Herdr control path
 
-- persistence database;
-- daemon or API framework;
-- dashboard technology;
-- full model-gateway design;
-- full MCP policy model;
-- general internet-egress policy;
-- final management-network policy implementation;
-- SSH CA versus managed keypairs;
-- multi-host scheduling;
-- cluster management;
-- a stable public configuration schema.
+`aginctus herdr` enters the dedicated **Herdr client container** using Incus exec and connects to Herdr servers inside managed workload guests. It is not a central Herdr HTTP API and the client container does not run OpenCode itself.
 
-Those decisions should be made when a concrete milestone requires them.
+For the supported OpenCode NixOS guest, explicit host commands authorize the client's public SSH key, pin the guest's Ed25519 SSH host key from authenticated Incus inspection, probe strict SSH as non-root `agent`, and register the managed machine with Herdr. Client private keys remain guest-local on a persistent system-state volume. Host-key changes and incompatible profiles fail closed; there is no automatic rotation or safe cross-incarnation trust reset. See [Herdr operator workflow](herdr-machine-registration.md), [SSH credential contract](ssh-credentials.md) and [persistent state](herdr-persistent-state-volumes.md).
+
+## Model gateway and credential path
+
+`internal/gateway` renders and deploys an Aginctus-owned LiteLLM + PostgreSQL Compose service with protected runtime secrets. The gateway is reachable on the private management network. The OpenCode image contains no upstream provider credential: the operator obtains an approved, scoped LiteLLM workload key and **explicitly** runs `aginctus workload gateway provision`. The host discovers the owned LiteLLM service's management address, transfers the already issued key to a fixed guest helper over Incus stdin, and the OpenCode launcher fails closed if runtime configuration is missing or invalid.
+
+Gateway provider/model registration is **local metadata**, not a completed OAuth authorization, LiteLLM route activation or successful inference request. LiteLLM's additional OCI egress NIC, default route and host firewall are handled by separate guarded procedures. Enabling NAT on the management bridge or allowing a workload direct provider access is **not** a fallback. See [gateway](ai-gateway.md), [key provisioning](workloads/opencode.md#provision-private-gateway-access-123), [host firewall](gateway-firewalld-egress.md) and [egress acceptance](litellm-oci-egress-pilot.md).
+
+## State and trust boundaries
+
+| Boundary | Implemented behavior | Important limitation |
+| --- | --- | --- |
+| Configuration vs secrets | Nix configuration excludes gateway secret paths; runtime gateway secrets reside in protected host state | Incus administrators and privileged host processes remain trusted |
+| Herdr client vs workload | Private client SSH identity stays in client; only the public key is installed in the workload; host key is pinned | A compromised client identity can control authorized workload accounts; recovery/rotation is manual |
+| Workload vs gateway | OpenCode receives a scoped LiteLLM key in guest runtime state; no baked provider key | Private-bridge HTTP carries bearer keys in plaintext; provisioning does not test effective remote scope |
+| Management vs egress | Management bridge is unrouted; external provider path is limited to the gateway egress attachment | Same-L2 management peers are not mutually isolated; real firewall and OCI route acceptance still require observation |
+| Root disk vs persisted state | Herdr client system-state volume outlives its rootfs | Removing a client does not automatically revoke its keys on surviving workloads or establish safe image migration |
+
+[Security controls and limitations](security.md) has the full risk statement. Treat Incus guest state, container images, snapshots and backups containing credentials as sensitive.
+
+## What is not yet the shipping architecture
+
+A public control-plane API, dashboard, Bubble Tea TUI, multiple independent Incus projects, remote Kubernetes workloads, arbitrary aggregation shells, broadly portable guest bootstrap, general-purpose managed SSH rotation, agent-controlled host tools/MCP grants and native Incus reconciliation are **design/roadmap work**. See [project overview](project-overview.md) for direction and [ADR 0001](adr/0001-herdr-client-topology.md) / [ADR 0002](adr/0002-native-incus-reconciliation.md) for durable decisions. Do not copy future proposals as current configuration contracts.
+
+## Verification boundary
+
+`just check-all`, rendering and read-only preflight validate offline contracts, not the pilot's live key scope, route, provider TLS, inference response, or model-directed file/test operation. The [v0.1 release checklist](https://github.com/blevinn/aginctus/issues/118) and its linked acceptance issues remain authoritative; a running container or HTTP 200 health check is insufficient. Consult [getting started](getting-started.md) for non-mutating versus explicitly approved deployment commands.
