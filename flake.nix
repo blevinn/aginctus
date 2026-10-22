@@ -35,9 +35,10 @@
         let
           pkgs = import nixpkgs { inherit system; };
           herdrPackage = herdr.packages.${system}.herdr;
+          releaseVersion = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./internal/cli/VERSION);
           aginctusCli = pkgs.buildGoModule {
             pname = "aginctus";
-            version = "0.0.0-dev+${self.shortRev or "source"}";
+            version = "${releaseVersion}+${self.shortRev or \"source\"}";
             src = ./.;
             # Dirty trees and non-Git sources get content identity, not a false commit claim.
             ldflags = [
@@ -54,7 +55,7 @@
           };
           oauthGatewayDaemon = pkgs.buildGoModule {
             pname = "aginctus-oauth-gateway";
-            version = "0.0.0-dev";
+            version = releaseVersion;
             src = ./.;
             vendorHash = "sha256-ao0Q95mYJ8xWhKWwhBQsBjtdF8bWMAXRG+c/kNOZkSQ=";
             subPackages = [ "./cmd/aginctus-oauth-gateway" ];

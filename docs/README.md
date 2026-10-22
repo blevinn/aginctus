@@ -129,6 +129,9 @@ generally discoverable should be linked from this index.
 
 ## Development and configuration
 
+- [Release process](releasing.md) — version/tag standards, release gates,
+  automated draft creation, and human-controlled publication.
+
 - [Development](development.md) — reproducible development shell,
   tooling, and Incus development notes.
 - [Configuration](configuration.md) — configuration sources,
