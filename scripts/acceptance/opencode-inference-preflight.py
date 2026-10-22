@@ -67,10 +67,14 @@ def check():
     endpoint = cfg["endpoint"]
     if any(ch.isspace() for ch in endpoint):
         raise RuntimeError("invalid private gateway endpoint")
-    url = urlsplit(endpoint)
+    try:
+        url = urlsplit(endpoint)
+        port = url.port
+    except ValueError:
+        raise RuntimeError("invalid private gateway endpoint") from None
     if (url.scheme != "http" or not url.hostname or url.username is not None
             or url.password is not None or url.path != "/v1"
-            or url.query or url.fragment or url.port != 4000):
+            or url.query or url.fragment or port != 4000):
         raise RuntimeError("invalid private gateway endpoint")
     try:
         address = ipaddress.IPv4Address(url.hostname)
