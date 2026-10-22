@@ -5,14 +5,14 @@ inert logger. No Go/Nix/Incus command can execute via this harness.
 """
 
 import os
+import pathlib
 import shutil
 import subprocess
 import tempfile
 import unittest
-from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 EXPECTED = [
     "check go",
     "check lint",
@@ -31,7 +31,7 @@ class JustCheckDispatchTests(unittest.TestCase):
         if executable is None:
             self.skipTest("just is not installed")
         with tempfile.TemporaryDirectory() as tmp:
-            bin_dir = Path(tmp)
+            bin_dir = pathlib.Path(tmp)
             logger = bin_dir / "just"
             logger.write_text(
                 "#!/bin/sh\n"
