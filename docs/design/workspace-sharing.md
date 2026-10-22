@@ -2,7 +2,7 @@
 
 Status: **proposed design, not implemented**. This document records the agreed
 v0.2 contract; examples are not yet accepted by the CLI or NixOS module.
-See [v0.2 milestone](milestones/0002-v0.2.md) for release scope and acceptance.
+See [v0.2 release tracker](https://github.com/blevinn/aginctus/issues/173) for release scope and acceptance.
 
 ## Goal
 

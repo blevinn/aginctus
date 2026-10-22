@@ -19,7 +19,7 @@ generally discoverable should be linked from this index.
 - [AI gateway design](ai-gateway.md) — single-operator LiteLLM
   deployment, inference and MCP policy, CLI authentication flows,
   and MVP acceptance criteria.
-- [Locally hosted LLMs](local-llms.md) — proposed managed Incus
+- [Locally hosted LLMs (proposed)](design/local-llms.md) — proposed managed Incus
   model-serving lifecycle with persistent shared model storage,
   gateway integration, isolation, compatibility, and acceptance
   criteria.
@@ -34,7 +34,7 @@ generally discoverable should be linked from this index.
   incus-apply and incus-compose.
 - [Orchestration streams](orchestration-streams.md) — stream
   semantics, ownership, and ordering during plan execution.
-- [Live host workspace sharing design](workspace-sharing.md) —
+- [Live host workspace sharing design](design/workspace-sharing.md) —
   workload mount contract, host policy, permissions, lifecycle, and
   tests.
 

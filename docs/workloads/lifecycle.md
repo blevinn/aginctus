@@ -36,7 +36,7 @@ but immutable/create-only drift remains fail-closed. In particular, a workload
 configured as a container will not silently adopt a same-named VM, and vice versa.
 
 The workload resource currently covers instance lifecycle only. The proposed
-[v0.2 live host workspace sharing design](../workspace-sharing.md) adds an
+[v0.2 live host workspace sharing design](../design/workspace-sharing.md) adds an
 optional, policy-gated host directory mount; its configuration examples are
 **not yet implemented**. A v0.1 guest-local workspace remains distinct from
 live host workspace sharing.
