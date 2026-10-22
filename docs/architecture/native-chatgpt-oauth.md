@@ -2,6 +2,18 @@
 
 Status: accepted architecture, **integration not yet deployed**. Tracked in #187; supersedes unmerged #186 and the custom OpenAI inference daemon from #170. Keep LiteLLM as the sole workload-facing inference gateway and preserve v0.1's shared LiteLLM API key.
 
+## Superseded standalone-daemon prototype
+
+The earlier `cmd/aginctus-oauth-gateway`, `internal/oauthgateway`, and optional
+`nix build .#oauth-gateway` guest were a **fail-closed prototype**, not an
+active OAuth inference path. The standalone guest required a protected mounted
+credential directory and exposed loopback liveness on port 4081; liveness
+could return HTTP 200 while inference/import/readiness returned 503. No
+gateway Compose path activates this daemon. Keep these artifacts distinct
+from the accepted LiteLLM-native integration; don't deploy them as a shortcut
+around enrollment, exclusive refresh ownership, and live Responses acceptance.
+The earlier design discussion is preserved in Git history and issues #170/#171.
+
 ## Verified upstream capabilities and remaining uncertainties
 
 Aginctus pins `ghcr.io/berriai/litellm:v1.103.0`. The upstream GitHub tag `v1.103.0` includes `litellm/llms/chatgpt/authenticator.py` and the ChatGPT provider package:

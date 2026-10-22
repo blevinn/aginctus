@@ -93,13 +93,6 @@ generally discoverable should be linked from this index.
 - [Herdr SSH identity contract](ssh-credentials.md) — fixed guest helpers, key locations, trust model and unsupported rotation.
 - [Herdr persistent state volumes](herdr-persistent-state-volumes.md) — volume ownership, mounts and separately approved legacy migration.
 
-## OAuth and native ChatGPT
-
-- [OAuth gateway daemon (superseded)](oauth-gateway-daemon.md) —
-  earlier daemon proposal; see
-  [Native ChatGPT OAuth](architecture/native-chatgpt-oauth.md) for
-  the accepted decision.
-
 ## Acceptance and validation
 
 - [Acceptance: OpenCode preflight](acceptance-opencode-preflight.md) —
@@ -112,13 +105,13 @@ generally discoverable should be linked from this index.
 - [Acceptance: OpenCode live](acceptance-opencode-live.md) —
   live OpenCode→LiteLLM acceptance and what stays unverified.
 
-## Milestones
+## Release tracking (current status)
 
-- [Milestone 1: Herdr console over managed workloads](milestones/0001-herdr-console.md) —
-  the first usable vertical slice and its success criteria.
-- [v0.2 milestone: controlled workload access](milestones/0002-v0.2.md) —
-  network segmentation and live host workspace sharing release
-  goals.
+GitHub release roll-ups, not old repository milestone narratives, own current
+scope, accepted evidence and status: [v0.1 / #118](https://github.com/blevinn/aginctus/issues/118),
+[v0.2 / #173](https://github.com/blevinn/aginctus/issues/173), and
+[v0.3 / #174](https://github.com/blevinn/aginctus/issues/174).
+The [release process](releasing.md) describes versioning and human sign-off.
 
 ## Development and configuration
 
