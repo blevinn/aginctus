@@ -90,19 +90,9 @@ jobs:
       - name: build Linux amd64 archive and checksum
         run: |
           set -euo pipefail
-          BUILD_SHA="$(git rev-parse HEAD)"
           nix --quiet develop --no-update-lock-file -c go mod download
-          mkdir -p dist/stage
-          nix --quiet develop --no-update-lock-file -c env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -trimpath -buildvcs=false \
-            -ldflags "-buildid= -X=github.com/blevinn/aginctus/internal/cli.Revision=$BUILD_SHA" \
-            -o dist/stage/aginctus ./cmd/aginctus
-          test "$(dist/stage/aginctus --version)" = "aginctus ${TAG#v} (revision $BUILD_SHA)"
-          cp LICENSE README.md dist/stage/
-          archive="aginctus-$TAG-linux-amd64.tar.gz"
-          tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
-            -C dist/stage -cf - . | gzip -n > "dist/$archive"
-          (cd dist && sha256sum "$archive" > SHA256SUMS && sha256sum -c SHA256SUMS)
+          nix --quiet develop --no-update-lock-file -c bash scripts/release/package.sh dist
+          test -f "dist/aginctus-$TAG-linux-amd64.tar.gz"
 
       - name: create draft release, never overwrite existing release
         env:

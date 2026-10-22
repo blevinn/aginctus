@@ -71,6 +71,14 @@ git tag -a v0.1.0 -m "Aginctus v0.1.0"
 git push origin refs/tags/v0.1.0
 ```
 
+The ordinary `hermetic` CI workflow also builds and verifies the Linux amd64
+archive with `scripts/release/package.sh` using the current source version
+(`0.0.0-dev` on the development branch). This is a **non-publishing**
+preview: it checks the CLI's embedded version and exact Git revision, archive
+contents, and SHA256 checksum without creating a tag or GitHub release.
+The tagged workflow invokes the same packaging script after its release
+collateral and hermetic validation gate.
+
 The `release` GitHub Actions workflow checks that the **annotated** tag
 points to a commit reachable from `origin/main`, that the version/changelog/
 notes match, and that pinned hermetic tests, gateway parity and CLI packaging
