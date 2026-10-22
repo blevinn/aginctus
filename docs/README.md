@@ -9,34 +9,30 @@ generally discoverable should be linked from this index.
 - [Getting started](getting-started.md) — prerequisites, NixOS side effects, non-mutating inspection, and explicitly approved deployment.
 - [CLI operations](cli.md) — supported command families, mutation boundaries, dry-run and force semantics.
 
-## Overview
+## Current architecture and component contracts
 
-- [Project overview](project-overview.md) — vision, design
-  principles, broad scope, and non-goals.
-- [Architecture](architecture.md) — initial component boundaries,
-  workload roles, management networking, SSH identity, and deferred
-  decisions.
-- [AI gateway design](ai-gateway.md) — single-operator LiteLLM
-  deployment, inference and MCP policy, CLI authentication flows,
-  and MVP acceptance criteria.
-- [Locally hosted LLMs (proposed)](design/local-llms.md) — proposed managed Incus
-  model-serving lifecycle with persistent shared model storage,
-  gateway integration, isolation, compatibility, and acceptance
-  criteria.
+- [Project overview](project-overview.md) — the supported v0.1 slice and
+  longer-term direction.
+- [Architecture](architecture.md) — implemented single-host topology,
+  runtime state, ownership and trust boundaries.
+- [AI gateway](ai-gateway.md) — implemented LiteLLM model gateway and
+  separately labeled future MCP/policy design.
+- [Declarative orchestration](orchestration.md) — current Jsonnet-generated
+  plans and Apply/Compose integration.
+- [Orchestration streams](orchestration-streams.md) — plan stream
+  validation, ownership and execution ordering.
 
-## Architecture decisions and component designs
+## Proposed designs (not implemented)
 
-- [Native Incus reconciliation migration plan](design/native-incus-reconciliation.md) —
-  staged post-v0.1 transition away from Apply/Compose, without v0.2
-  completion pressure.
-- [Declarative orchestration design](orchestration.md) —
-  Jsonnet-generated execution plans with direct Go integration for
-  incus-apply and incus-compose.
-- [Orchestration streams](orchestration-streams.md) — stream
-  semantics, ownership, and ordering during plan execution.
-- [Live host workspace sharing design](design/workspace-sharing.md) —
-  workload mount contract, host policy, permissions, lifecycle, and
-  tests.
+The designs below describe future contracts; their examples are **not**
+currently supported configuration or a release acceptance claim.
+
+- [Locally hosted LLMs](design/local-llms.md) — owned inference
+  workloads, model-storage volumes and gateway-facing policy.
+- [Live host workspace sharing](design/workspace-sharing.md) —
+  opt-in bidirectional mount policy and ownership.
+- [Native Incus reconciliation](design/native-incus-reconciliation.md) —
+  staged replacement of the current Apply/Compose drivers after release gates.
 
 ### Architecture (subdirectory)
 
@@ -93,13 +89,6 @@ generally discoverable should be linked from this index.
 - [Herdr SSH identity contract](ssh-credentials.md) — fixed guest helpers, key locations, trust model and unsupported rotation.
 - [Herdr persistent state volumes](herdr-persistent-state-volumes.md) — volume ownership, mounts and separately approved legacy migration.
 
-## OAuth and native ChatGPT
-
-- [OAuth gateway daemon (superseded)](oauth-gateway-daemon.md) —
-  earlier daemon proposal; see
-  [Native ChatGPT OAuth](architecture/native-chatgpt-oauth.md) for
-  the accepted decision.
-
 ## Acceptance and validation
 
 - [Acceptance: OpenCode preflight](acceptance-opencode-preflight.md) —
@@ -112,13 +101,13 @@ generally discoverable should be linked from this index.
 - [Acceptance: OpenCode live](acceptance-opencode-live.md) —
   live OpenCode→LiteLLM acceptance and what stays unverified.
 
-## Milestones
+## Release tracking (current status)
 
-- [Milestone 1: Herdr console over managed workloads](milestones/0001-herdr-console.md) —
-  the first usable vertical slice and its success criteria.
-- [v0.2 milestone: controlled workload access](milestones/0002-v0.2.md) —
-  network segmentation and live host workspace sharing release
-  goals.
+GitHub release roll-ups, not old repository milestone narratives, own current
+scope, accepted evidence and status: [v0.1 / #118](https://github.com/blevinn/aginctus/issues/118),
+[v0.2 / #173](https://github.com/blevinn/aginctus/issues/173), and
+[v0.3 / #174](https://github.com/blevinn/aginctus/issues/174).
+The [release process](releasing.md) describes versioning and human sign-off.
 
 ## Development and configuration
 
