@@ -185,6 +185,13 @@ assert lib.hasInfix "custom-egress"
 assert !egressHost.services.firewalld.settings.CleanupOnExit;
 assert egressHost.services.firewalld.settings.StrictForwardPorts;
 assert egressHost.systemd.timers.aginctus-egress-firewall.timerConfig.AccuracySec == "1s";
+assert
+  egressHost.systemd.services.aginctus-egress-firewall.serviceConfig.RuntimeDirectory
+  == "aginctus-egress-firewall";
+assert
+  egressHost.systemd.services.aginctus-egress-firewall.serviceConfig.RuntimeDirectoryMode == "0700";
+assert builtins.elem "XDG_CONFIG_HOME=/run/aginctus-egress-firewall"
+  egressHost.systemd.services.aginctus-egress-firewall.serviceConfig.Environment;
 assert lib.hasInfix "/var/lib/aginctus-firewall/overrides.json"
   egressHost.systemd.services.aginctus-egress-firewall.serviceConfig.ExecStart;
 assert !(builtins.hasAttr "nixos-fw" base.networking.nftables.tables);
