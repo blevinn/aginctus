@@ -87,24 +87,11 @@ generally discoverable should be linked from this index.
 - [OpenCode workload](workloads/opencode.md) — first agent workload
   image, guest services, and local image workflow.
 
-## Herdr SSH credential and lifecycle
+## Herdr SSH and persistent state
 
-- [Herdr SSH credential lifecycle](ssh-credentials.md) — proposed
-  generation, guest delivery, host trust, rotation, revocation,
-  and orchestration integration.
-- [SSH bootstrap workflow](ssh-bootstrap-workflow.md) — concrete
-  invocation and data flow between the Herdr client identity
-  helper, Aginctus host process, and workload authorization helper.
-- [Herdr host trust](herdr-host-trust.md) — host trust directory
-  ownership, scope, and validation rules.
-- [Herdr machine registration](herdr-machine-registration.md) —
-  managed-machine registration and lifecycle.
-- [Herdr workload authorization](herdr-workload-authorization.md) —
-  per-workload authorization, key pinning, and revocation.
-- [Herdr persistent state volumes](herdr-persistent-state-volumes.md) —
-  scoped state-volume provisioning and reuse.
-- [Herdr connectivity validation](herdr-connectivity-validation.md) —
-  remote Herdr CLI reaches the managed server through strict SSH.
+- [Herdr operations and validation](herdr-machine-registration.md) — supported authorization, pinned host trust, strict SSH probe, registration, diagnostics and recovery.
+- [Herdr SSH identity contract](ssh-credentials.md) — fixed guest helpers, key locations, trust model and unsupported rotation.
+- [Herdr persistent state volumes](herdr-persistent-state-volumes.md) — volume ownership, mounts and separately approved legacy migration.
 
 ## OAuth and native ChatGPT
 

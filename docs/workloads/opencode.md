@@ -42,7 +42,7 @@ aginctus-opencode-workload
 
 The image enables `sshd` but disables password and keyboard-interactive authentication. Root SSH login is disabled.
 
-No SSH public key is baked into the image. The image exposes a fixed `aginctus-ssh-authorize` helper and a dedicated root-owned authorization path for Aginctus-managed client keys; host-side orchestration still needs to deliver and reconcile those keys. See [SSH bootstrap workflow](../ssh-bootstrap-workflow.md) for the exact client-helper → host → workload-helper handoff.
+No SSH public key is baked into the image. The image provides the fixed `aginctus-ssh-authorize` helper and a dedicated root-owned authorization path for managed client keys. An operator explicitly runs `aginctus herdr authorize dev` to inspect the existing Herdr client public identity and install matching authorization; ordinary workload `apply` does not do this automatically. See [Herdr SSH identity contract](../ssh-credentials.md) for the public-key handoff and [Herdr operations](../herdr-machine-registration.md) for host trust and registration.
 
 The Herdr headless server starts at boot as the `agent` user with persistent state under `/var/lib/herdr` and runtime state under `/run/herdr`.
 
