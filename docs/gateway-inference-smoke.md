@@ -32,21 +32,9 @@ or upstream provider secret. It neither deploys nor repairs the gateway.
 - The test makes one small billable Responses inference request. Run only
   with an approved upstream model and spending authorization.
 
-## Validated pilot baseline (operator report, 2026-10-17)
+## Pilot state is not a script precondition
 
-- On the host with Aginctus installed as authoritative Incus network manager,
-  `litellm-1` and `postgres-1` were both Running; hostname-based PostgreSQL
-  TCP connectivity from LiteLLM passed.
-- LiteLLM local `/health/liveliness` **and** `/health/readiness` returned
-  HTTP 200. `aginctus gateway credential-storage audit` confirmed exclusive
-  *Incus attachment metadata*; NAT and routing on `aginctus-mgmt` were
-  each `false`.
-- The observed private LiteLLM IPv4 was `10.144.44.70`, but verify it again
-  before running anything against the pilot. This is not a durable configured
-  endpoint or a substitute for authenticated provider inference.
-- Neither an upstream API-key route nor a restricted virtual workload key
-  has been shown to exist yet. The only #247 registration reported was a
-  non-mutating preview. Never use its `openai/placeholder` source for live use.
+Do not rely on historical instance IPs, registration attempts or model/key availability recorded in earlier PRs. Inspect the **current** gateway on the operator-approved host and follow [#257](https://github.com/blevinn/aginctus/issues/257) for egress readiness and [#122](https://github.com/blevinn/aginctus/issues/122) for permission to resume live/billable inference. Neither configured routes, issued scoped keys nor HTTP health checks prove a successful upstream request.
 
 ## Operator workflow
 
@@ -93,17 +81,13 @@ GitHub comments or chat. Revoke the temporary virtual key when complete.
 ## Full offline validation
 
 ~~~sh
-git fetch origin
-git switch feat/122-live-responses-smoke
-git pull --ff-only
 nix develop -c python3 -m unittest discover \
   -s scripts/gateway -p 'test_authenticated_inference_smoke.py' -v
 nix develop -c python3 -m py_compile \
   scripts/gateway/authenticated-inference-smoke.py \
   scripts/gateway/test_authenticated_inference_smoke.py
+just check-all
 git diff --check origin/main...HEAD
-just check
-nix flake check
 git status --short
 ~~~
 

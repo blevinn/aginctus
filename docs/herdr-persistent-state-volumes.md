@@ -43,7 +43,7 @@ These guest-specific declarations are not part of the host CLI, which does not n
 
 ## Reinitialize old fleet explicitly
 
-Legacy client containers place SSH identity and Herdr state on the root disk. They must **not** be updated in place: the current native Apply backend rejects some immutable instance changes, and a new bind mount would hide old rootfs contents. The user has opted for an explicit fleet reset; do not initiate it simply by merging this PR.
+Legacy client containers place SSH identity and Herdr state on the root disk. They must **not** be updated in place: the current native Apply backend rejects some immutable instance changes, and a new bind mount would hide old rootfs contents. A reset deletes prior guest rootfs state and requires separate, host-specific operator approval; this guide does not authorize it.
 
 Start with **read-only inspection**:
 
@@ -51,7 +51,7 @@ Start with **read-only inspection**:
 incus list --project default
 incus storage list
 incus storage volume list default --project default
-incus config show aginctus-herdr --project default --expanded
+incus query "/1.0/instances/aginctus-herdr?project=default&recursion=1" | jq '{name, status, owned: .config["user.aginctus.managed"], state_volume: [(.expanded_devices // {}) | to_entries[] | select(.value.type == "disk" and .value.source == "aginctus-herdr-state-system") | {device: .key, guest_path: .value.path}]}'
 incus exec aginctus-herdr --project default -- aginctus-ssh-client-identity inspect
 ```
 
@@ -68,7 +68,7 @@ It creates the owned system volume and declares its Incus disk attachment. Verif
 
 ```bash
 incus storage volume show default custom/aginctus-herdr-state-system --project default
-incus config show aginctus-herdr --project default --expanded
+incus query "/1.0/instances/aginctus-herdr?project=default&recursion=1" | jq '{name, status, owned: .config["user.aginctus.managed"], state_volume: [(.expanded_devices // {}) | to_entries[] | select(.value.type == "disk" and .value.source == "aginctus-herdr-state-system") | {device: .key, guest_path: .value.path}]}'
 incus exec aginctus-herdr --project default -- mountpoint /var/lib/aginctus/state/system
 incus exec aginctus-herdr --project default -- mountpoint /var/lib/herdr
 incus exec aginctus-herdr --project default -- mountpoint /var/lib/aginctus/ssh
@@ -79,15 +79,11 @@ Check mount status and guest service health before generating a new SSH key. Onl
 
 ## Later image replacement acceptance
 
-A future explicitly supported replace-container command should stop the client, verify volume ownership and attachment, retain `state-system`, remove only the old instance, create from the new image with the same volume, and confirm unchanged SSH public fingerprint, host trust and Herdr machines. No key rotation should be necessary for an ordinary image upgrade. This PR does **not** yet automate safe replacement, versioned rollback, or concurrent operator exclusion.
+A future explicitly supported replace-container command should stop the client, verify volume ownership and attachment, retain `state-system`, remove only the old instance, create from the new image with the same volume, and confirm unchanged SSH public fingerprint, host trust and Herdr machines. No key rotation should be necessary for an ordinary image upgrade. The current state-volume operation does **not** by itself automate safe replacement, versioned rollback, or concurrent operator exclusion.
 
 ## Development validation
 
 ```bash
-git fetch origin
-git switch feat/herdr-persistent-state-volumes
-git pull --ff-only
-
 nix develop -c go test ./internal/statevolume ./internal/herdrclient -count=1
 nix develop -c go test ./...
 nix flake check
