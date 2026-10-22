@@ -103,6 +103,13 @@ hosts. Confirm both CLI version and pinned revision after deployment. Retain
 the old pin to allow source rollback; runtime state migrations require an
 independent rollback plan.
 
+After tagging, promptly open a normal PR to advance `internal/cli/VERSION`
+on `main` to the next **development** version (for example `0.2.0-dev`),
+and leave a fresh `[Unreleased]` changelog section. This is a separate,
+reviewed commit, never an edit to the release tag. Until it merges, builds
+of current `main` will still identify as the just-released version;
+consumers should pin immutable tags or commit SHAs instead.
+
 ## Failures and corrections
 
 The workflow rejects a mismatch, a lightweight/off-main tag, a failed
