@@ -52,10 +52,10 @@ class ReadinessTests(unittest.TestCase):
                              ["incus", "--project", "default", "exec", "aginctus-dev", "--"])
             self.assertNotIn("cat", argv)
         error = subprocess.CalledProcessError(1, ["incus"], stderr="secret-token")
-        with patch.object(mod.subprocess, "run", side_effect=error):
-            with self.assertRaisesRegex(RuntimeError, "guest command failed") as caught:
-                mod.guest("stat", "--", mod.KEY)
-            self.assertNotIn("secret-token", str(caught.exception))
+        with patch.object(mod.subprocess, "run", side_effect=error), self.assertRaisesRegex(
+                RuntimeError, "guest command failed") as caught:
+            mod.guest("stat", "--", mod.KEY)
+        self.assertNotIn("secret-token", str(caught.exception))
 
     def test_phase_error_suppresses_subprocess_detail(self):
         with self.assertRaisesRegex(RuntimeError, "readiness phase failed: credential metadata") as caught:
@@ -68,19 +68,19 @@ class ReadinessTests(unittest.TestCase):
             if args[:3] == ("stat", "-c", "%a %U %F"):
                 return "644 root regular file\n"
             return self.fake(*args)
-        with patch.object(mod, "guest", side_effect=fake) as guest:
-            with self.assertRaisesRegex(RuntimeError, "credential"):
-                mod.check()
-            self.assertEqual(guest.call_count, 1)
+        with patch.object(mod, "guest", side_effect=fake) as guest, self.assertRaisesRegex(
+                RuntimeError, "credential"):
+            mod.check()
+        self.assertEqual(guest.call_count, 1)
 
     def test_rejects_unreadable_key(self):
         def fake(*args):
             if "test" in args:
                 raise RuntimeError("sensitive subprocess text")
             return self.fake(*args)
-        with patch.object(mod, "guest", side_effect=fake):
-            with self.assertRaisesRegex(RuntimeError, "credential accessibility") as caught:
-                mod.check()
+        with patch.object(mod, "guest", side_effect=fake), self.assertRaisesRegex(
+                RuntimeError, "credential accessibility") as caught:
+            mod.check()
         self.assertNotIn("sensitive", str(caught.exception))
 
     def test_rejects_bad_config_metadata(self):
@@ -88,9 +88,9 @@ class ReadinessTests(unittest.TestCase):
             if args[:3] == ("stat", "-c", "%F"):
                 return "symbolic link\n"
             return self.fake(*args)
-        with patch.object(mod, "guest", side_effect=fake):
-            with self.assertRaisesRegex(RuntimeError, "regular gateway configuration"):
-                mod.check()
+        with patch.object(mod, "guest", side_effect=fake), self.assertRaisesRegex(
+                RuntimeError, "regular gateway configuration"):
+            mod.check()
 
     def test_rejects_wrong_protocol_and_model(self):
         for value in ("chat-completions", None):
