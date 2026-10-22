@@ -25,7 +25,7 @@ vet:
 # caller's integration/live-acceptance opt-ins and offline Go resolution.
 [no-cd]
 ci:
-    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local just check go lint python shell-tests shell markdown nix
+    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local bash -euo pipefail -c 'just check go; just check lint; just check python; just check shell-tests; just check shell; just check markdown; just check nix'
 
 # Same safe comprehensive suite for humans; VM/Incus/live tests stay opt-in.
 [no-cd]
