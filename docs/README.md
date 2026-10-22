@@ -26,7 +26,7 @@ generally discoverable should be linked from this index.
 
 ## Architecture decisions and component designs
 
-- [Native Incus reconciliation migration plan](native-incus-reconciliation.md) —
+- [Native Incus reconciliation migration plan](design/native-incus-reconciliation.md) —
   staged post-v0.1 transition away from Apply/Compose, without v0.2
   completion pressure.
 - [Declarative orchestration design](orchestration.md) —
