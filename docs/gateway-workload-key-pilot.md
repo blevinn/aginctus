@@ -116,10 +116,6 @@ LiteLLM HTTP responses or the gateway's expanded Incus configuration.
 ## Full offline validation
 
 ```sh
-git fetch origin
-git switch feat/122-scoped-workload-key-lifecycle
-git pull --ff-only
-
 nix develop -c python3 -m unittest discover \
   -s scripts/gateway -p 'test_manage_workload_key.py' -v
 nix develop -c python3 -m py_compile \
@@ -143,5 +139,4 @@ scope mismatch, revocation confirmation, endpoint restrictions, secret
 files, and no-op preview. No live key issuance or OAuth is performed
 by tests. Local trusted-host testing against pinned LiteLLM, a real
 approved registered alias, and a revocation run remains mandatory
-before closing #122, but does **not** block merging this opt-in helper
-after its offline validation.
+before closing #122, and must be explicitly authorized before claiming live #122 acceptance.

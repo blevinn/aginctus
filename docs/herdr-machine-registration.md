@@ -48,22 +48,16 @@ are the supported v0.1 path.
 
 ## Operational validation
 
-Run these on the PR branch before attempting machine registration:
+Run these non-mutating validations from the current checkout before attempting explicit machine registration:
 
 ```sh
-git fetch origin
-git switch feat/120-herdr-machine-registration
-git pull --ff-only
-
 nix develop -c go test ./internal/cli -run 'Test(ParseSavedHerdrMachines|SavedHerdrMachine|HerdrRegister)' -count=1
 nix develop -c go test ./...
 nix flake check
 nix build .#herdr-client --no-link
 ```
 
-After merging and updating the Herdr client image, **replace only the client
-instance while retaining `aginctus-herdr-state-system`**. Verify its managed
-SSH fingerprint is unchanged. Then:
+On the already provisioned, owned client with a verified persistent SSH identity, confirm that authorization and host-key trust are valid. Do not replace an existing instance as part of a routine registration check: an image upgrade needs a separate, reviewed, state-preserving procedure. Then:
 
 ```sh
 nix develop -c go run ./cmd/aginctus herdr pin-host dev
@@ -72,13 +66,11 @@ incus exec aginctus-herdr --project default -- herdr machine list --json
 incus exec aginctus-herdr --project default -- herdr machine status aginctus-dev --json
 ```
 
-The host-wide `net.bridge.bridge-nf-call-iptables=0` workaround used to test
-inter-container SSH is temporary; the host agent owns its eventual firewall
-replacement.
+Do not change host bridge filtering or firewall defaults as a machine registration workaround.
 
 ## Limitations
 
-This PR deliberately does not implement machine removal, remote sessions other
+The registration operation does not implement remote sessions other
 than `default`, automatic SSH alias drift remediation, or user-controlled
 host aliases. It does not register machines during a generic `aginctus apply`;
 `herdr register` is an explicit, independently verifiable action for v0.1.

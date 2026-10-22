@@ -1,6 +1,6 @@
 # Herdr SSH host trust and strict connectivity probe (#120)
 
-This increments the explicit #120 bootstrap after `aginctus herdr authorize dev`.
+After `aginctus herdr authorize dev`, the explicit host-trust and strict SSH probe is:
 
 ```sh
 aginctus herdr pin-host dev
@@ -21,16 +21,13 @@ The command exits unsuccessfully if the SSH probe is blocked or rejected, even t
 ## Validation (host)
 
 ```sh
-git fetch origin
-git switch feat/120-herdr-pin-host-trust
-git pull --ff-only
-
 nix develop -c go test ./internal/cli -run 'Test(ParseWorkloadHostKey|ParseManagementAddress|HerdrPinHost)' -count=1
 nix develop -c go test ./...
 nix flake check
 
-# IMPORTANT: The Herdr client image must be rebuilt and applied from this
-# branch so that aginctus-ssh-host-trust exists inside the client.
+# Check that the installed client image includes the trust helper.
+# If it is missing, plan an explicitly approved, state-preserving image upgrade;
+# do not replace a running client solely to make this check pass.
 incus exec aginctus-herdr --project default -- command -v aginctus-ssh-host-trust
 
 # Only after confirming the helper is present:
@@ -42,10 +39,10 @@ incus exec aginctus-herdr --project default -- \
   aginctus-ssh-host-trust inspect aginctus-dev
 ```
 
-Do not recreate the Herdr client merely to update the image unless its persistent SSH identity has been preserved. This bootstrap still requires lifecycle-safe image refresh, and the current host firewall may continue blocking SSH.
+Do not recreate the Herdr client merely to update the image unless its persistent SSH identity has been preserved. Any image refresh requires explicit preservation of persistent SSH identity and host trust; host firewall reachability must be verified independently.
 
 ## Remaining boundaries
 
 This is an **explicit operator action**, not an automated Apply driver or a Herdr machine publication. It currently assumes the workload's management device is `eth0`, the SSH account is `agent`, and the canonical alias is the configured managed instance name. Host-key replacement requires manual, explicit recovery. Target incarnation tracking, automatic host trust regeneration after workload recreation, safe upgrades of existing client containers, and guaranteed immunity to concurrent guest recreation remain incomplete. Herdr CLI integration must prove that its remote-session subprocess honors the dedicated SSH trust settings before registration is claimed.
 
-The host firewalld bridge-netfilter issue is separate. At the last test, authenticated SSH succeeded with `net.bridge.bridge-nf-call-iptables=0`, and the original value `1` was restored. Prefer a narrowly scoped host firewall exception; do not disable bridge filtering as part of this feature.
+The host firewall remains a separate boundary. Do not disable bridge filtering or weaken firewall policy to make SSH reachability checks pass.

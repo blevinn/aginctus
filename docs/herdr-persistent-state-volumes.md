@@ -79,15 +79,11 @@ Check mount status and guest service health before generating a new SSH key. Onl
 
 ## Later image replacement acceptance
 
-A future explicitly supported replace-container command should stop the client, verify volume ownership and attachment, retain `state-system`, remove only the old instance, create from the new image with the same volume, and confirm unchanged SSH public fingerprint, host trust and Herdr machines. No key rotation should be necessary for an ordinary image upgrade. This PR does **not** yet automate safe replacement, versioned rollback, or concurrent operator exclusion.
+A future explicitly supported replace-container command should stop the client, verify volume ownership and attachment, retain `state-system`, remove only the old instance, create from the new image with the same volume, and confirm unchanged SSH public fingerprint, host trust and Herdr machines. No key rotation should be necessary for an ordinary image upgrade. The current state-volume operation does **not** by itself automate safe replacement, versioned rollback, or concurrent operator exclusion.
 
 ## Development validation
 
 ```bash
-git fetch origin
-git switch feat/herdr-persistent-state-volumes
-git pull --ff-only
-
 nix develop -c go test ./internal/statevolume ./internal/herdrclient -count=1
 nix develop -c go test ./...
 nix flake check
