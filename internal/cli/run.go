@@ -18,8 +18,6 @@ import (
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
-const Version = "0.0.0-dev"
-
 type IncusClient interface {
 	ServerVersion(context.Context) (string, error)
 }
