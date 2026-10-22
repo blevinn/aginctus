@@ -9,12 +9,14 @@ The installed `aginctus help` and `aginctus help <command>` are the source of tr
 | `aginctus help`, `version` | Available syntax and build identity | Host readiness |
 | `aginctus config get PATH`, `config show` | Effective local configuration | Whether deployments are safe; review output before sharing |
 | `aginctus doctor` | Incus daemon and configured loopback HTTPS listener | Real service reachability or firewall isolation |
-| `aginctus status`, `network status`, `herdr client status`, `workload ID status`, `gateway status` | Selected observed state | Successful model inference |
+| `aginctus status`, `network status`, `herdr client status`, `workload status ID`, `gateway status` | Selected observed state | Successful model inference |
 | `aginctus gateway validate`, `gateway render` | Gateway input and rendered Compose intent | Application health, egress or authenticated provider access |
 | `aginctus apply --render` | Offline deterministic orchestration plan | Executed reconciliation |
-| `aginctus network apply --dry-run`, `herdr client apply --dry-run`, `workload ID apply --dry-run` | Non-mutating planned lifecycle operations | Ownership of an uninspected remote environment |
+| `aginctus network apply --dry-run`, `herdr client apply --dry-run`, `workload apply ID --dry-run` | Non-mutating planned lifecycle operations | Ownership of an uninspected remote environment |
 
 Some gateway egress `plan`, `preflight`, `audit`, `model render` and `credential-storage audit` commands are also read-only. A proposal or ownership audit is **not** a network address reservation, an authenticated request or permission to activate host policy. Use `aginctus help gateway` for the currently supported forms.
+
+The older `workload <name> ensure|teardown` forms remain supported for compatibility; prefer `workload apply|remove [name]` in new examples.
 
 ## Commands that change state
 
@@ -23,7 +25,7 @@ Some gateway egress `plan`, `preflight`, `audit`, `model render` and `credential
 | `aginctus doctor --fix` | Configures the Incus HTTPS listener **only if absent**, using a loopback address |
 | `aginctus network apply/remove` | Creates/reconciles or removes a named management bridge |
 | `aginctus herdr client apply/remove/start/stop` | Changes the managed client container lifecycle |
-| `aginctus workload ID apply/remove/start/stop` | Changes the selected managed workload lifecycle |
+| `aginctus workload apply/remove/start/stop ID` | Changes the selected managed workload lifecycle |
 | `aginctus herdr authorize/pin-host/register ID` | Changes workload SSH authorization, client trust and/or saved Herdr machines; these are deliberate bootstrap steps |
 | `aginctus images update NAME PATH` | Imports/updates a local Incus image alias; running instances are not automatically replaced |
 | `aginctus apply`, `aginctus apply --from FILE` | Executes orchestration; `--from` validates a YAML/JSON stream then **executes**, not previews |
