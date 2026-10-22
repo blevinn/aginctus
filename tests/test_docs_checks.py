@@ -10,8 +10,7 @@ from markdown_it import MarkdownIt
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from check_docs_examples import check as check_examples  # noqa: E402
-from check_docs_examples import matches, patterns  # noqa: E402
+from check_docs_examples import check as check_examples, matches, patterns  # noqa: E402
 from check_markdown_links import check_index  # noqa: E402
 
 
