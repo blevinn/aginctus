@@ -46,7 +46,7 @@ For initial planning, preview the components that support non-mutating dry-runs:
 ```sh
 aginctus network apply --dry-run
 aginctus herdr client apply --dry-run
-aginctus workload dev apply --dry-run
+aginctus workload apply dev --dry-run
 ```
 
 The `dev` example assumes a `workloads.dev` definition matching the [module configuration example](configuration.md#nixos-module). A successful preview is not an authorization to operate on production state.
@@ -69,10 +69,10 @@ After reviewing dry-run output, these operations **mutate Incus state** and must
 ```sh
 aginctus network apply
 aginctus herdr client apply
-aginctus workload dev apply
+aginctus workload apply dev
 ```
 
-Then inspect `aginctus status`, `aginctus herdr client status` and `aginctus workload dev status`. If Herdr remote control is needed, consult [Herdr bootstrap and verification](herdr-machine-registration.md) to authorize, pin host trust and register the owned target before launching the interactive `aginctus herdr` console.
+Then inspect `aginctus status`, `aginctus herdr client status` and `aginctus workload status dev`. If Herdr remote control is needed, consult [Herdr bootstrap and verification](herdr-machine-registration.md) to authorize, pin host trust and register the owned target before launching the interactive `aginctus herdr` console.
 
 **Do not enable the gateway or run a live model request merely to finish this quickstart.** Gateway deployment, scoped key issuance, guest provisioning and egress firewall activation each have separate prerequisites, operator approvals and acceptance gates. Continue with [gateway documentation](ai-gateway.md), [operator key workflow](gateway-workload-key-pilot.md) and [release acceptance](acceptance-opencode.md) only after those prerequisites are satisfied.
 
