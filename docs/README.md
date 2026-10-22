@@ -4,6 +4,11 @@ This directory contains project documentation that is too detailed or
 long-lived for the root README. New documents intended to be
 generally discoverable should be linked from this index.
 
+## Start here
+
+- [Getting started](getting-started.md) — prerequisites, NixOS side effects, non-mutating inspection, and explicitly approved deployment.
+- [CLI operations](cli.md) — supported command families, mutation boundaries, dry-run and force semantics.
+
 ## Overview
 
 - [Project overview](project-overview.md) — vision, design
@@ -65,6 +70,7 @@ generally discoverable should be linked from this index.
   hermetic/VM validation scope, and outstanding live pilot acceptance.
 - [Firewall host backends](firewall-host-backends.md) — iptables,
   nftables, and firewalld integration surfaces.
+- [LiteLLM firewalld egress](gateway-firewalld-egress.md) — fail-closed host policy, runtime grants and recovery procedures.
 - [Firewall pilot validation](firewall-pilot-validation.md) —
   disposable VM validation script for host firewall integration.
 
@@ -134,20 +140,6 @@ generally discoverable should be linked from this index.
 - [Configuration](configuration.md) — configuration sources,
   precedence, environment mapping, and inspection commands.
 
-## Documentation structure
+## Reading convention
 
-As the project grows, documentation should be organized by purpose
-rather than accumulated in the root README.
-
-Expected areas include:
-
-- architecture and component boundaries;
-- configuration and workload specifications;
-- security and policy models;
-- milestones and deployment guidance;
-- developer documentation;
-- architecture decision records;
-- API documentation.
-
-New documentation should be linked from this index when it is
-intended to be generally discoverable.
+Current operator procedures describe supported behavior; proposed designs and milestone descriptions are not proof of implemented features. Dated pilot evidence and the release acceptance checklist are tracked in GitHub issues. Keep generally discoverable new documents linked here, and prefer a single canonical explanation for each behavior.
