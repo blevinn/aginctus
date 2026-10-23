@@ -372,6 +372,9 @@
           vm-harness-runtime-lifecycle = import ./nix/vm-harness/runtime-lifecycle.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-ownership-recovery = import ./nix/vm-harness/ownership-recovery.nix {
+            inherit self nixpkgs system;
+          };
           herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
             inherit
               self
