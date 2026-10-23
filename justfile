@@ -58,6 +58,7 @@ check-shell-lint:
     git ls-files -z -- '*.sh' | xargs -0 -r -n1 shellcheck
 
 test-python:
+    python3 -m unittest discover -s scripts/vm_harness -p 'test_*.py' -v
     python3 -m unittest discover -s guest/opencode -p 'test_*.py' -v
     python3 -m unittest discover -s guest/ssh -p 'test_*.py' -v
     python3 -m unittest discover -s scripts/acceptance -p 'test_*.py' -v
