@@ -138,12 +138,12 @@ func (s *RunStore) RegisterRun(pid int, ttl time.Duration) (RunRecord, error) {
 	now := time.Now().UTC()
 	rec := RunRecord{
 		SchemaVersion: runSchemaVersion,
-		ID: runIDPrefix + hex.EncodeToString(token[:]),
-		OwnerUID: os.Getuid(),
-		PID: pid,
-		ProcessStart: start,
-		CreatedAt: now,
-		ExpiresAt: now.Add(ttl),
+		ID:            runIDPrefix + hex.EncodeToString(token[:]),
+		OwnerUID:      os.Getuid(),
+		PID:           pid,
+		ProcessStart:  start,
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(ttl),
 	}
 	dir := filepath.Join(s.root, rec.ID)
 	if err := os.Mkdir(dir, 0700); err != nil {

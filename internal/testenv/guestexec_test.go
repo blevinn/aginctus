@@ -57,9 +57,9 @@ func TestGuestAgentExecPreservesArgvAndCapturesOutput(t *testing.T) {
 			return map[string]any{"return": map[string]any{}}
 		case "guest-exec":
 			var args struct {
-				Path string `json:"path"`
-				Arg []string `json:"arg"`
-				Capture bool `json:"capture-output"`
+				Path    string   `json:"path"`
+				Arg     []string `json:"arg"`
+				Capture bool     `json:"capture-output"`
 			}
 			_ = json.Unmarshal(req["arguments"], &args)
 			if args.Path != "/run/current-system/sw/bin/timeout" || !args.Capture {
