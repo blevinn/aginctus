@@ -78,6 +78,35 @@ trusted installed CLI binary, not a shell string or a network URL). The
 server's source checkout does not establish a credential or authorization
 boundary. Use only on a dedicated non-privileged worker.
 
+## Trusted supervisor implementation (in progress)
+
+Issue [#459](https://github.com/blevinn/aginctus/issues/459) is being implemented
+in isolated increments. The initial Go backend has:
+
+- QEMU guest-agent `guest-exec` / `guest-exec-status` over a local Unix
+  socket, with **argv-array execution inside the guest**, no host shell;
+- explicit guest command runtime and output limits, plus redacted protocol
+  failures (guest error descriptions are not printed);
+- 96-bit random run IDs and private `0700` ownership directories with
+  `0600` manifests recording worker UID, QEMU PID, Linux process start time,
+  and a maximum two-hour lifetime;
+- strict rejection of unknown/stale IDs, symlinks, unexpected socket types,
+  foreign resource ownership, and oversized Unix socket paths.
+
+**Not yet wired to an agent-facing command:** `aginctus testenv vm
+up|status|exec|reset|destroy` and MCP mutation tools remain unavailable.
+The QGA transport is unit-tested against a **synthetic Unix socket**, not
+the real pinned QEMU/NixOS VM. Registering a run with a PID is an
+internal prerequisite, **not** proof that the process is the trusted VM.
+
+Critical remaining work: build a pinned **offline/fully disconnected VM**
+artifact without host store mounts, install the trusted launcher in an
+agent-unmodifiable location, attach QGA only to the run-owned socket,
+perform process identity/PIDFD-safe termination, bound disk/CPU/RAM and TTL
+independently, and verify crash recovery plus cleanup before exposing
+mutating tools. The worker must run under a separate unprivileged Unix
+identity (not the pilot operator's account).
+
 ## Commands
 
 From the repository root on x86_64-linux with KVM, using the dedicated worker:
