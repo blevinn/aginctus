@@ -37,6 +37,7 @@ nix develop -c just test-vm-runner
 nix develop -c just test-vm-smoke
 nix develop -c just test-vm-storage-network
 nix develop -c just test-vm-runtime-lifecycle
+nix develop -c just test-vm-ownership-recovery
 nix develop -c just vm-debug
 ```
 
