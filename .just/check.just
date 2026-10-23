@@ -1,3 +1,7 @@
+# Just modules do not inherit the root justfile shell settings. Keep
+# pipefail here so git ls-files errors cannot be masked by xargs.
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
 # Check recipes execute at the project root despite living under .just/.
 # 'ci' and 'all' never opt in to disposable Incus or billable acceptance.
 
