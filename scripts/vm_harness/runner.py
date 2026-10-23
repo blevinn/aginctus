@@ -14,6 +14,7 @@ import os
 import secrets
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -73,8 +74,47 @@ def driver_from_build(output: str) -> Path:
     return driver
 
 
+@dataclass(frozen=True)
+class Provenance:
+    git_revision: str | None = None
+    git_dirty: bool | None = None
+    flake_lock_sha256: str | None = None
+
+
+def capture_provenance(env: dict[str, str]) -> Provenance:
+    """Capture best-effort source metadata before launching the build."""
+
+    def git_output(*arguments: str) -> str | None:
+        try:
+            result = subprocess.run(
+                ["git", *arguments],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        except OSError:
+            return None
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    revision = git_output("rev-parse", "HEAD")
+    # Nix's Git source includes tracked changes, not untracked worker files.
+    status = git_output("status", "--porcelain=v1", "--untracked-files=no")
+    try:
+        lock_hash = hashlib.sha256((ROOT / "flake.lock").read_bytes()).hexdigest()
+    except OSError:
+        lock_hash = None
+    return Provenance(revision, None if status is None else bool(status), lock_hash)
+
+
 def write_report(
-    scenario: str, exit_code: int, revision: str | None, output_root: Path
+    scenario: str,
+    exit_code: int,
+    provenance: Provenance,
+    output_root: Path,
+    *,
+    launch_failed: bool = False,
 ) -> Path:
     """Write synthetic-only, independently owned outcome metadata.
 
@@ -89,12 +129,6 @@ def write_report(
     run_id = secrets.token_hex(12)
     run_dir = output_root / run_id
     run_dir.mkdir(mode=0o700)
-    lock_path = ROOT / "flake.lock"
-    lock_hash = (
-        hashlib.sha256(lock_path.read_bytes()).hexdigest()
-        if lock_path.is_file()
-        else None
-    )
     record = {
         "schema_version": 1,
         "run_id": run_id,
@@ -102,8 +136,12 @@ def write_report(
         "status": "pass" if exit_code == 0 else "fail",
         "exit_code": exit_code,
         "created_utc": datetime.now(timezone.utc).isoformat(),
-        "git_revision": revision,
-        "flake_lock_sha256": lock_hash,
+        "failure_stage": "launch"
+        if launch_failed
+        else ("build" if exit_code else None),
+        "git_revision": provenance.git_revision,
+        "git_dirty": provenance.git_dirty,
+        "flake_lock_sha256": provenance.flake_lock_sha256,
         "verification_tier": "disposable_guest_no_live_provider",
         "upstream_inference": "not_verified",
         "cleanup": "not_verified",
@@ -126,29 +164,32 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("debug requires an interactive terminal")
     env = clean_environment(dict(os.environ))
     try:
-        result = subprocess.run(
-            build_arguments(args.scenario, args.mode == "debug"),
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if args.mode == "test":
-            git = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
+        provenance = capture_provenance(env) if args.mode == "test" else Provenance()
+        command = build_arguments(args.scenario, args.mode == "debug")
+        launch_failed = False
+        try:
+            result = subprocess.run(
+                command,
                 cwd=ROOT,
                 env=env,
                 text=True,
                 capture_output=True,
                 check=False,
             )
-            revision = git.stdout.strip() if git.returncode == 0 else None
+        except OSError as exc:
+            if args.mode != "test":
+                raise
+            launch_failed = True
+            result = subprocess.CompletedProcess(
+                command, 1, "", f"VM launcher failed: {exc}\n"
+            )
+        if args.mode == "test":
             report = write_report(
                 args.scenario,
                 result.returncode,
-                revision,
+                provenance,
                 ROOT / ".vm-harness-results",
+                launch_failed=launch_failed,
             )
             print(f"VM evidence: {report}")
         if result.returncode != 0:
