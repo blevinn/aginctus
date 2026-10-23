@@ -24,6 +24,10 @@ test-vm-storage-network:
 test-vm-runtime-lifecycle:
     python3 scripts/vm_harness/runner.py test runtime-lifecycle
 
+# Real Incus foreign-resource and daemon-outage recovery assertions.
+test-vm-ownership-recovery:
+    python3 scripts/vm_harness/runner.py test ownership-recovery
+
 # Inspect the same VM fixture with the interactive NixOS test driver.
 # Run under a dedicated unprivileged worker identity, never on pilot host.
 vm-debug:
