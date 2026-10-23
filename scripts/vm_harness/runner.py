@@ -18,6 +18,7 @@ SCENARIOS = {
     "smoke": "vm-harness-smoke",
     "storage-network": "vm-harness-storage-network",
     "runtime-lifecycle": "vm-harness-runtime-lifecycle",
+    "ownership-recovery": "vm-harness-ownership-recovery",
 }
 # Explicit allowlist: do not propagate secrets, Incus remotes, Nix build hooks,
 # QEMU arguments, inherited integration flags or SSH agents to test processes.
