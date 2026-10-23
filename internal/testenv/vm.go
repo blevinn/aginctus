@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // Scenario is one of the pinned, explicitly opt-in NixOS VM test derivations.
@@ -66,6 +67,14 @@ func VMTestRequest(root, scenarioName string) (VMRunnerRequest, error) {
 	if err != nil || !fi.Mode().IsRegular() {
 		return VMRunnerRequest{}, errors.New("testenv requires the repository VM runner (regular file)")
 	}
+	resolvedRoot, err := filepath.EvalSymlinks(absolute)
+	if err != nil {
+		return VMRunnerRequest{}, errors.New("cannot resolve repository root")
+	}
+	resolvedScript, err := filepath.EvalSymlinks(script)
+	if err != nil || !filepath.IsLocal(strings.TrimPrefix(resolvedScript, resolvedRoot+string(os.PathSeparator))) || !strings.HasPrefix(resolvedScript, resolvedRoot+string(os.PathSeparator)) {
+		return VMRunnerRequest{}, errors.New("testenv VM runner escapes repository root")
+	}
 	// The underlying runner resolves its own repository root and produces the
 	// same run-scoped evidence as the existing just test-vm-* commands.
 	return VMRunnerRequest{
@@ -89,7 +98,18 @@ func RunVMTest(ctx context.Context, root, scenarioName string, stdout, stderr io
 	cmd.Stderr = stderr
 	// The Python runner further sanitizes inherited environment before Nix.
 	// Avoid passing local Incus and live acceptance selectors even to Python.
-	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME"), "AGINCTUS_INCUS_INTEGRATION=0", "AGINCTUS_INCUS_DISPOSABLE=NO", "AGINCTUS_ACCEPTANCE_LIVE="}
+	cmd.Env = []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + os.Getenv("HOME"),
+		"USER=" + os.Getenv("USER"),
+		"LOGNAME=" + os.Getenv("LOGNAME"),
+		"LANG=" + os.Getenv("LANG"),
+		"LC_ALL=" + os.Getenv("LC_ALL"),
+		"TERM=" + os.Getenv("TERM"),
+		"AGINCTUS_INCUS_INTEGRATION=0",
+		"AGINCTUS_INCUS_DISPOSABLE=NO",
+		"AGINCTUS_ACCEPTANCE_LIVE=",
+	}
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("VM scenario %s: %w", scenarioName, err)
 	}
