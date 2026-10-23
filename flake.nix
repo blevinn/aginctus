@@ -375,6 +375,11 @@
           vm-harness-ownership-recovery = import ./nix/vm-harness/ownership-recovery.nix {
             inherit self nixpkgs system;
           };
+          # Persistent testenv guest closure; operator builds only. Not
+          # automatically run by flake check or the pilot NixOS module.
+          testenv-isolated-vm = import ./nix/vm-harness/isolated-vm.nix {
+            inherit self nixpkgs system;
+          };
           herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
             inherit
               self
