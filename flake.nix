@@ -366,6 +366,9 @@
           vm-harness-smoke = import ./nix/vm-harness/smoke.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-storage-network = import ./nix/vm-harness/storage-network.nix {
+            inherit self nixpkgs system;
+          };
           herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
             inherit
               self
