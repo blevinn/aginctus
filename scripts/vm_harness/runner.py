@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
 """Opt-in NixOS VM test launcher; never connects to host Incus.
 
 The interactive NixOS test driver is a Python REPL running as the calling
 UNPRIVILEGED Unix account. It is NOT a security sandbox for that account:
 run untrusted agents as a separate worker account, ideally on a dedicated host.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+STORE_ROOT = Path("/nix/store")
 SCENARIOS = {
     "smoke": "vm-harness-smoke",
     "storage-network": "vm-harness-storage-network",
@@ -37,8 +38,13 @@ def build_arguments(scenario: str, interactive: bool) -> list[str]:
     target = SCENARIOS[scenario]
     suffix = ".driver" if interactive else ""
     return [
-        "nix", "build", "--no-link", "--no-update-lock-file",
-        "--print-out-paths", f".#{target}{suffix}",
+        "nix",
+        "--quiet",
+        "build",
+        "--no-link",
+        "--no-update-lock-file",
+        "--print-out-paths",
+        f".#{target}{suffix}",
     ]
 
 
@@ -47,10 +53,18 @@ def driver_from_build(output: str) -> Path:
     if len(paths) != 1:
         raise ValueError("expected exactly one VM driver store path")
     store_path = Path(paths[0])
-    if not store_path.is_absolute() or not store_path.is_relative_to("/nix/store"):
+    if not store_path.is_absolute() or not store_path.is_relative_to(STORE_ROOT):
         raise ValueError("VM driver is not in the Nix store")
-    driver = store_path / "bin" / "nixos-test-driver"
-    if not driver.is_file():
+    try:
+        store_path = store_path.resolve(strict=True)
+        driver = (store_path / "bin" / "nixos-test-driver").resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("VM driver executable is missing or invalid") from exc
+    if not store_path.is_relative_to(STORE_ROOT) or not driver.is_relative_to(
+        STORE_ROOT
+    ):
+        raise ValueError("VM driver resolves outside the Nix store")
+    if not driver.is_file() or not os.access(driver, os.X_OK):
         raise ValueError("VM driver executable is missing")
     return driver
 
@@ -80,8 +94,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"PASS: VM test derivation: {result.stdout.strip()}")
             return 0
         driver = driver_from_build(result.stdout)
-        print("Interactive VM driver: Python runs as your worker account.", file=sys.stderr)
-        print("Use machine.succeed(...) for guest-only diagnostics; never use pilot secrets.", file=sys.stderr)
+        print(
+            "Interactive VM driver: Python runs as your worker account.",
+            file=sys.stderr,
+        )
+        print(
+            "Use machine.succeed(...) for guest-only diagnostics; never use pilot secrets.",
+            file=sys.stderr,
+        )
         return subprocess.run(
             [str(driver), "--interactive"], cwd=ROOT, env=env, check=False
         ).returncode
