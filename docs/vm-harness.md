@@ -28,6 +28,28 @@ Nix builds can still download locked dependencies and consume host disk/CPU.
 No real network isolation or quota is claimed by this runner alone. Existing
 `just check-all` remains hostless and does not start this VM.
 
+## Native CLI entrypoint (experimental)
+
+`aginctus testenv vm` is the new typed operator CLI. In this first increment,
+`list` and `plan` are offline and read-only, and `test` reuses **the existing
+Python batch runner and its evidence files**, selected by fixed scenario name:
+
+```sh
+aginctus testenv vm list
+aginctus testenv vm plan smoke
+aginctus testenv vm test smoke
+aginctus testenv vm test storage-network
+```
+
+Execute `test` **from the repository checkout** on an unprivileged,
+dedicated test worker. The current Python script is sourced from that checkout,
+which a coding agent may modify; this is **not** an immutable installed
+supervisor or a safe way to grant an untrusted agent host execution.
+Native persistent VM exec/up/reset/destroy and MCP tool execution remain
+disabled until the separate trusted supervisor and permission work lands.
+`list`, `plan` and `help testenv` do not load host configuration or
+contact the host Incus daemon.
+
 ## Commands
 
 From the repository root on x86_64-linux with KVM, using the dedicated worker:
