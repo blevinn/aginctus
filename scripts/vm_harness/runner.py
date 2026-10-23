@@ -14,7 +14,10 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-SCENARIOS = {"smoke": "vm-harness-smoke"}
+SCENARIOS = {
+    "smoke": "vm-harness-smoke",
+    "storage-network": "vm-harness-storage-network",
+}
 # Explicit allowlist: do not propagate secrets, Incus remotes, Nix build hooks,
 # QEMU arguments, inherited integration flags or SSH agents to test processes.
 PASSTHROUGH = ("PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TERM")
