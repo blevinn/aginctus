@@ -13,7 +13,7 @@ pkgs.testers.runNixOSTest {
       virtualisation.memorySize = lib.mkForce 6144;
       virtualisation.diskSize = lib.mkForce 24576;
       services.aginctus.images.opencodeWorkload = {
-        enable = true;
+        enable = lib.mkForce true;
         source = self.packages.${system}.opencode-workload;
       };
     };
@@ -42,8 +42,8 @@ pkgs.testers.runNixOSTest {
     machine.succeed(f"{cli} network ensure")
     machine.succeed(f"{cli} herdr client apply")
     machine.succeed(f"{cli} workload apply dev")
-    machine.succeed("incus list --format json | jq -e '[.[] | select(.name == \\"aginctus-herdr\\")] | length == 1'")
-    machine.succeed("incus list --format json | jq -e '[.[] | select(.name == \\"aginctus-dev\\")] | length == 1'")
+    machine.succeed("incus list --format json | jq -e '[.[] | select(.name == \"aginctus-herdr\")] | length == 1'")
+    machine.succeed("incus list --format json | jq -e '[.[] | select(.name == \"aginctus-dev\")] | length == 1'")
 
     # Gateway rendering uses the *real* packaged CLI, but does not launch
     # OCI services or claim authenticated LiteLLM/provider inference.
