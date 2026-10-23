@@ -213,7 +213,9 @@ func mcpAnswer(raw []byte) *mcpResponse {
 			}
 			response.Result = mcpContent(map[string]any{"scenarios": VMScenarios()})
 		case "vm_plan":
-			var args struct { Scenario string `json:"scenario"` }
+			var args struct {
+				Scenario string `json:"scenario"`
+			}
 			if err := decodeStrict(call.Arguments, &args); err != nil {
 				answer := mcpRequestError(request.ID, -32602, "invalid vm_plan arguments", nil)
 				return &answer
