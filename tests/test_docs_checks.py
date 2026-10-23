@@ -13,7 +13,6 @@ sys.path.insert(0, str(SCRIPTS))
 from check_docs_examples import check as check_examples, matches, patterns  # noqa: E402
 from check_markdown_links import check_index  # noqa: E402
 
-
 HELP = """Usage: aginctus [global options] <command>
 
 Commands:
