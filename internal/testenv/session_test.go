@@ -99,15 +99,18 @@ func TestSupervisedVMRunCancelReapsProcessAndRetainsEvidence(t *testing.T) {
 	// Ensure the fake script received the exact QGA flags, without an
 	// agent-defined network/device or a forwarded host environment.
 	argvFile := filepath.Join(store.root, rec.ID, "tmp", "argv")
+	optsFile := filepath.Join(store.root, rec.ID, "tmp", "opts")
 	deadline := time.Now().Add(3*time.Second)
 	for {
-		if _, err := os.Stat(argvFile); err == nil {
+		_, argvErr := os.Stat(argvFile)
+		_, optsErr := os.Stat(optsFile)
+		if argvErr == nil && optsErr == nil {
 			break
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("fake launcher never entered")
 		}
-		time.Sleep(10*time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	args, err := os.ReadFile(argvFile)
 	if err != nil {
@@ -117,7 +120,7 @@ func TestSupervisedVMRunCancelReapsProcessAndRetainsEvidence(t *testing.T) {
 		strings.Contains(string(args), "-nic") || strings.Contains(string(args), "/etc/shadow") {
 		t.Fatalf("unsafe launcher arguments: %q", args)
 	}
-	opts, err := os.ReadFile(filepath.Join(store.root, rec.ID, "tmp", "opts"))
+	opts, err := os.ReadFile(optsFile)
 	if err != nil || strings.TrimSpace(string(opts)) != "" {
 		t.Fatalf("host QEMU_OPTS leaked to launched VM: %q, %v", opts, err)
 	}
