@@ -107,6 +107,35 @@ independently, and verify crash recovery plus cleanup before exposing
 mutating tools. The worker must run under a separate unprivileged Unix
 identity (not the pilot operator's account).
 
+## Standalone isolated VM image (supervisor prerequisite)
+
+A new explicitly opt-in package builds the persistent VM **launcher
+derivation** from the same pinned `guest.nix` configuration as the batch
+tests:
+
+```sh
+nix build -L --no-link .#testenv-isolated-vm
+nix build --no-link --print-out-paths .#testenv-isolated-vm
+```
+
+Unlike the batch test driver, this VM variant declares a guest-local Nix
+store disk image (`useNixStoreImage=true`), **no host Nix store mount**,
+no shared directories/virtiofs, no forwarded ports, and QEMU
+`-nic none` (no SLIRP/host management route), while allowing a
+guest-side QEMU agent. The supervisor will attach a private
+`org.qemu.guest_agent.0` virtio-serial channel under each run-owned
+socket; neither an arbitrary agent-supplied socket nor a TCP listener
+is acceptable.
+
+**Not a complete sandbox yet:** the generated VM script accepts
+QEMU runtime arguments and honors some environment variables. It must
+be invoked by an immutable, supervisor-controlled launcher with a
+sanitized environment, fixed QEMU options, explicit run-owned disk
+location, bounded TTL/CPU/RAM/storage and safe PIDFD-backed cleanup.
+Do not hand the standalone launcher to an untrusted agent. An operator
+may inspect/build its immutable Nix store closure without booting it;
+the guest image has not yet been validated under KVM in this PR.
+
 ## Commands
 
 From the repository root on x86_64-linux with KVM, using the dedicated worker:
