@@ -13,8 +13,16 @@ import (
 // The batch action delegates to the established run-scoped evidence runner.
 // Test injection proves unsupported CLI forms never start a VM.
 var executeTestenvVM = testenv.RunVMTest
+var serveTestenvMCP = testenv.ServeMCP
 
 func runTestenv(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 1 && args[0] == "mcp" {
+		if err := serveTestenvMCP(ctx, os.Stdin, stdout); err != nil {
+			fmt.Fprintf(stderr, "testenv mcp: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 	if len(args) == 0 || args[0] != "vm" {
 		printTestenvUsage(stderr)
 		return 2
@@ -60,10 +68,11 @@ func runTestenv(ctx context.Context, args []string, stdout, stderr io.Writer) in
 }
 
 func printTestenvUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: aginctus testenv mcp  (stdio MCP 2026-07-28; read-only VM discovery)")
 	fmt.Fprintln(w, "Usage: aginctus testenv vm list  (offline; no config or Incus)")
 	fmt.Fprintln(w, "       aginctus testenv vm plan SCENARIO  (read-only pinned target)")
 	fmt.Fprintln(w, "       aginctus testenv vm test SCENARIO  (opt-in heavyweight NixOS VM)")
 	fmt.Fprintln(w, "Batch test reuses the checkout Python runner/evidence. For trusted operators")
 	fmt.Fprintln(w, "on a dedicated unprivileged test worker ONLY; not an agent sandbox.")
-	fmt.Fprintln(w, "Persistent guest exec/reset/destroy and MCP permissions are not implemented yet.")
+	fmt.Fprintln(w, "Persistent guest exec/reset/destroy and MCP execution tools are not implemented yet.")
 }
