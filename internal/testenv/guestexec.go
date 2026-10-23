@@ -119,7 +119,7 @@ func (a GuestAgent) Exec(ctx context.Context, argv []string, limit time.Duration
 		}
 		if response.Error != nil {
 			// Guest-controlled descriptions may include secrets; do not print.
-			return fmt.Errorf("guest agent rejected %s (%s)", command, response.Error.Class)
+			return fmt.Errorf("guest agent rejected %s", command)
 		}
 		if len(response.Return) == 0 {
 			return errors.New("guest agent response lacks result")
