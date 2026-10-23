@@ -1,4 +1,8 @@
-{ self, nixpkgs, system }:
+{
+  self,
+  nixpkgs,
+  system,
+}:
 let
   pkgs = import nixpkgs { inherit system; };
 in
