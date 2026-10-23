@@ -107,6 +107,56 @@ independently, and verify crash recovery plus cleanup before exposing
 mutating tools. The worker must run under a separate unprivileged Unix
 identity (not the pilot operator's account).
 
+## Foreground VM supervisor increment (#459)
+
+The session library now starts a **trusted Nix-store VM launcher** using
+a fixed argv array, an independent private per-run directory, and a
+deliberately minimal environment. Host `QEMU_OPTS`, `QEMU_NET_OPTS`,
+`NIX_PATH`, `SHARED_DIR`, `SSH_AUTH_SOCK`, `INCUS_*` and provider
+secrets are **not inherited**. The generated launcher is given a
+run-owned `NIX_DISK_IMAGE`, `TMPDIR` and a fixed private QEMU
+virtio-serial guest-agent socket path.
+
+`RunPinnedVMSession` explicitly refuses root, validates a Nix-store
+executable and access to `/dev/kvm`. It reserves a cryptographic run
+ID **before starting** the guest, binds the QEMU process identity
+after launch, keeps the Go process handle, and waits until exit,
+cancellation or a maximum two-hour TTL. Cancellation/expiry sends
+TERM to the **held child process handle**, escalates to KILL after
+two seconds, and waits for the direct child to be reaped. Only the
+session's private `run.json` and `session.json` receipts are
+written; foreign resources are never enumerated or deleted.
+
+**Important limitations:**
+
+- This is an **internal foreground/session API**, not yet
+  `aginctus testenv vm up|exec|destroy` or MCP execution. No caller
+  can pass a custom launcher, socket, QEMU arguments, or state root
+  through those public interfaces because they do not exist yet.
+- The TTL is enforced by the **living supervisor process**. An
+  independent watchdog and crash/reboot recovery are still required.
+  No claim is made that children survive or terminate safely if the
+  supervisor itself crashes.
+- QEMU vCPU/memory and virtual disk size are configured by the pinned
+  NixOS fixture, but **cgroup CPU/RAM limits, actual host disk quotas,
+  process-tree teardown, retention GC and PIDFD-attested destruction
+  remain unimplemented**.
+- `process_reaped: true` means only that the direct process was
+  waited on. Both `cleanup` and `upstream_inference` remain
+  `not_verified`, and guest readiness is **not** inferred from a
+  started process.
+- Unit tests run a fake program instead of a real QEMU guest. The
+  pinned NixOS launcher, QGA connection, egress boundary and full
+  lifecycle still require disposable KVM validation.
+
+This API must be packaged in an agent-unmodifiable supervisor and
+run as an independent dedicated **unprivileged** account, with no
+pilot-host privileges or secrets. The eventual daemon/IPC API must
+hold process handles and validate run ownership before permitting
+guest exec/status/reset/destroy. Do not give arbitrary agents a
+direct NixOS launcher, Python console or supervisor state-directory
+write access.
+
 ## Standalone isolated VM image (supervisor prerequisite)
 
 A new explicitly opt-in package builds the persistent VM **launcher
