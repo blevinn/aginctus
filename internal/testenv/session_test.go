@@ -106,10 +106,16 @@ func TestSupervisedVMRunCancelReapsProcessAndRetainsEvidence(t *testing.T) {
 		time.Sleep(10*time.Millisecond)
 	}
 	args, err := os.ReadFile(argvFile)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(string(args), "org.qemu.guest_agent.0") ||
 		strings.Contains(string(args), "-nic") || strings.Contains(string(args), "/etc/shadow") {
 		t.Fatalf("unsafe launcher arguments: %q", args)
+	}
+	opts, err := os.ReadFile(filepath.Join(store.root, rec.ID, "tmp", "opts"))
+	if err != nil || strings.TrimSpace(string(opts)) != "" {
+		t.Fatalf("host QEMU_OPTS leaked to launched VM: %q, %v", opts, err)
 	}
 	cancel()
 	select {
