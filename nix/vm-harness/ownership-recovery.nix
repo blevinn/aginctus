@@ -49,11 +49,14 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus info aginctus-herdr")
     machine.succeed("incus info aginctus-dev")
 
-    # Stopping the guest's Incus daemon is safe for the real host. A
-    # reconciliation failure must not be masked as a successful apply.
-    machine.succeed("systemctl stop incus.service")
+    # Stop socket activation too so the CLI cannot restart the guest daemon
+    # and turn the intended outage into a successful reconciliation.
+    machine.succeed("systemctl stop incus.socket incus.service")
+    machine.fail("systemctl is-active --quiet incus.socket")
+    machine.fail("systemctl is-active --quiet incus.service")
     machine.fail(f"{cli} workload apply dev", timeout=60)
-    machine.succeed("systemctl start incus.service")
+    machine.fail("systemctl is-active --quiet incus.service")
+    machine.succeed("systemctl start incus.socket incus.service")
     machine.wait_for_unit("incus.service")
     machine.succeed(f"{cli} herdr client apply")
     machine.succeed(f"{cli} workload apply dev")
