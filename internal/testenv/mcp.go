@@ -119,6 +119,27 @@ func mcpContent(data any) any {
 	}
 }
 
+func validMCPRequestID(raw json.RawMessage) bool {
+	var value any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		return false
+	}
+	switch id := value.(type) {
+	case string:
+		return true
+	case json.Number:
+		// JSON-RPC IDs are strings or integral numbers, not booleans,
+		// arrays, objects, null, or fractional floating-point numbers.
+		var integer int64
+		_, err := fmt.Sscan(string(id), &integer)
+		return err == nil && fmt.Sprint(integer) == string(id)
+	default:
+		return false
+	}
+}
+
 func mcpAnswer(raw []byte) *mcpResponse {
 	var request mcpRequest
 	if err := json.Unmarshal(raw, &request); err != nil {
@@ -129,7 +150,7 @@ func mcpAnswer(raw []byte) *mcpResponse {
 	if len(request.ID) == 0 {
 		return nil
 	}
-	if request.JSONRPC != "2.0" || request.Method == "" || (!json.Valid(request.ID)) {
+	if request.JSONRPC != "2.0" || request.Method == "" || !validMCPRequestID(request.ID) {
 		answer := mcpRequestError(request.ID, -32600, "Invalid Request", nil)
 		return &answer
 	}
@@ -183,9 +204,12 @@ func mcpAnswer(raw []byte) *mcpResponse {
 		}
 		switch call.Name {
 		case "vm_list_scenarios":
-			if len(call.Arguments) != 0 && string(call.Arguments) != "{}" {
-				answer := mcpRequestError(request.ID, -32602, "vm_list_scenarios accepts no arguments", nil)
-				return &answer
+			if len(call.Arguments) != 0 {
+				var arguments map[string]json.RawMessage
+				if err := json.Unmarshal(call.Arguments, &arguments); err != nil || arguments == nil || len(arguments) != 0 {
+					answer := mcpRequestError(request.ID, -32602, "vm_list_scenarios accepts no arguments", nil)
+					return &answer
+				}
 			}
 			response.Result = mcpContent(map[string]any{"scenarios": VMScenarios()})
 		case "vm_plan":
