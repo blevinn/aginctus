@@ -35,6 +35,7 @@ From the repository root on x86_64-linux with KVM, using the dedicated worker:
 ```sh
 nix develop -c just test-vm-runner
 nix develop -c just test-vm-smoke
+nix develop -c just test-vm-storage-network
 nix develop -c just vm-debug
 ```
 
@@ -43,8 +44,10 @@ Within the interactive driver, use `start_all()`, then commands such as
 `machine.succeed("incus info")`. The driver session and VM are disposed when
 the driver exits. Use only synthetic data in guest fixtures.
 
-The initial smoke fixture uses an Incus `dir` pool; a later test slice will
-exercise isolated Btrfs. Subsequent slices add synthetic gateway inference,
+The initial smoke fixture uses an Incus `dir` pool. The separate
+`storage-network` scenario provisions a Btrfs pool on a guest-local loop image,
+checks snapshot/daemon-restart visibility, and tests Aginctus management bridge
+idempotency and foreign-resource protection. Subsequent slices add synthetic gateway inference,
 Herdr/OpenCode workflow assertions, fault injection, and redacted artifacts.
 
 Never record a synthetic provider test as evidence for [#124](https://github.com/blevinn/aginctus/issues/124).
