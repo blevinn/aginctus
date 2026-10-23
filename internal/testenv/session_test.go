@@ -53,9 +53,8 @@ func TestFixedQEMUArgumentsAndSanitizedEnvironment(t *testing.T) {
 			t.Fatalf("missing pinned QGA option %q: %#v", expected, args)
 		}
 	}
-	os.Setenv("QEMU_OPTS", "-netdev user,id=escape")
-	os.Setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
-	t.Cleanup(func() { os.Unsetenv("QEMU_OPTS"); os.Unsetenv("SSH_AUTH_SOCK") })
+	t.Setenv("QEMU_OPTS", "-netdev user,id=escape")
+	t.Setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
 	env := strings.Join(vmLaunchEnvironment("/private/run"), "|")
 	for _, disallowed := range []string{"QEMU_OPTS=", "SSH_AUTH_SOCK=", "INCUS_", "NIX_PATH=", "OPENAI_API_KEY="} {
 		if strings.Contains(env, disallowed) {
@@ -74,7 +73,10 @@ func TestSupervisedVMRunCancelReapsProcessAndRetainsEvidence(t *testing.T) {
 	launcher := sessionTestLauncher(t, "printf '%s\\n' \"$@\" > \"$TMPDIR/argv\"; printf '%s\\n' \"$QEMU_OPTS\" > \"$TMPDIR/opts\"; exec sleep 30")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	type result struct { outcome SessionOutcome; err error }
+	type result struct {
+		outcome SessionOutcome
+		err     error
+	}
 	done := make(chan result, 1)
 	ready := make(chan RunRecord, 1)
 	go func() {
