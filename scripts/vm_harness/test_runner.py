@@ -1,6 +1,5 @@
 """Hostless regression checks for the opt-in VM launcher."""
 import unittest
-from pathlib import Path
 
 from scripts.vm_harness import runner
 
