@@ -159,7 +159,7 @@ func (s *RunStore) saveSessionOutcome(outcome SessionOutcome) error {
 // FOREGROUND, operator-owned, single session—not a crash-safe daemon or
 // agent-facing mutation API. Callers must use an unprivileged isolated worker.
 // The generated NixOS script execs QEMU, keeping cmd.Process bound to QEMU.
-func RunPinnedVMSession(ctx context.Context, store *RunStore, launcher string, ttl time.Duration, onReady func(RunRecord)) (SessionOutcome, error) {
+func RunPinnedVMSession(ctx context.Context, store *RunStore, launcher string, ttl time.Duration, onStarted func(RunRecord)) (SessionOutcome, error) {
 	if os.Geteuid() == 0 {
 		return SessionOutcome{}, errors.New("refusing to launch VM supervisor as root")
 	}
@@ -171,12 +171,12 @@ func RunPinnedVMSession(ctx context.Context, store *RunStore, launcher string, t
 		return SessionOutcome{}, errors.New("unprivileged KVM access is required")
 	}
 	_ = kvm.Close()
-	return runVMSession(ctx, store, launcher, ttl, onReady)
+	return runVMSession(ctx, store, launcher, ttl, onStarted)
 }
 
 // runVMSession is separate for deterministic tests with a fake launcher.
 // In production it is only called after pinned-store + KVM checks above.
-func runVMSession(ctx context.Context, store *RunStore, launcher string, ttl time.Duration, onReady func(RunRecord)) (SessionOutcome, error) {
+func runVMSession(ctx context.Context, store *RunStore, launcher string, ttl time.Duration, onStarted func(RunRecord)) (SessionOutcome, error) {
 	if store == nil || ttl <= 0 || ttl > maxRunLifetime {
 		return SessionOutcome{}, errors.New("invalid trusted VM supervisor configuration")
 	}
@@ -206,8 +206,9 @@ func runVMSession(ctx context.Context, store *RunStore, launcher string, ttl tim
 		<-waited
 		return SessionOutcome{ID: id}, err
 	}
-	if onReady != nil {
-		onReady(rec)
+	if onStarted != nil {
+		// Process registration does not imply guest boot or QGA readiness.
+		onStarted(rec)
 	}
 	timer := time.NewTimer(ttl)
 	defer timer.Stop()
@@ -237,9 +238,12 @@ func runVMSession(ctx context.Context, store *RunStore, launcher string, ttl tim
 		grace.Stop()
 	}
 	outcome := SessionOutcome{
-		ID: id, EndedAt: time.Now().UTC(), Reason: reason,
-		ProcessReaped: true, Cleanup: "not_verified",
-		Upstream: "not_verified",
+		ID:            id,
+		EndedAt:       time.Now().UTC(),
+		Reason:        reason,
+		ProcessReaped: true,
+		Cleanup:       "not_verified",
+		Upstream:      "not_verified",
 	}
 	if err := store.saveSessionOutcome(outcome); err != nil {
 		return outcome, err
