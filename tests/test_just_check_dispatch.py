@@ -11,7 +11,6 @@ import subprocess
 import tempfile
 import unittest
 
-
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 EXPECTED = [
     "check go",
