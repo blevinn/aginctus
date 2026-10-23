@@ -30,6 +30,11 @@
         default = self.nixosModules.aginctus;
       };
 
+      homeManagerModules = {
+        aginctus = import ./nix/home-manager-module.nix { inherit self; };
+        default = self.homeManagerModules.aginctus;
+      };
+
       packages = forAllSystems (
         system:
         let
