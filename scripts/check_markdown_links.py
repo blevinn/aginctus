@@ -85,6 +85,9 @@ def heading_ids(tokens):
 
 def check_index(root, names, md):
     """Require discoverability for current docs; exempt future/internal archives."""
+    # A standalone Markdown fixture with no docs/ tree needs no project index.
+    if not any(name.startswith("docs/") for name in names):
+        return []
     index = root / "docs" / "README.md"
     try:
         parsed = md.parse(index.read_text(encoding="utf-8"))
