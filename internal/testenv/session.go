@@ -26,12 +26,12 @@ var ErrSessionExpired = errors.New("VM session lifetime expired")
 // SessionOutcome is the supervisor's observation of its direct child. It
 // deliberately does NOT attest cgroup teardown, descendants or disk cleanup.
 type SessionOutcome struct {
-	ID             string    `json:"run_id"`
-	EndedAt        time.Time `json:"ended_at"`
-	Reason         string    `json:"reason"`
-	ProcessReaped  bool      `json:"process_reaped"`
-	Cleanup        string    `json:"cleanup"`
-	Upstream       string    `json:"upstream_inference"`
+	ID            string    `json:"run_id"`
+	EndedAt       time.Time `json:"ended_at"`
+	Reason        string    `json:"reason"`
+	ProcessReaped bool      `json:"process_reaped"`
+	Cleanup       string    `json:"cleanup"`
+	Upstream      string    `json:"upstream_inference"`
 }
 
 // validatePinnedVM verifies the immutable binary selected by TRUSTED worker
@@ -69,7 +69,7 @@ func vmLaunchEnvironment(runDir string) []string {
 	// or extra daemon sockets. The runner script has absolute Nix paths.
 	return []string{
 		"HOME=" + runDir,
-		"PATH=/usr/bin:/bin",
+		"PATH=/run/current-system/sw/bin:/usr/bin:/bin",
 		"LANG=C",
 		"TZ=UTC",
 		"TMPDIR=" + filepath.Join(runDir, "tmp"),
