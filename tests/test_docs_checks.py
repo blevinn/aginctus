@@ -39,6 +39,10 @@ class DocsChecksTest(unittest.TestCase):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
 
+    def test_no_docs_tree_requires_no_index(self):
+        self.write("README.md", "# Standalone Markdown fixture\n")
+        self.assertEqual(check_index(self.root, ["README.md"], MarkdownIt("commonmark")), [])
+
     def test_new_public_doc_needs_index_entry(self):
         self.write("docs/README.md", "# Docs\n[Guide](guide.md)\n")
         self.write("docs/guide.md", "# Guide\n")
