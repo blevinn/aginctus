@@ -17,7 +17,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("systemctl restart aginctus-image-herdr-client.service")
     machine.succeed("systemctl is-active --quiet aginctus-image-herdr-client.service")
     machine.succeed("incus image info aginctus-herdr-client")
-    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name == \\"aginctus-herdr-client\\")] | length == 1'")
+    machine.succeed("incus image alias list --format json | jq -e '[.[] | select(.name == \"aginctus-herdr-client\")] | length == 1'")
     # The packaged CLI must work with its generated NixOS configuration.
     machine.succeed("aginctus --configuration-file /etc/aginctus/config.json network ensure --dry-run")
   '';
