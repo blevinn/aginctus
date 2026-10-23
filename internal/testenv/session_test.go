@@ -101,8 +101,12 @@ func TestSupervisedVMRunCancelReapsProcessAndRetainsEvidence(t *testing.T) {
 	argvFile := filepath.Join(store.root, rec.ID, "tmp", "argv")
 	deadline := time.Now().Add(3*time.Second)
 	for {
-		if _, err := os.Stat(argvFile); err == nil { break }
-		if time.Now().After(deadline) { t.Fatal("fake launcher never entered") }
+		if _, err := os.Stat(argvFile); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("fake launcher never entered")
+		}
 		time.Sleep(10*time.Millisecond)
 	}
 	args, err := os.ReadFile(argvFile)
@@ -133,7 +137,9 @@ func TestSupervisedVMRunCancelReapsProcessAndRetainsEvidence(t *testing.T) {
 		t.Fatalf("process not gone: %#v %v", status, err)
 	}
 	report, err := os.ReadFile(filepath.Join(store.root, rec.ID, "session.json"))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	var outcome SessionOutcome
 	if err := json.Unmarshal(report, &outcome); err != nil || !outcome.ProcessReaped {
 		t.Fatalf("missing bounded session evidence: %s, %v", report, err)
