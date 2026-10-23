@@ -28,10 +28,10 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus storage create vm-harness-btrfs btrfs size=2GiB")
     machine.succeed("incus storage volume create vm-harness-btrfs state")
     machine.succeed("incus storage volume show vm-harness-btrfs state")
-    machine.succeed("incus storage volume snapshot vm-harness-btrfs state checkpoint")
+    machine.succeed("incus storage volume snapshot create vm-harness-btrfs state checkpoint")
     machine.succeed("systemctl restart incus.service")
     machine.succeed("incus storage volume show vm-harness-btrfs state")
-    machine.succeed("incus storage volume snapshot list vm-harness-btrfs state")
+    assert machine.succeed("incus storage volume snapshot list vm-harness-btrfs state --format csv -c n").strip() == "checkpoint"
 
     # Exercise the actual Aginctus network path, not a hand-built test bridge.
     cli = "aginctus --configuration-file /etc/aginctus/config.json"
@@ -43,10 +43,10 @@ pkgs.testers.runNixOSTest {
     assert machine.succeed("incus network get aginctus-mgmt ipv6.address").strip() == "none"
 
     # Removing an Aginctus-owned bridge must not remove an unrelated network.
-    machine.succeed("incus network create vm-harness-foreign ipv4.address=none ipv6.address=none")
+    machine.succeed("incus network create vm-foreign ipv4.address=none ipv6.address=none")
     machine.succeed(f"{cli} network teardown")
     machine.fail("incus network show aginctus-mgmt")
-    machine.succeed("incus network show vm-harness-foreign")
+    machine.succeed("incus network show vm-foreign")
     # A colliding but unowned resource must be left untouched.
     machine.succeed("incus network create aginctus-mgmt ipv4.address=none ipv6.address=none")
     machine.fail(f"{cli} network ensure")

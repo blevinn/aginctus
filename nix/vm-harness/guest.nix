@@ -1,5 +1,10 @@
 { self, system }:
-{ pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 {
   # Shared guest definition for both scripted VM checks and interactive debugging.
   # All Incus and system services run INSIDE the QEMU guest.
@@ -36,4 +41,14 @@
     # Integration scenarios explicitly reconcile their own resources.
     reconcile.enable = false;
   };
+
+  # Tests initialize Incus before starting image imports; boot-time imports
+  # otherwise race initialization and explicit service starts.
+  systemd.services =
+    lib.optionalAttrs config.services.aginctus.images.herdrClient.enable {
+      aginctus-image-herdr-client.wantedBy = lib.mkForce [ ];
+    }
+    // lib.optionalAttrs config.services.aginctus.images.opencodeWorkload.enable {
+      aginctus-image-opencode-workload.wantedBy = lib.mkForce [ ];
+    };
 }
