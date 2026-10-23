@@ -14,10 +14,14 @@
   };
 
   networking.nftables.enable = true;
-  environment.systemPackages = with pkgs; [
-    incus
-    jq
-    iproute2
+  # The NixOS service calls the store-pinned CLI directly, but the VM test
+  # driver executes guest commands through a login shell. Provide the same
+  # package on the guest PATH so operator-style CLI checks can run.
+  environment.systemPackages = [
+    pkgs.incus
+    pkgs.jq
+    pkgs.iproute2
+    self.packages.${system}.aginctus
   ];
 
   services.aginctus = {
