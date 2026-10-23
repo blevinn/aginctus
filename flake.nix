@@ -369,6 +369,9 @@
           vm-harness-storage-network = import ./nix/vm-harness/storage-network.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-runtime-lifecycle = import ./nix/vm-harness/runtime-lifecycle.nix {
+            inherit self nixpkgs system;
+          };
           herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
             inherit
               self
