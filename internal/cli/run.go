@@ -80,6 +80,16 @@ func Run(
 		return 0
 	}
 
+	// The test environment does not consume pilot configuration or Incus.
+	// Dispatch before the normal host-facing config loader.
+	if commandArgs[0] == "testenv" {
+		if len(options.Overrides) != 0 || options.ConfigurationFile != "" {
+			fmt.Fprintln(stderr, "testenv: host configuration options are not supported")
+			return 2
+		}
+		return runTestenv(ctx, commandArgs[1:], stdout, stderr)
+	}
+
 	effective, err := configLoader.Load(options)
 	if err != nil {
 		fmt.Fprintf(stderr, "configuration: %v\n", err)
@@ -1136,6 +1146,7 @@ Commands:
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
   version|--version Print the CLI version and source revision
+  testenv vm ...    Isolated opt-in NixOS VM scenario operations (see 'help testenv')
   help [command]    Show help without loading configuration or contacting Incus
   <command> --help  Show command help (also -h)
 
