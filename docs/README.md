@@ -91,6 +91,8 @@ currently supported configuration or a release acceptance claim.
 
 ## Acceptance and validation
 
+- [Disposable NixOS VM harness](vm-harness.md) — experimental
+  opt-in Aginctus/Incus VM tests and agent-debugging security limits.
 - [Acceptance: OpenCode preflight](acceptance-opencode-preflight.md) —
   read-only host infrastructure preflight before launch.
 - [Acceptance: OpenCode](acceptance-opencode.md) — OpenCode
