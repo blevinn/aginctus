@@ -8,9 +8,13 @@ run untrusted agents as a separate worker account, ideally on a dedicated host.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
+import secrets
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -55,6 +59,45 @@ def driver_from_build(output: str) -> Path:
     return driver
 
 
+def write_report(
+    scenario: str, exit_code: int, revision: str | None, output_root: Path
+) -> Path:
+    """Write synthetic-only, independently owned outcome metadata.
+
+    Do not copy VM stdout/stderr, provider payloads, headers or credentials.
+    A green Nix derivation never proves live upstream model inference.
+    """
+    if output_root.is_symlink():
+        raise ValueError("refusing symlinked VM evidence root")
+    output_root.mkdir(mode=0o700, exist_ok=True)
+    if not output_root.is_dir():
+        raise ValueError("VM evidence root is not a directory")
+    run_id = secrets.token_hex(12)
+    run_dir = output_root / run_id
+    run_dir.mkdir(mode=0o700)
+    lock_path = ROOT / "flake.lock"
+    lock_hash = hashlib.sha256(lock_path.read_bytes()).hexdigest() if lock_path.is_file() else None
+    record = {
+        "schema_version": 1,
+        "run_id": run_id,
+        "scenario": scenario,
+        "status": "pass" if exit_code == 0 else "fail",
+        "exit_code": exit_code,
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "git_revision": revision,
+        "flake_lock_sha256": lock_hash,
+        "verification_tier": "disposable_guest_no_live_provider",
+        "upstream_inference": "not_verified",
+        "cleanup": "not_verified",
+    }
+    report = run_dir / "result.json"
+    fd = os.open(report, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as out:
+        json.dump(record, out, indent=2, sort_keys=True)
+        out.write("\n")
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("test", "debug"))
@@ -73,6 +116,17 @@ def main(argv: list[str] | None = None) -> int:
             capture_output=True,
             check=False,
         )
+        if args.mode == "test":
+            git = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, env=env,
+                text=True, capture_output=True, check=False,
+            )
+            revision = git.stdout.strip() if git.returncode == 0 else None
+            report = write_report(
+                args.scenario, result.returncode, revision,
+                ROOT / ".vm-harness-results",
+            )
+            print(f"VM evidence: {report}")
         if result.returncode != 0:
             print(result.stderr, file=sys.stderr, end="")
             return result.returncode
