@@ -36,8 +36,7 @@ let
                 path = prefix ++ [ name ];
                 dotted = lib.concatStringsSep "." path;
               in
-              lib.optional (lib.elem (lib.toLower dotted) runtimeSecretKeys) dotted
-              ++ visit path nested
+              lib.optional (lib.elem (lib.toLower dotted) runtimeSecretKeys) dotted ++ visit path nested
             ) value
           )
         else
@@ -73,7 +72,8 @@ in
     assertions = [
       {
         assertion = configuredSecretPaths == [ ];
-        message = "programs.aginctus.settings cannot contain runtime gateway secrets: "
+        message =
+          "programs.aginctus.settings cannot contain runtime gateway secrets: "
           + lib.concatStringsSep ", " configuredSecretPaths;
       }
     ];
