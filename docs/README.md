@@ -10,6 +10,7 @@ generally discoverable should be linked from this index.
 - [Home Manager operator integration](home-manager.md) — standalone user installation and coexistence with NixOS host firewall policy (v0.2).
 - [CLI operations](cli.md) — supported command families, mutation boundaries, dry-run and force semantics.
 - [Operator Incus preflight](operator-preflight.md) — read-only, explicitly project-scoped access diagnostics and their limitations.
+- [Gateway state ownership audit](operator-state-audit.md) — metadata-only detection of system/user credential state collisions and unsafe permissions.
 
 ## Current architecture and component contracts
 
