@@ -362,6 +362,10 @@
           firewall-nixos-nft-integration = import ./nix/firewall-nixos-nft-test.nix {
             inherit self nixpkgs system;
           };
+          # Heavyweight: explicitly selected, never part of default flake checks.
+          vm-harness-smoke = import ./nix/vm-harness/smoke.nix {
+            inherit self nixpkgs system;
+          };
           herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
             inherit
               self
