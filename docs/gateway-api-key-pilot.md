@@ -160,6 +160,51 @@ nix develop -c python3 scripts/gateway/register-openai-model.py \
 The new route never calls the upstream on dry-run or registration.
 Successful registry lookup proves *only* that LiteLLM stored the alias.
 
+### Opt-in selective Go header callback (offline policy increment; #456)
+
+`scripts/gateway/opencode_go_forwarding.py` and
+`scripts/gateway/litellm_opencode_go_hook.py` implement an **inactive by
+default** LiteLLM v1.103.0 `CustomLogger.async_pre_call_hook` contract.
+For native `aresponses` targeting the approved pilot model alias
+`aginctus-go-pilot`, it reads only the proxy-generated, credential-redacted
+`proxy_server_request.headers`; requires a native `ses_...` session in
+`x-opencode-session-id` or `x-opencode-session` plus a recognizable
+`opencode/VERSION` User-Agent; and replaces the provider-bound header map
+with **only** `x-opencode-session` and `User-Agent`. Two conflicting native
+headers, invalid/missing/oversized values and generic HTTP-library User-Agents
+fail closed. It never issues its own session ID or forwards the workload
+bearer token, `x-api-key`, arbitrary `x-*`, or body-supplied
+`extra_headers`. Other aliases and non-Responses calls are not modified.
+
+This provides a verifiable *policy and callback contract*; it is **not an
+activated runtime integration**. To run the callback, the two Python files
+must be packaged in the actual LiteLLM image's Python import path, and an
+explicit `litellm_settings.callbacks` configuration must point to
+`litellm_opencode_go_hook.proxy_handler_instance`. No current Aginctus
+Compose deployment installs either file or enables this callback. The pinned
+LiteLLM callback-loading behavior, dispatch order, actual header metadata,
+Responses adapter, provider credentials and upstream HTTP delivery must be
+verified with the *real* pinned LiteLLM image and an offline mock provider
+before applying any configuration to the pilot. Never enable global
+`forward_client_headers_to_llm_api`; broad model-group `x-*` forwarding
+is not a substitute for this allowlist.
+
+Run the local, offline unit suite:
+
+```sh
+nix develop -c python3 -m unittest discover \
+  -s scripts/gateway -p 'test_opencode_go_forwarding.py' -v
+```
+
+The hardcoded pilot alias and conservative native `ses_...` and
+`opencode/VERSION` header formats intentionally fail closed if the pinned
+OpenCode client uses different values. Check the actual pinned executable
+with `guest/opencode/test_real_runtime.py` before runtime integration, not
+by weakening the filters. #456 remains open until the runtime hook is
+**installed and exercised** through a controlled, credential-safe mock
+upstream. A real OpenCode Go inference request remains separately gated by
+#122 and #123; existing pilot credentials are revoked.
+
 ### Required live Go compatibility gate — before claiming #122 complete
 
 OpenCode Go states it is designed for coding-agent traffic and that
