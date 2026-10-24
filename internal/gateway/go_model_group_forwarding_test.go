@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/blevinn/aginctus/internal/config"
+	composeproject "github.com/lxc/incus-compose/project"
 )
 
 // The built-in option chooses model groups; it does not restrict header names.
@@ -232,5 +234,47 @@ func TestGoModelGroupForwardingConfigRequiresExplicitBooleanOptIn(t *testing.T) 
 				t.Fatalf("enabled=%v, want %v", spec.OpenCodeGoForwarding, tc.wantEnabled)
 			}
 		})
+	}
+}
+
+func TestGoModelGroupForwardingPinnedComposeParser(t *testing.T) {
+	spec := Spec{
+		ID: "local", Project: "aginctus-gateway", Network: "aginctus-mgmt",
+		LiteLLMImage: "ghcr.io/berriai/litellm:v1.103.0-stable",
+		PostgresImage: "docker.io/library/postgres:17-alpine",
+		OpenCodeGoForwarding: true,
+	}
+	content, err := spec.RenderCompose()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "compose.yaml")
+	if err := os.WriteFile(file, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		"AGINCTUS_GATEWAY_MASTER_KEY",
+		"AGINCTUS_GATEWAY_SALT_KEY",
+		"AGINCTUS_GATEWAY_POSTGRES_PASSWORD",
+	} {
+		t.Setenv(name, "synthetic-only")
+	}
+
+	project, err := composeproject.New().Load(context.Background(),
+		composeproject.LoadFiles([]string{file}),
+		composeproject.LoadName("aginctus-gateway"),
+		composeproject.LoadOsEnv(),
+	)
+	if err != nil {
+		t.Fatalf("pinned incus-compose cannot load inline config: %v", err)
+	}
+	definition, ok := project.Configs["aginctus-opencode-go-forwarding"]
+	if !ok || definition.Content != openCodeGoForwardingYAML {
+		t.Fatalf("pinned incus-compose did not retain approved config content")
+	}
+	service, ok := project.Services["litellm"]
+	if !ok || len(service.Configs) != 1 ||
+		service.Configs[0].Target != openCodeGoConfigPath {
+		t.Fatal("pinned incus-compose lost LiteLLM config attachment")
 	}
 }
