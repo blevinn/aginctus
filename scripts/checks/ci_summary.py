@@ -60,6 +60,8 @@ def load_report(path: Path) -> dict | None:
             item["status"] != "error"
             and type(item.get("exit_code")) is not int
         )
+        or (item["status"] == "pass" and item.get("exit_code") != 0)
+        or (item["status"] == "fail" and item.get("exit_code") == 0)
         for item in results
     ):
         return None
@@ -133,9 +135,10 @@ def main() -> int:
     summary = render_summary(report, dict(environment), revision)
     with Path(environment["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
         stream.write(summary)
-    # Fail closed if CI claimed success but produced no valid report.
-    if report is None and environment.get("AGGREGATE_RESULT") == "success":
-        return 1
+    # Fail closed on missing or inconsistent evidence. A failed aggregate
+    # remains a failed check even if its report is missing or incomplete.
+    if environment.get("AGGREGATE_RESULT") == "success":
+        return 0 if report is not None and report["status"] == "pass" else 1
     return 0
 
 
