@@ -24,16 +24,29 @@ type nativeIncusVMClient struct {
 const incusRequestTimeout = 30 * time.Second
 
 func waitIncusOperation(ctx context.Context, op incusclient.Operation) error {
-	if err := op.WaitContext(ctx); err != nil {
-		return err
+	// HTTP polling avoids SDK event websocket setup without call contexts and
+	// GetOperationWait's mutation of the shared HTTP transport timeout.
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if op.Get().StatusCode.IsFinal() {
+			if op.Get().StatusCode != api.Success {
+				return errors.New("testenv Incus operation did not complete successfully")
+			}
+			return nil
+		}
+		if err := op.Refresh(); err != nil {
+			return err
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if op.Get().StatusCode != api.Success {
-		return errors.New("testenv Incus operation did not complete successfully")
-	}
-	return nil
 }
 
 // UseProject constructs a new ProtocolIncus, including private event state.
@@ -57,7 +70,7 @@ func ConnectTrustedIncusVMClient(ctx context.Context, socketPath string) (IncusV
 	}
 	// Incus may be installed under a root-owned parent. Configuration of
 	// this path is a trusted worker deployment responsibility.
-	server, err := incusclient.ConnectIncusUnixWithContext(ctx, socketPath, &incusclient.ConnectionArgs{SkipGetServer: true})
+	server, err := incusclient.ConnectIncusUnixWithContext(ctx, socketPath, &incusclient.ConnectionArgs{SkipGetServer: true, SkipGetEvents: true})
 	if err != nil {
 		return nil, safeIncusError("could not connect to configured Incus worker daemon", err)
 	}
