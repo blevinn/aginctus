@@ -45,6 +45,9 @@ check-nix:
 check-markdown-links:
     just check markdown
 
+check-docs-examples:
+    just check docs-examples
+
 # Run the heavyweight NixOS firewall VM tests explicitly (x86_64-linux).
 test-nix-firewall:
     nix build -L --no-link .#firewall-iptables-integration .#firewall-firewalld-integration .#firewall-nixos-nft-integration

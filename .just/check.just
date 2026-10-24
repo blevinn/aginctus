@@ -29,7 +29,7 @@ vet:
 # caller's integration/live-acceptance opt-ins and offline Go resolution.
 [no-cd]
 ci:
-    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local bash -euo pipefail -c 'just check go; just check lint; just check python; just check shell-tests; just check shell; just check markdown; just check nix'
+    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local bash -euo pipefail -c 'just check go; just check lint; just check python; just check shell-tests; just check shell; just check markdown; just check docs-examples; just check nix'
 
 # Same safe comprehensive suite for humans; VM/Incus/live tests stay opt-in.
 [no-cd]
@@ -78,3 +78,9 @@ nix:
 [no-cd]
 markdown:
     python3 scripts/check_markdown_links.py
+
+# Only validates shell commands in canonical docs against CLI help.
+# Never executes any command copied from a document.
+[no-cd]
+docs-examples:
+    go run ./cmd/aginctus help | python3 scripts/check_docs_examples.py

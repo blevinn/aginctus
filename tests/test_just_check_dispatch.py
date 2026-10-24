@@ -19,6 +19,7 @@ EXPECTED = [
     "check shell-tests",
     "check shell",
     "check markdown",
+    "check docs-examples",
     "check nix",
 ]
 
