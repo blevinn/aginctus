@@ -49,10 +49,10 @@ func TestOperatorProjectPlanConservativeReadOnly(t *testing.T) {
 	drift := scope.DesiredConfig()
 	drift["features.networks"] = "true"
 	tests := []struct {
-		name string
-		data []byte
-		err error
-		code int
+		name   string
+		data   []byte
+		err    error
+		code   int
 		status string
 	}{
 		{"owned compatible", toJSON([]observedProject{{Name: "aginctus", Config: scope.DesiredConfig()}}), nil, 0, "compatible"},
