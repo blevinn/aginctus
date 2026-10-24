@@ -71,6 +71,10 @@ func newExecutor(newConnection func(*iclient.ConfigRemoteInfo) (*iclient.Connect
 	}
 }
 
+// The pinned Compose Ensure cannot predict or report every reconciliation
+// mutation. Parsing and validating a plan is not an observation-only dry run,
+// especially where existing devices or image identities can drift; reject it
+// at the engine capability gate rather than promising a no-op preview.
 func (d *Driver) SupportsDryRun() bool {
 	return false
 }

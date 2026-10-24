@@ -70,7 +70,40 @@ def secret_file(path):
     return value
 
 
-def request(opener, host, route, key=None, body=None):
+def classify_http_error(response):
+    """Return a fixed, nonsecret diagnostic label for a bounded error body.
+
+    Neither arbitrary provider response text nor HTTP reason phrases belong in
+    operator output; these can include prompts, tokens, or attacker content.
+    """
+    try:
+        raw = response.read(16385)
+        if len(raw) > 16384:
+            return "unclassified"
+        payload = json.loads(raw)
+    except (OSError, ValueError, UnicodeDecodeError, TypeError):
+        return "unclassified"
+    if not isinstance(payload, dict):
+        return "unclassified"
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        return "unclassified"
+    fields = (error.get("type"), error.get("code"), error.get("message"))
+    text = " ".join(v.lower() for v in fields if isinstance(v, str))
+    if "missingsessionid" in text or (
+        "x-opencode-session" in text and "missing" in text
+    ):
+        return "missing-session-id"
+    if "unsupportedparamserror" in text or "unsupported parameter" in text:
+        return "unsupported-parameter"
+    if "model_not_found" in text or "unknown model" in text:
+        return "unknown-model"
+    if "authenticationerror" in text or "invalid api key" in text:
+        return "provider-authentication"
+    return "unclassified"
+
+
+def request(opener, host, route, key=None, body=None, diagnose=False):
     headers = {"Accept": "application/json"}
     if key is not None:
         headers["Authorization"] = "Bearer " + key
@@ -87,6 +120,9 @@ def request(opener, host, route, key=None, body=None):
             raise SmokeError("gateway payload exceeds 8MiB")
         return 200, data
     except HTTPError as exc:
+        if diagnose:
+            category = classify_http_error(exc)
+            raise SmokeError(f"upstream Responses request failed (HTTP {exc.code}; {category})") from None
         return exc.code, b""
     except (URLError, TimeoutError, OSError):
         raise SmokeError(f"gateway {route} unavailable") from None
@@ -187,7 +223,7 @@ def run(host, alias, workload_key, master_key, opener=None, marker=None):
         "stream": True,
         "max_output_tokens": 80,
         "user": "aginctus-smoke-" + marker.lower(),
-    })
+    }, diagnose=True)
     if status != 200:
         raise SmokeError(f"upstream Responses request failed (HTTP {status})")
     count = verify_sse(data, marker)
