@@ -115,14 +115,23 @@ return the sealed recovery handle without authorizing adoption. Destroy accepts
 already-absent instances only after validating the handle and live project;
 absence attests neither former ownership nor separate storage/evidence cleanup.
 
-Create success currently means the Incus start operation completed, not that
-the guest agent or inner services are ready. A finite agent-readiness probe is
-a required worker admission gate before exposing lifecycle mutation over CLI/MCP.
+Raw `VMBackend.Create` success confirms the Incus start operation,
+**not** an answering VM agent. The intended worker entrypoint is now
+`CreateReadyIncusVM`, which retains the signed created run handle on
+readiness failure, and `WaitForIncusVMAgent`. Admission repeatedly verifies
+the same run ownership and that the VM is Running, then executes **only**
+`/run/current-system/sw/bin/true` inside the guest using the bounded
+Incus-agent transport. Each attempt has at most a 2-second timeout and the
+whole readiness window cannot exceed 2 minutes; zero, negative and unbounded
+waits are denied. Unowned/deleted/stopped resources fail without adoption,
+and caller cancellation terminates the probe. An absent agent is **not**
+proof that the VM stopped or cleaned up; keep its signed handle for GC.
+This is still a trusted internal API, **not yet exposed through CLI/MCP**.
 
-**Still pending:** an independently scheduled TTL/orphan sweep, a pinned
-Incus NixOS VM image, worker/daemon credential segregation and policy-key
-provisioning, finite agent-readiness admission, snapshot/reset policy,
-and real disposable-host KVM acceptance. These backend methods are not
+**Still pending:** independently scheduled TTL/orphan recovery, worker/daemon
+credential segregation and policy-key provisioning, snapshot/reset policy,
+and real disposable-host KVM/agent readiness acceptance. The opt-in Incus
+NixOS image is staged in #506 but has not been imported or boot-tested. These backend methods are not
 exposed through CLI/MCP without a trusted authorization service.
 
 ## Bounded native guest execution
