@@ -49,6 +49,12 @@ class RunnerTests(unittest.TestCase):
             ".#vm-harness-storage-network",
         )
 
+    def test_runtime_lifecycle_is_an_explicit_target(self):
+        self.assertEqual(
+            runner.build_arguments("runtime-lifecycle", False)[-1],
+            ".#vm-harness-runtime-lifecycle",
+        )
+
     def test_rejects_missing_or_foreign_driver(self):
         for value in ("", "/tmp/evil", "/nix/store/one\n/nix/store/two"):
             with self.subTest(value=value), self.assertRaises(ValueError):
