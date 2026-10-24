@@ -48,6 +48,9 @@ type GuestExecClient interface {
 // Exec executes argv ONLY inside the owned Incus VM through incus-agent.
 // It does not expose the Incus socket to the user and never runs a host shell.
 func (b *IncusVMBackend) Exec(ctx context.Context, ref VMRef, argv []string, timeout time.Duration) (VMExecResult, error) {
+	if b == nil || b.client == nil {
+		return VMExecResult{}, ErrBackendUnavailable
+	}
 	if err := validateIncusExec(argv, timeout); err != nil {
 		return VMExecResult{}, err
 	}
@@ -68,6 +71,9 @@ func (b *IncusVMBackend) Exec(ctx context.Context, ref VMRef, argv []string, tim
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	result, err := guest.ExecGuest(runCtx, ref.Instance, append([]string(nil), argv...))
+	if errors.Is(err, ErrGuestOutputLimit) {
+		return VMExecResult{}, ErrGuestOutputLimit
+	}
 	if err != nil {
 		return VMExecResult{}, errors.New("testenv guest execution transport failed or timed out")
 	}
