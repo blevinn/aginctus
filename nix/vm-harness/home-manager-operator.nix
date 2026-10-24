@@ -6,32 +6,26 @@
 let
   pkgs = import nixpkgs { inherit system; };
 
-  # Standalone Home Manager consumes the exact exported Aginctus module and
-  # CLI package. Neither Home Manager nor Aginctus is wired into NixOS services.
-  operatorHome = pkgs.writeText "aginctus-operator-home.nix" ''
-    { pkgs, ... }:
-    {
-      imports = [
-        # Import from the whole flake source: this module loads its sibling
-        # settings-options.nix, so importing a single interpolated file
-        # would omit that dependency from the Nix store.
-        (import ${self.outPath}/nix/home-manager-module.nix {
-          self.packages.${system}.aginctus = ${self.packages.${system}.aginctus};
-        })
-      ];
-      home.username = "operator";
-      home.homeDirectory = "/home/operator";
-      home.stateVersion = "26.05";
-      programs.aginctus = {
-        enable = true;
-        settings.gateway.id = "disposable-operator";
-      };
-    }
-  '';
-
-  # The Home Manager CLI/source are supplied by the pinned nixpkgs input.
-  # No additional flake input, ambient channel, or network fetch is required.
-  homeCommand = "runuser -u operator -- env HOME=/home/operator USER=operator LOGNAME=operator NIX_PATH=nixpkgs=${nixpkgs}:home-manager=${pkgs.home-manager.src} ${pkgs.home-manager}/bin/home-manager";
+  # Evaluate a real standalone Home Manager configuration, without linking
+  # Home Manager into NixOS modules or granting the user Incus access.
+  # Build the activation closure OUTSIDE the isolated VM: its in-guest Nix
+  # daemon has no network and must not fetch a toolchain during activation.
+  homeManager = import "${pkgs.home-manager.src}/lib" { lib = pkgs.lib; };
+  operatorGeneration = homeManager.homeManagerConfiguration {
+    inherit pkgs;
+    modules = [
+      self.homeManagerModules.default
+      {
+        home.username = "operator";
+        home.homeDirectory = "/home/operator";
+        home.stateVersion = "26.05";
+        programs.aginctus = {
+          enable = true;
+          settings.gateway.id = "disposable-operator";
+        };
+      }
+    ];
+  };
 in
 pkgs.testers.runNixOSTest {
   name = "aginctus-vm-home-manager-operator";
@@ -55,12 +49,13 @@ pkgs.testers.runNixOSTest {
       "root"
       "operator"
     ];
+    # Embed the full prebuilt generation and its closure in the guest store.
+    # This does not activate Home Manager or touch the user's home as root.
+    system.extraDependencies = [ operatorGeneration.activationPackage ];
     environment.systemPackages = [
       pkgs.incus
-      pkgs.home-manager
       pkgs.jq
     ];
-    environment.etc."aginctus/operator-home.nix".source = operatorHome;
   };
 
   testScript = ''
@@ -74,17 +69,18 @@ pkgs.testers.runNixOSTest {
     machine.succeed("test ! -e /etc/aginctus/config.json")
     machine.fail("systemctl list-unit-files --no-legend 'aginctus*' | grep -q '^aginctus'")
 
-    # Build and activate with the actual standalone Home Manager CLI, as the
-    # unprivileged operator. No root-based HM integration is involved.
-    operator = "${homeCommand}"
-    machine.succeed(f"{operator} build -f /etc/aginctus/operator-home.nix", timeout=600)
-    machine.succeed(f"{operator} switch -f /etc/aginctus/operator-home.nix", timeout=600)
+    # The generation was evaluated and built by the outer test derivation.
+    # Exercise its real Home Manager activation as the unprivileged operator.
+    # Neither the NixOS activation nor root invokes this script.
+    activation = "runuser -u operator -- env HOME=/home/operator USER=operator LOGNAME=operator ${operatorGeneration.activationPackage}/activate"
+    machine.succeed("test -x ${operatorGeneration.activationPackage}/activate")
+    machine.succeed(activation, timeout=600)
     machine.succeed("runuser -u operator -- test -L /home/operator/.config/aginctus/config.json")
     machine.succeed("runuser -u operator -- jq -e '.gateway.id == \"disposable-operator\"' /home/operator/.config/aginctus/config.json")
     machine.succeed("runuser -u operator -- /home/operator/.nix-profile/bin/aginctus config get gateway.id | grep -q disposable-operator")
 
     # Repeated activation remains an operator-only package/config change.
-    machine.succeed(f"{operator} switch -f /etc/aginctus/operator-home.nix", timeout=600)
+    machine.succeed(activation, timeout=600)
     machine.succeed("incus list --format json | jq -e 'length == 0'")
     machine.succeed("incus image list --format json | jq -e 'length == 0'")
     machine.succeed("test ! -e /etc/aginctus/config.json")
