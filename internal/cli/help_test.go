@@ -65,7 +65,7 @@ func TestHelpOfflineInventory(t *testing.T) {
 		"network firewall policy", "network firewall reconcile", "herdr authorize", "herdr pin-host", "herdr register",
 		"network firewall egress reconcile|revoke",
 		"workload gateway provision", "--require-function-call", "network ensure", "herdr client ensure", "workload <name> ensure|teardown",
-		"operator state-audit --owner system|user",
+		"operator state-audit --owner system|user", "operator units-audit --owner system|user",
 	} {
 		if !strings.Contains(top.String(), want) {
 			t.Errorf("help missing %q", want)
