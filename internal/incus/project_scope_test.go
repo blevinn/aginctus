@@ -29,13 +29,13 @@ func TestProjectScopeRequiredPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]string{
-		"user.aginctus.managed": "true",
-		"user.aginctus.resource": "deployment-project",
+		"user.aginctus.managed":    "true",
+		"user.aginctus.resource":   "deployment-project",
 		"user.aginctus.deployment": "aginctus",
-		"features.images": "true",
-		"features.profiles": "true",
+		"features.images":          "true",
+		"features.profiles":        "true",
 		"features.storage.volumes": "true",
-		"features.networks": "false",
+		"features.networks":        "false",
 	}
 	if got := scope.DesiredConfig(); !reflect.DeepEqual(got, want) {
 		t.Errorf("desired policy: got %v; want %v", got, want)
