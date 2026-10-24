@@ -67,11 +67,13 @@ jobs:
       - name: populate Go module cache
         run: nix --quiet develop --no-update-lock-file -c go mod download
 
-      - name: just check ci
+      - name: hermetic suites (structured JSON)
         id: aggregate
         run: |
           set -euo pipefail
-          nix --quiet develop --no-update-lock-file -c just check ci 2>&1 | tee "$RUNNER_TEMP/check-ci.log"
+          # tee preserves the result even on failure; pipefail retains status.
+          # Keep stdout as JSON, never merge raw subprocess stderr into it.
+          nix --quiet develop --no-update-lock-file -c just check report-json | tee "$RUNNER_TEMP/check-ci.json"
 
       - name: gateway-config-parity flake check
         id: parity
@@ -107,20 +109,4 @@ jobs:
           RELEASE_PREVIEW_RESULT: ${{ steps.release_preview.outcome }}
           WHITESPACE_RESULT: ${{ steps.whitespace.outcome }}
         run: |
-          python3 - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          log = Path(os.environ['RUNNER_TEMP']) / 'check-ci.log'
-          lines = log.read_text(errors='replace').splitlines() if log.exists() else []
-          observed = [line for line in lines if re.match(r'^(test_.* \.\.\. |Ran \d+ tests? in |OK\b|FAILED\b)', line)]
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-              summary.write('## Hermetic CI\n\n')
-              summary.write(f"Checkout: `{os.environ['BUILD_HASH']}`\n\n")
-              for label, key in [('Namespace contract', 'NAMESPACE_RESULT'), ('check ci (includes lint)', 'AGGREGATE_RESULT'), ('Gateway parity', 'PARITY_RESULT'), ('Release package preview', 'RELEASE_PREVIEW_RESULT'), ('Whitespace', 'WHITESPACE_RESULT')]:
-                  summary.write(f'- {label}: {os.environ[key]}\n')
-              summary.write('\n### Observed Python results (partial if aggregate failed)\n\n```text\n')
-              summary.write('\n'.join(observed) if observed else 'No Python test results observed; inspect step logs.')
-              summary.write('\n```\n\nGo and shell command results are in the aggregate log. Suites after its first failure did not run.\n')
-          PY
+          python3 scripts/checks/ci_summary.py
