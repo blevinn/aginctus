@@ -104,6 +104,9 @@ func (n *nativeIncusVMClient) Get(ctx context.Context, name string) (*IncusVMIns
 	if err != nil {
 		return nil, err
 	}
+	if instance == nil {
+		return nil, errors.New("Incus returned no instance")
+	}
 	result := fromIncusInstance(*instance)
 	return &result, nil
 }
