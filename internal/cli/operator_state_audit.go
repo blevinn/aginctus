@@ -22,11 +22,11 @@ var operatorGatewayID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 type gatewayStateEvidence string
 
 const (
-	gatewayStateAbsent      gatewayStateEvidence = "absent"
-	gatewayStatePresent     gatewayStateEvidence = "present"
-	gatewayStateIncomplete  gatewayStateEvidence = "incomplete"
-	gatewayStateUnverified  gatewayStateEvidence = "unverified"
-	gatewayStateUnsafe      gatewayStateEvidence = "unsafe"
+	gatewayStateAbsent	gatewayStateEvidence = "absent"
+	gatewayStatePresent	gatewayStateEvidence = "present"
+	gatewayStateIncomplete	gatewayStateEvidence = "incomplete"
+	gatewayStateUnverified	gatewayStateEvidence = "unverified"
+	gatewayStateUnsafe	gatewayStateEvidence = "unsafe"
 )
 
 func inspectGatewayState(root, gatewayID string, expectedUID uint32) gatewayStateEvidence {
