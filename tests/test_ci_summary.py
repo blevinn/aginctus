@@ -75,6 +75,25 @@ class CISummaryTests(unittest.TestCase):
             path.unlink()
             self.assertIsNone(ci_summary.load_report(path))
 
+    def test_success_report_writes_all_suite_rows(self):
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            report_path = base / "check-ci.json"
+            report_path.write_text(json.dumps(fixture()))
+            summary_path = base / "summary.md"
+            env = {
+                "RUNNER_TEMP": str(base),
+                "GITHUB_STEP_SUMMARY": str(summary_path),
+                "BUILD_HASH": "b" * 40,
+                "AGGREGATE_RESULT": "success",
+            }
+            with patch.dict(os.environ, env):
+                self.assertEqual(ci_summary.main(), 0)
+            markdown = summary_path.read_text()
+            self.assertIn("**PASS** — 8 passed, 0 failed, 0 errors.", markdown)
+            self.assertIn("| `nix` | PASS | 0.0s | 0 |", markdown)
+            self.assertNotIn("TOP_SECRET_SHOULD_NOT_RENDER", markdown)
+
     def test_invalid_report_fails_closed_when_aggregate_claims_success(self):
         with tempfile.TemporaryDirectory() as root:
             base = Path(root)
