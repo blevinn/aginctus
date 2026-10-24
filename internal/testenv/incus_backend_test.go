@@ -186,7 +186,8 @@ func TestIncusFailClosedAfterFailedStartAndUnverifiedCleanup(t *testing.T) {
 	ref, err := backend.Create(ctx, admittedSpec())
 	if err == nil || ref.RunID == "" { t.Fatalf("lost recoverable run identity: %#v %v", ref, err) }
 	if _, ok := client.vms[ref.Instance]; !ok { t.Fatal("failed start removed recoverable instance") }
-	client.fail = "stop"
+	// A failed start leaves a stopped VM, so cleanup must exercise Delete.
+	client.fail = "delete"
 	if err := backend.Destroy(ctx, ref); err == nil { t.Fatal("unverified cleanup was reported successful") }
 	if _, ok := client.vms[ref.Instance]; !ok { t.Fatal("failed cleanup damaged instance") }
 }

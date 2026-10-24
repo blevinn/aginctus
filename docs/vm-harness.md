@@ -59,6 +59,10 @@ The JSON-RPC request must include
 `params._meta["io.modelcontextprotocol/protocolVersion"] = "2026-07-28"`
 and `params._meta["io.modelcontextprotocol/clientCapabilities"] = {}`.
 The stdout stream contains only newline-delimited JSON-RPC messages.
+Missing required metadata returns `-32602` (Invalid params). Unsupported
+versions return `-32022` (Unsupported protocol version), with `data.supported`
+and `data.requested`, including on `server/discover`; clients may retry with
+a supported version. Legacy `initialize` handshakes are not supported.
 
 MCP tools currently available:
 

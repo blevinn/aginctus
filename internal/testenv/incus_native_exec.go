@@ -84,26 +84,26 @@ func (n *nativeIncusVMClient) ExecGuest(ctx context.Context, instance string, ar
 		DataDone: streamsDone,
 	})
 	if err != nil {
-		return VMExecResult{}, errors.New("Incus guest agent execution unavailable")
+		return VMExecResult{}, errors.New("testenv Incus guest agent execution unavailable")
 	}
 	if err := op.WaitContext(ctx); err != nil {
 		_ = op.Cancel() // best effort; VM TTL cleanup remains mandatory
-		return VMExecResult{}, errors.New("Incus guest execution completion not verified")
+		return VMExecResult{}, errors.New("testenv Incus guest execution completion not verified")
 	}
 	select {
 	case <-streamsDone:
 	case <-ctx.Done():
 		_ = op.Cancel()
-		return VMExecResult{}, errors.New("Incus guest output transport deadline exceeded")
+		return VMExecResult{}, errors.New("testenv Incus guest output transport deadline exceeded")
 	}
 	metadata := op.Get().Metadata
 	raw, ok := metadata["return"]
 	if !ok {
-		return VMExecResult{}, errors.New("Incus guest exit status missing")
+		return VMExecResult{}, errors.New("testenv Incus guest exit status missing")
 	}
 	code, err := strconv.Atoi(fmt.Sprint(raw))
 	if err != nil || code < 0 || code > 255 {
-		return VMExecResult{}, errors.New("Incus guest exit status invalid")
+		return VMExecResult{}, errors.New("testenv Incus guest exit status invalid")
 	}
 	return output.Result(code)
 }
