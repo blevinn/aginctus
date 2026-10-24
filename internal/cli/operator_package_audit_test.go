@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -117,6 +118,20 @@ func TestOperatorPackageAuditArguments(t *testing.T) {
 		owner, ok := parseOperatorPackageAuditArgs(tc.args)
 		if ok != tc.ok || (ok && owner == "") {
 			t.Errorf("args=%q accepted=%v owner=%q", tc.args, ok, owner)
+		}
+	}
+}
+
+func TestOperatorPackageAuditRejectsConfigurationOptionsBeforeLoading(t *testing.T) {
+	// This validation is reached before Run loads either user or host config.
+	for _, args := range [][]string{
+		{"--configuration-file=/nonexistent", "operator", "package-audit", "--owner=user"},
+		{"--config=gateway.id=test", "operator", "package-audit", "--owner=user"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if code := Run(context.Background(), args, &stdout, &stderr, nil, nil); code != 2 ||
+			stdout.Len() != 0 || !strings.Contains(stderr.String(), "configuration overrides are not supported") {
+			t.Fatalf("args=%q code=%d stdout=%q stderr=%q", args, code, stdout.String(), stderr.String())
 		}
 	}
 }
