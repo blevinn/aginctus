@@ -12,7 +12,10 @@ let
     { pkgs, ... }:
     {
       imports = [
-        (import ${../home-manager-module.nix} {
+        # Import from the whole flake source: this module loads its sibling
+        # settings-options.nix, so importing a single interpolated file
+        # would omit that dependency from the Nix store.
+        (import ${self.outPath}/nix/home-manager-module.nix {
           self.packages.${system}.aginctus = ${self.packages.${system}.aginctus};
         })
       ];
