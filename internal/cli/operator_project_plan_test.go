@@ -104,6 +104,22 @@ func TestOperatorProjectPlanConservativeReadOnly(t *testing.T) {
 	}
 }
 
+func TestOperatorProjectPlanCannotLoadHostConfiguration(t *testing.T) {
+	for _, args := range [][]string{
+		{"--configuration-file=/nonexistent", "operator", "project-plan", "--project", "aginctus"},
+		{"--config=gateway.id=other", "operator", "project-plan", "--project", "aginctus"},
+	} {
+		var stdout, stderr bytes.Buffer
+		// Passing nil loaders proves this dispatch happens before config
+		// initialization, validation, or credential access.
+		code := Run(context.Background(), args, &stdout, &stderr, nil, nil)
+		if code != 2 || stdout.Len() != 0 ||
+			!strings.Contains(stderr.String(), "configuration overrides are not supported") {
+			t.Fatalf("args=%q code=%d stdout=%q stderr=%q", args, code, stdout.String(), stderr.String())
+		}
+	}
+}
+
 func TestOperatorProjectPlanRejectsInvalidNameBeforeIncus(t *testing.T) {
 	before := inspectOperatorIncus
 	t.Cleanup(func() { inspectOperatorIncus = before })
