@@ -33,6 +33,8 @@ currently supported configuration or a release acceptance claim.
   opt-in bidirectional mount policy and ownership.
 - [Native Incus reconciliation](design/native-incus-reconciliation.md) —
   staged replacement of the current Apply/Compose drivers after release gates.
+- [Home Manager operator / NixOS host authority](design/home-manager-operator.md) —
+  proposed v0.2 privilege boundary, safe operator installation and migration gates.
 
 ### Architecture (subdirectory)
 
@@ -51,6 +53,9 @@ currently supported configuration or a release acceptance claim.
 
 ## Operations and gateway integration
 
+- [Start here: gateway and egress operator path](gateway-operator-path.md) —
+  staged read-only checks, separately authorized network maintenance,
+  provider registration, scoped keys, inference evidence and revocation.
 - [Gateway egress network](gateway-egress-network.md) — LiteLLM
   egress bridge, OCI NIC, and DHCP design.
 - [Gateway API key pilot](gateway-api-key-pilot.md) — operator
