@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Summarize the existing safe hermetic `just check` suites.
 
 Machine output never contains subprocess stdout/stderr. Failed suites can be
