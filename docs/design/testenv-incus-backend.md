@@ -119,9 +119,9 @@ Create success currently means the Incus start operation completed, not that
 the guest agent or inner services are ready. A finite agent-readiness probe is
 a required worker admission gate before exposing lifecycle mutation over CLI/MCP.
 
-**Still pending:** an independently scheduled TTL/orphan sweep,
-Incus-agent argv exec with bounded output/time, a pinned Incus NixOS
-VM image, worker/daemon credential segregation, snapshot/reset policy,
+**Still pending:** an independently scheduled TTL/orphan sweep, a pinned
+Incus NixOS VM image, worker/daemon credential segregation and policy-key
+provisioning, finite agent-readiness admission, snapshot/reset policy,
 and real disposable-host KVM acceptance. These backend methods are not
 exposed through CLI/MCP without a trusted authorization service.
 
@@ -137,6 +137,15 @@ Incus stdout and stderr streams share a 64 KiB capture bound. A guest
 exit code is reported separately from an unavailable agent, oversized
 output or unverified completion. Arbitrary shell metacharacters stay
 literal argv; the host does not interpolate them.
+
+One deadline includes project/ownership preflight, HTTP submission, websocket
+handshakes, operation polling and output completion. Each request uses a private
+project-scoped SDK copy; websocket handshakes use the same context explicitly.
+The adapter owns its stream readers and verifies their errors plus a final
+successful Incus operation before returning guest output. SDK `DataDone` is not
+used as proof of transport integrity. Broken streams discard partial output;
+overflow fails immediately. All sockets/readers are closed and joined on return,
+including setup failures, cancellation and deadlines.
 
 Cancellation triggers best-effort Incus operation cancellation, but the
 backend does **not** claim that this always kills guest processes.

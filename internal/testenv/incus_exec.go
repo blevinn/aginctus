@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	maxIncusExecArgs = 32
+	maxIncusExecArgs     = 32
 	maxIncusExecArgBytes = 8 * 1024
 	maxIncusExecDuration = 30 * time.Second
 )
@@ -58,24 +58,31 @@ func (b *IncusVMBackend) Exec(ctx context.Context, ref VMRef, argv []string, tim
 	if !ok {
 		return VMExecResult{}, ErrUnsupportedAction
 	}
-	instance, expires, err := b.loadOwned(ctx, ref)
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	instance, expires, err := b.loadOwned(runCtx, ref)
 	if err != nil {
-		return VMExecResult{}, err
+		return VMExecResult{}, safeIncusError("testenv guest preflight failed", err)
 	}
 	if !strings.EqualFold(instance.Status, "Running") {
 		return VMExecResult{}, errors.New("testenv guest VM is not running")
 	}
-	if !b.now().Before(expires) || b.now().Add(timeout).After(expires) {
+	deadline, _ := runCtx.Deadline()
+	if !b.now().Before(expires) || b.now().Add(time.Until(deadline)).After(expires) {
 		return VMExecResult{}, errors.New("guest exec cannot exceed VM run lifetime")
 	}
-	runCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+	if err := runCtx.Err(); err != nil {
+		return VMExecResult{}, err
+	}
 	result, err := guest.ExecGuest(runCtx, ref.Instance, append([]string(nil), argv...))
 	if errors.Is(err, ErrGuestOutputLimit) {
 		return VMExecResult{}, ErrGuestOutputLimit
 	}
 	if err != nil {
-		return VMExecResult{}, errors.New("testenv guest execution transport failed or timed out")
+		return VMExecResult{}, safeIncusError("testenv guest execution transport failed or timed out", err)
+	}
+	if err := runCtx.Err(); err != nil {
+		return VMExecResult{}, err
 	}
 	if len(result.Stdout)+len(result.Stderr) > MaxGuestOutput {
 		return VMExecResult{}, ErrGuestOutputLimit
