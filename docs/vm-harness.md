@@ -55,4 +55,24 @@ contract; it **does not yet boot LiteLLM/PostgreSQL or prove inference**.
 Subsequent slices add synthetic gateway inference,
 Herdr/OpenCode workflow assertions, fault injection, and redacted artifacts.
 
+## Machine-readable run evidence
+
+Every `runner.py test <scenario>` invocation writes an independent,
+per-run `.vm-harness-results/<random-id>/result.json` with the scenario,
+pass/fail from the Nix derivation exit status, lockfile fingerprint,
+base repository revision, tracked-source dirty status and UTC timestamp.
+Provenance is captured before the build; unavailable Git or lockfile metadata
+is recorded as `null`. The base revision alone does not identify dirty source,
+and this snapshot does not prevent concurrent source changes. Launch failures
+also produce a failure report with `failure_stage: launch`; a nonzero build
+exit records `failure_stage: build`. It **always** records
+`upstream_inference: not_verified` and `cleanup: not_verified`; these
+are not inferred from the presence of an Incus service or a green mock.
+
+The report contains no VM transcript, raw headers, credentials, or provider
+payload. It does **not** prove that cleanup completed, establish a cryptographic
+attestation, or sanitize diagnostic output printed by the Nix builder.
+Only run this on a separate unprivileged worker without pilot secrets.
+Reports are mode `0600` under run-scoped directories and excluded from Git.
+
 Never record a synthetic provider test as evidence for [#124](https://github.com/blevinn/aginctus/issues/124).

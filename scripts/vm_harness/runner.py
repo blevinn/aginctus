@@ -8,9 +8,14 @@ run untrusted agents as a separate worker account, ideally on a dedicated host.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
+import secrets
 import subprocess
 import sys
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -69,6 +74,86 @@ def driver_from_build(output: str) -> Path:
     return driver
 
 
+@dataclass(frozen=True)
+class Provenance:
+    git_revision: str | None = None
+    git_dirty: bool | None = None
+    flake_lock_sha256: str | None = None
+
+
+def capture_provenance(env: dict[str, str]) -> Provenance:
+    """Capture best-effort source metadata before launching the build."""
+
+    def git_output(*arguments: str) -> str | None:
+        try:
+            result = subprocess.run(
+                ["git", *arguments],
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        except OSError:
+            return None
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    revision = git_output("rev-parse", "HEAD")
+    # Nix's Git source includes tracked changes, not untracked worker files.
+    status = git_output("status", "--porcelain=v1", "--untracked-files=no")
+    try:
+        lock_hash = hashlib.sha256((ROOT / "flake.lock").read_bytes()).hexdigest()
+    except OSError:
+        lock_hash = None
+    return Provenance(revision, None if status is None else bool(status), lock_hash)
+
+
+def write_report(
+    scenario: str,
+    exit_code: int,
+    provenance: Provenance,
+    output_root: Path,
+    *,
+    launch_failed: bool = False,
+) -> Path:
+    """Write synthetic-only, independently owned outcome metadata.
+
+    Do not copy VM stdout/stderr, provider payloads, headers or credentials.
+    A green Nix derivation never proves live upstream model inference.
+    """
+    if output_root.is_symlink():
+        raise ValueError("refusing symlinked VM evidence root")
+    output_root.mkdir(mode=0o700, exist_ok=True)
+    if not output_root.is_dir():
+        raise ValueError("VM evidence root is not a directory")
+    run_id = secrets.token_hex(12)
+    run_dir = output_root / run_id
+    run_dir.mkdir(mode=0o700)
+    record = {
+        "schema_version": 1,
+        "run_id": run_id,
+        "scenario": scenario,
+        "status": "pass" if exit_code == 0 else "fail",
+        "exit_code": exit_code,
+        "created_utc": datetime.now(timezone.utc).isoformat(),
+        "failure_stage": "launch"
+        if launch_failed
+        else ("build" if exit_code else None),
+        "git_revision": provenance.git_revision,
+        "git_dirty": provenance.git_dirty,
+        "flake_lock_sha256": provenance.flake_lock_sha256,
+        "verification_tier": "disposable_guest_no_live_provider",
+        "upstream_inference": "not_verified",
+        "cleanup": "not_verified",
+    }
+    report = run_dir / "result.json"
+    fd = os.open(report, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as out:
+        json.dump(record, out, indent=2, sort_keys=True)
+        out.write("\n")
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("test", "debug"))
@@ -79,14 +164,34 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("debug requires an interactive terminal")
     env = clean_environment(dict(os.environ))
     try:
-        result = subprocess.run(
-            build_arguments(args.scenario, args.mode == "debug"),
-            cwd=ROOT,
-            env=env,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        provenance = capture_provenance(env) if args.mode == "test" else Provenance()
+        command = build_arguments(args.scenario, args.mode == "debug")
+        launch_failed = False
+        try:
+            result = subprocess.run(
+                command,
+                cwd=ROOT,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        except OSError as exc:
+            if args.mode != "test":
+                raise
+            launch_failed = True
+            result = subprocess.CompletedProcess(
+                command, 1, "", f"VM launcher failed: {exc}\n"
+            )
+        if args.mode == "test":
+            report = write_report(
+                args.scenario,
+                result.returncode,
+                provenance,
+                ROOT / ".vm-harness-results",
+                launch_failed=launch_failed,
+            )
+            print(f"VM evidence: {report}")
         if result.returncode != 0:
             print(result.stderr, file=sys.stderr, end="")
             return result.returncode
