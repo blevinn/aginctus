@@ -79,6 +79,7 @@ let
 in
 assert disabled.home.packages == [ ];
 assert disabled.xdg.configFile == { };
+assert !(builtins.hasAttr "aginctus/operator-package.json" disabled.xdg.configFile);
 assert disabled.assertions == [ ];
 assert enabled.home.packages == [ stub ];
 assert enabled.programs.aginctus.settings.incus.management.network.name == "operator-test";
@@ -86,6 +87,9 @@ assert enabled.programs.aginctus.settings.gateway.id == "local";
 assert enabled.programs.aginctus.settings.firewall.zone == "aginctus-dns";
 assert enabled.programs.aginctus.settings.workloads.dev.runtime.type == "opencode";
 assert builtins.hasAttr "aginctus/config.json" enabled.xdg.configFile;
+assert builtins.hasAttr "aginctus/operator-package.json" enabled.xdg.configFile;
+assert lib.hasInfix "aginctus-user-package.json"
+  (toString enabled.xdg.configFile."aginctus/operator-package.json".source);
 assert !rejected enabled;
 assert rejected invalidNested;
 assert rejected invalidDotted;
