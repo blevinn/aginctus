@@ -49,6 +49,7 @@ func runHelp(args []string, stdout, stderr io.Writer) (int, bool) {
 		fmt.Fprintln(stdout, "Usage: aginctus [global options] doctor [--fix]  (read-only unless --fix; may configure loopback HTTPS)")
 	case "operator":
 		fmt.Fprintln(stdout, "Usage: aginctus [global options] operator preflight --project NAME (read-only; write and host authority unverified)")
+		fmt.Fprintln(stdout, "       aginctus [global options] operator state-audit --owner system|user (read-only; no secret reads or migration)")
 	case "version":
 		fmt.Fprintln(stdout, "Usage: aginctus version|--version\nRevision: packaged clean Git commit or source-<content hash>; local Go VCS revision[-dirty], or unknown when unavailable (including go run). No timestamps.")
 	case "help":
