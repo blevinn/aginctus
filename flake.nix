@@ -27,6 +27,7 @@
     {
       nixosModules = {
         aginctus = import ./nix/nixos-module.nix { inherit self; };
+        aginctusTestenvRecovery = import ./nix/testenv/recovery-worker.nix { inherit self; };
         default = self.nixosModules.aginctus;
       };
 
@@ -329,6 +330,13 @@
           opencodeWorkloadMetadata = opencodeWorkloadSystem.config.system.build.metadata;
         in
         {
+          testenv-sweep = pkgs.buildGoModule {
+            pname = "aginctus-testenv-sweep";
+            version = releaseVersion;
+            src = ./.;
+            vendorHash = "sha256-ao0Q95mYJ8xWhKWwhBQsBjtdF8bWMAXRG+c/kNOZkSQ=";
+            subPackages = [ "./cmd/aginctus-testenv-sweep" ];
+          };
           aginctus = aginctusCli;
           default = aginctusCli;
           # Expose exactly the runtime used by the workload image for contract tests.
@@ -420,6 +428,9 @@
         };
       } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
         testenv-incus-vm-image-config = import ./nix/testenv/incus-vm-image-check.nix {
+          inherit self nixpkgs system;
+        };
+        testenv-recovery-worker-policy = import ./nix/testenv/recovery-worker-check.nix {
           inherit self nixpkgs system;
         };
       });
