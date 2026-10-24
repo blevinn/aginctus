@@ -35,6 +35,8 @@ pkgs.testers.runNixOSTest {
 
   nodes.machine = {
     system.stateVersion = "26.05";
+    # NixOS Incus requires nftables, even when this VM does not expose Aginctus host firewall services.
+    networking.nftables.enable = true;
     virtualisation = {
       cores = 2;
       memorySize = 4096;
