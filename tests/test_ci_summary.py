@@ -66,6 +66,10 @@ class CISummaryTests(unittest.TestCase):
                 dict(fixture(), schema_version=2),
                 dict(fixture(), summary={"passed": 1, "failed": 0, "errors": 0}),
                 dict(fixture(), results=fixture()["results"][:-1]),
+                dict(fixture(), results=[
+                    dict(fixture()["results"][0], exit_code=42),
+                    *fixture()["results"][1:],
+                ]),
             ):
                 with self.subTest(invalid=invalid.get("schema_version")):
                     path.write_text(json.dumps(invalid))
@@ -93,6 +97,22 @@ class CISummaryTests(unittest.TestCase):
             self.assertIn("**PASS** — 8 passed, 0 failed, 0 errors.", markdown)
             self.assertIn("| `nix` | PASS | 0.0s | 0 |", markdown)
             self.assertNotIn("TOP_SECRET_SHOULD_NOT_RENDER", markdown)
+
+    def test_report_cannot_contradict_successful_step(self):
+        with tempfile.TemporaryDirectory() as root:
+            base = Path(root)
+            report_path = base / "check-ci.json"
+            report_path.write_text(json.dumps(fixture(failed="go")))
+            summary_path = base / "summary.md"
+            env = {
+                "RUNNER_TEMP": str(base),
+                "GITHUB_STEP_SUMMARY": str(summary_path),
+                "BUILD_HASH": "b" * 40,
+                "AGGREGATE_RESULT": "success",
+            }
+            with patch.dict(os.environ, env):
+                self.assertEqual(ci_summary.main(), 1)
+            self.assertIn("**FAIL**", summary_path.read_text())
 
     def test_invalid_report_fails_closed_when_aggregate_claims_success(self):
         with tempfile.TemporaryDirectory() as root:
