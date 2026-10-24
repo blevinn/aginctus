@@ -31,10 +31,10 @@ var inspectOperatorUnit = func(ctx context.Context, manager, unit string) ([]byt
 type unitEvidence string
 
 const (
-	unitAbsent   unitEvidence = "absent"
-	unitPresent  unitEvidence = "installed"
-	unitActive   unitEvidence = "active"
-	unitUnknown  unitEvidence = "unverified"
+	unitAbsent	unitEvidence = "absent"
+	unitPresent	unitEvidence = "installed"
+	unitActive	unitEvidence = "active"
+	unitUnknown	unitEvidence = "unverified"
 )
 
 func classifyOperatorUnit(data []byte) unitEvidence {
