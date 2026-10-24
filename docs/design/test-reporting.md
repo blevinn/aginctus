@@ -54,11 +54,29 @@ A failed test's exact native diagnostics require explicit rerun. Machine output
 is suitable for pasting as a compact status snapshot, not as a substitute for
 collecting approved diagnostic evidence. The adapter does not store raw logs.
 
+## Standard validation and CI adoption
+
+The second increment makes `just check ci`, `just check all`, and the legacy
+`just check-all` alias show the same concise suite-level terminal report.
+These commands report every hermetic suite outcome; they no longer stop at
+the first failing *suite*. Commands within a failing suite still follow Just's
+normal fail-fast semantics. To see detailed native diagnostics, explicitly run
+`just check <suite>`. To copy a compact, versioned, agent-readable report, use
+`just check report-json` and preserve its process exit status.
+
+GitHub Actions executes `just check report-json` **once** and saves the output
+in the runner's temporary directory as `check-ci.json`. The CI step summary
+validates the schema, suite inventory, counts, and statuses before rendering
+bounded, synthetic-only Markdown. Missing, invalid or partial JSON is labeled
+unavailable, never reported as passed, and additionally fails CI if the
+aggregate step had claimed success. No successful or failing child stdout or
+stderr is stored as a CI artifact by this integration.
+
+This still does not cover disposable VM, live Incus or provider acceptance
+runs. The source checks and their safety/environment overrides are unchanged.
+
 ## Migration and extension
 
-- Adopt the adapter behind `just check ci` / `just check all` and CI step summaries
-  only after validating parity with today's fail-fast recipe; remove CI's ad hoc
-  Python log scraping. Keep safety overrides and nonzero failure status.
 - Add optional structured failed-case details through adapters for Go's JSON test
   events, Python `unittest`, and shell/Nix, without exposing arbitrary stdout.
 - Represent `skipped` / `not-run` when future selectors or early aborts are
@@ -68,5 +86,5 @@ collecting approved diagnostic evidence. The adapter does not store raw logs.
   independently secured evidence stores, or quietly invoking those tests.
 - Evolve `schema_version` for incompatible changes, and use stable suite IDs.
 
-The first increment deliberately does not change `just check ci`, VM evidence
-semantics, or CI workflow steps.
+VM evidence semantics remain unchanged. Future schema adapters must not
+interpret a green hermetic run as evidence of live inference.
