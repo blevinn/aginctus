@@ -28,12 +28,7 @@ let
 
   # The Home Manager CLI/source are supplied by the pinned nixpkgs input.
   # No additional flake input, ambient channel, or network fetch is required.
-  homeCommand = ''
-    runuser -u operator -- env \
-      HOME=/home/operator USER=operator LOGNAME=operator \
-      NIX_PATH=nixpkgs=${nixpkgs}:home-manager=${pkgs.home-manager.src} \
-      ${pkgs.home-manager}/bin/home-manager
-  '';
+  homeCommand = "runuser -u operator -- env HOME=/home/operator USER=operator LOGNAME=operator NIX_PATH=nixpkgs=${nixpkgs}:home-manager=${pkgs.home-manager.src} ${pkgs.home-manager}/bin/home-manager";
 in
 pkgs.testers.runNixOSTest {
   name = "aginctus-vm-home-manager-operator";
@@ -76,7 +71,7 @@ pkgs.testers.runNixOSTest {
 
     # Build and activate with the actual standalone Home Manager CLI, as the
     # unprivileged operator. No root-based HM integration is involved.
-    operator = "${homeCommand}".strip()
+    operator = "${homeCommand}"
     machine.succeed(f"{operator} build -f /etc/aginctus/operator-home.nix", timeout=600)
     machine.succeed(f"{operator} switch -f /etc/aginctus/operator-home.nix", timeout=600)
     machine.succeed("runuser -u operator -- test -L /home/operator/.config/aginctus/config.json")
