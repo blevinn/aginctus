@@ -42,7 +42,7 @@ func TestOperatorPackageManifestState(t *testing.T) {
 	}
 	bad := filepath.Join(dir, "bad")
 	for _, raw := range []string{
-		"{not-json}", "null", "{}", 
+		"{not-json}", "null", "{}",
 		`{"schema":2,"authority":"system","package":"` + fixturePackageA + `"}`,
 		`{"schema":1,"authority":"system","package":"/var/lib/aginctus/state/secrets.json"}`,
 		`{"schema":1,"authority":"system","package":"/nix/store/../secrets"}`,
