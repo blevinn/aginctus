@@ -126,6 +126,8 @@ type VMRef struct {
 	Instance         string      `json:"instance"`
 	RunID            string      `json:"run_id"`
 	ImageFingerprint string      `json:"image_fingerprint"`
+	Policy           VMRunPolicy `json:"policy"`
+	PolicyMAC        string      `json:"policy_mac"`
 }
 
 func (ref VMRef) Validate() error {
