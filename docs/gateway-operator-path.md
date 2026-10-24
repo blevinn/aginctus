@@ -35,15 +35,17 @@ Only enter these paths if read-only assessment shows a specific deficiency and t
 
 After any change, positively test LiteLLM-to-provider TLS and gateway-to-PostgreSQL connectivity, and **negatively** test prohibited guest-to-public/private/host/Tailscale routes. No speculative firewall fix or `gateway apply` should be used as a repair shortcut. If route, ownership or denial evidence is unclear, **stop** and restore only the specifically reviewed prior state.
 
-## 3. Provider registration and key handling
+## 3. Register an authorized upstream
 
 The [provider registration procedure](gateway-api-key-pilot.md) is independent of host networking. Obtain explicit approval for the **actual provider account, protocol and model**, validate the pinned LiteLLM and upstream contract, and put any upstream API key in an operator-owned 0600 regular file outside Git, Nix store and shell history. Its default dry-run has no live registration effect; live `--apply` is a distinct approval.
+
+## 4. Issue a scoped workload key and plan revocation
 
 The [workload-key procedure](gateway-workload-key-pilot.md) issues a **separate LiteLLM virtual key** for exactly one registered alias, with a one-hour lifetime, bounded budget and concurrency/rate restrictions. Confirm alias, scope, output-path owner/mode and permitted `/v1/models` visibility before a live inference request. Restrict host-side traffic to the observed *private numeric IPv4* LiteLLM HTTP listener on port 4000: that private HTTP transport is **not encrypted**, so never port-forward the admin endpoint or call it from an untrusted machine.
 
 **Treat uncertain issuance, registration or revocation as unresolved remote state**: inspect safe metadata and reconcile by approved procedures. Do not dump expanded Incus configuration (it can contain master/salt/database credentials), print key contents, or delete the protected workload key file before remote revocation is confirmed.
 
-## 4. Inference evidence and operator hold
+## 5. Inference evidence and operator hold
 
 The [authenticated smoke](gateway-inference-smoke.md) is **opt-in** (`--run`) and can incur provider charges. Before running, separately verify the permitted model/alias, a restricted unexpired virtual key, private listener ownership, gateway-only routing, negative direct-egress checks and cost authority. For OpenCode Go, inspect provider-specific coding traffic requirements (including stable `x-opencode-session` and the expected user-agent/forwarding path) under [#122](https://github.com/blevinn/aginctus/issues/122). **Do not disable authentication, add a direct-provider bypass, broadly forward headers or retry billable traffic merely to make the smoke pass.**
 
@@ -51,7 +53,9 @@ A valid provider acceptance record requires *more than* a successful local HTTP 
 
 If the upstream returns a nonterminal/error response, session identity is missing, provenance cannot be proven, or revocation is uncertain, record a **failure or unknown** and stop. Neither mock traffic, model registration, `/v1/models`, a `/health` check, nor a potentially fabricated SSE response is a release-acceptance result.
 
-## 5. Record redacted evidence and recover safely
+## 6. Full agent acceptance, evidence and recovery
+
+A successful host-only smoke must still be followed by the separately authorized [OpenCode agent acceptance](acceptance-opencode.md), including real Herdr tool/test traces and run-correlated upstream gateway evidence. Synthetic or scripted model protocol acceptance cannot replace this final gate.
 
 For each approved operation, record the observed software versions, sanitized resource identities, change approval, before/after ownership/NIC/route state, safe firewall results, provider outcome and run/request correlation, negative controls, and the explicitly verified key revocation result. Track changing live pilot observations in [#257](https://github.com/blevinn/aginctus/issues/257) and [#122](https://github.com/blevinn/aginctus/issues/122), not as permanent sample addresses here. Refer full-release claims to [#118](https://github.com/blevinn/aginctus/issues/118).
 
