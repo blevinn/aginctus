@@ -252,6 +252,30 @@ func TestComposeInstanceOwnershipValidation(t *testing.T) {
 	}
 }
 
+func TestDetectComposeInstanceDriftRejectsUndeclaredLiteLLMConfigFile(t *testing.T) {
+	const key = "environment.CONFIG_FILE_PATH"
+	desired := map[string]string{"user.label.incus-compose.service": "litellm"}
+	actual := map[string]string{
+		"user.label.incus-compose.service": "litellm",
+		key: "/app/aginctus-go-pilot.yaml",
+	}
+	if err := detectComposeInstanceDrift(desired, nil, actual, nil); err == nil {
+		t.Fatal("undocumented LiteLLM config override was silently accepted")
+	}
+	desired[key] = "/app/aginctus-go-pilot.yaml"
+	if err := detectComposeInstanceDrift(desired, nil, actual, nil); err != nil {
+		t.Fatalf("matching declarative LiteLLM override rejected: %v", err)
+	}
+	delete(actual, key)
+	if err := detectComposeInstanceDrift(desired, nil, actual, nil); err != nil {
+		t.Fatalf("newly declared config is safe to add: %v", err)
+	}
+	delete(desired, key)
+	if err := detectComposeInstanceDrift(desired, nil, actual, nil); err != nil {
+		t.Fatalf("fully cleared config still reported drift: %v", err)
+	}
+}
+
 func TestDetectComposeInstanceDrift(t *testing.T) {
 	tests := []struct {
 		name           string
