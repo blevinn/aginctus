@@ -1,5 +1,7 @@
 # Read-only OpenCode gateway runtime readiness (#124)
 
+This is the **second read-only check in stage 2** of the [OpenCode acceptance decision path](acceptance-opencode.md#2-read-only-pilot-inspection), after the host/Incus topology preflight. Running it does not start an agent, validate a scoped LiteLLM key remotely or grant permission for billable inference.
+
 This is a **necessary, not sufficient** gate for the separately opted-in
 [OpenCode live acceptance harness](acceptance-opencode.md). It complements the
 [Incus topology preflight](acceptance-opencode-preflight.md), the
@@ -41,6 +43,8 @@ included in reports.
 **Not verified:** managed gateway ownership, network isolation, key
 authorization, actual LiteLLM reachability, streaming Responses tool
 compatibility, upstream inference, Herdr agent execution, workspace changes,
-or gateway-side correlation. Those require the full live harness and
-independent gateway/network evidence. Do **not** close #124, authorize
-inference, or change Incus/firewall/key state based on this check alone.
+or gateway-side correlation. Those require separately authorized live checks and independent
+gateway/network evidence. Closure of [#124](https://github.com/blevinn/aginctus/issues/124)
+is **not proof** of provider success. Do **not** authorize inference or change
+Incus, firewall, or credential state based on this check alone; consult the
+active [#122 inference gate](https://github.com/blevinn/aginctus/issues/122).
