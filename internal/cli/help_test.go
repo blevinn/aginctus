@@ -20,7 +20,7 @@ import (
 func TestHelpOfflineInventory(t *testing.T) {
 	var top bytes.Buffer
 	printUsage(&top)
-	for _, command := range []string{"apply", "gateway", "network", "herdr", "workload", "images", "config", "doctor", "status", "remove", "version", "help"} {
+	for _, command := range []string{"apply", "gateway", "network", "herdr", "workload", "images", "config", "doctor", "operator", "status", "remove", "version", "help"} {
 		for _, args := range [][]string{{"help", command}, {command, "--help"}, {command, "-h"}, {"--configuration-file=/nonexistent", command, "--help"}} {
 			var out, errOut bytes.Buffer
 			// Nil dependencies prove help cannot load config or contact Incus.
