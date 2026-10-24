@@ -100,7 +100,7 @@ def normalize(record: dict, run_id: str) -> dict:
         or record.get("cleanup") != "not_verified"
         or not _optional_hash(record.get("git_revision"), REVISION)
         or not _optional_hash(record.get("flake_lock_sha256"), LOCK_HASH)
-        or record.get("git_dirty") not in (True, False, None)
+        or (record.get("git_dirty") is not None and type(record["git_dirty"]) is not bool)
         or not isinstance(created, str)
     ):
         raise ValueError("invalid VM evidence contract")
