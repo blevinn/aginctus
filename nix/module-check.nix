@@ -35,6 +35,12 @@ let
     services.aginctus.images.opencodeWorkload.enable = false;
     services.aginctus.reconcile.enable = true;
   };
+  hostOnly = evaluate {
+    services.aginctus.images.herdrClient.enable = false;
+    services.aginctus.images.opencodeWorkload.enable = false;
+    services.aginctus.reconcile.enable = false;
+    services.aginctus.firewall.enable = true;
+  };
   withForbiddenCredentials = evaluate {
     services.aginctus.settings.gateway = {
       postgres.password = "must-not-be-stored";
@@ -159,6 +165,16 @@ let
         unit.script
     );
 in
+# Operator-owned lifecycle may coexist with this existing minimal NixOS host
+# policy mode, but the system must not import image aliases or reconcile guests.
+assert hostOnly.services.aginctus.enable;
+assert hostOnly.services.aginctus.firewall.enable;
+assert builtins.hasAttr "aginctus-firewall-reconcile" hostOnly.systemd.services;
+assert builtins.hasAttr "aginctus-firewall-reconcile" hostOnly.systemd.timers;
+assert !(builtins.hasAttr "aginctus-image-herdr-client" hostOnly.systemd.services);
+assert !(builtins.hasAttr "aginctus-image-opencode-workload" hostOnly.systemd.services);
+assert !(builtins.hasAttr "aginctus-reconcile" hostOnly.systemd.services);
+assert builtins.hasAttr "aginctus/config.json" hostOnly.environment.etc;
 assert !base.services.aginctus.reconcile.enable;
 assert !base.services.aginctus.reconcile.gateway;
 assert !(builtins.hasAttr "aginctus-reconcile" base.systemd.services);
