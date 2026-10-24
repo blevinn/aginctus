@@ -38,16 +38,29 @@ class ValidationDispatchTests(unittest.TestCase):
             "nix --quiet flake check --no-build --no-update-lock-file",
             "nix --quiet flake check --no-update-lock-file",
         ]
+        # Each suite stops at its own first failed command, but the reporter
+        # proceeds to later suites and summarizes every observed suite.
+        groups = (
+            expected[:3], expected[3:7], expected[7:13], expected[13:15],
+            expected[15:16], expected[16:17], expected[17:19], expected[19:],
+        )
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             shutil.copy(ROOT / "justfile", root)
             shutil.copytree(ROOT / ".just", root / ".just")
+            (root / "scripts/checks").mkdir(parents=True)
+            shutil.copy(ROOT / "scripts/checks/report.py", root / "scripts/checks/report.py")
             tools = root / "bin"
             tools.mkdir()
             stub = f"#!{sys.executable}\n" + '''import os
 from pathlib import Path
 import sys
 name = Path(sys.argv[0]).name
+# Execute the actual reporter in the copied tree; fake only its children.
+# This happens before safety assertions because the reporter must sanitize
+# the intentionally hostile inherited environment.
+if name == "python3" and sys.argv[1:2] == ["scripts/checks/report.py"]:
+    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
 command = " ".join([name, *sys.argv[1:]])
 assert os.environ["AGINCTUS_INCUS_INTEGRATION"] == "0"
 assert os.environ["AGINCTUS_INCUS_DISPOSABLE"] == "NO"
@@ -130,18 +143,30 @@ if name == "git":
                         seen[first:first + 2] = [producer, consumer]
                     if not failure:
                         self.assertEqual(result.returncode, 0, result.stderr)
-                        self.assertEqual(seen, expected)
+                        self.assertIn("Hermetic: 8 passed, 0 failed, 0 errors", result.stdout)
                     else:
                         self.assertNotEqual(result.returncode, 0, result.stderr)
-                        last = "git ls-files -z -- *.sh" if failure == "syntax" else failure
-                        stop = expected.index(last)
-                        if failure in (producer, consumer):
-                            # A pipeline starts both sides even if one exits 23.
-                            stop = expected.index(consumer)
+                        failed_groups = sum(failure in commands for commands in groups)
                         if failure == "syntax":
-                            # Bash syntax checking follows the second file-list dispatch.
-                            stop = len(expected) - 1 - expected[::-1].index(last)
-                        self.assertEqual(seen, expected[:stop + 1])
+                            failed_groups = 1
+                        self.assertIn(
+                            f"Hermetic: {8 - failed_groups} passed, "
+                            f"{failed_groups} failed, 0 errors",
+                            result.stdout,
+                        )
+                    observed = []
+                    for commands in groups:
+                        if failure in commands:
+                            # Failed Just dependencies and multiline recipes
+                            # stop within their suite, not the entire run.
+                            length = commands.index(failure) + 1
+                            if failure in (producer, consumer):
+                                # The pipe launches both sides.
+                                length = len(commands)
+                            observed.extend(commands[:length])
+                        else:
+                            observed.extend(commands)
+                    self.assertEqual(seen, observed)
 
 
 if __name__ == "__main__":
