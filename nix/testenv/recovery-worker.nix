@@ -71,7 +71,7 @@ in
       extraGroups = [ "incus-admin" ];
       home = "/var/empty";
       createHome = false;
-      shell = "${pkgs.shadow}/bin/nologin";
+      shell = "${pkgs.util-linux}/bin/nologin";
     };
 
     systemd.services.aginctus-testenv-recovery = {
