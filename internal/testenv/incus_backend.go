@@ -269,6 +269,9 @@ func (b *IncusVMBackend) ListOwned(ctx context.Context) ([]VMStatus, error) {
 	for _, instance := range all {
 		runID := instance.Config["user.aginctus.testenv.run"]
 		if !vmRunID.MatchString(runID) || instance.Name != "testenv-"+runID {
+			if strings.HasPrefix(instance.Name, "testenv-vm-") {
+				return nil, ErrOwnershipMismatch // reserved namespace, corrupt run
+			}
 			continue // unrelated project resource; do not adopt it
 		}
 		ref := VMRef{
