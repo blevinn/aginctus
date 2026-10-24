@@ -50,6 +50,7 @@ func runHelp(args []string, stdout, stderr io.Writer) (int, bool) {
 	case "operator":
 		fmt.Fprintln(stdout, "Usage: aginctus [global options] operator preflight --project NAME (read-only; write and host authority unverified)")
 		fmt.Fprintln(stdout, "       aginctus [global options] operator state-audit --owner system|user (read-only; no secret reads or migration)")
+		fmt.Fprintln(stdout, "       aginctus operator units-audit --owner system|user (read-only; current user's manager only; no config options)")
 	case "version":
 		fmt.Fprintln(stdout, "Usage: aginctus version|--version\nRevision: packaged clean Git commit or source-<content hash>; local Go VCS revision[-dirty], or unknown when unavailable (including go run). No timestamps.")
 	case "help":

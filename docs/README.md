@@ -11,6 +11,7 @@ generally discoverable should be linked from this index.
 - [CLI operations](cli.md) — supported command families, mutation boundaries, dry-run and force semantics.
 - [Operator Incus preflight](operator-preflight.md) — read-only, explicitly project-scoped access diagnostics and their limitations.
 - [Gateway state ownership audit](operator-state-audit.md) — metadata-only detection of system/user credential state collisions and unsafe permissions.
+- [Lifecycle unit ownership audit](operator-units-audit.md) — inspect competing system/current-user image and reconciler units without modification.
 
 ## Current architecture and component contracts
 
