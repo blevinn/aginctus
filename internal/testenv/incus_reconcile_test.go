@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 )
@@ -70,17 +69,24 @@ func TestIncusReconcileFailsClosedOnForeignOrOverCapacity(t *testing.T) {
 	if _, ok := client.vms[ref.Instance]; !ok { t.Fatal("unsafe VM deleted") }
 	delete(client.vms, ref.Instance)
 	for i := 0; i < MaxIncusReconcileCandidates+1; i++ {
-		name := fmt.Sprintf("testenv-vm-%024x", i)
-		runID := "vm-" + strings.Repeat("a", 23) + string("0123456789abcdef"[i%16])
-		client.vms[name] = IncusVMInstance{Name: name, Config: map[string]string{
-			"user.aginctus.testenv.run": runID,
-		}}
+		runID := fmt.Sprintf("vm-%024x", i)
+		name := "testenv-" + runID
+		client.vms[name] = IncusVMInstance{
+			Name: name, Type: "virtual-machine", Status: "Running",
+			Ephemeral: true, Profiles: []string{},
+			Config: map[string]string{
+				"user.aginctus.testenv.run": runID,
+				"user.aginctus.testenv.image": admittedSpec().ImageFingerprint,
+				"user.aginctus.testenv.expires": now.Add(time.Hour).Format(time.RFC3339Nano),
+			},
+			Devices: map[string]map[string]string{
+				"root": {"type": "disk", "path": "/", "pool": "testenv"},
+			},
+		}
 	}
-	// Fake entries above intentionally have mismatched name IDs and must
-	// fail ownership checks; neither they nor foreign resources may be touched.
-	summary, err = ReconcileExpiredIncusVMs(ctx, backend, now.Add(time.Hour))
-	if err == nil || summary.Destroyed != 0 {
-		t.Fatalf("malformed foreign candidate accepted: %#v %v", summary, err)
+	summary, err = ReconcileExpiredIncusVMs(ctx, backend, now.Add(2*time.Hour))
+	if err == nil || summary.Destroyed != 0 || summary.Scanned != 0 {
+		t.Fatalf("over-capacity scan modified resources: %#v %v", summary, err)
 	}
 }
 
