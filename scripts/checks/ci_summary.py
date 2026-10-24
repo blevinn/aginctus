@@ -21,7 +21,7 @@ EXPECTED_SUITES = (
     "docs-examples",
     "nix",
 )
-CASE_ID = re.compile(r"[A-Za-z0-9_./:-]{1,192}\\Z".replace("\\\\", "\\"))
+CASE_ID = re.compile(r"[A-Za-z0-9_./:-]{1,192}\Z")
 MAX_CASES = 8
 STEP_LABELS = (
     ("Namespace contract", "NAMESPACE_RESULT"),
