@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"sigs.k8s.io/yaml"
+
+	"github.com/blevinn/aginctus/internal/config"
 )
 
 // The built-in option chooses model groups; it does not restrict header names.
@@ -187,5 +189,48 @@ func TestGoModelGroupForwardingDisabledInOrchestrationPlan(t *testing.T) {
 		len(planned.Compose.Services["litellm"].Configs) != 0 ||
 		len(planned.Compose.Configs) != 0 {
 		t.Fatal("disabled policy unexpectedly activates forwarded client headers")
+	}
+}
+
+func TestGoModelGroupForwardingConfigRequiresExplicitBooleanOptIn(t *testing.T) {
+	loader := config.NewLoader()
+	loader.SystemPath = ""
+	loader.UserPath = ""
+	loader.Environment = nil
+	for _, tc := range []struct {
+		name string
+		value string
+		wantEnabled bool
+		wantError bool
+	}{
+		{name: "default", value: "", wantEnabled: false},
+		{name: "enabled", value: "true", wantEnabled: true},
+		{name: "disabled", value: "false", wantEnabled: false},
+		{name: "reject string", value: "\"\"enabled\"\"", wantError: true},
+		{name: "reject number", value: "1", wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var overrides []string
+			if tc.value != "" {
+				overrides = append(overrides, "gateway.litellm.opencodeGoForwarding=" + tc.value)
+			}
+			effective, err := loader.Load(config.Options{Overrides: overrides})
+			if err != nil {
+				t.Fatal(err)
+			}
+			spec, err := FromConfig(effective)
+			if tc.wantError {
+				if err == nil {
+					t.Fatal("accepted non-boolean model-scoped forwarding configuration")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if spec.OpenCodeGoForwarding != tc.wantEnabled {
+				t.Fatalf("enabled=%v, want %v", spec.OpenCodeGoForwarding, tc.wantEnabled)
+			}
+		})
 	}
 }
