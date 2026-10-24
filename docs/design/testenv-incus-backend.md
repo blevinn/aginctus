@@ -57,6 +57,27 @@ Outer VM needs **nested virtualization** only if tests create inner VMs. Where I
 
 The image must be an immutable NixOS Incus **VM image** containing `incus-agent`, the guest-local Incus daemon, Btrfs test support and known Aginctus packages. Do not use the `run-nixos-vm` QEMU launcher as an Incus image or treat mutable `images:nixos/latest` as a pinned artifact. Import the pinned image into the test project using trusted worker reconciliation, then launch by fingerprint, not by arbitrary remote.
 
+## Incus ephemeral instance policy
+
+The default `VMCreateSpec.Retention` is **ephemeral** (the empty value
+also means ephemeral). The adapter must set Incus `InstancesPost.Ephemeral`
+explicitly at creation time, never rely on an Incus profile default.
+
+Ephemeral VMs are deleted when naturally stopped by Incus, so an operator
+must not expect retained disks or snapshots after shutdown. No snapshot or
+reset is advertised in the MVP (project snapshots remain blocked).
+Tests needing evidence from guest storage must collect it **before**
+stopping, or deliberately request `retained` in trusted worker policy;
+retention is not a free-form MCP setting and never disables TTL/GC.
+
+Incus may restart an ephemeral instance after uncontrolled host
+reboots/failure rather than deleting it. Therefore **ephemeral does
+not replace the TTL reconciler**: orphan sweeps must still enumerate
+instances in the restricted project, verify ownership/expiry, and
+destroy expired resources. Destruction must tolerate an instance
+vanishing because Incus already cleaned it up, without treating that
+absence as proof that foreign resources were not affected.
+
 ## Operations and failure model
 
 1. **Create:** mint cryptographic run ID and an owner/generation marker in trusted state; validate the project's restrictions and limits, image fingerprint, root volume quota and no NIC before calling Incus. Create a uniquely named VM with fixed devices/profile; re-read it after creation. Name collision or preexisting foreign metadata fails closed. No implicit adoption.
