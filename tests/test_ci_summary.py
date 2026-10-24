@@ -125,6 +125,8 @@ class CISummaryTests(unittest.TestCase):
                 {"failed_cases": None},
                 {"cases_truncated": True},
                 {"failed_cases": [{"id": "valid", "kind": "fail"}],
+                 "cases_truncated": None},
+                {"failed_cases": [{"id": "valid", "kind": "fail"}],
                  "cases_truncated": True},
             ):
                 with self.subTest(metadata=metadata):
