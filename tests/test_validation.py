@@ -33,6 +33,8 @@ class ValidationDispatchTests(unittest.TestCase):
             "shell opencode-live-adapter-test.sh",
             "git ls-files -z -- *.sh",
             "python3 scripts/check_markdown_links.py",
+            "go run ./cmd/aginctus help",
+            "python3 scripts/check_docs_examples.py",
             "nix --quiet flake check --no-build --no-update-lock-file",
             "nix --quiet flake check --no-update-lock-file",
         ]
@@ -112,6 +114,20 @@ if name == "git":
                         capture_output=True, text=True, timeout=30, check=False,
                     )
                     seen = log.read_text().splitlines()
+                    # The docs checker is a pipe: both commands must run,
+                    # but the OS can schedule either child to log first.
+                    producer = "go run ./cmd/aginctus help"
+                    consumer = "python3 scripts/check_docs_examples.py"
+                    if producer in seen or consumer in seen:
+                        first = min(
+                            index for index, command in enumerate(seen)
+                            if command in (producer, consumer)
+                        )
+                        self.assertCountEqual(
+                            seen[first:first + 2], [producer, consumer],
+                            "both sides of the documentation-check pipe must execute",
+                        )
+                        seen[first:first + 2] = [producer, consumer]
                     if not failure:
                         self.assertEqual(result.returncode, 0, result.stderr)
                         self.assertEqual(seen, expected)
@@ -119,6 +135,9 @@ if name == "git":
                         self.assertNotEqual(result.returncode, 0, result.stderr)
                         last = "git ls-files -z -- *.sh" if failure == "syntax" else failure
                         stop = expected.index(last)
+                        if failure in (producer, consumer):
+                            # A pipeline starts both sides even if one exits 23.
+                            stop = expected.index(consumer)
                         if failure == "syntax":
                             # Bash syntax checking follows the second file-list dispatch.
                             stop = len(expected) - 1 - expected[::-1].index(last)
