@@ -5,7 +5,7 @@ Aginctus controls Incus resources for a private Herdr/OpenCode environment and a
 ## Host prerequisites
 
 - Linux host with Nix flakes enabled; a working local Incus daemon and initialized storage pool are required only for Incus operations.
-- For the supported NixOS host integration, import `nixosModules.default` and enable `services.aginctus` using the [NixOS module example](configuration.md#nixos-module). The current guest images are NixOS containers; selecting `vm` requires an independently compatible image.
+- For host-level NixOS integration, import `nixosModules.default` and enable `services.aginctus` using the [NixOS module example](configuration.md#nixos-module). A separate [Home Manager operator-only installation](home-manager.md) is proposed in the unmerged v0.2 stack; it cannot replace host firewall authority. The current guest images are NixOS containers; selecting `vm` requires an independently compatible image.
 - Trust the host and Incus administrators; review the effective configuration, storage pools, bridge topology, firewall backend and network exposure before enabling mutations.
 
 From the repository checkout, the development/build path is:
