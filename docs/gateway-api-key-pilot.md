@@ -1,6 +1,6 @@
 # Pilot API-key model registration (issue #122)
 
-**Stage 3** of the [gateway operator decision path](gateway-operator-path.md#3-provider-registration-and-key-handling). Finish read-only network and isolation verification before separately approving registration. This is not an inference test; the live #122 operator hold remains in force.
+**Stage 3** of the [gateway operator decision path](gateway-operator-path.md#3-register-an-authorized-upstream). Finish read-only network and isolation verification before separately approving registration. This is not an inference test; the live #122 operator hold remains in force.
 
 Status: opt-in, operator-managed route registration; **not** a successful live
 inference test. This avoids rebuilding or reapplying an existing Compose gateway.
