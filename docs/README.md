@@ -33,7 +33,8 @@ currently supported configuration or a release acceptance claim.
   workloads, model-storage volumes and gateway-facing policy.
 - [Live host workspace sharing](design/workspace-sharing.md) —
   opt-in bidirectional mount policy and ownership.
-- [Unified test reporting](design/test-reporting.md) — proposed cross-suite output contract and opt-in hermetic adapter.\n- [Native Incus reconciliation](design/native-incus-reconciliation.md) —
+- [Unified test reporting](design/test-reporting.md) — proposed cross-suite output contract and opt-in hermetic adapter.
+- [Native Incus reconciliation](design/native-incus-reconciliation.md) —
   staged replacement of the current Apply/Compose drivers after release gates.
 - [Home Manager operator / NixOS host authority](design/home-manager-operator.md) —
   proposed v0.2 privilege boundary, safe operator installation and migration gates.
