@@ -41,11 +41,17 @@ Home Manager (replace the username, home directory, and system):
 }
 ```
 
-The opt-in `vm-harness-home-manager-operator` flake package exercises a
-standalone `home-manager build` and `switch` in a disposable NixOS/Incus VM,
-using an ordinary user without Incus authorization. It is not part of routine
-`nix flake check`; run it explicitly as documented in #490. This initial
-scenario does not establish permissions for subsequent image/lifecycle work.
+The opt-in `vm-harness-home-manager-operator` flake package evaluates
+and builds a standalone Home Manager generation in the outer Nix build, then
+activates it **as an unprivileged user** inside a disposable NixOS/Incus VM
+with no Incus authorization. Prebuilding is intentional: the VM is offline,
+so it cannot fetch build-time sources during a nested `home-manager build`.
+The test exercises the real Home Manager activation twice, checks the
+installed CLI/config and verifies no Incus mutations, but it does **not**
+execute the `home-manager build/switch` CLI inside the guest. It is not part
+of routine `nix flake check`; run the explicit VM build described in #490.
+This initial scenario does not establish permissions for subsequent
+image/lifecycle work.
 
 The consumer's flake lock pins the input revisions. The module exports
 `homeManagerModules.aginctus` and `homeManagerModules.default`. It installs
