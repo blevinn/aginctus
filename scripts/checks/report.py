@@ -79,10 +79,10 @@ class FailureCases:
     def _add(self, identifier: str, kind: str) -> None:
         if not CASE_CHARS.fullmatch(identifier) or identifier in self._seen:
             return
-        self._seen.add(identifier)
         if len(self.cases) >= MAX_CASES:
             self.truncated = True
             return
+        self._seen.add(identifier)
         self.cases.append({"id": identifier, "kind": kind})
 
     def _parse(self, line: str) -> None:
