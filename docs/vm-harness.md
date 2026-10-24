@@ -129,4 +129,35 @@ attestation, or sanitize diagnostic output printed by the Nix builder.
 Only run this on a separate unprivileged worker without pilot secrets.
 Reports are mode `0600` under run-scoped directories and excluded from Git.
 
+## Read-only concise evidence view
+
+After a separately authorized VM run produces `.vm-harness-results/<run-id>/result.json`,
+copy its **24-character hexadecimal run ID** from the report path. Inspect the
+*existing* record from the same repository checkout:
+
+```sh
+nix develop -c just check vm-report <run-id>
+nix develop -c just check vm-report-json <run-id>
+```
+
+These commands do not discover or start VMs, run Nix/Incus, read host Incus
+configuration, or enable live acceptance. They validate the original private
+v1 evidence contract, verify owner-only directory/file permissions, refuse
+symlinks, and read only the chosen report (up to 16 KiB). Their output is
+bounded and synthetic-only: a short terminal summary or one JSON object on
+stdout. Passing records exit 0; failed, missing or invalid evidence exits
+nonzero, and invalid evidence produces a generic `error` result instead of
+printing raw payloads or filesystem paths.
+
+The view uses the same **conceptual** report envelope as hermetic tests
+(`schema_version`, `profile`, `status`, `summary`, `results`) but carries
+`profile: disposable_vm`. It never calls the hermetic CI reporter or appends
+VM results to `just check ci`. The optional source metadata is sanitized and
+allowlisted. Every view retains the original
+`upstream_inference: not_verified` and `cleanup: not_verified`, even when
+the VM derivation passed. This is a presentation of the original evidence,
+not an additional test or an attestation. A run under another Unix user cannot
+be inspected by silently relaxing evidence permissions; use that worker
+identity or move only an explicitly reviewed redacted report.
+
 Never record a synthetic provider test as evidence for [#124](https://github.com/blevinn/aginctus/issues/124).
