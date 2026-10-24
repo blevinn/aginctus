@@ -15,6 +15,7 @@ func TestTestenvOfflineHelpListAndPlan(t *testing.T) {
 		{"testenv", "vm", "list"},
 		{"testenv", "vm", "backend"},
 		{"testenv", "vm", "backend", "incus"},
+		{"testenv", "vm", "policy"},
 		{"testenv", "vm", "plan", "smoke"},
 		{"--configuration-file=/does/not/exist", "testenv", "--help"},
 	} {
@@ -41,6 +42,7 @@ func TestTestenvRejectsUnexpectedCommandsWithoutExecution(t *testing.T) {
 		{"testenv", "vm", "test", "smoke", "--nix-option"},
 		{"testenv", "vm", "exec", "/bin/sh"},
 		{"testenv", "vm", "backend", "qemu"},
+		{"testenv", "vm", "policy", "--pool=pilot"},
 		{"testenv", "vm", "backend", "incus", "--host-socket=/var/lib/incus/unix.socket"},
 		{"testenv", "mcp", "--http"},
 		{"testenv", "vm", "plan", ".#vm-harness-smoke"},
@@ -103,5 +105,17 @@ func TestTestenvBackendDiscoveryIsReadOnlyAndUninstalled(t *testing.T) {
 		!strings.Contains(out.String(), "\"agent_accessible\": false") ||
 		errOut.Len() != 0 {
 		t.Fatalf("unexpected backend discovery: code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+}
+
+func TestTestenvIncusPolicyIsOfflineAndRestricted(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := Run(context.Background(), []string{"testenv", "vm", "policy"}, &out, &errOut, nil, nil)
+	if code != 0 || errOut.Len() != 0 ||
+		!strings.Contains(out.String(), "\"restricted\": \"true\"") ||
+		!strings.Contains(out.String(), "\"restricted.devices.nic\": \"block\"") ||
+		!strings.Contains(out.String(), "\"restricted.virtual-machines.nesting\": \"allow\"") ||
+		!strings.Contains(out.String(), "\"limits.instances\": \"2\"") {
+		t.Fatalf("invalid offline policy: code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
 	}
 }

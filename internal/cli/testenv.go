@@ -27,6 +27,21 @@ func runTestenv(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		printTestenvUsage(stderr)
 		return 2
 	}
+	if len(args) == 2 && args[1] == "policy" {
+		// Offline canonical policy only. Does not connect to or modify Incus.
+		policy, err := testenv.IncusProjectPolicy("testenv")
+		if err != nil {
+			fmt.Fprintln(stderr, "testenv Incus policy unavailable")
+			return 1
+		}
+		data, err := json.MarshalIndent(policy, "", "  ")
+		if err != nil {
+			fmt.Fprintln(stderr, "testenv Incus policy encoding unavailable")
+			return 1
+		}
+		fmt.Fprintln(stdout, string(data))
+		return 0
+	}
 	if len(args) == 2 && args[1] == "backend" {
 		// Offline discovery; no access to the Incus Unix socket or pilot config.
 		data, err := json.MarshalIndent(testenv.SupportedVMBackends(), "", "  ")
@@ -94,6 +109,7 @@ func runTestenv(ctx context.Context, args []string, stdout, stderr io.Writer) in
 func printTestenvUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus testenv mcp  (stdio MCP 2026-07-28; read-only VM discovery)")
 	fmt.Fprintln(w, "Usage: aginctus testenv vm backend [incus]  (offline; planned provider)")
+	fmt.Fprintln(w, "       aginctus testenv vm policy  (offline; intended Incus project controls)")
 	fmt.Fprintln(w, "Usage: aginctus testenv vm list  (offline; no config or Incus)")
 	fmt.Fprintln(w, "       aginctus testenv vm plan SCENARIO  (read-only pinned target)")
 	fmt.Fprintln(w, "       aginctus testenv vm test SCENARIO  (opt-in heavyweight NixOS VM)")
