@@ -85,3 +85,14 @@ markdown:
 [no-cd]
 docs-examples:
     go run ./cmd/aginctus help | python3 scripts/check_docs_examples.py
+
+
+# Opt-in concise suite reporting; CI's existing fail-fast path is unchanged.
+# The @ prefix is essential: JSON mode must emit exactly one JSON object.
+[no-cd]
+report:
+    @python3 scripts/checks/report.py --format text
+
+[no-cd]
+report-json:
+    @python3 scripts/checks/report.py --format json
