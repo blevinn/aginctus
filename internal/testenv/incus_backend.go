@@ -217,6 +217,10 @@ func (b *IncusVMBackend) Destroy(ctx context.Context, ref VMRef) error {
 	// A normal Stop deletes an ephemeral instance. Retained VMs require
 	// a distinct explicit Delete. Never turn missing-after-stop into
 	// permission to affect any different instance.
+	if !strings.EqualFold(actual.Status, "Running") &&
+		!strings.EqualFold(actual.Status, "Stopped") {
+		return errors.New("VM in unexpected state; cleanup requires reconciliation")
+	}
 	if strings.EqualFold(actual.Status, "Running") {
 		if err := b.client.Stop(ctx, ref.Instance); err != nil {
 			return errors.New("testenv VM stop failed; cleanup unverified")
