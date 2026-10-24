@@ -207,6 +207,54 @@ by weakening the filters. #456 remains open until the runtime hook is
 upstream. A real OpenCode Go inference request remains separately gated by
 #122 and #123; existing pilot credentials are revoked.
 
+### Opt-in LiteLLM runtime image (packaging increment; #456)
+
+The repository includes an **explicit alternative** build recipe in
+`deploy/litellm-go/Dockerfile`. It derives from the same pinned upstream
+LiteLLM **v1.103.0-stable** image as the stock gateway, copies the two
+credential-free hook modules into `/app/aginctus-go`, verifies the
+`CustomLogger` callback imports using the base image's installed Python,
+and selects `deploy/litellm-go/config.yaml` as the alternative startup
+configuration. The config declares an empty static model list and the
+callback instance; the gateway's existing PostgreSQL-backed model registry,
+`STORE_MODEL_IN_DB` environment, LiteLLM master/salt and provider keys remain
+out of band. Build with the repository root as the Docker context.
+
+This **does not switch** `gateway.images.litellm`, alter Compose, rebuild
+the pilot instance, or grant new network access. Image creation is a
+deliberate, locally verifiable candidate for promotion, not permission to
+activate it on the pilot. For production promotion, verify and pin the
+**immutable upstream manifest digest** via
+`--build-arg LITELLM_BASE=ghcr.io/berriai/litellm@sha256:<verified-digest>`;
+the tag-based default is only a convenience for a disposable dry-run build.
+
+Isolated validations, before any gateway orchestration:
+
+```sh
+nix develop -c python3 -m unittest discover \
+  -s scripts/gateway -p 'test_opencode_go_image.py' -v
+nix develop -c python3 -m unittest discover \
+  -s scripts/gateway -p 'test_opencode_go_transport.py' -v
+
+# Optional: local disposable image build and import smoke; this pulls the
+# stock upstream image and does not run a gateway or contact a provider.
+docker build -f deploy/litellm-go/Dockerfile \
+  -t aginctus-litellm-go:validate .
+docker run --rm --network none \
+  --entrypoint /app/.venv/bin/python aginctus-litellm-go:validate \
+  -c 'from litellm_opencode_go_hook import proxy_handler_instance; assert callable(proxy_handler_instance.async_pre_call_hook)'
+```
+
+The `test_opencode_go_transport.py` loopback server verifies the policy's
+canonical session/User-Agent values survive one **synthetic HTTP transport**
+and that forbidden client headers are absent. It is **not** a substitute
+for exercising LiteLLM's own request setup, callback dispatch, model router,
+provider-credential injection, and native Responses implementation in an
+isolated actual LiteLLM process with a mock Go upstream. Do not set the
+running gateway to this image until that integration has passed; the
+hardcoded pilot alias and real pinned OpenCode client headers also must be
+checked. The v0.1 acceptance remains open.
+
 ### Required live Go compatibility gate — before claiming #122 complete
 
 OpenCode Go states it is designed for coding-agent traffic and that
