@@ -1,6 +1,6 @@
 # Home Manager operator integration (v0.2 stack)
 
-Status: **initial implementation on the unmerged v0.2 PR stack**.
+Status: **CLI-only standalone Home Manager integration merged** (#448); disposable VM validation and authorized user lifecycle support remain incremental v0.2 work.
 See [design](design/home-manager-operator.md), [#426](https://github.com/blevinn/aginctus/issues/426)
 and [NixOS configuration](configuration.md#nixos-module). This does **not**
 replace the v0.1 pilot activation/runbooks.
@@ -40,6 +40,29 @@ Home Manager (replace the username, home directory, and system):
   };
 }
 ```
+
+The opt-in `vmTests.x86_64-linux.home-manager-operator` output evaluates
+and builds a standalone Home Manager generation in the outer Nix build, then
+activates it **as an unprivileged user** inside a disposable NixOS/Incus VM
+with no Incus authorization. Prebuilding is intentional: the VM is offline,
+so it cannot fetch build-time sources during a nested `home-manager build`.
+The test exercises the real Home Manager activation twice, checks the
+installed CLI/config and verifies no Incus mutations, but it does **not**
+execute the `home-manager build/switch` CLI inside the guest.
+
+Run the heavyweight acceptance test explicitly:
+
+```sh
+nix build -L --no-link .#vmTests.x86_64-linux.home-manager-operator
+```
+
+It is deliberately **not exported under `packages` or `checks`**. Routine
+`nix flake check` evaluates package derivations, while this test's evaluation
+imports Home Manager from its packaged source (an import-from-derivation).
+The dedicated output avoids introducing that evaluation-time build into
+hermetic CI. Its runtime source and closure are still pinned through Nixpkgs.
+This initial scenario does not establish permissions for subsequent
+image/lifecycle work.
 
 The consumer's flake lock pins the input revisions. The module exports
 `homeManagerModules.aginctus` and `homeManagerModules.default`. It installs

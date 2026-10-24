@@ -391,6 +391,17 @@
         }
       );
 
+      # Explicit heavyweight VM tests whose evaluation may require an
+      # import-from-derivation (e.g. Home Manager's packaged source). Keep
+      # these out of packages/checks: nix flake check evaluates every package
+      # even when its derivation is not built.
+      # Run explicitly: nix build -L --no-link .#vmTests.x86_64-linux.home-manager-operator
+      vmTests = forAllSystems (system: {
+        home-manager-operator = import ./nix/vm-harness/home-manager-operator.nix {
+          inherit self nixpkgs system;
+        };
+      });
+
       checks = forAllSystems (system: {
         nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
         home-manager-module = import ./nix/home-manager-module-check.nix { inherit self nixpkgs system; };
