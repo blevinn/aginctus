@@ -9,13 +9,12 @@ from types import SimpleNamespace
 
 import litellm
 import yaml
-from starlette.datastructures import Headers
-
 from litellm.proxy import proxy_server
 from litellm.proxy.litellm_pre_call_utils import (
     LiteLLMProxyRequestSetup,
     clean_headers,
 )
+from starlette.datastructures import Headers
 
 
 def main(config_path):
