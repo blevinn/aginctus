@@ -427,7 +427,7 @@
               ++ [ herdrCli ];
 
             shellHook = ''
-              echo "Aginctus development shell"
+              echo "Aginctus development shell" >&2
             '';
           };
         }
