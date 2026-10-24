@@ -351,6 +351,13 @@
             ln -s ${opencodeWorkloadRootfs} "$out/rootfs"
             ln -s ${opencodeWorkloadMetadata} "$out/metadata"
           '';
+          # Separate Incus VM disk + metadata archive, built only when
+          # explicitly selected; not a run-nixos-vm QEMU batch launcher.
+        }
+        // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          testenv-incus-vm-image = (import ./nix/testenv/incus-vm-image.nix {
+            inherit self nixpkgs system;
+          }).image;
         }
         # Keep VM integration tests explicitly buildable, outside the default
         # flake checks, so routine validation does not execute heavyweight VMs.
@@ -409,6 +416,10 @@
           inherit self nixpkgs system;
         };
         opencode-workload-socket-alignment = import ./nix/opencode-workload-check.nix {
+          inherit self nixpkgs system;
+        };
+      } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+        testenv-incus-vm-image-config = import ./nix/testenv/incus-vm-image-check.nix {
           inherit self nixpkgs system;
         };
       });
