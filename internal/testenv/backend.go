@@ -28,7 +28,7 @@ const (
 )
 
 var (
-	vmSafeName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+	vmSafeName = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`)
 	vmDigest   = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	vmRunID    = regexp.MustCompile(`^vm-[0-9a-f]{24}$`)
 )
