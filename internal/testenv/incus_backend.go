@@ -60,8 +60,12 @@ func NewIncusVMBackend(client IncusVMClient, storagePool string) (*IncusVMBacken
 }
 
 func (*IncusVMBackend) Name() BackendName { return IncusBackend }
-func (*IncusVMBackend) Capabilities() BackendCapabilities {
-	return BackendCapabilities{Exec: true}
+func (b *IncusVMBackend) Capabilities() BackendCapabilities {
+	if b == nil || b.client == nil {
+		return BackendCapabilities{}
+	}
+	_, supported := b.client.(GuestExecClient)
+	return BackendCapabilities{Exec: supported}
 }
 
 // checkProject refuses a mutable/default/looser project. The worker must
