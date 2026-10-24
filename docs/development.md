@@ -141,10 +141,17 @@ For the supported hermetic validation tier, run from the repository root:
 
 ```sh
 nix --quiet develop -c just check-all
+# For CI/agents, emit a single versioned JSON object instead:
+nix --quiet develop -c just check report-json
 ```
 
-Inside the development shell, the same entrypoint is `just check-all`. It stops
-at the first failing command and composes these individually runnable recipes:
+Inside the development shell, use `just check all` or `just check ci`. They
+show one PASS/FAIL/ERROR line per suite and an aggregate summary. The runner
+continues through all eight safe suites even when an earlier suite fails;
+individual suites still stop on their own first failed subcommand. All
+failures cause a nonzero final exit status. The JSON recipe has the same
+coverage and failure behavior, without printing raw test output. Run
+`just check <suite>` directly to view native diagnostics. The suites are:
 
 | Recipe | Coverage |
 | --- | --- |
@@ -159,11 +166,14 @@ at the first failing command and composes these individually runnable recipes:
 The Nix checks evaluate the flake and build the current system's lightweight
 NixOS module, gateway configuration parity, and workload socket alignment
 checks. They do not build guest images or run firewall/Incus VMs. Other
-architectures are not built by this command. This is a local validation
-entrypoint; it does not configure or establish CI gates.
+architectures are not built by this command. GitHub Actions runs the
+same hermetic suite set with `just check report-json`, then constructs the CI
+step summary from the validated JSON rather than scraping native Python logs.
+A missing or malformed report is not treated as evidence of test success.
 
-`check-all` overrides inherited Incus integration and live shell-acceptance opt-ins
-before dispatch. It clears `GOFLAGS` so inherited flags cannot suppress Go tests.
+`check-all`, `check ci`, and `check report-json` override inherited Incus
+integration and live shell-acceptance opt-ins for each child suite. They clear
+`GOFLAGS` so inherited flags cannot suppress Go tests.
 It disables Go module/checksum downloads and automatic toolchain
 selection (`GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local`), so populate the Go module
 cache first with `go mod download` in the development shell if needed. Nix may
@@ -183,7 +193,8 @@ their external calls before adding them to routine discovery.
 `tests/test_validation.py` runs the actual aggregate recipe in a temporary copy
 with inert Go/Python/Nix commands and fake shell fixtures. It checks exact suite
 dispatch, overrides hostile inherited opt-ins, and injects failures into every
-child command plus Bash syntax validation. To run that proof alone:
+child command plus Bash syntax validation, including continued execution of
+other suites after a failed suite. To run that proof alone:
 
 ```sh
 nix --quiet develop -c python3 -m unittest discover -s tests -p 'test_*.py' -v
