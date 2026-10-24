@@ -2,15 +2,14 @@
 import asyncio
 import copy
 import importlib.util
+import pathlib
 import sys
 import types
-import unittest
-from pathlib import Path
-from unittest.mock import patch
+import unittest.mock
 
 
 spec = importlib.util.spec_from_file_location(
-    "opencode_go_forwarding", Path(__file__).with_name("opencode_go_forwarding.py"))
+    "opencode_go_forwarding", pathlib.Path(__file__).with_name("opencode_go_forwarding.py"))
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
@@ -94,11 +93,11 @@ class ForwardingTests(unittest.TestCase):
         root.__path__ = []
         integrations = types.ModuleType("litellm.integrations")
         integrations.__path__ = []
-        with patch.dict(sys.modules, {"litellm": root, "litellm.integrations": integrations,
+        with unittest.mock.patch.dict(sys.modules, {"litellm": root, "litellm.integrations": integrations,
                                       "litellm.integrations.custom_logger": logger,
                                       "opencode_go_forwarding": mod}):
             adapter = importlib.util.spec_from_file_location(
-                "litellm_opencode_go_hook", Path(__file__).with_name("litellm_opencode_go_hook.py"))
+                "litellm_opencode_go_hook", pathlib.Path(__file__).with_name("litellm_opencode_go_hook.py"))
             hook = importlib.util.module_from_spec(adapter)
             adapter.loader.exec_module(hook)
             self.assertIsInstance(hook.proxy_handler_instance, logger.CustomLogger)
