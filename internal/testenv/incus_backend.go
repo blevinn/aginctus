@@ -60,7 +60,9 @@ func NewIncusVMBackend(client IncusVMClient, storagePool string) (*IncusVMBacken
 }
 
 func (*IncusVMBackend) Name() BackendName { return IncusBackend }
-func (*IncusVMBackend) Capabilities() BackendCapabilities { return BackendCapabilities{} }
+func (*IncusVMBackend) Capabilities() BackendCapabilities {
+	return BackendCapabilities{Exec: true}
+}
 
 // checkProject refuses a mutable/default/looser project. The worker must
 // provision a dedicated project first; no implicit creation or adoption.
@@ -279,10 +281,7 @@ func (b *IncusVMBackend) ListOwned(ctx context.Context) ([]VMStatus, error) {
 	return owned, nil
 }
 
-// These remain deliberately unavailable until Incus agent exec and
-// restricted snapshot handling have their own negative-security tests.
-func (*IncusVMBackend) Exec(context.Context, VMRef, []string, time.Duration) (VMExecResult, error) {
-	return VMExecResult{}, ErrUnsupportedAction
-}
+// Snapshot and reset are not admitted while the restricted Incus project
+// forbids snapshots; no silent destructive fallback is permitted.
 func (*IncusVMBackend) Snapshot(context.Context, VMRef, string) error { return ErrUnsupportedAction }
 func (*IncusVMBackend) Reset(context.Context, VMRef, string) error { return ErrUnsupportedAction }
