@@ -40,6 +40,15 @@ in
         default = "docker.io/library/postgres:17-alpine";
       };
     };
+    litellm.opencodeGoForwarding = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Opt into stock LiteLLM model-group forwarding for the fixed
+        aginctus-go-pilot alias. This may forward eligible additional x-*
+        request headers; it is not a header-name allowlist.
+      '';
+    };
   };
 
   infrastructure.herdr = {
