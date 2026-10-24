@@ -73,7 +73,9 @@ func TestTestenvDispatchesOnlyKnownScenario(t *testing.T) {
 	if code := Run(context.Background(), []string{"testenv", "vm", "test", "smoke"}, &out, &errOut, nil, nil); code != 0 || received != "smoke" || !strings.Contains(out.String(), "PASS") {
 		t.Fatalf("code=%d scenario=%q stderr=%q", code, received, errOut.String())
 	}
-	executeTestenvVM = func(context.Context, string, string, io.Writer, io.Writer) error { return errors.New("guest VM failed") }
+	executeTestenvVM = func(context.Context, string, string, io.Writer, io.Writer) error {
+		return errors.New("guest VM failed")
+	}
 	out.Reset()
 	errOut.Reset()
 	if code := Run(context.Background(), []string{"testenv", "vm", "test", "smoke"}, &out, &errOut, nil, nil); code != 1 || !strings.Contains(errOut.String(), "guest VM failed") {

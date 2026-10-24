@@ -1,5 +1,7 @@
 # Gateway-only outbound bridge
 
+Start with the [gateway and egress operator decision path](gateway-operator-path.md) for ordered read-only inventory, exceptional maintenance, credential approval, inference evidence and key revocation. This page describes the configured network contract, not live acceptance of guest routes or host filtering.
+
 The gateway egress bridge gives LiteLLM an outbound path while keeping
 PostgreSQL and agent workloads on the private management network. Network
 reconciliation does not configure providers or distribute credentials.

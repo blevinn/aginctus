@@ -35,6 +35,8 @@ currently supported configuration or a release acceptance claim.
   staged replacement of the current Apply/Compose drivers after release gates.
 - [Persistent testenv VM backend](design/testenv-incus-backend.md) —
   v0.2 Incus MVP, pluggable VM contract and dedicated-worker security gates.
+- [Home Manager operator / NixOS host authority](design/home-manager-operator.md) —
+  proposed v0.2 privilege boundary, safe operator installation and migration gates.
 
 ### Architecture (subdirectory)
 
@@ -53,6 +55,9 @@ currently supported configuration or a release acceptance claim.
 
 ## Operations and gateway integration
 
+- [Start here: gateway and egress operator path](gateway-operator-path.md) —
+  staged read-only checks, separately authorized network maintenance,
+  provider registration, scoped keys, inference evidence and revocation.
 - [Gateway egress network](gateway-egress-network.md) — LiteLLM
   egress bridge, OCI NIC, and DHCP design.
 - [Gateway API key pilot](gateway-api-key-pilot.md) — operator
@@ -95,10 +100,11 @@ currently supported configuration or a release acceptance claim.
 
 - [Disposable NixOS VM harness](vm-harness.md) — experimental
   opt-in Aginctus/Incus VM tests and agent-debugging security limits.
-- [Acceptance: OpenCode preflight](acceptance-opencode-preflight.md) —
-  read-only host infrastructure preflight before launch.
-- [Acceptance: OpenCode](acceptance-opencode.md) — OpenCode
-  workload lifecycle acceptance gates.
+- [Start here: OpenCode acceptance decision path](acceptance-opencode.md) —
+  distinguish offline mocks, read-only inspection, owned Herdr lifecycle,
+  and separately authorized real provider inference; no implicit sign-off.
+- [Acceptance: OpenCode infrastructure preflight](acceptance-opencode-preflight.md) —
+  read-only Incus/host resource metadata (not gateway inference).
 - [Acceptance: OpenCode Herdr](acceptance-opencode-herdr.md) —
   Herdr-managed workspace lifecycle, including the agent and
   prompt opt-ins.

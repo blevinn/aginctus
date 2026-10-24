@@ -1,5 +1,7 @@
 # Opt-in live acceptance phase adapter (#124)
 
+This is **stage 4** of the [OpenCode acceptance decision path](acceptance-opencode.md#4-operator-authorized-live-nine-phase-acceptance). Read-only preflight or a successful workspace-only Herdr smoke does not authorize this step. Obtain separate approval under the current [#122 inference gate](https://github.com/blevinn/aginctus/issues/122) before enabling live requests or paying for an upstream provider.
+
 `scripts/acceptance/opencode-live-adapter.sh` is a **fail-closed dispatcher**
 for the [disposable acceptance harness](acceptance-opencode.md). It requires
 operator-supplied hooks and is not proof of a completed end-to-end run.
@@ -64,7 +66,10 @@ non-executable repository mode; installing a copy satisfies the harness's
 executable-adapter requirement without changing checkout permissions.
 
 A missing hook intentionally prevents live acceptance. Merely adding no-op
-hooks or markers is **not** a valid live result. Record reviewed live
-evidence on [#124](https://github.com/blevinn/aginctus/issues/124) and the
-[#118 release checklist](https://github.com/blevinn/aginctus/issues/118);
+hooks or markers is **not** a valid live result. Record reviewed, redacted live evidence on the
+[#118 release checklist](https://github.com/blevinn/aginctus/issues/118) and
+active [#122 inference](https://github.com/blevinn/aginctus/issues/122) and
+[#257 egress](https://github.com/blevinn/aginctus/issues/257) gates. The
+[#124 acceptance issue](https://github.com/blevinn/aginctus/issues/124) is
+closed, but that does not substitute for proof of real upstream success;
 deterministic dispatch checks do not satisfy those gates.

@@ -36,7 +36,7 @@ type mcpResponse struct {
 func mcpServerInfo() map[string]any {
 	return map[string]any{
 		"io.modelcontextprotocol/serverInfo": map[string]string{
-			"name": "aginctus-testenv",
+			"name":    "aginctus-testenv",
 			"version": "0.1.0",
 		},
 	}
@@ -64,25 +64,31 @@ func decodeStrict(raw json.RawMessage, dst any) error {
 	return nil
 }
 
-func validateMCPMeta(params json.RawMessage) error {
+func validateMCPMeta(params json.RawMessage) *mcpError {
+	invalid := func(message string) *mcpError {
+		return &mcpError{Code: -32602, Message: message}
+	}
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(params, &obj); err != nil || obj == nil {
-		return errors.New("params must be an object")
+		return invalid("params must be an object")
 	}
 	var meta map[string]json.RawMessage
 	if err := json.Unmarshal(obj["_meta"], &meta); err != nil || meta == nil {
-		return errors.New("missing MCP request metadata")
+		return invalid("missing MCP request metadata")
 	}
 	var version string
-	if err := json.Unmarshal(meta["io.modelcontextprotocol/protocolVersion"], &version); err != nil {
-		return errors.New("missing MCP protocol version")
-	}
-	if version != mcpVersion {
-		return fmt.Errorf("unsupported MCP protocol version")
+	if raw := meta["io.modelcontextprotocol/protocolVersion"]; len(raw) == 0 || bytes.Equal(raw, []byte("null")) || json.Unmarshal(raw, &version) != nil {
+		return invalid("missing or invalid MCP protocol version")
 	}
 	var capabilities map[string]json.RawMessage
 	if err := json.Unmarshal(meta["io.modelcontextprotocol/clientCapabilities"], &capabilities); err != nil || capabilities == nil {
-		return errors.New("missing MCP client capabilities")
+		return invalid("missing MCP client capabilities")
+	}
+	if version != mcpVersion {
+		return &mcpError{
+			Code: -32022, Message: "Unsupported protocol version",
+			Data: map[string]any{"supported": []string{mcpVersion}, "requested": version},
+		}
 	}
 	return nil
 }
@@ -90,18 +96,18 @@ func validateMCPMeta(params json.RawMessage) error {
 func mcpTools() []map[string]any {
 	return []map[string]any{
 		{
-			"name": "vm_list_scenarios",
+			"name":        "vm_list_scenarios",
 			"description": "List fixed disposable NixOS VM batch scenarios; offline and read-only.",
 			"inputSchema": map[string]any{"type": "object", "additionalProperties": false},
 			"annotations": map[string]any{"readOnlyHint": true},
 		},
 		{
-			"name": "vm_plan",
+			"name":        "vm_plan",
 			"description": "Return the pinned Nix test derivation for one known VM scenario. Does not start a VM.",
 			"inputSchema": map[string]any{
-				"type": "object",
-				"properties": map[string]any{"scenario": map[string]string{"type": "string"}},
-				"required": []string{"scenario"},
+				"type":                 "object",
+				"properties":           map[string]any{"scenario": map[string]string{"type": "string"}},
+				"required":             []string{"scenario"},
 				"additionalProperties": false,
 			},
 			"annotations": map[string]any{"readOnlyHint": true},
@@ -112,10 +118,10 @@ func mcpTools() []map[string]any {
 func mcpContent(data any) any {
 	encoded, _ := json.Marshal(data) // values are internally constructed
 	return map[string]any{
-		"resultType": "complete",
-		"content": []any{map[string]string{"type": "text", "text": string(encoded)}},
+		"resultType":        "complete",
+		"content":           []any{map[string]string{"type": "text", "text": string(encoded)}},
 		"structuredContent": data,
-		"_meta": mcpServerInfo(),
+		"_meta":             mcpServerInfo(),
 	}
 }
 
@@ -141,21 +147,42 @@ func validMCPRequestID(raw json.RawMessage) bool {
 }
 
 func mcpAnswer(raw []byte) *mcpResponse {
-	var request mcpRequest
-	if err := json.Unmarshal(raw, &request); err != nil {
+	if !json.Valid(raw) {
 		answer := mcpRequestError(nil, -32700, "Parse error", nil)
 		return &answer
 	}
-	// JSON-RPC notifications have no ID and must never produce replies.
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &envelope); err != nil || envelope == nil {
+		answer := mcpRequestError(nil, -32600, "Invalid Request", nil)
+		return &answer
+	}
+	var id json.RawMessage
+	if validMCPRequestID(envelope["id"]) {
+		id = envelope["id"]
+	}
+	request := mcpRequest{ID: envelope["id"], Params: envelope["params"]}
+	versionErr := json.Unmarshal(envelope["jsonrpc"], &request.JSONRPC)
+	methodErr := json.Unmarshal(envelope["method"], &request.Method)
+	if versionErr != nil || methodErr != nil || request.JSONRPC != "2.0" || request.Method == "" || (len(request.ID) != 0 && id == nil) {
+		answer := mcpRequestError(id, -32600, "Invalid Request", nil)
+		return &answer
+	}
+	if len(request.Params) != 0 {
+		var params map[string]json.RawMessage
+		if err := json.Unmarshal(request.Params, &params); err != nil || params == nil {
+			answer := mcpRequestError(id, -32600, "Invalid Request", nil)
+			return &answer
+		}
+	}
+	// Only valid notification envelopes are silent; malformed requests need errors.
 	if len(request.ID) == 0 {
 		return nil
 	}
-	if request.JSONRPC != "2.0" || request.Method == "" || !validMCPRequestID(request.ID) {
-		answer := mcpRequestError(request.ID, -32600, "Invalid Request", nil)
-		return &answer
-	}
 	if err := validateMCPMeta(request.Params); err != nil {
-		answer := mcpRequestError(request.ID, -32602, err.Error(), nil)
+		if request.Method == "initialize" {
+			err.Message += "; supported MCP protocol version: " + mcpVersion
+		}
+		answer := mcpRequestError(request.ID, err.Code, err.Message, err.Data)
 		return &answer
 	}
 	response := mcpResponse{JSONRPC: "2.0", ID: request.ID}
@@ -168,13 +195,13 @@ func mcpAnswer(raw []byte) *mcpResponse {
 			return &answer
 		}
 		response.Result = map[string]any{
-			"resultType": "complete",
+			"resultType":        "complete",
 			"supportedVersions": []string{mcpVersion},
-			"capabilities": map[string]any{"tools": map[string]any{}},
-			"instructions": "Read-only VM discovery. No guest execution or host access available via MCP.",
-			"_meta": mcpServerInfo(),
-			"ttlMs": 60000,
-			"cacheScope": "private",
+			"capabilities":      map[string]any{"tools": map[string]any{}},
+			"instructions":      "Read-only VM discovery. No guest execution or host access available via MCP.",
+			"_meta":             mcpServerInfo(),
+			"ttlMs":             60000,
+			"cacheScope":        "private",
 		}
 	case "tools/list":
 		if len(params) != 1 {
@@ -227,7 +254,7 @@ func mcpAnswer(raw []byte) *mcpResponse {
 			}
 			response.Result = mcpContent(scenario)
 		default:
-			answer := mcpRequestError(request.ID, -32601, "Unknown or unavailable testenv tool", nil)
+			answer := mcpRequestError(request.ID, -32602, "Unknown or unavailable testenv tool", nil)
 			return &answer
 		}
 	default:
