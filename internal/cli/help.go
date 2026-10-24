@@ -43,6 +43,8 @@ func runHelp(args []string, stdout, stderr io.Writer) (int, bool) {
 		fmt.Fprintln(stdout, "Usage: aginctus [global options] images list|ls\n       aginctus [global options] images update NAME PATH")
 	case "config":
 		fmt.Fprintln(stdout, "Usage: aginctus [global options] config show\n       aginctus [global options] config get <path>")
+	case "testenv":
+		printTestenvUsage(stdout)
 	case "doctor":
 		fmt.Fprintln(stdout, "Usage: aginctus [global options] doctor [--fix]  (read-only unless --fix; may configure loopback HTTPS)")
 	case "operator":
