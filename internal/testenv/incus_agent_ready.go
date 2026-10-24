@@ -43,7 +43,7 @@ func (b *IncusVMBackend) WaitForIncusVMAgent(ctx context.Context, ref VMRef, wai
 
 	for {
 		if err := runCtx.Err(); err != nil {
-			if errors.Is(ctx.Err(), context.Canceled) {
+			if ctx.Err() != nil {
 				return ctx.Err()
 			}
 			return ErrIncusAgentNotReady
@@ -114,6 +114,12 @@ func deadlineOrAfter(ctx context.Context, d time.Duration) time.Time {
 func (b *IncusVMBackend) CreateReadyIncusVM(ctx context.Context, spec VMCreateSpec, readinessWait time.Duration) (VMRef, error) {
 	if readinessWait <= 0 || readinessWait > MaxIncusAgentReadiness {
 		return VMRef{}, errors.New("testenv Incus readiness timeout outside admitted bounds")
+	}
+	if b == nil || b.client == nil {
+		return VMRef{}, ErrBackendUnavailable
+	}
+	if _, ok := b.client.(GuestExecClient); !ok {
+		return VMRef{}, ErrUnsupportedAction
 	}
 	ref, err := b.Create(ctx, spec)
 	if err != nil {
