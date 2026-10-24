@@ -371,10 +371,6 @@
           vm-harness-smoke = import ./nix/vm-harness/smoke.nix {
             inherit self nixpkgs system;
           };
-          # Explicit heavyweight standalone Home Manager user activation in a disposable VM.
-          vm-harness-home-manager-operator = import ./nix/vm-harness/home-manager-operator.nix {
-            inherit self nixpkgs system;
-          };
           vm-harness-storage-network = import ./nix/vm-harness/storage-network.nix {
             inherit self nixpkgs system;
           };
@@ -394,6 +390,17 @@
           };
         }
       );
+
+      # Explicit heavyweight VM tests whose evaluation may require an
+      # import-from-derivation (e.g. Home Manager's packaged source). Keep
+      # these out of packages/checks: nix flake check evaluates every package
+      # even when its derivation is not built.
+      # Run explicitly: nix build -L --no-link .#vmTests.x86_64-linux.home-manager-operator
+      vmTests = forAllSystems (system: {
+        home-manager-operator = import ./nix/vm-harness/home-manager-operator.nix {
+          inherit self nixpkgs system;
+        };
+      });
 
       checks = forAllSystems (system: {
         nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
