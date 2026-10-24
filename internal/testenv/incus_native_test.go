@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -136,5 +137,32 @@ func TestIncusNativeOperationWaitAndErrorsAreBoundedAndRedacted(t *testing.T) {
 	n = nativeHTTPTestClient(t, incusTestRoundTrip(func(*http.Request) (*http.Response, error) { return nil, errors.New("synthetic-secret") }))
 	if _, err := n.Get(context.Background(), "testenv-vm-test"); err == nil || strings.Contains(err.Error(), "synthetic-secret") {
 		t.Fatalf("unredacted native error: %v", err)
+	}
+}
+
+func TestIncusNativeOperationPollingRequiresFinalSuccess(t *testing.T) {
+	for _, final := range []string{"Success", "Failure"} {
+		t.Run(final, func(t *testing.T) {
+			var polls atomic.Int32
+			n := nativeHTTPTestClient(t, incusTestRoundTrip(func(r *http.Request) (*http.Response, error) {
+				if strings.Contains(r.URL.Path, "/events") || strings.Contains(r.URL.Path, "/wait") {
+					t.Error("unsafe SDK event/wait path")
+				}
+				if r.Method == http.MethodPut || polls.Add(1) == 1 {
+					return testIncusResponse(`{"type":"async","status_code":100,"metadata":{"id":"test-op","status_code":103}}`), nil
+				}
+				code := "200"
+				if final == "Failure" {
+					code = "400"
+				}
+				return testIncusResponse(`{"type":"sync","status_code":200,"metadata":{"id":"test-op","status_code":` + code + `}}`), nil
+			}))
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			err := n.Start(ctx, "testenv-vm-test")
+			if polls.Load() < 2 || (err == nil) != (final == "Success") {
+				t.Fatalf("unverified operation result, polls=%d: %v", polls.Load(), err)
+			}
+		})
 	}
 }
