@@ -1,5 +1,7 @@
 # LiteLLM OCI egress: pilot migration and acceptance (#257)
 
+**Exception-only stage 2** of the [gateway operator decision path](gateway-operator-path.md#2-maintenance-is-a-separately-authorized-change). First use read-only inventory to decide whether migration is actually required. This is not a routine precondition for every inference smoke: bridge/DHCP modification and LiteLLM NIC repair each require explicit approval and independently reviewed rollback.
+
 This is an **operator-controlled maintenance procedure**, not an automatic
 deployment step. Never run it from CI or during ordinary `aginctus gateway
 apply`. The Incus CLI must target the intended **local** daemon, not a remote.

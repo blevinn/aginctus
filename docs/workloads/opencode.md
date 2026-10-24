@@ -81,7 +81,9 @@ OPENCODE_PATH="$(nix build .#opencode-runtime --no-link --print-out-paths)/bin/o
 nix shell nixpkgs#python3 --command python3 guest/opencode/test_real_runtime.py "$OPENCODE_PATH"
 ```
 
-The separate integration test runs the actual pinned CLI via the launcher in an isolated temporary HOME, with a disposable loopback mock. It asserts an authenticated `POST /v1/responses`, the configured model, and terminal streamed text consumption; no external model or gateway is needed. This is an **operator validation step**, not a claim that it passed. The test does not yet prove real LiteLLM interoperability or model-driven filesystem tools (see #172).
+The separate integration test runs the actual pinned CLI via the launcher in an isolated temporary HOME, with a disposable loopback mock. It asserts an authenticated `POST /v1/responses`, the configured model, an identifying `User-Agent`, a native OpenCode session header (`x-opencode-session` or `x-opencode-session-id`), continuity across requests in that run, and terminal streamed text consumption; no external model or gateway is needed. It never prints session identifiers or bearer keys. This is an **operator validation step**, not a claim that it passed. If the pinned OpenCode binary lacks those headers, the offline test fails rather than having Aginctus silently fabricate a session. A run with one request verifies header presence only; repeatability across a multi-request conversation and upstream forwarding remain separate acceptance gates.
+
+This test does **not** establish LiteLLM forwarding or model-driven filesystem tools (see #172). In pinned LiteLLM v1.103.0, client `x-*` forwarding is disabled by default and the model-scoped forwarding setting admits all eligible `x-*` headers, not solely the OpenCode session header. Do not enable global header forwarding or relay client credentials in order to satisfy the Go provider. Selective header forwarding and upstream `User-Agent` preservation require a separate, verified implementation before another paid OpenCode Go pilot request.
 
 ## Final pilot-host validation (after #122, #172 and #220)
 
