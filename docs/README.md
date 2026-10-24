@@ -33,6 +33,8 @@ currently supported configuration or a release acceptance claim.
   opt-in bidirectional mount policy and ownership.
 - [Native Incus reconciliation](design/native-incus-reconciliation.md) —
   staged replacement of the current Apply/Compose drivers after release gates.
+- [Home Manager operator / NixOS host authority](design/home-manager-operator.md) —
+  proposed v0.2 privilege boundary, safe operator installation and migration gates.
 
 ### Architecture (subdirectory)
 
