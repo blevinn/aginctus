@@ -15,7 +15,7 @@ class ValidationDispatchTests(unittest.TestCase):
     def test_dispatch_and_child_failures(self):
         expected = [
             "go mod verify",
-            "go test ./...",
+            "go test -json ./...",
             "go vet ./...",
             "golangci-lint run",
             "ruff check .",
