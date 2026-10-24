@@ -45,7 +45,7 @@ class VMEvidenceTests(unittest.TestCase):
 
     def test_failed_vm_evidence_remains_failed_not_live_verified(self):
         with tempfile.TemporaryDirectory() as directory:
-            for code, launch_failed in ((42, False), (1, True)):
+            for code, launch_failed in ((42, False), (-9, False), (1, True)):
                 with self.subTest(code=code, launch_failed=launch_failed):
                     root, run_id, _ = self.create(
                         directory, exit_code=code, launch_failed=launch_failed
