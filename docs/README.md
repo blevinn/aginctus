@@ -33,6 +33,8 @@ currently supported configuration or a release acceptance claim.
   opt-in bidirectional mount policy and ownership.
 - [Native Incus reconciliation](design/native-incus-reconciliation.md) —
   staged replacement of the current Apply/Compose drivers after release gates.
+- [Persistent testenv VM backend](design/testenv-incus-backend.md) —
+  v0.2 Incus MVP, pluggable VM contract and dedicated-worker security gates.
 
 ### Architecture (subdirectory)
 
