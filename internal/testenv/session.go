@@ -30,6 +30,7 @@ type SessionOutcome struct {
 	EndedAt       time.Time `json:"ended_at"`
 	Reason        string    `json:"reason"`
 	ProcessReaped bool      `json:"process_reaped"`
+	Cgroup        string    `json:"cgroup"`
 	Cleanup       string    `json:"cleanup"`
 	Upstream      string    `json:"upstream_inference"`
 }
@@ -159,7 +160,10 @@ func (s *RunStore) saveSessionOutcome(outcome SessionOutcome) error {
 // FOREGROUND, operator-owned, single session—not a crash-safe daemon or
 // agent-facing mutation API. Callers must use an unprivileged isolated worker.
 // The generated NixOS script execs QEMU, keeping cmd.Process bound to QEMU.
-func RunPinnedVMSession(ctx context.Context, store *RunStore, launcher string, ttl time.Duration, onStarted func(RunRecord)) (SessionOutcome, error) {
+func RunPinnedVMSession(ctx context.Context, store *RunStore, cgroups *CgroupManager, launcher string, ttl time.Duration, onStarted func(RunRecord)) (SessionOutcome, error) {
+	if cgroups == nil {
+		return SessionOutcome{}, errors.New("delegated cgroup resource limits are required")
+	}
 	if os.Geteuid() == 0 {
 		return SessionOutcome{}, errors.New("refusing to launch VM supervisor as root")
 	}
@@ -171,12 +175,17 @@ func RunPinnedVMSession(ctx context.Context, store *RunStore, launcher string, t
 		return SessionOutcome{}, errors.New("unprivileged KVM access is required")
 	}
 	_ = kvm.Close()
-	return runVMSession(ctx, store, launcher, ttl, onStarted)
+	return runVMSessionWithCgroup(ctx, store, cgroups, launcher, ttl, onStarted)
 }
 
 // runVMSession is separate for deterministic tests with a fake launcher.
 // In production it is only called after pinned-store + KVM checks above.
 func runVMSession(ctx context.Context, store *RunStore, launcher string, ttl time.Duration, onStarted func(RunRecord)) (SessionOutcome, error) {
+	// Only the hostless fake-launcher tests use this unbounded helper.
+	return runVMSessionWithCgroup(ctx, store, nil, launcher, ttl, onStarted)
+}
+
+func runVMSessionWithCgroup(ctx context.Context, store *RunStore, cgroups *CgroupManager, launcher string, ttl time.Duration, onStarted func(RunRecord)) (SessionOutcome, error) {
 	if store == nil || ttl <= 0 || ttl > maxRunLifetime {
 		return SessionOutcome{}, errors.New("invalid trusted VM supervisor configuration")
 	}
@@ -187,6 +196,14 @@ func runVMSession(ctx context.Context, store *RunStore, launcher string, ttl tim
 	if err != nil {
 		return SessionOutcome{}, err
 	}
+	var cg *RunCgroup
+	if cgroups != nil {
+		cg, err = cgroups.Prepare(id)
+		if err != nil {
+			return SessionOutcome{ID: id}, err
+		}
+		defer cg.Close()
+	}
 	socket := filepath.Join(dir, guestAgentSocketName)
 	cmd := exec.Command(launcher, vmLaunchArgs(socket)...)
 	cmd.Dir = dir
@@ -195,7 +212,19 @@ func runVMSession(ctx context.Context, store *RunStore, launcher string, ttl tim
 	cmd.Stdout = io.Discard
 	cmd.Stderr = io.Discard
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if cg != nil {
+		if err := cg.Attach(cmd); err != nil {
+			return SessionOutcome{ID: id}, err
+		}
+	}
 	if err := cmd.Start(); err != nil {
+		// The cgroup may have been prepared but no VM process launched.
+		// Retain it if cleanup verification fails for any reason.
+		if cg != nil {
+			if cg.KillAndVerify() == nil {
+				_ = cg.Remove()
+			}
+		}
 		return SessionOutcome{ID: id}, errors.New("pinned VM process could not start; inspect private run directory")
 	}
 	waited := make(chan error, 1)
@@ -204,6 +233,11 @@ func runVMSession(ctx context.Context, store *RunStore, launcher string, ttl tim
 	if err != nil {
 		_ = cmd.Process.Kill()
 		<-waited
+		if cg != nil {
+			if cg.KillAndVerify() == nil {
+				_ = cg.Remove()
+			}
+		}
 		return SessionOutcome{ID: id}, err
 	}
 	if onStarted != nil {
@@ -237,19 +271,31 @@ func runVMSession(ctx context.Context, store *RunStore, launcher string, ttl tim
 		}
 		grace.Stop()
 	}
+	cgroupState := "not_verified"
+	var cgroupErr error
+	if cg != nil {
+		if err := cg.KillAndVerify(); err != nil {
+			cgroupErr = fmt.Errorf("run cgroup teardown unverified: %w", err)
+		} else if err := cg.Remove(); err != nil {
+			cgroupErr = fmt.Errorf("run cgroup could not be removed: %w", err)
+		} else {
+			cgroupState = "empty_and_removed"
+		}
+	}
 	outcome := SessionOutcome{
 		ID:            id,
 		EndedAt:       time.Now().UTC(),
 		Reason:        reason,
 		ProcessReaped: true,
+		Cgroup:        cgroupState,
 		Cleanup:       "not_verified",
 		Upstream:      "not_verified",
 	}
 	if err := store.saveSessionOutcome(outcome); err != nil {
-		return outcome, err
+		return outcome, errors.Join(err, cgroupErr)
 	}
 	if reason == "exited" && runErr != nil {
-		return outcome, errors.New("pinned VM process exited unsuccessfully")
+		return outcome, errors.Join(errors.New("pinned VM process exited unsuccessfully"), cgroupErr)
 	}
-	return outcome, runErr
+	return outcome, errors.Join(runErr, cgroupErr)
 }
