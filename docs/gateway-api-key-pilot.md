@@ -162,6 +162,108 @@ nix develop -c python3 scripts/gateway/register-openai-model.py \
 The new route never calls the upstream on dry-run or registration.
 Successful registry lookup proves *only* that LiteLLM stored the alias.
 
+### Preferred model-group forwarding candidate (inactive; #456)
+
+The updated #456 decision is **configuration first**. This opt-in fixture
+uses the existing stock LiteLLM v1.103.0 `--config` YAML path:
+
+```yaml
+model_list: []
+litellm_settings:
+  model_group_settings:
+    forward_client_headers_to_llm_api:
+      - aginctus-go-pilot
+```
+
+It is stored in `deploy/litellm-go/model-group-forwarding.yaml`. The default
+Aginctus gateway Compose/Incus configuration does **not** load or mount it.
+The empty static model list does not register the approved alias, which must
+still be verified independently via the PostgreSQL model registry in an
+isolated test. No master/salt credentials, model keys, or provider endpoints
+are included in this file.
+
+**Security limitation:** The setting selects the *model group*, not
+individual headers. LiteLLM's pinned forwarding helper admits eligible
+`x-*` headers except `x-stainless*`, and `anthropic-beta`. That may leak
+synthetic `x-custom-secret`, tracing, or workload metadata. Its separate
+credential-cleaning behavior must be verified against adversarial inputs
+before this feature is approved. The helper does **not** select the
+original `User-Agent` or canonicalize `x-opencode-session-id` into
+`x-opencode-session`; native upstream compatibility remains uncertain.
+
+Run these no-provider checks first:
+
+```sh
+nix develop -c go test ./internal/gateway -run 'TestGoModelGroupForwarding' -v
+nix develop -c python3 -m py_compile scripts/gateway/probe_model_group_forwarding.py
+
+# Optional pinned stock image probe with networking disabled; this tests the
+# real LiteLLM forwarding helper, not the full native Responses transport.
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  --mount type=bind,src="$PWD/deploy/litellm-go/model-group-forwarding.yaml",dst=/run/aginctus-go.yaml,readonly \
+  --mount type=bind,src="$PWD/scripts/gateway/probe_model_group_forwarding.py",dst=/run/aginctus-probe.py,readonly \
+  --entrypoint /app/.venv/bin/python ghcr.io/berriai/litellm:v1.103.0-stable \
+  /run/aginctus-probe.py /run/aginctus-go.yaml
+```
+
+The probe prints only synthetic **header names** and forwarded/not-forwarded
+classifications, never values. It verifies stock model-scoped helper
+behavior but **not** an actual outbound native Responses HTTP request, DB
+model registration, or provider-credential separation. Those remain
+mandatory, offline/mock-upstream gates under #456. No pilot activation,
+gateway rebuild, global forwarding, wildcard, broad provider-auth
+forwarding, or billable inference is authorized by this fixture. If
+actual pinned tests show missing identifying `User-Agent`, incompatible
+session-header spelling, or unacceptable `x-*` leakage, reassess the
+inactive selective hook merged in #470 as a targeted fallback.
+
+### Opt-in selective Go header callback (offline policy increment; #456)
+
+`scripts/gateway/opencode_go_forwarding.py` and
+`scripts/gateway/litellm_opencode_go_hook.py` implement an **inactive, optional fallback** LiteLLM v1.103.0
+`CustomLogger.async_pre_call_hook` contract. Prefer the built-in, model-scoped
+configuration above unless the pinned acceptance gates require this hook.
+For native `aresponses` targeting the approved pilot model alias
+`aginctus-go-pilot`, it reads only the proxy-generated, credential-redacted
+`proxy_server_request.headers`; requires a native `ses_...` session in
+`x-opencode-session-id` or `x-opencode-session` plus a recognizable
+`opencode/VERSION` User-Agent; and replaces the provider-bound header map
+with **only** `x-opencode-session` and `User-Agent`. Two conflicting native
+headers, invalid/missing/oversized values and generic HTTP-library User-Agents
+fail closed. It never issues its own session ID or forwards the workload
+bearer token, `x-api-key`, arbitrary `x-*`, or body-supplied
+`extra_headers`. Other aliases and non-Responses calls are not modified.
+
+This provides a verifiable *policy and callback contract*; it is **not an
+activated runtime integration**. To run the callback, the two Python files
+must be packaged in the actual LiteLLM image's Python import path, and an
+explicit `litellm_settings.callbacks` configuration must point to
+`litellm_opencode_go_hook.proxy_handler_instance`. No current Aginctus
+Compose deployment installs either file or enables this callback. The pinned
+LiteLLM callback-loading behavior, dispatch order, actual header metadata,
+Responses adapter, provider credentials and upstream HTTP delivery must be
+verified with the *real* pinned LiteLLM image and an offline mock provider
+before applying any configuration to the pilot. Never enable global
+`forward_client_headers_to_llm_api`; broad model-group `x-*` forwarding
+is not a substitute for this allowlist.
+
+Run the local, offline unit suite:
+
+```sh
+nix develop -c python3 -m unittest discover \
+  -s scripts/gateway -p 'test_opencode_go_forwarding.py' -v
+```
+
+The hardcoded pilot alias and conservative native `ses_...` and
+`opencode/VERSION` header formats intentionally fail closed if the pinned
+OpenCode client uses different values. Check the actual pinned executable
+with `guest/opencode/test_real_runtime.py` before runtime integration, not
+by weakening the filters. #456 remains open until the runtime hook is
+**installed and exercised** through a controlled, credential-safe mock
+upstream. A real OpenCode Go inference request remains separately gated by
+#122 and #123; existing pilot credentials are revoked.
+
 ### Required live Go compatibility gate — before claiming #122 complete
 
 OpenCode Go states it is designed for coding-agent traffic and that

@@ -57,6 +57,14 @@ test-nix-firewall:
 test-vm-smoke:
     python3 scripts/vm_harness/runner.py test smoke
 
+# Guest-only Btrfs Incus pool and real Aginctus management bridge checks.
+test-vm-storage-network:
+    python3 scripts/vm_harness/runner.py test storage-network
+
+# Real packaged Herdr/OpenCode images and Incus lifecycle, no OCI inference.
+test-vm-runtime-lifecycle:
+    python3 scripts/vm_harness/runner.py test runtime-lifecycle
+
 # Inspect the same VM fixture with the interactive NixOS test driver.
 # Run under a dedicated unprivileged worker identity, never on pilot host.
 vm-debug:
