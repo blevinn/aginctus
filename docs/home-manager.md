@@ -1,6 +1,6 @@
 # Home Manager operator integration (v0.2 stack)
 
-Status: **initial implementation on the unmerged v0.2 PR stack**.
+Status: **CLI-only standalone Home Manager integration merged** (#448); disposable VM validation and authorized user lifecycle support remain incremental v0.2 work.
 See [design](design/home-manager-operator.md), [#426](https://github.com/blevinn/aginctus/issues/426)
 and [NixOS configuration](configuration.md#nixos-module). This does **not**
 replace the v0.1 pilot activation/runbooks.
@@ -40,6 +40,12 @@ Home Manager (replace the username, home directory, and system):
   };
 }
 ```
+
+The opt-in `vm-harness-home-manager-operator` flake package exercises a
+standalone `home-manager build` and `switch` in a disposable NixOS/Incus VM,
+using an ordinary user without Incus authorization. It is not part of routine
+`nix flake check`; run it explicitly as documented in #490. This initial
+scenario does not establish permissions for subsequent image/lifecycle work.
 
 The consumer's flake lock pins the input revisions. The module exports
 `homeManagerModules.aginctus` and `homeManagerModules.default`. It installs
