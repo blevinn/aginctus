@@ -163,6 +163,16 @@ only expired run handles are destroyed. A foreign instance cannot
 gain deletion rights from a recognizable name alone. Malformed
 reserved testenv names fail closed rather than being silently adopted.
 
+Discovery is only a candidate snapshot. Before stopping an expired candidate,
+the destructive path re-reads live project policy and the authenticated original
+run policy, verifies generation/resource/expiration consistency and compares live
+expiration with the trusted sweep time. Renewed or altered metadata fails closed,
+even if a trusted signer replaced the policy after discovery. Manual Destroy
+still permits explicit cleanup of an unexpired owned run. Natural auto-deletion
+between discovery and destruction is accepted only as verified project-scoped
+absence. The result's `Destroyed` count includes those already-absent expired
+candidates; it is not proof that this process performed each deletion.
+
 This library call is **not a scheduled watchdog** and does not cover
 untracked instances that disappeared due to Incus automatic ephemeral
 cleanup. It reports success only after destroy verifies the instance

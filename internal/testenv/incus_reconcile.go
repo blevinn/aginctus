@@ -48,7 +48,7 @@ func ReconcileExpiredIncusVMs(ctx context.Context, backend *IncusVMBackend, now 
 			summary.Skipped++
 			continue
 		}
-		if err := backend.Destroy(ctx, vm.Ref); err != nil {
+		if err := backend.destroy(ctx, vm.Ref, now); err != nil {
 			summary.Failed++
 			failures = append(failures, fmt.Errorf("expired run %s deletion not verified: %w", vm.Ref.RunID, err))
 			continue

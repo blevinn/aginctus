@@ -253,12 +253,21 @@ func (b *IncusVMBackend) Status(ctx context.Context, ref VMRef) (VMStatus, error
 }
 
 func (b *IncusVMBackend) Destroy(ctx context.Context, ref VMRef) error {
-	actual, _, err := b.loadOwned(ctx, ref)
+	return b.destroy(ctx, ref, time.Time{})
+}
+
+// expiredAt is supplied only by the trusted reconciler. The live, sealed
+// lifetime must still authorize expiry cleanup, independently of discovery.
+func (b *IncusVMBackend) destroy(ctx context.Context, ref VMRef, expiredAt time.Time) error {
+	actual, expiry, err := b.loadOwned(ctx, ref)
 	if errors.Is(err, ErrIncusInstanceMissing) {
 		return b.confirmAbsent(ctx, ref)
 	}
 	if err != nil {
 		return err
+	}
+	if !expiredAt.IsZero() && expiredAt.Before(expiry) {
+		return ErrOwnershipMismatch
 	}
 	// A normal Stop deletes an ephemeral instance. Retained VMs require
 	// a distinct explicit Delete. Never turn missing-after-stop into
