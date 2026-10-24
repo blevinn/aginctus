@@ -27,13 +27,13 @@ func NewProjectScope(name string) (ProjectScope, error) {
 
 func (scope ProjectScope) DesiredConfig() map[string]string {
 	return map[string]string{
-		"user.aginctus.managed":          "true",
-		"user.aginctus.resource":         "deployment-project",
-		"user.aginctus.deployment":       scope.Name,
-		"features.images":                "true",
-		"features.profiles":              "true",
-		"features.storage.volumes":       "true",
-		"features.networks":              "false",
+		"user.aginctus.managed":    "true",
+		"user.aginctus.resource":   "deployment-project",
+		"user.aginctus.deployment": scope.Name,
+		"features.images":          "true",
+		"features.profiles":        "true",
+		"features.storage.volumes": "true",
+		"features.networks":        "false",
 	}
 }
 
