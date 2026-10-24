@@ -3,9 +3,9 @@ package testenv
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -125,7 +125,7 @@ func TestRecoverySkipsCompletedSessionWithoutCgroup(t *testing.T) {
 func TestRecoveryScanIsBounded(t *testing.T) {
 	store, manager, _ := recoveryFixture(t)
 	for i := 0; i < maxRecoveryCandidates+1; i++ {
-		name := "vm-" + strings.Repeat("a", 22) + string(rune('a'+i/16)) + string(rune('a'+i%16))
+		name := fmt.Sprintf("vm-%024x", i)
 		if err := os.Mkdir(filepath.Join(store.root, name), 0700); err != nil {
 			t.Fatal(err)
 		}
