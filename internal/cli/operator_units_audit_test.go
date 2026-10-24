@@ -53,12 +53,12 @@ func TestOperatorUnitsAuditReport(t *testing.T) {
 	active := fakeOperatorUnitProperties("loaded", "active", "enabled")
 	installed := fakeOperatorUnitProperties("loaded", "inactive", "disabled")
 	cases := []struct {
-		name string
-		owner string
-		system []byte
-		user []byte
-		otherError bool
-		wantCode int
+		name          string
+		owner         string
+		system        []byte
+		user          []byte
+		otherError    bool
+		wantCode      int
 		wantUnitState string
 	}{
 		{"empty user owner", "user", missing, missing, false, 0, "system=absent user=absent"},
@@ -69,7 +69,7 @@ func TestOperatorUnitsAuditReport(t *testing.T) {
 		{"system conflicts with active user", "system", missing, active, false, 1, "system=absent user=active"},
 		{"both owners configured", "system", installed, installed, false, 1, "system=installed user=installed"},
 		{"user bus denied", "system", missing, missing, true, 1, "system=absent user=unverified"},
-	} 
+	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var calls []string
