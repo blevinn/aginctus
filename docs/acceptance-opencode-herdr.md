@@ -1,5 +1,7 @@
 # Owned Herdr lifecycle phases for #124
 
+This is **stage 3** of the [OpenCode acceptance decision path](acceptance-opencode.md#3-opt-in-real-herdr-lifecycle-not-yet-the-full-agent-task). A workspace-only pass demonstrates owned Herdr operations, not model inference or agent-executed tests. The #124 issue's closure does not replace the independent #122/#257 live provider and egress gates.
+
 The Python implementation `scripts/acceptance/herdr-lifecycle.py` now calls documented Herdr commands for `open`, `start`, `prompt`, `wait`, `stop` and `close`. It uses the Herdr `--machine` selector, which points to a **previously saved and authenticated Herdr machine on the same machine where the CLI runs**, not an arbitrary SSH host. The pilot's intended Herdr client runs inside the `aginctus-herdr` Incus container; the host's `herdr machine list --json` is not its machine registry. The API is documented at [Herdr agent automation](https://herdr.dev/docs/agent-automation/) and [Herdr CLI reference](https://herdr.dev/docs/cli-reference/); pilot validation must confirm the pinned Herdr version supports them.
 
 This is a partial integration, **not** complete acceptance. The live dispatcher requires all nine hooks. There is still no built-in `preflight` covering authenticated Herdr reachability and guest workspace transport, no real `credential-check` or `gateway-evidence` hook. The OpenCode gateway launcher from #123 must be provisioned and validated separately. The Herdr agent's settled state does not prove it ran tests; inspect agent tool traces, gateway logs and guest test execution independently.
@@ -25,7 +27,7 @@ just check
 
 Live Herdr execution remains opt-in and **is not established by these test doubles**. Further live work must implement protected fixture transport/verification, real runtime key provisioning, credential checks and independent gateway-side inference correlation, without logging secrets or allowing direct-provider fallback.
 
-## Real pilot lifecycle smoke (required before merge)
+## Opt-in real pilot workspace smoke (not release sign-off)
 
 The new `scripts/acceptance/herdr-smoke.py` runs **two actual remote workspace create/get/close cycles** through the saved Herdr machine profile. It requires explicit opt-in and reviewed guest directory staging and cleanup commands.
 
@@ -72,7 +74,7 @@ export AGINCTUS_ACCEPTANCE_HERDR_CLEANUP=/absolute/path/to/reviewed-cleanup
 nix develop -c python3 scripts/acceptance/herdr-smoke.py
 ```
 
-Review the Herdr workspace list afterwards and confirm that neither run left a workspace or a guest directory. This only establishes remote workspace operations, not the full `agent start/prompt/wait/stop` contract. A separate real agent-lifecycle run is still required before regarding #233 as a validated real lifecycle integration. Do **not** merge solely on mocked lifecycle assertions.
+Review the Herdr workspace list afterwards and confirm that neither run left a workspace or a guest directory. This only establishes remote workspace operations, not the full `agent start/prompt/wait/stop` contract. A separate real agent-lifecycle run is still required before regarding #233 as a validated real lifecycle integration. Do **not** treat mocked lifecycle assertions as real remote-lifecycle or release-acceptance evidence.
 
 ## Pilot topology correction
 
@@ -86,7 +88,7 @@ incus exec aginctus-herdr -- herdr status server
 
 Use the configured Herdr client instance name in place of `aginctus-herdr` if overridden. If the client also has no registered machines, inspect Aginctus SSH provisioning before trying to register anything manually. Do not create a host-local Herdr machine entry as a workaround: it would bypass the Aginctus client identity, host key pinning and registration workflow. The existing lifecycle script executes `herdr` locally; it must be adapted to run in the intended **client container context** or explicitly tested with the correct remote profile before live execution. Likewise, test guest staging with the managed, authenticated Incus interface; do not invent unverified SSH shortcuts.
 
-## Managed guest helper in this branch
+## Managed guest helper for workspace-only smoke
 
 `scripts/acceptance/guest-owned.py` now supplies the stage and cleanup actions via authenticated `incus exec aginctus-dev -- runuser -u agent -- /bin/sh -c ...`. It creates a **new empty** workspace directory under `/home/agent/aginctus-acceptance` with a private run-ID marker. Cleanup refuses directories with unexpected files and will never delete the existing Herdr workspace `w1`. The guest runs as `agent`, and the host never receives any SSH private key.
 
@@ -111,7 +113,7 @@ nix develop -c python3 scripts/acceptance/herdr-smoke.py
 
 Do not run this if there are previously unreviewed failed runs with the same IDs. Inspect newly created resources after each failure. This still does not verify actual agent lifecycle.
 
-Pilot 2026-10-17: `python3` was missing inside `aginctus-dev`; the initial opt-in smoke failed without establishing a remote lifecycle result. The helper now uses a fixed POSIX shell program. Repeat guest prerequisite and deterministic checks before attempting the smoke again.
+The managed guest staging helper uses a fixed POSIX shell program rather than requiring Python inside `aginctus-dev`. Repeat the guest prerequisite and deterministic checks before attempting an opted-in smoke; a failed run supplies no positive remote-lifecycle result.
 
 ## Opt-in real agent lifecycle (separate from workspace smoke)
 

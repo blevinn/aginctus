@@ -93,10 +93,11 @@ currently supported configuration or a release acceptance claim.
 
 - [Disposable NixOS VM harness](vm-harness.md) — experimental
   opt-in Aginctus/Incus VM tests and agent-debugging security limits.
-- [Acceptance: OpenCode preflight](acceptance-opencode-preflight.md) —
-  read-only host infrastructure preflight before launch.
-- [Acceptance: OpenCode](acceptance-opencode.md) — OpenCode
-  workload lifecycle acceptance gates.
+- [Start here: OpenCode acceptance decision path](acceptance-opencode.md) —
+  distinguish offline mocks, read-only inspection, owned Herdr lifecycle,
+  and separately authorized real provider inference; no implicit sign-off.
+- [Acceptance: OpenCode infrastructure preflight](acceptance-opencode-preflight.md) —
+  read-only Incus/host resource metadata (not gateway inference).
 - [Acceptance: OpenCode Herdr](acceptance-opencode-herdr.md) —
   Herdr-managed workspace lifecycle, including the agent and
   prompt opt-ins.
