@@ -13,6 +13,8 @@ func TestTestenvOfflineHelpListAndPlan(t *testing.T) {
 	for _, args := range [][]string{
 		{"testenv", "--help"}, {"help", "testenv"},
 		{"testenv", "vm", "list"},
+		{"testenv", "vm", "backend"},
+		{"testenv", "vm", "backend", "incus"},
 		{"testenv", "vm", "plan", "smoke"},
 		{"--configuration-file=/does/not/exist", "testenv", "--help"},
 	} {
@@ -38,6 +40,8 @@ func TestTestenvRejectsUnexpectedCommandsWithoutExecution(t *testing.T) {
 		{"testenv", "vm", "test", "../smoke"},
 		{"testenv", "vm", "test", "smoke", "--nix-option"},
 		{"testenv", "vm", "exec", "/bin/sh"},
+		{"testenv", "vm", "backend", "qemu"},
+		{"testenv", "vm", "backend", "incus", "--host-socket=/var/lib/incus/unix.socket"},
 		{"testenv", "mcp", "--http"},
 		{"testenv", "vm", "plan", ".#vm-harness-smoke"},
 		{"--config=workloads.dev.isolation=vm", "testenv", "vm", "test", "smoke"},
@@ -87,5 +91,15 @@ func TestTestenvMCPIsConfigFreeAndReadOnly(t *testing.T) {
 	var out, errOut bytes.Buffer
 	if code := Run(context.Background(), []string{"testenv", "mcp"}, &out, &errOut, nil, nil); code != 0 || !called || !strings.Contains(out.String(), "jsonrpc") {
 		t.Fatalf("code=%d called=%v stdout=%q stderr=%q", code, called, out.String(), errOut.String())
+	}
+}
+
+func TestTestenvBackendDiscoveryIsReadOnlyAndUninstalled(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := Run(context.Background(), []string{"testenv", "vm", "backend", "incus"}, &out, &errOut, nil, nil)
+	if code != 0 || !strings.Contains(out.String(), "\"lifecycle\": \"planned\"") ||
+		!strings.Contains(out.String(), "\"agent_accessible\": false") ||
+		errOut.Len() != 0 {
+		t.Fatalf("unexpected backend discovery: code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
 	}
 }
