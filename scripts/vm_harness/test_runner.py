@@ -55,6 +55,12 @@ class RunnerTests(unittest.TestCase):
             ".#vm-harness-runtime-lifecycle",
         )
 
+    def test_ownership_recovery_is_an_explicit_target(self):
+        self.assertEqual(
+            runner.build_arguments("ownership-recovery", False)[-1],
+            ".#vm-harness-ownership-recovery",
+        )
+
     def test_rejects_missing_or_foreign_driver(self):
         for value in ("", "/tmp/evil", "/nix/store/one\n/nix/store/two"):
             with self.subTest(value=value), self.assertRaises(ValueError):
