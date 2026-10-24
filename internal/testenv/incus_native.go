@@ -105,7 +105,7 @@ func (n *nativeIncusVMClient) Get(ctx context.Context, name string) (*IncusVMIns
 		return nil, err
 	}
 	if instance == nil {
-		return nil, errors.New("Incus returned no instance")
+		return nil, errors.New("testenv Incus returned no instance")
 	}
 	result := fromIncusInstance(*instance)
 	return &result, nil
@@ -119,7 +119,7 @@ func (n *nativeIncusVMClient) Create(ctx context.Context, plan IncusInstancePlan
 		!vmSafeName.MatchString(plan.Name) || plan.Type != "virtual-machine" ||
 		len(plan.Profiles) != 0 || len(plan.Devices) != 1 ||
 		plan.Devices["root"]["type"] != "disk" || plan.Devices["root"]["source"] != "" {
-		return errors.New("Incus create plan violated trusted policy")
+		return errors.New("testenv Incus create plan violated trusted policy")
 	}
 	req := api.InstancesPost{
 		Name: plan.Name, Type: api.InstanceTypeVM,
