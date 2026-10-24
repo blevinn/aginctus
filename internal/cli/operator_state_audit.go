@@ -74,20 +74,20 @@ func inspectGatewayState(root, gatewayID string, expectedUID uint32) gatewayStat
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || !info.Mode().IsRegular() || stat.Uid != expectedUID ||
-		info.Mode().Perm()&0o077 != 0 {
+		info.Mode().Perm()&0o177 != 0 {
 		return gatewayStateUnsafe
 	}
 	return gatewayStatePresent
 }
 
-func auditOperatorGatewayState(owner, systemRoot, userRoot, gatewayID string, userUID uint32) (gatewayStateEvidence, gatewayStateEvidence, bool) {
+func auditOperatorGatewayState(owner, systemRoot, userRoot, gatewayID string, systemUID, userUID uint32) (gatewayStateEvidence, gatewayStateEvidence, bool) {
 	// The state root selected for the user may not be the same location as
 	// system-owned state; otherwise a user environment variable could make
 	// one credential tree appear to have two owners.
 	if filepath.Clean(systemRoot) == filepath.Clean(userRoot) {
 		return gatewayStateUnsafe, gatewayStateUnsafe, false
 	}
-	system := inspectGatewayState(systemRoot, gatewayID, 0)
+	system := inspectGatewayState(systemRoot, gatewayID, systemUID)
 	user := inspectGatewayState(userRoot, gatewayID, userUID)
 	if system == gatewayStateUnsafe || user == gatewayStateUnsafe ||
 		system == gatewayStateUnverified || user == gatewayStateUnverified ||
@@ -135,11 +135,11 @@ func runOperatorStateAudit(args []string, stdout, stderr io.Writer, effective *c
 		fmt.Fprintln(stderr, "operator state-audit: cannot resolve absolute user state root")
 		return 2
 	}
-	return renderOperatorStateAudit(owner, operatorSystemStateRoot, userRoot, gatewayID, uint32(os.Geteuid()), stdout, stderr)
+	return renderOperatorStateAudit(owner, operatorSystemStateRoot, userRoot, gatewayID, 0, uint32(os.Geteuid()), stdout, stderr)
 }
 
-func renderOperatorStateAudit(owner, systemRoot, userRoot, gatewayID string, userUID uint32, stdout, stderr io.Writer) int {
-	system, user, ok := auditOperatorGatewayState(owner, systemRoot, userRoot, gatewayID, userUID)
+func renderOperatorStateAudit(owner, systemRoot, userRoot, gatewayID string, systemUID, userUID uint32, stdout, stderr io.Writer) int {
+	system, user, ok := auditOperatorGatewayState(owner, systemRoot, userRoot, gatewayID, systemUID, userUID)
 	fmt.Fprintf(stdout, "Gateway %q: selected state authority %s (read-only; no migration)\n", gatewayID, owner)
 	fmt.Fprintf(stdout, "System gateway credential metadata: %s\n", system)
 	fmt.Fprintf(stdout, "User gateway credential metadata: %s\n", user)
