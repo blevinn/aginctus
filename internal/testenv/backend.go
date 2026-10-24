@@ -73,6 +73,16 @@ func VMBackendDescriptor(name string) (BackendDescriptor, error) {
 
 // VMCreateSpec is assembled by the trusted control service. It is never
 // exposed as a free-form provider config to an MCP caller.
+// VMRetention is chosen only by trusted worker policy. An empty value
+// defaults to disposable Incus ephemeral behavior. Retained instances are
+// explicit and still subject to TTL-based destruction.
+type VMRetention string
+
+const (
+	VMEphemeral VMRetention = "ephemeral"
+	VMRetained VMRetention = "retained"
+)
+
 type VMCreateSpec struct {
 	Backend          BackendName
 	Project          string
@@ -81,11 +91,15 @@ type VMCreateSpec struct {
 	MemoryMiB        int
 	RootDiskGiB      int
 	TimeToLive       time.Duration
+	Retention        VMRetention
 }
 
 func (spec VMCreateSpec) Validate() error {
 	if _, err := VMBackendDescriptor(string(spec.Backend)); err != nil {
 		return err
+	}
+	if spec.Retention != "" && spec.Retention != VMEphemeral && spec.Retention != VMRetained {
+		return errors.New("unsupported testenv VM retention policy")
 	}
 	if spec.Project != DefaultVMProject {
 		return errors.New("testenv VM must use the dedicated restricted project")
