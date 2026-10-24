@@ -16,6 +16,12 @@ let
   cfg = config.programs.aginctus;
   jsonFormat = pkgs.formats.json { };
   knownSettingsOptions = import ./settings-options.nix { inherit lib jsonFormat; };
+  # Export the declared user CLI package, never credentials or environment.
+  operatorPackageManifest = jsonFormat.generate "aginctus-user-package.json" {
+    schema = 1;
+    authority = "user";
+    package = toString cfg.package;
+  };
 
   # Both dotted keys and nested objects are possible in the freeform JSON
   # layer. Reject runtime credential paths before writing the Nix store.
@@ -79,6 +85,7 @@ in
     ];
 
     home.packages = [ cfg.package ];
+    xdg.configFile."aginctus/operator-package.json".source = operatorPackageManifest;
     xdg.configFile."aginctus/config.json".source =
       jsonFormat.generate "aginctus-user-config.json" cfg.settings;
   };

@@ -52,3 +52,42 @@ is a supported combined design, not a competing workload controller.
 Use [gateway state audit](operator-state-audit.md) separately to detect
 credential-state collisions. Neither diagnostic copies, reads, or moves
 gateway credentials. Reversible ownership migration belongs to [#442](https://github.com/blevinn/aginctus/issues/442).
+
+
+## Declared CLI package compatibility
+
+The NixOS and Home Manager modules also publish **nonsecret package
+declarations** when enabled. The host writes
+`/etc/aginctus/operator-package.json`; Home Manager writes
+`~/.config/aginctus/operator-package.json` through XDG. Each contains
+only schema version, authority (`system` or `user`) and the precise
+Nix store package output path chosen for its Aginctus CLI. These files
+contain **no passwords, runtime keys, gateway state or unit environment**.
+
+From the ordinary user account, inspect the intended authority:
+
+```sh
+aginctus operator package-audit --owner system
+# or, for a planned Home Manager-owned operator lifecycle:
+aginctus operator package-audit --owner user
+```
+
+The audit does not load application configuration or accept overrides.
+It reads only these two fixed, bounded JSON files. It requires the
+selected authority to have a valid declaration; missing declarations
+for the *other* authority are allowed for single-owner installations.
+When both exist, the package store paths must be **exactly equal**.
+Malformed/unreadable declarations and different package outputs fail
+conservatively. Output reports only `declared`, `absent`, or
+`unverified`; it does not print absolute paths or manifest contents.
+
+**This tests the packages declared by Nix, not running-service revision
+identity.** A separately installed CLI, external unit, override in a
+unit drop-in, stale generation, or another user's service can still run
+a different revision. Differences in package derivation also need not
+imply protocol incompatibility; until a cross-version compatibility
+contract exists, this diagnostic treats them as unverified rather than
+assuming safety. It is **not an authorization oracle or write guard**.
+Use it alongside `operator units-audit` and `operator state-audit`;
+project-scoped alias and mutation-time checks remain prerequisites
+before introducing user-owned reconcilers (#200, #437, #441).
