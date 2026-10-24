@@ -80,7 +80,7 @@ type VMRetention string
 
 const (
 	VMEphemeral VMRetention = "ephemeral"
-	VMRetained VMRetention = "retained"
+	VMRetained  VMRetention = "retained"
 )
 
 type VMCreateSpec struct {
@@ -126,6 +126,8 @@ type VMRef struct {
 	Instance         string      `json:"instance"`
 	RunID            string      `json:"run_id"`
 	ImageFingerprint string      `json:"image_fingerprint"`
+	Policy           VMRunPolicy `json:"policy"`
+	PolicyMAC        string      `json:"policy_mac"`
 }
 
 func (ref VMRef) Validate() error {

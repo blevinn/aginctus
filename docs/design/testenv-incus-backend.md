@@ -97,6 +97,28 @@ Incus deletion after stopping an ephemeral instance. A retained instance
 must be deleted separately and its absence verified. Foreign project
 resources are never adopted based on names alone.
 
+`NewIncusVMBackend` requires a trusted 32-byte policy signing key, supplied
+out of band by the installed worker and retained across restarts. Never put
+the key in guest storage, Incus metadata, source control or an agent request.
+The run handle and instance metadata carry a signed original resource/retention
+policy, pool, creation time and expiration, bound to the run identity and image.
+Live CPU, memory, root size/pool, retention and expiration must still match;
+mutable tags cannot authorize new limits or extend TTL. Unknown keys, unsealed
+legacy handles and policy drift fail closed. Key loss/rotation requires a
+separate trusted operator recovery procedure; no name-based adoption is provided.
+
+Every native API call uses a separate project-scoped SDK client copy with the
+caller context and a 30-second upper bound, including submission and operation
+wait requests. Provider diagnostics are redacted while cancellation, deadlines
+and instance absence retain typed classifications. Indeterminate create errors
+return the sealed recovery handle without authorizing adoption. Destroy accepts
+already-absent instances only after validating the handle and live project;
+absence attests neither former ownership nor separate storage/evidence cleanup.
+
+Create success currently means the Incus start operation completed, not that
+the guest agent or inner services are ready. A finite agent-readiness probe is
+a required worker admission gate before exposing lifecycle mutation over CLI/MCP.
+
 **Still pending:** an independently scheduled TTL/orphan sweep,
 Incus-agent argv exec with bounded output/time, a pinned Incus NixOS
 VM image, worker/daemon credential segregation, snapshot/reset policy,
@@ -106,7 +128,7 @@ exposed through CLI/MCP without a trusted authorization service.
 ## Operations and failure model
 
 1. **Create:** mint cryptographic run ID and an owner/generation marker in trusted state; validate the project's restrictions and limits, image fingerprint, root volume quota and no NIC before calling Incus. Create a uniquely named VM with fixed devices/profile; re-read it after creation. Name collision or preexisting foreign metadata fails closed. No implicit adoption.
-2. **Start/Status:** start through Incus; wait for `incus-agent` readiness with a finite deadline. Incus "running" does not mean guest service ready or inner Incus initialized.
+2. **Start/Status:** start through Incus. The installed worker must add a finite `incus-agent` readiness probe before agent-facing admission; that probe remains pending. Incus "running" does not mean guest service ready or inner Incus initialized.
 3. **Exec:** allow argv-array commands inside the *guest*, never a host Python or shell interpreter. Enforce caller authorization, argv count/bytes, runtime/output size limits and redaction; distinguish a nonzero guest status from transport failure.
 4. **Snapshot/Reset:** use Incus snapshots within run scope when supported; check snapshot/generation ownership. Reject unsupported capabilities explicitly. Reset must not affect unrelated disks/volumes.
 5. **Destroy/GC:** expire by trusted TTL, enumerate only controlled project and ownership markers, stop/delete via Incus operations, and re-read instance + root volume/snapshots to verify removal. On failure, write an honest `cleanup:not_verified` receipt; never delete foreign instances based solely on prefix matches. Resume cleanup after daemon restart, control service crash, or worker reboot via independent timer.
