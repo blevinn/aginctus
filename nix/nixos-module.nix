@@ -153,6 +153,9 @@ in
       };
     };
 
+    # Host DNS/DHCP firewall reconciliation defaults on independently of the
+    # opt-in Incus network/workload reconciliation below. Enabling this host
+    # rule does not authorize gateway egress or make a model endpoint ready.
     firewall.enable = mkOption {
       type = types.bool;
       default = true;

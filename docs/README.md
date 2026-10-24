@@ -54,6 +54,9 @@ currently supported configuration or a release acceptance claim.
 
 ## Operations and gateway integration
 
+- [Start here: gateway and egress operator path](gateway-operator-path.md) —
+  staged read-only checks, separately authorized network maintenance,
+  provider registration, scoped keys, inference evidence and revocation.
 - [Gateway egress network](gateway-egress-network.md) — LiteLLM
   egress bridge, OCI NIC, and DHCP design.
 - [Gateway API key pilot](gateway-api-key-pilot.md) — operator
@@ -94,13 +97,18 @@ currently supported configuration or a release acceptance claim.
 
 ## Acceptance and validation
 
-- [Acceptance: OpenCode preflight](acceptance-opencode-preflight.md) —
-  read-only host infrastructure preflight before launch.
-- [Acceptance: OpenCode](acceptance-opencode.md) — OpenCode
-  workload lifecycle acceptance gates.
+- [Disposable NixOS VM harness](vm-harness.md) — experimental
+  opt-in Aginctus/Incus VM tests and agent-debugging security limits.
+- [Start here: OpenCode acceptance decision path](acceptance-opencode.md) —
+  distinguish offline mocks, read-only inspection, owned Herdr lifecycle,
+  and separately authorized real provider inference; no implicit sign-off.
+- [Acceptance: OpenCode infrastructure preflight](acceptance-opencode-preflight.md) —
+  read-only Incus/host resource metadata (not gateway inference).
 - [Acceptance: OpenCode Herdr](acceptance-opencode-herdr.md) —
   Herdr-managed workspace lifecycle, including the agent and
   prompt opt-ins.
+- [Acceptance: OpenCode gateway readiness](acceptance-opencode-inference.md) —
+  read-only guest runtime configuration and key-file preflight (not inference).
 - [Acceptance: OpenCode live](acceptance-opencode-live.md) —
   live OpenCode→LiteLLM acceptance and what stays unverified.
 

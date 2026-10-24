@@ -29,6 +29,7 @@ class MarkdownLinksTests(unittest.TestCase):
     def test_commonmark_links_and_heading_collisions(self):
         result = self.scan({
             "AGENTS.md": "[nested](docs/guide.markdown#repeat-1-1)\n",
+            "docs/README.md": "# Docs\n[Guide](guide.markdown)\n[Space](space%20name.md)\n[Nested](nested_%28file%29.md)\n",
             "docs/guide.markdown": (
                 "# Repeat\n# Repeat\n# Repeat-1\n"
                 "Setext *heading* `code`\n---\n"
@@ -48,7 +49,12 @@ class MarkdownLinksTests(unittest.TestCase):
             "asset.png": "not parsed as Markdown",
         })
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("4 files", result.stdout)
+        self.assertIn("5 files", result.stdout)
+
+    def test_docs_index_cannot_be_silently_removed(self):
+        result = self.scan({"docs/guide.md": "# Guide\n"})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("docs/README.md: cannot read index", result.stderr)
 
     def test_code_escapes_and_external_targets_are_not_checked(self):
         result = self.scan({"README.md": (
