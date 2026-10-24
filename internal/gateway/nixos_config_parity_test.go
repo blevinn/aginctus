@@ -42,10 +42,10 @@ func TestNixOSGatewayConfigParity(t *testing.T) {
 		}
 		fixtures = generated
 	}
-	if len(fixtures) != 4 {
-		t.Fatalf("fixture count = %d, want 4", len(fixtures))
+	if len(fixtures) != 5 {
+		t.Fatalf("fixture count = %d, want 5", len(fixtures))
 	}
-	for _, name := range []string{"defaults", "disabled", "ranges", "static"} {
+	for _, name := range []string{"defaults", "disabled", "forwarding", "ranges", "static"} {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.json")
 			if err := os.WriteFile(path, fixtures[name], 0o600); err != nil {
@@ -59,6 +59,9 @@ func TestNixOSGatewayConfigParity(t *testing.T) {
 			spec, err := FromConfig(effective)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if spec.OpenCodeGoForwarding != (name == "forwarding") {
+				t.Fatalf("NixOS forwarding opt-in = %v for %s", spec.OpenCodeGoForwarding, name)
 			}
 			plan, compose := assertRenderedGatewayComposeMatchesDeploymentModel(t, spec)
 			wantSteps := []string{"management-network", "gateway-egress-network", "gateway"}

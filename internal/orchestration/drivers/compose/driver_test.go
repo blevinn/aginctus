@@ -257,7 +257,7 @@ func TestDetectComposeInstanceDriftRejectsUndeclaredLiteLLMConfigFile(t *testing
 	desired := map[string]string{"user.label.incus-compose.service": "litellm"}
 	actual := map[string]string{
 		"user.label.incus-compose.service": "litellm",
-		key: "/app/aginctus-go-pilot.yaml",
+		key:                                "/app/aginctus-go-pilot.yaml",
 	}
 	if err := detectComposeInstanceDrift(desired, nil, actual, nil); err == nil {
 		t.Fatal("undocumented LiteLLM config override was silently accepted")

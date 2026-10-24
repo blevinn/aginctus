@@ -56,26 +56,22 @@ ag.orchestration(cfg.id,
           } + (if cfg.openCodeGoForwarding then {
             CONFIG_FILE_PATH: '/app/aginctus-go-pilot.yaml',
           } else {}),
-          configs: if cfg.openCodeGoForwarding then [{
-            source: 'aginctus-opencode-go-forwarding',
-            target: '/app/aginctus-go-pilot.yaml',
-          }] else [],
           networks: if cfg.egressNetwork == '' then ['management'] else {
             management: {
               'x-incus-compose': { internal: true },
             },
             egress: if cfg.egressIPv4Address == '' then {} else { ipv4_address: cfg.egressIPv4Address },
           },
-        },
+        } + (if cfg.openCodeGoForwarding then {
+          configs: [{
+            source: 'aginctus-opencode-go-forwarding',
+            target: '/app/aginctus-go-pilot.yaml',
+          }],
+        } else {}),
       },
       volumes: {
         'gateway-postgres': {},
       },
-      configs: if cfg.openCodeGoForwarding then {
-        'aginctus-opencode-go-forwarding': {
-          content: cfg.openCodeGoForwardingContent,
-        },
-      } else {},
       networks: {
         management: {
           external: true,
@@ -91,6 +87,12 @@ ag.orchestration(cfg.id,
           },
         }),
       }),
-    },
+    } + (if cfg.openCodeGoForwarding then {
+      configs: {
+        'aginctus-opencode-go-forwarding': {
+          content: cfg.openCodeGoForwardingContent,
+        },
+      },
+    } else {}),
   }),
 ])

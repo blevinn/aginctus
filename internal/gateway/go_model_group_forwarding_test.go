@@ -47,7 +47,7 @@ func TestGoModelGroupForwardingConfigIsStrictlyScoped(t *testing.T) {
 func TestGoModelGroupForwardingDoesNotActivateStockGateway(t *testing.T) {
 	spec := Spec{
 		ID: "local", Project: "aginctus-gateway", Network: "aginctus-mgmt",
-		LiteLLMImage: "ghcr.io/berriai/litellm:v1.103.0-stable",
+		LiteLLMImage:  "ghcr.io/berriai/litellm:v1.103.0-stable",
 		PostgresImage: "docker.io/library/postgres:17-alpine",
 	}
 	rendered, err := spec.RenderCompose()
@@ -68,7 +68,7 @@ func TestGoModelGroupForwardingDoesNotActivateStockGateway(t *testing.T) {
 type goForwardingCompose struct {
 	Services map[string]struct {
 		Environment map[string]string `json:"environment"`
-		Configs []struct {
+		Configs     []struct {
 			Source string `json:"source"`
 			Target string `json:"target"`
 		} `json:"configs"`
@@ -81,8 +81,8 @@ type goForwardingCompose struct {
 func TestGoModelGroupForwardingDeclarativeComposeParity(t *testing.T) {
 	spec := Spec{
 		ID: "local", Project: "aginctus-gateway", Network: "aginctus-mgmt",
-		LiteLLMImage: "ghcr.io/berriai/litellm:v1.103.0-stable",
-		PostgresImage: "docker.io/library/postgres:17-alpine",
+		LiteLLMImage:         "ghcr.io/berriai/litellm:v1.103.0-stable",
+		PostgresImage:        "docker.io/library/postgres:17-alpine",
 		OpenCodeGoForwarding: true,
 	}
 
@@ -174,7 +174,7 @@ func TestGoModelGroupForwardingDeclarativeComposeParity(t *testing.T) {
 func TestGoModelGroupForwardingDisabledInOrchestrationPlan(t *testing.T) {
 	spec := Spec{
 		ID: "local", Project: "aginctus-gateway", Network: "aginctus-mgmt",
-		LiteLLMImage: "ghcr.io/berriai/litellm:v1.103.0-stable",
+		LiteLLMImage:  "ghcr.io/berriai/litellm:v1.103.0-stable",
 		PostgresImage: "docker.io/library/postgres:17-alpine",
 	}
 	plan, err := spec.OrchestrationPlan()
@@ -200,10 +200,10 @@ func TestGoModelGroupForwardingConfigRequiresExplicitBooleanOptIn(t *testing.T) 
 	loader.UserPath = ""
 	loader.Environment = nil
 	for _, tc := range []struct {
-		name string
-		value string
+		name        string
+		value       string
 		wantEnabled bool
-		wantError bool
+		wantError   bool
 	}{
 		{name: "default", value: "", wantEnabled: false},
 		{name: "enabled", value: "true", wantEnabled: true},
@@ -214,7 +214,7 @@ func TestGoModelGroupForwardingConfigRequiresExplicitBooleanOptIn(t *testing.T) 
 		t.Run(tc.name, func(t *testing.T) {
 			var overrides []string
 			if tc.value != "" {
-				overrides = append(overrides, "gateway.litellm.opencodeGoForwarding=" + tc.value)
+				overrides = append(overrides, "gateway.litellm.opencodeGoForwarding="+tc.value)
 			}
 			effective, err := loader.Load(config.Options{Overrides: overrides})
 			if err != nil {
@@ -240,8 +240,8 @@ func TestGoModelGroupForwardingConfigRequiresExplicitBooleanOptIn(t *testing.T) 
 func TestGoModelGroupForwardingPinnedComposeParser(t *testing.T) {
 	spec := Spec{
 		ID: "local", Project: "aginctus-gateway", Network: "aginctus-mgmt",
-		LiteLLMImage: "ghcr.io/berriai/litellm:v1.103.0-stable",
-		PostgresImage: "docker.io/library/postgres:17-alpine",
+		LiteLLMImage:         "ghcr.io/berriai/litellm:v1.103.0-stable",
+		PostgresImage:        "docker.io/library/postgres:17-alpine",
 		OpenCodeGoForwarding: true,
 	}
 	content, err := spec.RenderCompose()
