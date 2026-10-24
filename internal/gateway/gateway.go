@@ -38,6 +38,7 @@ type Spec struct {
 	NetworkIPv6Address   string
 	LiteLLMImage         string
 	PostgresImage        string
+	OpenCodeGoForwarding bool
 }
 
 func FromConfig(effective *config.Config) (Spec, error) {
@@ -117,6 +118,10 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		return Spec{}, err
 	}
 	spec.NetworkIPv4Routing, err = effective.Bool("incus.management.network.ipv4.routing")
+	if err != nil {
+		return Spec{}, err
+	}
+	spec.OpenCodeGoForwarding, err = effective.Bool("gateway.litellm.opencodeGoForwarding")
 	if err != nil {
 		return Spec{}, err
 	}
@@ -217,6 +222,20 @@ func (s Spec) Validate() error {
 	}
 }
 
+// Keep the approved pilot alias fixed: this is a per-model-group switch, NOT a
+// header-name allowlist. No model registration, credentials or callbacks.
+const openCodeGoForwardingYAML = "model_list: []\n" +
+	"litellm_settings:\n" +
+	"  model_group_settings:\n" +
+	"    forward_client_headers_to_llm_api:\n" +
+	"      - aginctus-go-pilot\n"
+
+const openCodeGoConfigPath = "/app/aginctus-go-pilot.yaml"
+
+func (s Spec) OpenCodeGoForwardingIndentedYAML() string {
+	return "      " + strings.ReplaceAll(strings.TrimSuffix(openCodeGoForwardingYAML, "\n"), "\n", "\n      ")
+}
+
 var composeTemplate = template.Must(template.New("gateway-compose").Parse(`name: {{.Project}}
 services:
   postgres:
@@ -239,7 +258,11 @@ services:
       LITELLM_MASTER_KEY: ${AGINCTUS_GATEWAY_MASTER_KEY}
       LITELLM_SALT_KEY: ${AGINCTUS_GATEWAY_SALT_KEY}
       STORE_MODEL_IN_DB: "True"
-    networks:
+{{if .OpenCodeGoForwarding}}      CONFIG_FILE_PATH: /app/aginctus-go-pilot.yaml
+    configs:
+      - source: aginctus-opencode-go-forwarding
+        target: /app/aginctus-go-pilot.yaml
+{{end}}    networks:
 {{if .EgressNetwork}}      management:
         x-incus-compose:
           internal: true
@@ -247,7 +270,11 @@ services:
         ipv4_address: {{.EgressIPv4Address}}{{else}} {}{{end}}
 {{else}}      - management
 {{end}}
-volumes:
+{{if .OpenCodeGoForwarding}}configs:
+  aginctus-opencode-go-forwarding:
+    content: |
+{{.OpenCodeGoForwardingIndentedYAML}}
+{{end}}volumes:
   gateway-postgres: {}
 
 networks:
@@ -305,8 +332,10 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 				"ipv4Routing": s.NetworkIPv4Routing,
 				"ipv6Address": s.NetworkIPv6Address,
 			},
-			"litellmImage":  s.LiteLLMImage,
-			"postgresImage": s.PostgresImage,
+			"litellmImage":                s.LiteLLMImage,
+			"postgresImage":               s.PostgresImage,
+			"openCodeGoForwarding":        s.OpenCodeGoForwarding,
+			"openCodeGoForwardingContent": openCodeGoForwardingYAML,
 		},
 	)
 }

@@ -168,6 +168,38 @@ Rendered Incus resource keys remain literal `ipv4.dhcp` (set to `"false"` when
 disabled, otherwise omitted to retain Incus's enabled default) and
 `ipv4.dhcp.ranges` (the exact nonempty pool string).
 
+## Declarative OpenCode Go header forwarding
+
+`gateway.litellm.opencodeGoForwarding` is a boolean, **false by default**.
+When `true`, the gateway's rendered Compose and actual orchestration plan
+both declare a stock LiteLLM v1.103.0 YAML config, delivered only to LiteLLM
+using pinned incus-compose inline `configs`, and set its
+`CONFIG_FILE_PATH=/app/aginctus-go-pilot.yaml`. The forwarding applies only
+to the database-registered alias `aginctus-go-pilot`; it is **not** a
+header-name allowlist. It may forward eligible extra `x-*` and
+`anthropic-beta` headers, does not guarantee client `User-Agent`, and
+does not translate alternative session-header names. Do not enable it for
+untrusted workloads before the explicit metadata-exposure review in #456.
+
+In NixOS configuration:
+
+```nix
+services.aginctus.settings.gateway.litellm.opencodeGoForwarding = true;
+```
+
+Without changing host or network state, inspect the effective setting and
+the rendered Compose using:
+
+```sh
+aginctus config get gateway.litellm.opencodeGoForwarding
+aginctus gateway render
+```
+
+A pilot that previously set `environment.CONFIG_FILE_PATH` directly in Incus
+must follow the manual-to-declarative migration and rollback criteria in
+[gateway-api-key-pilot.md](gateway-api-key-pilot.md). Declaring this config is
+not permission to reconcile a running gateway or make provider requests.
+
 ## Inspecting effective configuration
 
 Print the complete merged configuration:
