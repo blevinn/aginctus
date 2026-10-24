@@ -1,5 +1,7 @@
 # Read-only OpenCode pilot infrastructure preflight (#124)
 
+This is the **first read-only check in stage 2** of the [OpenCode acceptance decision path](acceptance-opencode.md#2-read-only-pilot-inspection). Follow it with the separately documented [guest gateway readiness preflight](acceptance-opencode-inference.md) before considering any opted-in Herdr or live-provider test. Neither preflight provides authorization to alter Incus or the host.
+
 This increment implements **actual read-only Incus interrogation**, not the complete live acceptance adapter. It does not execute a model request, discover the Herdr automation API, modify firewall rules or claim that gateway egress was proven.
 
 Run on a provisioned NixOS pilot with `aginctus` and `incus` in PATH, from the repository development shell (`nix develop`, which includes Python 3):
@@ -38,4 +40,4 @@ git diff --check origin/main...HEAD
 just check
 ```
 
-The VM/host pilot verification can run independently from #123 while its launcher remains under development. For a complete #118 sign-off, follow this inspection with real Herdr launch/prompt/wait and gateway-side request correlation; no synthetic marker or test double counts as live evidence.
+This read-only topology inspection can run independently of any live-agent invocation. For a complete #118 sign-off, subsequent **separately authorized** Herdr launch/prompt/wait, actual agent tool traces, direct-egress denial and gateway-side successful upstream request correlation remain necessary. No synthetic marker, health check or test double counts as live inference evidence.
