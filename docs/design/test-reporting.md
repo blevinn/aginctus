@@ -106,6 +106,35 @@ This prevents automatically pasting possibly sensitive error messages to
 agents or CI. Shell, lint, docs and Nix checks remain suite-level pending
 purpose-built structured adapters.
 
+## Read-only presentation of existing VM evidence (phase D1)
+
+The explicitly selected `just check vm-report <run-id>` and
+`just check vm-report-json <run-id>` commands inspect *only* the
+already-written VM harness `.vm-harness-results/<run-id>/result.json`.
+They never launch a VM or implicitly opt in to Nix builds, host Incus,
+live provider access, or agent-host authority. They require an exact
+24-character run ID rather than accepting arbitrary filesystem paths,
+and check symlink/owner-only permissions before reading the private
+16-KiB-bounded source. Errors emit generic, bounded output; raw records,
+filesystem exceptions and unrecognized fields are never copied into
+shared text/JSON.
+
+The read-only adapter validates the VM evidence schema-version-1 fields,
+scenario allowlist, run ID, status/exit code, UTC timestamp, limited
+provenance and the independently owned `not_verified` claims. It maps
+those records to an independently versioned reporting **profile** of
+`disposable_vm`, with the familiar `schema_version`, `status`, `summary`
+and `results` shape. It retains `verification_tier`,
+`upstream_inference: not_verified` and `cleanup: not_verified` explicitly,
+rather than conflating a successful Nix derivation with verified upstream
+model inference or cleanup. No duration is invented because the source
+does not record it. The original private evidence is left untouched.
+
+This view is not ingested by the hermetic CI reporter, and v0.1 live
+acceptance or cryptographic approval/attestation still require separate
+work. Only the known VM harness synthetic evidence format is supported;
+there is no generic free-form log importer.
+
 ## Migration and extension
 
 - Extend bounded structured failure detail to shell/Nix only when a trustworthy
