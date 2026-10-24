@@ -206,7 +206,7 @@ func TestGoModelGroupForwardingConfigRequiresExplicitBooleanOptIn(t *testing.T) 
 		{name: "default", value: "", wantEnabled: false},
 		{name: "enabled", value: "true", wantEnabled: true},
 		{name: "disabled", value: "false", wantEnabled: false},
-		{name: "reject string", value: "\"\"enabled\"\"", wantError: true},
+		{name: "reject string", value: "enabled", wantError: true},
 		{name: "reject number", value: "1", wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
