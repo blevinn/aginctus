@@ -35,10 +35,10 @@ STEP_LABELS = (
 
 
 def valid_failure_details(item: dict) -> bool:
-    cases = item.get("failed_cases")
+    if "failed_cases" not in item:
+        return "cases_truncated" not in item
+    cases = item["failed_cases"]
     truncated = item.get("cases_truncated")
-    if cases is None:
-        return truncated is None
     if item["status"] != "fail" or not isinstance(cases, list):
         return False
     if not 1 <= len(cases) <= MAX_CASES:
