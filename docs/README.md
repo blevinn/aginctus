@@ -36,6 +36,8 @@ currently supported configuration or a release acceptance claim.
 - [Unified test reporting](design/test-reporting.md) — proposed cross-suite output contract and opt-in hermetic adapter.
 - [Native Incus reconciliation](design/native-incus-reconciliation.md) —
   staged replacement of the current Apply/Compose drivers after release gates.
+- [Persistent testenv VM backend](design/testenv-incus-backend.md) —
+  v0.2 Incus MVP, pluggable VM contract and dedicated-worker security gates.
 - [Home Manager operator / NixOS host authority](design/home-manager-operator.md) —
   proposed v0.2 privilege boundary, safe operator installation and migration gates.
 
