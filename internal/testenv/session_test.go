@@ -196,3 +196,28 @@ func TestSupervisorRejectsUnsafeLifetimeAndCancelledStartup(t *testing.T) {
 		t.Fatalf("started a VM after cancellation: %v", err)
 	}
 }
+
+func TestRealSupervisorRequiresDelegatedCgroup(t *testing.T) {
+	store := sessionTestStore(t)
+	// Policy checks happen before store access, launcher resolution or
+	// starting a child. The test must not need a KVM device.
+	_, err := RunPinnedVMSession(context.Background(), store, nil, "/nonexistent", time.Minute, nil)
+	if err == nil || !strings.Contains(err.Error(), "delegated cgroup resource limits are required") {
+		t.Fatalf("supervisor fell back to unbounded launch: %v", err)
+	}
+}
+
+func TestRunWithMisconfiguredCgroupNeverStartsLauncher(t *testing.T) {
+	store := sessionTestStore(t)
+	launcher := sessionTestLauncher(t, "touch \"$HOME/LAUNCHED\"; exec sleep 10")
+	// This fake root provides no kernel control files. Launch must fail
+	// BEFORE exec.Cmd.Start rather than running outside a cgroup.
+	manager := &CgroupManager{root: t.TempDir(), limits: defaultVMLimits}
+	outcome, err := runVMSessionWithCgroup(context.Background(), store, manager, launcher, time.Minute, nil)
+	if err == nil || !validRunID(outcome.ID) {
+		t.Fatalf("missing cgroup limits did not deny launch: %#v %v", outcome, err)
+	}
+	if _, err := os.Stat(filepath.Join(store.root, outcome.ID, "LAUNCHED")); !os.IsNotExist(err) {
+		t.Fatalf("unbounded launch occurred: %v", err)
+	}
+}
