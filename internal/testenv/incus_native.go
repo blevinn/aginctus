@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
@@ -17,7 +18,30 @@ import (
 // The daemon socket is effectively host-admin authority and MUST NOT be
 // given to a coding agent or a regular user session.
 type nativeIncusVMClient struct {
-	server incusclient.InstanceServer
+	server *incusclient.ProtocolIncus
+}
+
+const incusRequestTimeout = 30 * time.Second
+
+func waitIncusOperation(ctx context.Context, op incusclient.Operation) error {
+	if err := op.WaitContext(ctx); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if op.Get().StatusCode != api.Success {
+		return errors.New("testenv Incus operation did not complete successfully")
+	}
+	return nil
+}
+
+// UseProject constructs a new ProtocolIncus, including private event state.
+// WithContext mutates its receiver, so it must only be used on that copy.
+func (n *nativeIncusVMClient) requestClient(ctx context.Context) (context.Context, incusclient.InstanceServer, context.CancelFunc) {
+	requestCtx, cancel := context.WithTimeout(ctx, incusRequestTimeout)
+	copy := n.server.UseProject(DefaultVMProject).(*incusclient.ProtocolIncus)
+	return requestCtx, copy.WithContext(requestCtx), cancel
 }
 
 // ConnectTrustedIncusVMClient is for installed worker configuration ONLY;
@@ -35,18 +59,24 @@ func ConnectTrustedIncusVMClient(ctx context.Context, socketPath string) (IncusV
 	// this path is a trusted worker deployment responsibility.
 	server, err := incusclient.ConnectIncusUnixWithContext(ctx, socketPath, &incusclient.ConnectionArgs{SkipGetServer: true})
 	if err != nil {
-		return nil, errors.New("could not connect to configured Incus worker daemon")
+		return nil, safeIncusError("could not connect to configured Incus worker daemon", err)
 	}
-	return &nativeIncusVMClient{server: server.UseProject(DefaultVMProject)}, nil
+	protocol, ok := server.(*incusclient.ProtocolIncus)
+	if !ok {
+		return nil, errors.New("unsupported trusted Incus SDK client")
+	}
+	return &nativeIncusVMClient{server: protocol}, nil
 }
 
 func (n *nativeIncusVMClient) ProjectConfig(ctx context.Context) (map[string]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	project, _, err := n.server.GetProject(DefaultVMProject)
+	_, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	project, _, err := server.GetProject(DefaultVMProject)
 	if err != nil {
-		return nil, err
+		return nil, safeIncusError("testenv Incus project lookup failed", err)
 	}
 	config := make(map[string]string, len(project.Config))
 	for k, v := range project.Config {
@@ -62,12 +92,14 @@ func (n *nativeIncusVMClient) HasImage(ctx context.Context, fingerprint string) 
 	if !vmDigest.MatchString(fingerprint) {
 		return false, errors.New("invalid immutable image fingerprint")
 	}
-	image, _, err := n.server.GetImage(fingerprint)
+	_, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	image, _, err := server.GetImage(fingerprint)
 	if api.StatusErrorCheck(err, http.StatusNotFound) {
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, safeIncusError("testenv Incus image lookup failed", err)
 	}
 	return image != nil && image.Fingerprint == fingerprint, nil
 }
@@ -89,7 +121,7 @@ func fromIncusInstance(instance api.Instance) IncusVMInstance {
 		Name: instance.Name, Type: string(instance.Type),
 		Status: instance.Status, Ephemeral: instance.Ephemeral,
 		Profiles: append([]string{}, instance.Profiles...),
-		Config: config, Devices: devices,
+		Config:   config, Devices: devices,
 	}
 }
 
@@ -97,12 +129,14 @@ func (n *nativeIncusVMClient) Get(ctx context.Context, name string) (*IncusVMIns
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	instance, _, err := n.server.GetInstance(name)
+	_, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	instance, _, err := server.GetInstance(name)
 	if api.StatusErrorCheck(err, http.StatusNotFound) {
 		return nil, ErrIncusInstanceMissing
 	}
 	if err != nil {
-		return nil, err
+		return nil, safeIncusError("testenv Incus instance lookup failed", err)
 	}
 	if instance == nil {
 		return nil, errors.New("testenv Incus returned no instance")
@@ -125,63 +159,91 @@ func (n *nativeIncusVMClient) Create(ctx context.Context, plan IncusInstancePlan
 		Name: plan.Name, Type: api.InstanceTypeVM,
 		Source: api.InstanceSource{Type: "image", Fingerprint: plan.ImageFingerprint},
 		InstancePut: api.InstancePut{
-			Config: api.ConfigMap(plan.Config),
-			Devices: api.DevicesMap(plan.Devices),
-			Profiles: []string{},
+			Config:    api.ConfigMap(plan.Config),
+			Devices:   api.DevicesMap(plan.Devices),
+			Profiles:  []string{},
 			Ephemeral: plan.Ephemeral,
 		},
 	}
-	op, err := n.server.CreateInstance(req)
+	ctx, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	op, err := server.CreateInstance(req)
 	if err != nil {
-		return err
+		return safeIncusError("testenv Incus create submission failed", err)
 	}
-	return op.WaitContext(ctx)
+	if err := waitIncusOperation(ctx, op); err != nil {
+		return safeIncusError("testenv Incus create completion unverified", err)
+	}
+	return nil
 }
 
 func (n *nativeIncusVMClient) Start(ctx context.Context, name string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	op, err := n.server.UpdateInstanceState(name, api.InstanceStatePut{
+	ctx, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	op, err := server.UpdateInstanceState(name, api.InstanceStatePut{
 		Action: "start", Timeout: 30,
 	}, "")
 	if err != nil {
-		return err
+		return safeIncusError("testenv Incus start submission failed", err)
 	}
-	return op.WaitContext(ctx)
+	if err := waitIncusOperation(ctx, op); err != nil {
+		return safeIncusError("testenv Incus start completion unverified", err)
+	}
+	return nil
 }
 
 func (n *nativeIncusVMClient) Stop(ctx context.Context, name string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	op, err := n.server.UpdateInstanceState(name, api.InstanceStatePut{
+	ctx, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	op, err := server.UpdateInstanceState(name, api.InstanceStatePut{
 		Action: "stop", Force: true, Timeout: 30,
 	}, "")
 	if err != nil {
-		return err
+		if api.StatusErrorCheck(err, http.StatusNotFound) {
+			return ErrIncusInstanceMissing
+		}
+		return safeIncusError("testenv Incus stop submission failed", err)
 	}
-	return op.WaitContext(ctx)
+	if err := waitIncusOperation(ctx, op); err != nil {
+		return safeIncusError("testenv Incus stop completion unverified", err)
+	}
+	return nil
 }
 
 func (n *nativeIncusVMClient) Delete(ctx context.Context, name string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	op, err := n.server.DeleteInstance(name)
+	ctx, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	op, err := server.DeleteInstance(name)
 	if err != nil {
-		return err
+		if api.StatusErrorCheck(err, http.StatusNotFound) {
+			return ErrIncusInstanceMissing
+		}
+		return safeIncusError("testenv Incus delete submission failed", err)
 	}
-	return op.WaitContext(ctx)
+	if err := waitIncusOperation(ctx, op); err != nil {
+		return safeIncusError("testenv Incus delete completion unverified", err)
+	}
+	return nil
 }
 
 func (n *nativeIncusVMClient) List(ctx context.Context) ([]IncusVMInstance, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	instances, err := n.server.GetInstances(api.InstanceTypeVM)
+	_, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	instances, err := server.GetInstances(api.InstanceTypeVM)
 	if err != nil {
-		return nil, err
+		return nil, safeIncusError("testenv Incus list failed", err)
 	}
 	result := make([]IncusVMInstance, 0, len(instances))
 	for _, instance := range instances {

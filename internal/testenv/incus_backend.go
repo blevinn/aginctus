@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -39,24 +41,28 @@ type IncusVMClient interface {
 	List(context.Context) ([]IncusVMInstance, error)
 }
 
-// IncusVMBackend is a deliberately minimal native-lifecycle implementation.
-// Guest exec and snapshots/reset are not admitted in this slice.
+// IncusVMBackend authenticates native lifecycle and optional guest execution.
+// Snapshot/reset remain blocked by project policy.
 type IncusVMBackend struct {
-	client IncusVMClient
-	pool   string
-	now    func() time.Time
+	client    IncusVMClient
+	pool      string
+	now       func() time.Time
+	policyKey []byte
 }
 
 var _ VMBackend = (*IncusVMBackend)(nil)
 
-func NewIncusVMBackend(client IncusVMClient, storagePool string) (*IncusVMBackend, error) {
+func NewIncusVMBackend(client IncusVMClient, storagePool string, policyKey []byte) (*IncusVMBackend, error) {
 	if client == nil {
 		return nil, errors.New("trusted Incus client required")
 	}
 	if _, err := IncusProjectPolicy(storagePool); err != nil {
 		return nil, err
 	}
-	return &IncusVMBackend{client: client, pool: storagePool, now: time.Now}, nil
+	if len(policyKey) != 32 {
+		return nil, errors.New("a stable trusted 32-byte worker policy key is required")
+	}
+	return &IncusVMBackend{client: client, pool: storagePool, now: time.Now, policyKey: append([]byte(nil), policyKey...)}, nil
 }
 
 func (*IncusVMBackend) Name() BackendName { return IncusBackend }
@@ -71,17 +77,20 @@ func (b *IncusVMBackend) Capabilities() BackendCapabilities {
 // checkProject refuses a mutable/default/looser project. The worker must
 // provision a dedicated project first; no implicit creation or adoption.
 func (b *IncusVMBackend) checkProject(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	want, err := IncusProjectPolicy(b.pool)
 	if err != nil {
 		return err
 	}
 	actual, err := b.client.ProjectConfig(ctx)
 	if err != nil {
-		return errors.New("testenv Incus project policy unavailable")
+		return safeIncusError("testenv Incus project policy unavailable", err)
 	}
 	for key, expected := range want.Config {
 		if actual[key] != expected {
-			return fmt.Errorf("testenv Incus project policy mismatch at %s", key)
+			return ErrOwnershipMismatch
 		}
 	}
 	// Additional provider-defined project controls are allowed only when
@@ -89,7 +98,7 @@ func (b *IncusVMBackend) checkProject(ctx context.Context) error {
 	for key := range actual {
 		if strings.HasPrefix(key, "restricted.") || strings.HasPrefix(key, "limits.") {
 			if _, ok := want.Config[key]; !ok {
-				return errors.New("unreviewed testenv Incus project policy")
+				return ErrOwnershipMismatch
 			}
 		}
 	}
@@ -104,8 +113,8 @@ func newVMRunID() (string, error) {
 	return "vm-" + hex.EncodeToString(token[:]), nil
 }
 
-func checkIncusOwned(actual *IncusVMInstance, ref VMRef) (time.Time, error) {
-	if err := ref.Validate(); err != nil {
+func (b *IncusVMBackend) checkIncusOwned(actual *IncusVMInstance, ref VMRef) (time.Time, error) {
+	if err := b.verifyRef(ref); err != nil {
 		return time.Time{}, err
 	}
 	if actual == nil || actual.Name != ref.Instance ||
@@ -120,11 +129,20 @@ func checkIncusOwned(actual *IncusVMInstance, ref VMRef) (time.Time, error) {
 	root, ok := actual.Devices["root"]
 	if !ok || len(actual.Devices) != 1 ||
 		root["type"] != "disk" || root["path"] != "/" ||
-		root["source"] != "" {
+		root["source"] != "" || root["pool"] != b.pool ||
+		root["size"] != fmt.Sprintf("%dGiB", ref.Policy.RootDiskGiB) ||
+		actual.Config["limits.cpu"] != strconv.Itoa(ref.Policy.CPU) ||
+		actual.Config["limits.memory"] != fmt.Sprintf("%dMiB", ref.Policy.MemoryMiB) ||
+		actual.Config["security.nesting"] != "true" ||
+		actual.Ephemeral != (ref.Policy.Retention == VMEphemeral) {
 		return time.Time{}, ErrOwnershipMismatch
 	}
 	expiry, err := time.Parse(time.RFC3339Nano, actual.Config["user.aginctus.testenv.expires"])
 	if err != nil || expiry.IsZero() {
+		return time.Time{}, ErrOwnershipMismatch
+	}
+	stored, err := b.instanceRef(*actual)
+	if err != nil || stored != ref || !expiry.Equal(ref.Policy.ExpiresAt) {
 		return time.Time{}, ErrOwnershipMismatch
 	}
 	return expiry, nil
@@ -145,7 +163,7 @@ func (b *IncusVMBackend) Create(ctx context.Context, spec VMCreateSpec) (VMRef, 
 	}
 	exists, err := b.client.HasImage(ctx, spec.ImageFingerprint)
 	if err != nil || !exists {
-		return VMRef{}, errors.New("pinned VM image unavailable from trusted project")
+		return VMRef{}, safeIncusError("pinned VM image unavailable from trusted project", err)
 	}
 	runID, err := newVMRunID()
 	if err != nil {
@@ -156,32 +174,48 @@ func (b *IncusVMBackend) Create(ctx context.Context, spec VMCreateSpec) (VMRef, 
 		Instance: "testenv-" + runID, RunID: runID,
 		ImageFingerprint: spec.ImageFingerprint,
 	}
-	plan, err := PlanIncusVM(spec, ref, b.pool, b.now().UTC())
+	created := b.now().UTC()
+	retention := spec.Retention
+	if retention == "" {
+		retention = VMEphemeral
+	}
+	ref.Policy = VMRunPolicy{CPU: spec.CPU, MemoryMiB: spec.MemoryMiB, RootDiskGiB: spec.RootDiskGiB,
+		Retention: retention, StoragePool: b.pool, CreatedAt: created, ExpiresAt: created.Add(spec.TimeToLive)}
+	ref.PolicyMAC = b.sealRef(ref)
+	plan, err := PlanIncusVM(spec, ref, b.pool, created)
 	if err != nil {
 		return VMRef{}, err
 	}
+	policy, err := json.Marshal(ref.Policy)
+	if err != nil {
+		return VMRef{}, errors.New("cannot encode trusted run policy")
+	}
+	plan.Config[incusPolicyKey] = string(policy)
+	plan.Config[incusPolicyMACKey] = ref.PolicyMAC
 	// Fail closed on collisions, including an existing instance with an
 	// apparently matching user.* owner tag. Never adopt an existing name.
 	if _, err := b.client.Get(ctx, ref.Instance); err == nil {
 		return VMRef{}, errors.New("testenv VM name already exists")
 	} else if !errors.Is(err, ErrIncusInstanceMissing) {
-		return VMRef{}, errors.New("cannot verify testenv VM name is unused")
+		return VMRef{}, safeIncusError("cannot verify testenv VM name is unused", err)
 	}
 	if err := b.client.Create(ctx, plan); err != nil {
-		return VMRef{}, fmt.Errorf("create isolated testenv VM: %w", err)
+		// Submission may have succeeded even when its response/wait failed.
+		// The sealed handle permits verification, never automatic adoption.
+		return ref, safeIncusError("testenv VM create outcome uncertain; recovery required", err)
 	}
 	actual, err := b.client.Get(ctx, ref.Instance)
 	if err != nil {
-		return ref, errors.New("created VM requires recovery: cannot verify instance")
+		return ref, safeIncusError("created VM requires recovery: cannot verify instance", err)
 	}
-	if _, err := checkIncusOwned(actual, ref); err != nil || actual.Ephemeral != plan.Ephemeral ||
+	if _, err := b.checkIncusOwned(actual, ref); err != nil || actual.Ephemeral != plan.Ephemeral ||
 		actual.Devices["root"]["pool"] != b.pool {
-		return ref, errors.New("created VM requires recovery: ownership or policy mismatch")
+		return ref, ErrOwnershipMismatch
 	}
 	// An instance can exist after a crash between Create and Start. The
 	// trusted orphan/TTL reconciler will handle that; never blindly retry.
 	if err := b.client.Start(ctx, ref.Instance); err != nil {
-		return ref, errors.New("created VM requires recovery: start failed")
+		return ref, safeIncusError("created VM requires recovery: start failed", err)
 	}
 	return ref, nil
 }
@@ -190,7 +224,7 @@ func (b *IncusVMBackend) loadOwned(ctx context.Context, ref VMRef) (*IncusVMInst
 	if b == nil || b.client == nil {
 		return nil, time.Time{}, ErrBackendUnavailable
 	}
-	if err := ref.Validate(); err != nil {
+	if err := b.verifyRef(ref); err != nil {
 		return nil, time.Time{}, err
 	}
 	if err := b.checkProject(ctx); err != nil {
@@ -198,9 +232,12 @@ func (b *IncusVMBackend) loadOwned(ctx context.Context, ref VMRef) (*IncusVMInst
 	}
 	actual, err := b.client.Get(ctx, ref.Instance)
 	if err != nil {
-		return nil, time.Time{}, err
+		if actual != nil {
+			return nil, time.Time{}, ErrOwnershipMismatch
+		}
+		return nil, time.Time{}, safeIncusError("testenv VM lookup failed", err)
 	}
-	expiry, err := checkIncusOwned(actual, ref)
+	expiry, err := b.checkIncusOwned(actual, ref)
 	if err != nil || actual.Devices["root"]["pool"] != b.pool {
 		return nil, time.Time{}, ErrOwnershipMismatch
 	}
@@ -217,6 +254,9 @@ func (b *IncusVMBackend) Status(ctx context.Context, ref VMRef) (VMStatus, error
 
 func (b *IncusVMBackend) Destroy(ctx context.Context, ref VMRef) error {
 	actual, _, err := b.loadOwned(ctx, ref)
+	if errors.Is(err, ErrIncusInstanceMissing) {
+		return b.confirmAbsent(ctx, ref)
+	}
 	if err != nil {
 		return err
 	}
@@ -229,29 +269,47 @@ func (b *IncusVMBackend) Destroy(ctx context.Context, ref VMRef) error {
 	}
 	if strings.EqualFold(actual.Status, "Running") {
 		if err := b.client.Stop(ctx, ref.Instance); err != nil {
-			return errors.New("testenv VM stop failed; cleanup unverified")
+			if errors.Is(err, ErrIncusInstanceMissing) {
+				return b.confirmAbsent(ctx, ref)
+			}
+			return safeIncusError("testenv VM stop failed; cleanup unverified", err)
 		}
-		actual, err = b.client.Get(ctx, ref.Instance)
+		actual, _, err = b.loadOwned(ctx, ref)
 		if errors.Is(err, ErrIncusInstanceMissing) {
 			if actual != nil {
 				return errors.New("ambiguous VM cleanup response")
 			}
-			return nil
+			return b.confirmAbsent(ctx, ref)
 		}
 		if err != nil {
-			return errors.New("testenv VM cleanup recheck failed")
+			return safeIncusError("testenv VM cleanup recheck failed", err)
 		}
-		if _, err := checkIncusOwned(actual, ref); err != nil {
-			return err
+		if !strings.EqualFold(actual.Status, "Stopped") {
+			return errors.New("testenv VM did not stop; cleanup unverified")
 		}
 	}
 	if err := b.client.Delete(ctx, ref.Instance); err != nil {
-		return errors.New("testenv VM deletion not verified")
+		if !errors.Is(err, ErrIncusInstanceMissing) {
+			return safeIncusError("testenv VM deletion not verified", err)
+		}
 	}
-	if _, err := b.client.Get(ctx, ref.Instance); !errors.Is(err, ErrIncusInstanceMissing) {
-		return errors.New("testenv VM still present or unverifiable after deletion")
+	return b.confirmAbsent(ctx, ref)
+}
+
+// Absence verifies only a project-scoped postcondition, not former ownership
+// or separate volume/evidence reclamation. A policy failure is never absence.
+func (b *IncusVMBackend) confirmAbsent(ctx context.Context, ref VMRef) error {
+	if err := b.verifyRef(ref); err != nil {
+		return err
 	}
-	return nil
+	if err := b.checkProject(ctx); err != nil {
+		return err
+	}
+	actual, err := b.client.Get(ctx, ref.Instance)
+	if actual == nil && errors.Is(err, ErrIncusInstanceMissing) && ctx.Err() == nil {
+		return nil
+	}
+	return safeIncusError("testenv VM still present or unverifiable after deletion", err)
 }
 
 func (b *IncusVMBackend) ListOwned(ctx context.Context) ([]VMStatus, error) {
@@ -263,7 +321,7 @@ func (b *IncusVMBackend) ListOwned(ctx context.Context) ([]VMStatus, error) {
 	}
 	all, err := b.client.List(ctx)
 	if err != nil {
-		return nil, errors.New("unable to enumerate testenv Incus project")
+		return nil, safeIncusError("unable to enumerate testenv Incus project", err)
 	}
 	owned := make([]VMStatus, 0, len(all))
 	for _, instance := range all {
@@ -271,12 +329,11 @@ func (b *IncusVMBackend) ListOwned(ctx context.Context) ([]VMStatus, error) {
 		if !vmRunID.MatchString(runID) || instance.Name != "testenv-"+runID {
 			continue // unrelated project resource; do not adopt it
 		}
-		ref := VMRef{
-			Backend: IncusBackend, Project: DefaultVMProject,
-			Instance: instance.Name, RunID: runID,
-			ImageFingerprint: instance.Config["user.aginctus.testenv.image"],
+		ref, err := b.instanceRef(instance)
+		if err != nil {
+			return nil, ErrOwnershipMismatch
 		}
-		expiry, err := checkIncusOwned(&instance, ref)
+		expiry, err := b.checkIncusOwned(&instance, ref)
 		if err != nil || instance.Devices["root"]["pool"] != b.pool {
 			return nil, ErrOwnershipMismatch // suspicious owned prefix
 		}
@@ -288,4 +345,4 @@ func (b *IncusVMBackend) ListOwned(ctx context.Context) ([]VMStatus, error) {
 // Snapshot and reset are not admitted while the restricted Incus project
 // forbids snapshots; no silent destructive fallback is permitted.
 func (*IncusVMBackend) Snapshot(context.Context, VMRef, string) error { return ErrUnsupportedAction }
-func (*IncusVMBackend) Reset(context.Context, VMRef, string) error { return ErrUnsupportedAction }
+func (*IncusVMBackend) Reset(context.Context, VMRef, string) error    { return ErrUnsupportedAction }

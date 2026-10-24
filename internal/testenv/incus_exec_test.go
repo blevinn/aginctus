@@ -24,7 +24,7 @@ func TestIncusGuestExecUsesOwnedAgentAndLiteralArgv(t *testing.T) {
 	ctx := context.Background()
 	fake := &fakeGuestIncusClient{fakeIncusVMClient: newFakeIncusClient(t),
 		response: VMExecResult{ExitCode: 17, Stdout: "ok", Stderr: "not fatal"}}
-	backend, err := NewIncusVMBackend(fake, "testenv")
+	backend, err := newTestIncusBackend(fake, "testenv")
 	if err != nil { t.Fatal(err) }
 	backend.now = time.Now
 	ref, err := backend.Create(ctx, admittedSpec())
@@ -43,7 +43,7 @@ func TestIncusGuestExecUsesOwnedAgentAndLiteralArgv(t *testing.T) {
 func TestIncusGuestExecRejectsUnsafeArgvAndLimits(t *testing.T) {
 	ctx := context.Background()
 	fake := &fakeGuestIncusClient{fakeIncusVMClient: newFakeIncusClient(t)}
-	backend, _ := NewIncusVMBackend(fake, "testenv")
+	backend, _ := newTestIncusBackend(fake, "testenv")
 	backend.now = time.Now
 	ref, err := backend.Create(ctx, admittedSpec())
 	if err != nil { t.Fatal(err) }
@@ -71,7 +71,7 @@ func TestIncusGuestExecRejectsUnsafeArgvAndLimits(t *testing.T) {
 func TestIncusGuestExecRequiresActiveOwnedRun(t *testing.T) {
 	ctx := context.Background()
 	fake := &fakeGuestIncusClient{fakeIncusVMClient: newFakeIncusClient(t)}
-	backend, _ := NewIncusVMBackend(fake, "testenv")
+	backend, _ := newTestIncusBackend(fake, "testenv")
 	backend.now = time.Now
 	ref, err := backend.Create(ctx, admittedSpec())
 	if err != nil { t.Fatal(err) }
@@ -100,7 +100,7 @@ func TestIncusGuestExecRequiresActiveOwnedRun(t *testing.T) {
 func TestIncusGuestExecReportsOverflowAndTransportFailure(t *testing.T) {
 	ctx := context.Background()
 	fake := &fakeGuestIncusClient{fakeIncusVMClient: newFakeIncusClient(t)}
-	backend, _ := NewIncusVMBackend(fake, "testenv")
+	backend, _ := newTestIncusBackend(fake, "testenv")
 	backend.now = time.Now
 	ref, err := backend.Create(ctx, admittedSpec())
 	if err != nil { t.Fatal(err) }
