@@ -67,6 +67,28 @@ loose/symlinked secret files and payloads over 8 MiB, and prints only a safe
 status, event count and **nonsecret** correlation identifier. It never prints
 provider output, error payloads, model text or credential bytes.
 
+On an HTTP error from `/v1/responses`, the script reads at most 16 KiB of
+response data and reports **only one fixed classification**:
+`missing-session-id`, `unsupported-parameter`, `unknown-model`,
+`provider-authentication`, or `unclassified`. The raw error body,
+exception text and HTTP reason are never printed. Classification is
+best-effort; an `unclassified` response is not proof that a particular
+error did not occur. An observed `missing-session-id` does not establish
+whether the client omitted the header or LiteLLM dropped it.
+
+**OpenCode Go caveat:** This host-side nonce-echo smoke intentionally does not
+fabricate an OpenCode conversation ID or pretend to be a coding agent. The
+pinned real-OpenCode loopback test in `guest/opencode/test_real_runtime.py`
+checks for an identifying `User-Agent`, the presence of a native OpenCode
+session header, and stability across the requests in one run. That test
+establishes the **client-to-mock** contract, not LiteLLM-to-Go forwarding.
+The pinned LiteLLM v1.103.0 default does not blindly forward client `x-*`
+headers. Its `model_group_settings.forward_client_headers_to_llm_api`
+option is model-scoped but forwards a broad collection of client `x-*`
+headers and does not by itself preserve `User-Agent`. Do not globally
+enable forwarding to make the smoke pass; a separate restricted, tested
+header-forwarding mechanism is necessary before repeating paid Go inference.
+
 A passing transcript **does not independently prove upstream provenance**.
 The operator must inspect trusted LiteLLM-side telemetry or provider-side
 usage, correlate the generated identifier with the request, verify upstream

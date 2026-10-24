@@ -89,6 +89,61 @@ class SmokeTests(unittest.TestCase):
             mod.run("http://10.0.0.9:4000", "coding", "master", "master", fake, marker)
         self.assertEqual(len(fake.calls), 5)
 
+    def test_http_error_classification_is_bounded_and_never_logs_provider_text(self):
+        marker = "AGINCTUS_OK_TEST123"
+
+        class FailedResponses(MockOpener):
+            def __init__(self, response_body, status=400):
+                super().__init__(marker)
+                self.response_body = response_body
+                self.status = status
+
+            def open(self, req, timeout):
+                if req.full_url.endswith("/v1/responses"):
+                    raise mod.HTTPError(
+                        req.full_url, self.status, "provider secret and prompt",
+                        {}, io.BytesIO(self.response_body),
+                    )
+                return super().open(req, timeout)
+
+        for payload, expected in (
+            ({"error": {"type": "BadRequestError",
+                        "message": "MissingSessionID: x-opencode-session required; private-prompt"}},
+             "missing-session-id"),
+            ({"error": {"message": "unsupported parameter: temperature"}},
+             "unsupported-parameter"),
+            ({"error": {"code": "model_not_found", "message": "secret-model"}},
+             "unknown-model"),
+            ({"error": {"type": "AuthenticationError", "message": "invalid api key secret"}},
+             "provider-authentication"),
+            ({"error": {"message": "some unexpected private prompt secret"}},
+             "unclassified"),
+        ):
+            with self.subTest(expected=expected):
+                fake = FailedResponses(json.dumps(payload).encode())
+                with self.assertRaises(mod.SmokeError) as failure:
+                    mod.run("http://10.0.0.9:4000", "coding",
+                            "good-workload", "master", fake, marker)
+                self.assertIn(expected, str(failure.exception))
+                self.assertNotIn("private-prompt", str(failure.exception))
+                self.assertNotIn("secret", str(failure.exception))
+                self.assertNotIn("temperature", str(failure.exception))
+                self.assertNotIn("provider secret", str(failure.exception))
+
+        for body in (b"not JSON secret", b'{"error":"MissingSessionID"}',
+                     b'{"error":{"message":"MissingSessionID"}}' + b"x" * 16384):
+            fake = FailedResponses(body)
+            with self.assertRaises(mod.SmokeError) as failure:
+                mod.run("http://10.0.0.9:4000", "coding",
+                        "good-workload", "master", fake, marker)
+            self.assertIn("unclassified", str(failure.exception))
+            self.assertNotIn("secret", str(failure.exception))
+
+        # Never parse error bodies on missing/invalid-key probes.
+        fake = MockOpener(marker)
+        self.assertEqual(mod.run("http://10.0.0.9:4000", "coding",
+                                 "good-workload", "master", fake, marker)[1], 3)
+
     def test_protected_file_and_dry_run(self):
         with tempfile.TemporaryDirectory() as td:
             key = Path(td) / "key"
