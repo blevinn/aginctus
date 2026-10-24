@@ -49,12 +49,12 @@ let
     set -euo pipefail
     shopt -s nullglob
     disks=(${disk}/*.qcow2)
-    if [ "${#disks[@]}" -ne 1 ]; then
+    if [ "''${#disks[@]}" -ne 1 ]; then
       echo "expected precisely one pinned NixOS qcow2 disk" >&2
       exit 1
     fi
     mkdir -p "$out"
-    cp -- "${disks[0]}" "$out/disk.qcow2"
+    cp -- "''${disks[0]}" "$out/disk.qcow2"
     chmod 0444 "$out/disk.qcow2"
     mkdir -p meta
     cat > meta/metadata.yaml <<'YAML'
