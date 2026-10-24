@@ -192,7 +192,7 @@ func runVMSessionWithCgroup(ctx context.Context, store *RunStore, cgroups *Cgrou
 	if err := ctx.Err(); err != nil {
 		return SessionOutcome{}, err
 	}
-	id, dir, err := store.reserveVMRun()
+	id, dir, err := store.reserveVMRunWithTTL(ttl)
 	if err != nil {
 		return SessionOutcome{}, err
 	}
