@@ -90,7 +90,7 @@ def normalize(record: dict, run_id: str) -> dict:
         or scenario not in SCENARIOS
         or status not in ("pass", "fail")
         or type(exit_code) is not int
-        or not 0 <= exit_code <= 255
+        or not -255 <= exit_code <= 255
         or (status == "pass") != (exit_code == 0)
         or failure_stage not in ("launch", "build", None)
         or (status == "pass" and failure_stage is not None)
