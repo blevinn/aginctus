@@ -14,6 +14,9 @@ let
   evaluate =
     extra:
     (lib.evalModules {
+      # evalModules is lower-level than Home Manager and does not supply pkgs.
+      # Provide the same package set as a standalone HM evaluation would.
+      specialArgs = { inherit pkgs; };
       modules = [
         self.homeManagerModules.default
         (
