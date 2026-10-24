@@ -16,6 +16,9 @@ import (
 )
 
 // The key is deliberately piped to a fixed guest helper, never placed in argv.
+// This guest exec still targets the v0.1 default Incus project. Project
+// extensibility must change workload ownership discovery and gateway lookup
+// together; changing only the exec target would cross a trust boundary.
 var provisionGatewayGuest = func(ctx context.Context, instance string, payload []byte) error {
 	cmd := exec.CommandContext(ctx, "incus", "exec", instance, "--project", "default", "--", "/run/current-system/sw/bin/aginctus-opencode-gateway-provision")
 	cmd.Stdin = strings.NewReader(string(payload))
@@ -41,6 +44,10 @@ type gatewayDiscoveryInstance struct {
 	} `json:"state"`
 }
 
+// Only the unique, owned, running LiteLLM service on the configured management
+// NIC is a candidate workload endpoint. An egress NIC may also have a private
+// address, but that is not evidence of an authorized management API. Discovery
+// is metadata validation, never a network or key-scope acceptance check.
 func discoverGatewayIPv4(data []byte, project, managementNetwork string) (string, error) {
 	if managementNetwork == "" {
 		return "", errors.New("gateway management network not configured")
