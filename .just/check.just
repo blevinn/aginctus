@@ -19,7 +19,11 @@ modules:
 
 [no-cd]
 test:
-    go test ./...
+    @if [[ "${AGINCTUS_CHECK_STRUCTURED:-0}" == 1 ]]; then \
+      go test -json ./...; \
+    else \
+      go test ./...; \
+    fi
 
 [no-cd]
 vet:
