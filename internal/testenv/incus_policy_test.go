@@ -64,13 +64,46 @@ func TestIncusInstancePlanHasNoHostDevicesOrMutableImage(t *testing.T) {
 		p.Devices["root"]["pool"] != "testenv" ||
 		p.Devices["root"]["size"] != "16GiB" ||
 		p.Devices["root"]["path"] != "/" ||
-		p.ExpiresAt != now.Add(spec.TimeToLive) {
+		!p.Ephemeral || p.ExpiresAt != now.Add(spec.TimeToLive) {
 		t.Fatalf("unexpected incus plan: %#v", p)
 	}
 	for _, forbidden := range []string{"raw.qemu", "raw.lxc", "volatile.", "security.privileged", "limits.memory.enforce"} {
 		if _, ok := p.Config[forbidden]; ok {
 			t.Fatalf("unsafe instance config %q", forbidden)
 		}
+	}
+}
+
+func TestEphemeralIsDefaultAndRetentionMustBeExplicit(t *testing.T) {
+	spec := VMCreateSpec{
+		Backend: IncusBackend, Project: DefaultVMProject,
+		ImageFingerprint: strings.Repeat("a", 64),
+		CPU: 1, MemoryMiB: 1024, RootDiskGiB: 8,
+		TimeToLive: 5 * time.Minute,
+	}
+	ref := VMRef{
+		Backend: IncusBackend, Project: DefaultVMProject,
+		Instance: "testenv-vm-ephemeral",
+		RunID: "vm-" + strings.Repeat("c", 24),
+		ImageFingerprint: spec.ImageFingerprint,
+	}
+	now := time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC)
+	temporary, err := PlanIncusVM(spec, ref, "testenv", now)
+	if err != nil || !temporary.Ephemeral {
+		t.Fatalf("default must be ephemeral: %#v %v", temporary, err)
+	}
+	spec.Retention = VMEphemeral
+	explicit, err := PlanIncusVM(spec, ref, "testenv", now)
+	if err != nil || !explicit.Ephemeral {
+		t.Fatalf("explicit ephemeral policy must match default: %#v %v", explicit, err)
+	}
+	spec.Retention = VMRetained
+	retained, err := PlanIncusVM(spec, ref, "testenv", now)
+	if err != nil || retained.Ephemeral {
+		t.Fatalf("retained must be an explicit opt-in: %#v %v", retained, err)
+	}
+	if retained.ExpiresAt != temporary.ExpiresAt {
+		t.Fatal("retained instances must not evade TTL")
 	}
 }
 
