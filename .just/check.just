@@ -25,11 +25,11 @@ test:
 vet:
     go vet ./...
 
-# Full hermetic checks, used by GitHub Actions. Explicitly override any
-# caller's integration/live-acceptance opt-ins and offline Go resolution.
+# Standard hermetic validation uses the same concise reporter as manual
+# runs. Reporter hardens the environment independently for each suite and
+# records failures across all eight safe suites (not just the first failure).
 [no-cd]
-ci:
-    env AGINCTUS_INCUS_INTEGRATION=0 AGINCTUS_INCUS_DISPOSABLE=NO AGINCTUS_ACCEPTANCE_LIVE= AGINCTUS_ACCEPTANCE_LIVE_HOOKS= ACCEPTANCE_TEST_FAIL= GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local bash -euo pipefail -c 'just check go; just check lint; just check python; just check shell-tests; just check shell; just check markdown; just check docs-examples; just check nix'
+ci: report
 
 # Same safe comprehensive suite for humans; VM/Incus/live tests stay opt-in.
 [no-cd]
@@ -87,8 +87,8 @@ docs-examples:
     go run ./cmd/aginctus help | python3 scripts/check_docs_examples.py
 
 
-# Opt-in concise suite reporting; CI's existing fail-fast path is unchanged.
-# The @ prefix is essential: JSON mode must emit exactly one JSON object.
+# Standard concise suite reporting. The @ prefix suppresses Just's recipe
+# echo so JSON mode emits exactly one machine-readable object.
 [no-cd]
 report:
     @python3 scripts/checks/report.py --format text
