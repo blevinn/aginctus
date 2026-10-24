@@ -78,6 +78,31 @@ destroy expired resources. Destruction must tolerate an instance
 vanishing because Incus already cleaned it up, without treating that
 absence as proof that foreign resources were not affected.
 
+## Incus native lifecycle implementation
+
+The first native `IncusVMBackend` adapter uses the repository's pinned
+Incus v7 Go SDK and a **project-scoped, trusted injected client**. It
+implements create, status, destroy and owned-instance enumeration, with
+verification of the actual restricted project policy and VM metadata
+before any mutation. It does **not** connect through the agent-facing
+CLI or MCP, which remain read-only.
+
+Creation requires the immutable image fingerprint to exist, refuses
+collisions, generates a random run ID, and launches from exactly one
+managed root disk with no profiles or NICs. It passes an explicit
+Incus `Ephemeral` property. A failed start returns a recoverable
+run handle rather than claiming success or deleting unknown resources.
+Destroy rechecks ownership, stops a running VM and tolerates automatic
+Incus deletion after stopping an ephemeral instance. A retained instance
+must be deleted separately and its absence verified. Foreign project
+resources are never adopted based on names alone.
+
+**Still pending:** an independently scheduled TTL/orphan sweep,
+Incus-agent argv exec with bounded output/time, a pinned Incus NixOS
+VM image, worker/daemon credential segregation, snapshot/reset policy,
+and real disposable-host KVM acceptance. These backend methods are not
+exposed through CLI/MCP without a trusted authorization service.
+
 ## Operations and failure model
 
 1. **Create:** mint cryptographic run ID and an owner/generation marker in trusted state; validate the project's restrictions and limits, image fingerprint, root volume quota and no NIC before calling Incus. Create a uniquely named VM with fixed devices/profile; re-read it after creation. Name collision or preexisting foreign metadata fails closed. No implicit adoption.
