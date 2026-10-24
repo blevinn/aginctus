@@ -1,5 +1,7 @@
 # Pilot LiteLLM workload key lifecycle (#122)
 
+**Stage 4** of the [gateway operator decision path](gateway-operator-path.md#3-provider-registration-and-key-handling). Issue a temporary LiteLLM key only for an operator-approved, already registered alias, and plan confirmed revocation before any paid request; an uncertain revocation must be treated as outstanding access.
+
 This operator-only utility completes the credential delivery **between** the
 merged guarded model registrar (#247) and authenticated Responses smoke test
 (#248). It is **not** a general workload-identity system (deferred to #177 in
