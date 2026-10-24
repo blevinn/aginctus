@@ -59,6 +59,9 @@ func Run(
 		printUsage(stdout)
 		return 0
 	}
+	// Help must remain available without loading host configuration or querying
+	// Incus: operators need a safe discovery surface even before deployment.
+	// Preserve this boundary when replacing the command switch with a tree.
 	if code, handled := runHelp(args, stdout, stderr); handled {
 		return code
 	}
