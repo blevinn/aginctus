@@ -109,6 +109,9 @@ func Run(
 	case "doctor":
 		return runDoctor(ctx, commandArgs[1:], stdout, stderr, incusClient)
 	case "operator":
+		if len(commandArgs) > 1 && commandArgs[1] == "state-audit" {
+			return runOperatorStateAudit(commandArgs[1:], stdout, stderr, effective)
+		}
 		return runOperatorPreflight(ctx, commandArgs[1:], stdout, stderr)
 	case "images":
 		return runImages(ctx, commandArgs[1:], stdout, stderr)
