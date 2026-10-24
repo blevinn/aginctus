@@ -168,31 +168,60 @@ Rendered Incus resource keys remain literal `ipv4.dhcp` (set to `"false"` when
 disabled, otherwise omitted to retain Incus's enabled default) and
 `ipv4.dhcp.ranges` (the exact nonempty pool string).
 
-## Declarative OpenCode Go header forwarding
+## Declarative client header forwarding
 
-`gateway.litellm.opencodeGoForwarding` is a boolean, **false by default**.
-When `true`, the gateway's rendered Compose and actual orchestration plan
-both declare a stock LiteLLM v1.103.0 YAML config, delivered only to LiteLLM
-using pinned incus-compose inline `configs`, and set its
-`CONFIG_FILE_PATH=/app/aginctus-go-pilot.yaml`. The forwarding applies only
-to the database-registered alias `aginctus-go-pilot`; it is **not** a
-header-name allowlist. It may forward eligible extra `x-*` and
-`anthropic-beta` headers, does not guarantee client `User-Agent`, and
-does not translate alternative session-header names. Do not enable it for
-untrusted workloads before the explicit metadata-exposure review in #456.
+`gateway.litellm.forwardClientHeaders` accepts a boolean or an array of
+model-group strings in NixOS, Home Manager, JSON files, and CLI overrides.
+It defaults to **false**:
+
+| Value | LiteLLM policy |
+| --- | --- |
+| `false` or `[]` | No forwarding policy or config-file override is declared. |
+| `true` | `general_settings.forward_client_headers_to_llm_api: true`, for all models. |
+| A nonempty string array | `litellm_settings.model_group_settings.forward_client_headers_to_llm_api`, for those model groups only. |
+
+The array selects **model groups, not header names**. Exact aliases and
+LiteLLM model-group wildcard patterns are supported. An array replaces the
+global mode; it cannot express per-model exclusions from global forwarding.
+Provider-wide selection requires matching model-group names, not merely a
+provider identifier. Empty/whitespace-only names, control characters, and
+dollar signs are rejected; the latter prevents Compose environment expansion
+inside model names. Other JSON types and mixed-type arrays are rejected.
+
+The Go preview and Jsonnet deployment plan declare the same stock LiteLLM
+YAML through inline Compose `configs`, attached only to LiteLLM at
+`/app/aginctus-client-headers.yaml` with matching `CONFIG_FILE_PATH`.
+No models or credentials are registered by this setting.
+
+Forwarding admits eligible extra `x-*` headers except `x-stainless*`, and
+`anthropic-beta`. It does not preserve client `User-Agent` or translate
+session-header names. Provider-auth forwarding is a separate LiteLLM setting
+and is not enabled here. Global mode expands eligible-header exposure to
+every configured upstream, including models registered later. The #456
+metadata-exposure and native transport acceptance gates remain separate.
 
 In NixOS configuration:
 
 ```nix
-services.aginctus.settings.gateway.litellm.opencodeGoForwarding = true;
+services.aginctus.settings.gateway.litellm.forwardClientHeaders = true;
+```
+
+Alternatively, restrict forwarding to selected model groups:
+
+```nix
+services.aginctus.settings.gateway.litellm.forwardClientHeaders = [
+  "aginctus-go-pilot"
+  "team/*"
+];
 ```
 
 Without changing host or network state, inspect the effective setting and
 the rendered Compose using:
 
 ```sh
-aginctus config get gateway.litellm.opencodeGoForwarding
+aginctus config get gateway.litellm.forwardClientHeaders
 aginctus gateway render
+aginctus --config='gateway.litellm.forwardClientHeaders=["aginctus-go-pilot"]' gateway render
 ```
 
 A pilot that previously set `environment.CONFIG_FILE_PATH` directly in Incus

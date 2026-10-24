@@ -40,13 +40,15 @@ in
         default = "docker.io/library/postgres:17-alpine";
       };
     };
-    litellm.opencodeGoForwarding = mkOption {
-      type = types.bool;
+    litellm.forwardClientHeaders = mkOption {
+      type = types.either types.bool (types.listOf types.str);
       default = false;
       description = ''
-        Opt into stock LiteLLM model-group forwarding for the fixed
-        aginctus-go-pilot alias. This may forward eligible additional x-*
-        request headers; it is not a header-name allowlist.
+        Forward eligible client headers globally when true, or only for the
+        model groups named in a string list. False and an empty list disable
+        forwarding. Lists select model groups, not header names, and cannot
+        exclude models from global forwarding. This may expose additional
+        x-* request headers to upstream providers.
       '';
     };
   };
