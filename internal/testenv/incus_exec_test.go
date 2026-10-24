@@ -10,9 +10,9 @@ import (
 
 type fakeGuestIncusClient struct {
 	*fakeIncusVMClient
-	argv []string
+	argv     []string
 	response VMExecResult
-	err error
+	err      error
 }
 
 func (c *fakeGuestIncusClient) ExecGuest(_ context.Context, _ string, argv []string) (VMExecResult, error) {
@@ -24,11 +24,15 @@ func TestIncusGuestExecUsesOwnedAgentAndLiteralArgv(t *testing.T) {
 	ctx := context.Background()
 	fake := &fakeGuestIncusClient{fakeIncusVMClient: newFakeIncusClient(t),
 		response: VMExecResult{ExitCode: 17, Stdout: "ok", Stderr: "not fatal"}}
-	backend, err := NewIncusVMBackend(fake, "testenv")
-	if err != nil { t.Fatal(err) }
+	backend, err := newTestIncusBackend(fake, "testenv")
+	if err != nil {
+		t.Fatal(err)
+	}
 	backend.now = time.Now
 	ref, err := backend.Create(ctx, admittedSpec())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !backend.Capabilities().Exec || backend.Capabilities().Snapshot || backend.Capabilities().Reset {
 		t.Fatalf("incorrect backend capabilities: %#v", backend.Capabilities())
 	}
@@ -43,12 +47,14 @@ func TestIncusGuestExecUsesOwnedAgentAndLiteralArgv(t *testing.T) {
 func TestIncusGuestExecRejectsUnsafeArgvAndLimits(t *testing.T) {
 	ctx := context.Background()
 	fake := &fakeGuestIncusClient{fakeIncusVMClient: newFakeIncusClient(t)}
-	backend, _ := NewIncusVMBackend(fake, "testenv")
+	backend, _ := newTestIncusBackend(fake, "testenv")
 	backend.now = time.Now
 	ref, err := backend.Create(ctx, admittedSpec())
-	if err != nil { t.Fatal(err) }
-	for _, tc := range []struct{
-		argv []string
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		argv    []string
 		timeout time.Duration
 	}{
 		{nil, time.Second},
@@ -56,8 +62,9 @@ func TestIncusGuestExecRejectsUnsafeArgvAndLimits(t *testing.T) {
 		{[]string{"/bin/../sh"}, time.Second},
 		{[]string{"/bin/echo", "abc\x00def"}, time.Second},
 		{[]string{"/bin/echo", strings.Repeat("x", 8193)}, time.Second},
+		{append([]string{"/bin/echo"}, make([]string, 32)...), time.Second},
 		{[]string{"/bin/true"}, 0},
-		{[]string{"/bin/true"}, 31*time.Second},
+		{[]string{"/bin/true"}, 31 * time.Second},
 	} {
 		if _, err := backend.Exec(ctx, ref, tc.argv, tc.timeout); err == nil {
 			t.Fatalf("accepted unsafe guest exec args %#v timeout %s", tc.argv, tc.timeout)
@@ -68,13 +75,24 @@ func TestIncusGuestExecRejectsUnsafeArgvAndLimits(t *testing.T) {
 	}
 }
 
+func TestIncusGuestExecAcceptsExactArgvBoundaries(t *testing.T) {
+	if err := validateIncusExec(append([]string{"/bin/echo"}, make([]string, 31)...), time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateIncusExec([]string{"/bin/echo", strings.Repeat("x", maxIncusExecArgBytes-len("/bin/echo"))}, maxIncusExecDuration); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestIncusGuestExecRequiresActiveOwnedRun(t *testing.T) {
 	ctx := context.Background()
 	fake := &fakeGuestIncusClient{fakeIncusVMClient: newFakeIncusClient(t)}
-	backend, _ := NewIncusVMBackend(fake, "testenv")
+	backend, _ := newTestIncusBackend(fake, "testenv")
 	backend.now = time.Now
 	ref, err := backend.Create(ctx, admittedSpec())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	tampered := ref
 	tampered.ImageFingerprint = strings.Repeat("f", 64)
 	if _, err := backend.Exec(ctx, tampered, []string{"/bin/true"}, time.Second); !errors.Is(err, ErrOwnershipMismatch) {
@@ -100,10 +118,12 @@ func TestIncusGuestExecRequiresActiveOwnedRun(t *testing.T) {
 func TestIncusGuestExecReportsOverflowAndTransportFailure(t *testing.T) {
 	ctx := context.Background()
 	fake := &fakeGuestIncusClient{fakeIncusVMClient: newFakeIncusClient(t)}
-	backend, _ := NewIncusVMBackend(fake, "testenv")
+	backend, _ := newTestIncusBackend(fake, "testenv")
 	backend.now = time.Now
 	ref, err := backend.Create(ctx, admittedSpec())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	fake.response.Stdout = strings.Repeat("s", MaxGuestOutput+1)
 	if _, err := backend.Exec(ctx, ref, []string{"/bin/true"}, time.Second); !errors.Is(err, ErrGuestOutputLimit) {
 		t.Fatalf("oversized output not rejected: %v", err)
