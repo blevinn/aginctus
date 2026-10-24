@@ -38,7 +38,7 @@ func TestTestenvRejectsUnexpectedCommandsWithoutExecution(t *testing.T) {
 		{"testenv", "vm", "test", "../smoke"},
 		{"testenv", "vm", "test", "smoke", "--nix-option"},
 		{"testenv", "vm", "exec", "/bin/sh"},
-		{"testenv", "mcp"},
+		{"testenv", "mcp", "--http"},
 		{"testenv", "vm", "plan", ".#vm-harness-smoke"},
 		{"--config=workloads.dev.isolation=vm", "testenv", "vm", "test", "smoke"},
 	} {
@@ -74,5 +74,20 @@ func TestTestenvDispatchesOnlyKnownScenario(t *testing.T) {
 	errOut.Reset()
 	if code := Run(context.Background(), []string{"testenv", "vm", "test", "smoke"}, &out, &errOut, nil, nil); code != 1 || !strings.Contains(errOut.String(), "guest VM failed") {
 		t.Fatalf("code=%d stderr=%q", code, errOut.String())
+	}
+}
+
+func TestTestenvMCPIsConfigFreeAndReadOnly(t *testing.T) {
+	before := serveTestenvMCP
+	defer func() { serveTestenvMCP = before }()
+	called := false
+	serveTestenvMCP = func(_ context.Context, _ io.Reader, out io.Writer) error {
+		called = true
+		_, _ = io.WriteString(out, "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n")
+		return nil
+	}
+	var out, errOut bytes.Buffer
+	if code := Run(context.Background(), []string{"testenv", "mcp"}, &out, &errOut, nil, nil); code != 0 || !called || !strings.Contains(out.String(), "jsonrpc") {
+		t.Fatalf("code=%d called=%v stdout=%q stderr=%q", code, called, out.String(), errOut.String())
 	}
 }

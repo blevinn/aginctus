@@ -50,6 +50,38 @@ disabled until the separate trusted supervisor and permission work lands.
 `list`, `plan` and `help testenv` do not load host configuration or
 contact the host Incus daemon.
 
+## Local MCP entrypoint (read-only initial release)
+
+`aginctus testenv mcp` launches a **local stdio MCP server**. It does
+not listen on TCP or HTTP. This increment targets MCP protocol
+`2026-07-28` with `server/discover`, `tools/list`, and `tools/call`.
+The JSON-RPC request must include
+`params._meta["io.modelcontextprotocol/protocolVersion"] = "2026-07-28"`
+and `params._meta["io.modelcontextprotocol/clientCapabilities"] = {}`.
+The stdout stream contains only newline-delimited JSON-RPC messages.
+Missing required metadata returns `-32602` (Invalid params). Unsupported
+versions return `-32022` (Unsupported protocol version), with `data.supported`
+and `data.requested`, including on `server/discover`; clients may retry with
+a supported version. Legacy `initialize` handshakes are not supported.
+
+MCP tools currently available:
+
+- `vm_list_scenarios`: read-only list of the same scenarios as
+  `aginctus testenv vm list`.
+- `vm_plan` with argument `{"scenario":"smoke"}`: read-only pinned
+  target description, equivalent to `aginctus testenv vm plan smoke`.
+
+`vm_test`, `vm_exec`, `vm_create`, `vm_destroy` and arbitrary
+shell commands are deliberately **not exposed through MCP**. Merely connecting
+an MCP client is not authorization for VM execution. Persistent, agent-safe
+VM operations must first pass the trusted supervisor/worker security gate.
+
+To add a stdio MCP connection to a client, configure its command as
+`aginctus` and its argument array as `["testenv", "mcp"]` (use the
+trusted installed CLI binary, not a shell string or a network URL). The
+server's source checkout does not establish a credential or authorization
+boundary. Use only on a dedicated non-privileged worker.
+
 ## Commands
 
 From the repository root on x86_64-linux with KVM, using the dedicated worker:
