@@ -371,6 +371,10 @@
           vm-harness-smoke = import ./nix/vm-harness/smoke.nix {
             inherit self nixpkgs system;
           };
+          # Explicit heavyweight standalone Home Manager user activation in a disposable VM.
+          vm-harness-home-manager-operator = import ./nix/vm-harness/home-manager-operator.nix {
+            inherit self nixpkgs system;
+          };
           vm-harness-storage-network = import ./nix/vm-harness/storage-network.nix {
             inherit self nixpkgs system;
           };
