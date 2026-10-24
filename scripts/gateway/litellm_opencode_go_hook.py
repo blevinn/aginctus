@@ -4,7 +4,6 @@ Requires pinned LiteLLM v1.103.0 and must be explicitly configured on its
 runtime; merely shipping this file does not activate request forwarding.
 """
 from litellm.integrations.custom_logger import CustomLogger
-
 from opencode_go_forwarding import sanitize_go_headers
 
 
