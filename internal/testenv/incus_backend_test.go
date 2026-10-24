@@ -113,7 +113,7 @@ func TestIncusCreateStatusDestroyEphemeral(t *testing.T) {
 	}
 	if err := backend.Destroy(ctx, ref); err != nil { t.Fatal(err) }
 	if _, ok := client.vms[ref.Instance]; ok { t.Fatal("ephemeral still present after stop") }
-	if len(client.calls) != 6 { t.Fatalf("unexpected calls: %v", client.calls) }
+	if len(client.calls) != 4 { t.Fatalf("unexpected calls: %v", client.calls) }
 	for _, call := range client.calls {
 		if call == "delete" { t.Fatal("ephemeral cleanup should auto-delete on stop") }
 	}
