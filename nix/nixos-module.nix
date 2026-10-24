@@ -70,6 +70,12 @@ let
   ) cfg.reconcile.workloads;
 
   configFile = jsonFormat.generate "aginctus-config.json" cfg.settings;
+  # Nonsecret, declared package identity for read-only system/user parity audit.
+  operatorPackageManifest = jsonFormat.generate "aginctus-system-package.json" {
+    schema = 1;
+    authority = "system";
+    package = toString cfg.package;
+  };
 
   imageUpdateService =
     {
@@ -187,6 +193,7 @@ in
   };
 
   config = mkIf cfg.enable {
+    environment.etc."aginctus/operator-package.json".source = operatorPackageManifest;
     assertions = [
       {
         assertion =
