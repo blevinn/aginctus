@@ -3,10 +3,10 @@ package testenv
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -138,7 +138,7 @@ func (c *RunCgroup) readControl(name string) (string, error) {
 		return "", err
 	}
 	defer file.Close()
-	data, err := os.ReadFile("/proc/self/fd/" + strconv.Itoa(int(file.Fd())))
+	data, err := io.ReadAll(io.LimitReader(file, 4096))
 	if err != nil {
 		return "", fmt.Errorf("cannot inspect cgroup %s", name)
 	}
