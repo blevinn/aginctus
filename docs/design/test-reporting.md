@@ -75,10 +75,41 @@ stderr is stored as a CI artifact by this integration.
 This still does not cover disposable VM, live Incus or provider acceptance
 runs. The source checks and their safety/environment overrides are unchanged.
 
+## Structured failed-test identifiers (Go and unittest)
+
+For normal non-verbose aggregation, the reporter drains native output in
+fixed-size chunks without retaining a raw subprocess log. The Go test recipe
+emits native JSON test events only while the reporter sets the dedicated
+AGINCTUS_CHECK_STRUCTURED opt-in; invoking the ordinary Go test recipe directly
+still uses original Go output. The Python adapter recognizes the standard
+FAIL and ERROR headers from unittest verbose mode.
+
+When a failing suite has recognizable test events, an optional additive
+`failed_cases` array contains at most **eight** objects per suite, each with
+a restricted `id` and `kind` (fail or error). The optional
+`cases_truncated: true` signals more distinct failures. The schema remains
+version 1. No raw output or exception/traceback text enters JSON or the CI
+summary. The summary validates identifiers before writing Markdown.
+Case names are **best-effort, diagnostic hints** extracted from child output;
+the suite exit code remains authoritative. Cases not recognized, including
+Go vet/module errors and some Python import failures, still cause the suite
+to fail without invented case details.
+
+Go identifiers are restricted to Aginctus-module package paths and safe
+test-name characters. The Python adapter accepts only simple unittest
+class/method identifiers. Overlong lines, binary/non-UTF-8 content, unrecognized
+formats and characters that might inject Markdown or shell syntax are discarded.
+The parser bounds its line buffer and retained case list; no raw logs are
+saved to disk or emitted in JSON. Operators needing a traceback or actual
+assertion text must rerun the reported suite intentionally on a trusted machine.
+This prevents automatically pasting possibly sensitive error messages to
+agents or CI. Shell, lint, docs and Nix checks remain suite-level pending
+purpose-built structured adapters.
+
 ## Migration and extension
 
-- Add optional structured failed-case details through adapters for Go's JSON test
-  events, Python `unittest`, and shell/Nix, without exposing arbitrary stdout.
+- Extend bounded structured failure detail to shell/Nix only when a trustworthy
+  structured event source exists, without scraping arbitrary diagnostic text.
 - Represent `skipped` / `not-run` when future selectors or early aborts are
   introduced. Never count unexecuted checks as passes.
 - Map existing VM harness synthetic `result.json` records and explicit live

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 EXPECTED_SUITES = (
@@ -20,6 +21,8 @@ EXPECTED_SUITES = (
     "docs-examples",
     "nix",
 )
+CASE_ID = re.compile(r"[A-Za-z0-9_./:-]{1,192}\Z")
+MAX_CASES = 8
 STEP_LABELS = (
     ("Namespace contract", "NAMESPACE_RESULT"),
     ("Hermetic suites", "AGGREGATE_RESULT"),
@@ -27,6 +30,36 @@ STEP_LABELS = (
     ("Release package preview", "RELEASE_PREVIEW_RESULT"),
     ("Whitespace", "WHITESPACE_RESULT"),
 )
+
+
+
+
+def valid_failure_details(item: dict) -> bool:
+    if "failed_cases" not in item:
+        return "cases_truncated" not in item
+    cases = item["failed_cases"]
+    if item["status"] != "fail" or not isinstance(cases, list):
+        return False
+    if not 1 <= len(cases) <= MAX_CASES:
+        return False
+    if "cases_truncated" in item and (
+        item["cases_truncated"] is not True or len(cases) != MAX_CASES
+    ):
+        return False
+    seen: set[str] = set()
+    for case in cases:
+        if not isinstance(case, dict) or set(case) != {"id", "kind"}:
+            return False
+        identifier = case["id"]
+        if (
+            not isinstance(identifier, str)
+            or not CASE_ID.fullmatch(identifier)
+            or case["kind"] not in ("fail", "error")
+            or identifier in seen
+        ):
+            return False
+        seen.add(identifier)
+    return True
 
 
 def load_report(path: Path) -> dict | None:
@@ -62,6 +95,7 @@ def load_report(path: Path) -> dict | None:
         )
         or (item["status"] == "pass" and item.get("exit_code") != 0)
         or (item["status"] == "fail" and item.get("exit_code") == 0)
+        or not valid_failure_details(item)
         for item in results
     ):
         return None
@@ -117,6 +151,16 @@ def render_summary(report: dict | None, steps: dict[str, str], revision: str) ->
                 f"{code if code is not None else '—'} |"
             )
         lines.append("")
+        for entry in report["results"]:
+            for case in entry.get("failed_cases", []):
+                lines.append(
+                    f"- `{entry['id']}` {case['kind'].upper()}: "
+                    f"`{case['id']}`"
+                )
+            if entry.get("cases_truncated"):
+                lines.append(f"- `{entry['id']}`: additional failed cases omitted")
+        if any(entry.get("failed_cases") for entry in report["results"]):
+            lines.append("")
         lines.append(
             "Failing suites can be diagnosed by running "
             "`just check <suite>` locally. No raw test logs are included."
