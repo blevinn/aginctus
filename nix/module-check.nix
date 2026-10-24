@@ -175,6 +175,11 @@ assert !(builtins.hasAttr "aginctus-image-herdr-client" hostOnly.systemd.service
 assert !(builtins.hasAttr "aginctus-image-opencode-workload" hostOnly.systemd.services);
 assert !(builtins.hasAttr "aginctus-reconcile" hostOnly.systemd.services);
 assert builtins.hasAttr "aginctus/config.json" hostOnly.environment.etc;
+# The identity manifest is declarative, public and does not require IFD.
+assert builtins.hasAttr "aginctus/operator-package.json" base.environment.etc;
+assert builtins.hasAttr "aginctus/operator-package.json" hostOnly.environment.etc;
+assert lib.hasInfix "aginctus-system-package.json"
+  (toString base.environment.etc."aginctus/operator-package.json".source);
 assert !base.services.aginctus.reconcile.enable;
 assert !base.services.aginctus.reconcile.gateway;
 assert !(builtins.hasAttr "aginctus-reconcile" base.systemd.services);
