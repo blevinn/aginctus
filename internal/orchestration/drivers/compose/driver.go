@@ -226,6 +226,16 @@ func (e *ComposeDriftError) Error() string {
 // detectComposeInstanceDrift rejects changes the pinned Compose Ensure would
 // silently ignore. Missing extension keys are safe: Ensure adds them.
 func detectComposeInstanceDrift(desired map[string]string, desiredProfiles []string, actual map[string]string, actualProfiles []string) error {
+
+	// A manual LiteLLM config-file override changes the proxy's security
+	// policy, even when Compose's declared environment no longer mentions it.
+	// Fail closed rather than treating an opt-out as successfully reconciled.
+	const configFileKey = "environment.CONFIG_FILE_PATH"
+	if desired["user.label.incus-compose.service"] == "litellm" {
+		if _, managed := desired[configFileKey]; !managed && actual[configFileKey] != "" {
+			return &ComposeDriftError{Kind: ComposeDriftConfig, Key: configFileKey, Reason: "unmanaged LiteLLM configuration path requires explicit removal"}
+		}
+	}
 	for key, want := range desired {
 		if got, exists := actual[key]; exists && got != want {
 			return &ComposeDriftError{Kind: ComposeDriftConfig, Key: key, Reason: "instance recreation or an explicit update is required"}

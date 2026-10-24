@@ -15,6 +15,9 @@ import (
 	"strings"
 	"syscall"
 	"text/template"
+	"unicode"
+
+	"sigs.k8s.io/yaml"
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/filestate"
@@ -24,20 +27,22 @@ import (
 )
 
 type Spec struct {
-	ID                   string
-	Project              string
-	Network              string
-	EgressNetwork        string
-	EgressIPv4Address    string
-	EgressBridgeIPv4CIDR string
-	EgressDHCPDisabled   bool
-	EgressDHCPRanges     string
-	NetworkIPv4Address   string
-	NetworkIPv4NAT       bool
-	NetworkIPv4Routing   bool
-	NetworkIPv6Address   string
-	LiteLLMImage         string
-	PostgresImage        string
+	ID                        string
+	Project                   string
+	Network                   string
+	EgressNetwork             string
+	EgressIPv4Address         string
+	EgressBridgeIPv4CIDR      string
+	EgressDHCPDisabled        bool
+	EgressDHCPRanges          string
+	NetworkIPv4Address        string
+	NetworkIPv4NAT            bool
+	NetworkIPv4Routing        bool
+	NetworkIPv6Address        string
+	LiteLLMImage              string
+	PostgresImage             string
+	ForwardClientHeaders      bool
+	ForwardClientHeaderModels []string
 }
 
 func FromConfig(effective *config.Config) (Spec, error) {
@@ -120,6 +125,24 @@ func FromConfig(effective *config.Config) (Spec, error) {
 	if err != nil {
 		return Spec{}, err
 	}
+	if _, present := effective.Get("gateway.litellm.opencodeGoForwarding"); present {
+		return Spec{}, fmt.Errorf("use gateway.litellm.forwardClientHeaders instead of gateway.litellm.opencodeGoForwarding")
+	}
+	value, _ := effective.Get("gateway.litellm.forwardClientHeaders")
+	switch value := value.(type) {
+	case bool:
+		spec.ForwardClientHeaders = value
+	case []any:
+		for _, raw := range value {
+			model, ok := raw.(string)
+			if !ok {
+				return Spec{}, fmt.Errorf("gateway.litellm.forwardClientHeaders must be a boolean or a list of model-group strings")
+			}
+			spec.ForwardClientHeaderModels = append(spec.ForwardClientHeaderModels, model)
+		}
+	default:
+		return Spec{}, fmt.Errorf("gateway.litellm.forwardClientHeaders must be a boolean or a list of model-group strings")
+	}
 
 	if err := spec.Validate(); err != nil {
 		return Spec{}, err
@@ -148,6 +171,15 @@ func rejectDottedEgressDHCPInput(effective *config.Config) error {
 var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
 func (s Spec) Validate() error {
+	if s.ForwardClientHeaders && len(s.ForwardClientHeaderModels) != 0 {
+		return fmt.Errorf("global and model-group client header forwarding cannot be combined")
+	}
+	for _, model := range s.ForwardClientHeaderModels {
+		// Compose interpolates config content, so model names cannot reference environment variables.
+		if strings.TrimSpace(model) == "" || strings.Contains(model, "$") || strings.IndexFunc(model, unicode.IsControl) >= 0 {
+			return fmt.Errorf("forwarding model groups must be nonempty strings without dollar signs or control characters")
+		}
+	}
 	if s.EgressDHCPRanges != "" {
 		if s.EgressDHCPDisabled || s.EgressBridgeIPv4CIDR == "" || s.EgressIPv4Address == "" {
 			return fmt.Errorf("egress DHCP ranges require enabled DHCP and explicit bridge and LiteLLM IPv4 CIDRs")
@@ -217,6 +249,37 @@ func (s Spec) Validate() error {
 	}
 }
 
+const clientHeadersConfigPath = "/app/aginctus-client-headers.yaml"
+const clientHeadersConfigName = "aginctus-client-headers"
+
+func (s Spec) HasClientHeaderForwarding() bool {
+	return s.ForwardClientHeaders || len(s.ForwardClientHeaderModels) != 0
+}
+
+func (s Spec) clientHeaderForwardingYAML() (string, error) {
+	if !s.HasClientHeaderForwarding() {
+		return "", nil
+	}
+	policy := map[string]any{"model_list": []string{}}
+	if s.ForwardClientHeaders {
+		policy["general_settings"] = map[string]any{"forward_client_headers_to_llm_api": true}
+	} else {
+		policy["litellm_settings"] = map[string]any{
+			"model_group_settings": map[string]any{"forward_client_headers_to_llm_api": s.ForwardClientHeaderModels},
+		}
+	}
+	content, err := yaml.Marshal(policy)
+	return string(content), err
+}
+
+func (s Spec) ClientHeaderForwardingIndentedYAML() (string, error) {
+	content, err := s.clientHeaderForwardingYAML()
+	if err != nil {
+		return "", err
+	}
+	return "      " + strings.ReplaceAll(strings.TrimSuffix(content, "\n"), "\n", "\n      "), nil
+}
+
 var composeTemplate = template.Must(template.New("gateway-compose").Parse(`name: {{.Project}}
 services:
   postgres:
@@ -239,7 +302,11 @@ services:
       LITELLM_MASTER_KEY: ${AGINCTUS_GATEWAY_MASTER_KEY}
       LITELLM_SALT_KEY: ${AGINCTUS_GATEWAY_SALT_KEY}
       STORE_MODEL_IN_DB: "True"
-    networks:
+{{if .HasClientHeaderForwarding}}      CONFIG_FILE_PATH: /app/aginctus-client-headers.yaml
+    configs:
+      - source: aginctus-client-headers
+        target: /app/aginctus-client-headers.yaml
+{{end}}    networks:
 {{if .EgressNetwork}}      management:
         x-incus-compose:
           internal: true
@@ -247,7 +314,11 @@ services:
         ipv4_address: {{.EgressIPv4Address}}{{else}} {}{{end}}
 {{else}}      - management
 {{end}}
-volumes:
+{{if .HasClientHeaderForwarding}}configs:
+  aginctus-client-headers:
+    content: |
+{{.ClientHeaderForwardingIndentedYAML}}
+{{end}}volumes:
   gateway-postgres: {}
 
 networks:
@@ -288,6 +359,10 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 	if err != nil {
 		return orchestration.Plan{}, err
 	}
+	content, err := s.clientHeaderForwardingYAML()
+	if err != nil {
+		return orchestration.Plan{}, err
+	}
 	return generator.Evaluate(
 		"import 'aginctus/gateway.jsonnet'",
 		map[string]any{
@@ -305,8 +380,10 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 				"ipv4Routing": s.NetworkIPv4Routing,
 				"ipv6Address": s.NetworkIPv6Address,
 			},
-			"litellmImage":  s.LiteLLMImage,
-			"postgresImage": s.PostgresImage,
+			"litellmImage":                  s.LiteLLMImage,
+			"postgresImage":                 s.PostgresImage,
+			"forwardClientHeaders":          s.HasClientHeaderForwarding(),
+			"clientHeaderForwardingContent": content,
 		},
 	)
 }

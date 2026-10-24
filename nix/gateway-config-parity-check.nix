@@ -35,6 +35,16 @@ let
         jq -n \
           --slurpfile defaults ${moduleDefaults} \
           --slurpfile disabled ${configSource { gateway.egress.network.name = ""; }} \
+          --slurpfile forwarding ${configSource { gateway.litellm.forwardClientHeaders = true; }} \
+          --slurpfile models ${
+            configSource {
+              gateway.litellm.forwardClientHeaders = [
+                "aginctus-go-pilot"
+                "provider/*"
+              ];
+            }
+          } \
+          --slurpfile emptyModels ${configSource { gateway.litellm.forwardClientHeaders = [ ]; }} \
           --slurpfile ranges ${
             configSource (
               nixpkgs.lib.recursiveUpdate static {
@@ -52,7 +62,7 @@ let
               }
             )
           } \
-          '{defaults: $defaults[0], disabled: $disabled[0], ranges: $ranges[0], static: $static[0]}' > "$out"
+          '{defaults: $defaults[0], disabled: $disabled[0], forwarding: $forwarding[0], models: $models[0], emptyModels: $emptyModels[0], ranges: $ranges[0], static: $static[0]}' > "$out"
       '';
 in
 self.packages.${system}.aginctus.overrideAttrs (old: {
