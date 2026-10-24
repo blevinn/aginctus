@@ -59,11 +59,12 @@ class PreflightReportTests(unittest.TestCase):
 
     def test_invalid_target_fails_closed_without_execution(self):
         for target in ("", "../../other", "-unsafe", "evil value", "bad\nname"):
-            with self.subTest(target=target):
-                with patch.object(preflight_report.subprocess, "run") as run:
-                    result = preflight_report.run_preflight(
-                        "opencode-runtime", {"AGINCTUS_ACCEPTANCE_WORKLOAD": target}
-                    )
+            with self.subTest(target=target), patch.object(
+                preflight_report.subprocess, "run"
+            ) as run:
+                result = preflight_report.run_preflight(
+                    "opencode-runtime", {"AGINCTUS_ACCEPTANCE_WORKLOAD": target}
+                )
                 self.assertEqual(result["status"], "error")
                 if target:
                     self.assertNotIn(target, json.dumps(result))
@@ -83,19 +84,22 @@ class PreflightReportTests(unittest.TestCase):
             FileNotFoundError("SECRET_CANARY"),
             subprocess.TimeoutExpired([], 1),
         ):
-            with self.subTest(problem=type(problem).__name__):
-                with patch.object(preflight_report.subprocess, "run", side_effect=problem):
-                    record = preflight_report.run_preflight("pilot-topology", {})
+            with self.subTest(problem=type(problem).__name__), patch.object(
+                preflight_report.subprocess, "run", side_effect=problem
+            ):
+                record = preflight_report.run_preflight("pilot-topology", {})
                 self.assertEqual(record["status"], "error")
                 self.assertIsNone(record["results"][0]["exit_code"])
                 self.assertNotIn("SECRET_CANARY", json.dumps(record))
 
     def test_one_json_object_and_no_inference_claim(self):
         done = subprocess.CompletedProcess([], 0)
-        with patch.object(preflight_report.subprocess, "run", return_value=done):
-            output = io.StringIO()
-            with contextlib.redirect_stdout(output):
-                exit_code = preflight_report.main(["pilot-topology", "--format", "json"])
+        output = io.StringIO()
+        with (
+            patch.object(preflight_report.subprocess, "run", return_value=done),
+            contextlib.redirect_stdout(output),
+        ):
+            exit_code = preflight_report.main(["pilot-topology", "--format", "json"])
         self.assertEqual(exit_code, 0)
         self.assertEqual(len(output.getvalue().splitlines()), 1)
         document = json.loads(output.getvalue())
