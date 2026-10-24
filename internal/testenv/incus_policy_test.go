@@ -14,20 +14,20 @@ func TestIncusProjectPolicyRestrictsHostResources(t *testing.T) {
 		t.Fatalf("policy failed: %#v %v", p, err)
 	}
 	for key, want := range map[string]string{
-		"restricted": "true",
+		"restricted":                           "true",
 		"restricted.virtual-machines.lowlevel": "block",
-		"restricted.virtual-machines.nesting": "allow",
-		"restricted.devices.nic": "block",
-		"restricted.devices.disk": "block",
-		"restricted.devices.pci": "block",
-		"restricted.devices.unix-char": "block",
-		"restricted.snapshots": "block",
-		"restricted.storage-pools.access": "testenv",
-		"limits.instances": "2",
-		"limits.virtual-machines": "2",
-		"limits.cpu": "4",
-		"limits.memory": "10GiB",
-		"limits.disk": "64GiB",
+		"restricted.virtual-machines.nesting":  "allow",
+		"restricted.devices.nic":               "block",
+		"restricted.devices.disk":              "block",
+		"restricted.devices.pci":               "block",
+		"restricted.devices.unix-char":         "block",
+		"restricted.snapshots":                 "block",
+		"restricted.storage-pools.access":      "testenv",
+		"limits.instances":                     "2",
+		"limits.virtual-machines":              "2",
+		"limits.cpu":                           "4",
+		"limits.memory":                        "10GiB",
+		"limits.disk":                          "64GiB",
 	} {
 		if p.Config[key] != want {
 			t.Errorf("unsafe project %s=%q, want %q", key, p.Config[key], want)
@@ -44,7 +44,7 @@ func TestIncusInstancePlanHasNoHostDevicesOrMutableImage(t *testing.T) {
 	spec := VMCreateSpec{
 		Backend: IncusBackend, Project: DefaultVMProject,
 		ImageFingerprint: strings.Repeat("a", 64),
-		CPU: 2, MemoryMiB: 4096, RootDiskGiB: 16,
+		CPU:              2, MemoryMiB: 4096, RootDiskGiB: 16,
 		TimeToLive: 30 * time.Minute,
 	}
 	ref := VMRef{
@@ -78,13 +78,13 @@ func TestEphemeralIsDefaultAndRetentionMustBeExplicit(t *testing.T) {
 	spec := VMCreateSpec{
 		Backend: IncusBackend, Project: DefaultVMProject,
 		ImageFingerprint: strings.Repeat("a", 64),
-		CPU: 1, MemoryMiB: 1024, RootDiskGiB: 8,
+		CPU:              1, MemoryMiB: 1024, RootDiskGiB: 8,
 		TimeToLive: 5 * time.Minute,
 	}
 	ref := VMRef{
 		Backend: IncusBackend, Project: DefaultVMProject,
-		Instance: "testenv-vm-ephemeral",
-		RunID: "vm-" + strings.Repeat("c", 24),
+		Instance:         "testenv-vm-ephemeral",
+		RunID:            "vm-" + strings.Repeat("c", 24),
 		ImageFingerprint: spec.ImageFingerprint,
 	}
 	now := time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC)
@@ -111,7 +111,7 @@ func TestIncusPlanRejectsMismatchedRunIdentityAndPool(t *testing.T) {
 	spec := VMCreateSpec{
 		Backend: IncusBackend, Project: DefaultVMProject,
 		ImageFingerprint: strings.Repeat("a", 64),
-		CPU: 1, MemoryMiB: 1024, RootDiskGiB: 8,
+		CPU:              1, MemoryMiB: 1024, RootDiskGiB: 8,
 		TimeToLive: 5 * time.Minute,
 	}
 	ref := VMRef{

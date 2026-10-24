@@ -10,7 +10,7 @@ import (
 
 type fakeVMBackend struct{ name BackendName }
 
-func (f fakeVMBackend) Name() BackendName { return f.name }
+func (f fakeVMBackend) Name() BackendName                 { return f.name }
 func (f fakeVMBackend) Capabilities() BackendCapabilities { return BackendCapabilities{} }
 func (f fakeVMBackend) Create(context.Context, VMCreateSpec) (VMRef, error) {
 	return VMRef{}, ErrUnsupportedAction
@@ -22,8 +22,8 @@ func (f fakeVMBackend) Exec(context.Context, VMRef, []string, time.Duration) (VM
 	return VMExecResult{}, ErrUnsupportedAction
 }
 func (f fakeVMBackend) Snapshot(context.Context, VMRef, string) error { return ErrUnsupportedAction }
-func (f fakeVMBackend) Reset(context.Context, VMRef, string) error { return ErrUnsupportedAction }
-func (f fakeVMBackend) Destroy(context.Context, VMRef) error { return ErrUnsupportedAction }
+func (f fakeVMBackend) Reset(context.Context, VMRef, string) error    { return ErrUnsupportedAction }
+func (f fakeVMBackend) Destroy(context.Context, VMRef) error          { return ErrUnsupportedAction }
 func (f fakeVMBackend) ListOwned(context.Context) ([]VMStatus, error) {
 	return nil, ErrUnsupportedAction
 }
@@ -50,10 +50,12 @@ func TestVMCreateSpecRejectsUntrustedPolicies(t *testing.T) {
 	good := VMCreateSpec{
 		Backend: IncusBackend, Project: DefaultVMProject,
 		ImageFingerprint: strings.Repeat("a", 64),
-		CPU: 2, MemoryMiB: 4096, RootDiskGiB: 16,
+		CPU:              2, MemoryMiB: 4096, RootDiskGiB: 16,
 		TimeToLive: 30 * time.Minute,
 	}
-	if err := good.Validate(); err != nil { t.Fatal(err) }
+	if err := good.Validate(); err != nil {
+		t.Fatal(err)
+	}
 	for _, mutate := range []func(*VMCreateSpec){
 		func(s *VMCreateSpec) { s.Backend = "qemu" },
 		func(s *VMCreateSpec) { s.Project = "default" },
@@ -76,11 +78,13 @@ func TestVMCreateSpecRejectsUntrustedPolicies(t *testing.T) {
 func TestVMRefNeverConfersOwnership(t *testing.T) {
 	ref := VMRef{
 		Backend: IncusBackend, Project: DefaultVMProject,
-		Instance: "testenv-vm-123",
-		RunID: "vm-" + strings.Repeat("a", 24),
+		Instance:         "testenv-vm-123",
+		RunID:            "vm-" + strings.Repeat("a", 24),
 		ImageFingerprint: strings.Repeat("b", 64),
 	}
-	if err := ref.Validate(); err != nil { t.Fatal(err) }
+	if err := ref.Validate(); err != nil {
+		t.Fatal(err)
+	}
 	for _, mutate := range []func(*VMRef){
 		func(r *VMRef) { r.Backend = "qemu" },
 		func(r *VMRef) { r.Project = "default" },
@@ -98,12 +102,16 @@ func TestVMRefNeverConfersOwnership(t *testing.T) {
 
 func TestBackendRegistryIsExplicitlyInjected(t *testing.T) {
 	empty, err := NewBackendRegistry()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if _, err := empty.Resolve("incus"); !errors.Is(err, ErrBackendUnavailable) {
 		t.Fatalf("uninstalled backend active: %v", err)
 	}
 	reg, err := NewBackendRegistry(fakeVMBackend{name: IncusBackend})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	backend, err := reg.Resolve("incus")
 	if err != nil || backend.Name() != IncusBackend {
 		t.Fatalf("backend resolution failed: %v", err)
@@ -120,5 +128,7 @@ func TestBackendRegistryIsExplicitlyInjected(t *testing.T) {
 	if _, err := NewBackendRegistry(fakeVMBackend{name: "qemu"}); err == nil {
 		t.Fatal("accepted unsupported backend")
 	}
-	if _, err := NewBackendRegistry(nil); err == nil { t.Fatal("accepted nil backend") }
+	if _, err := NewBackendRegistry(nil); err == nil {
+		t.Fatal("accepted nil backend")
+	}
 }
