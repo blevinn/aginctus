@@ -81,9 +81,8 @@ class VMEvidenceTests(unittest.TestCase):
                 {"git_dirty": "false"},
             )
             for change in mutations:
-                with self.subTest(change=change):
-                    with self.assertRaises(ValueError):
-                        vm_evidence.normalize({**raw, **change}, run_id)
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    vm_evidence.normalize({**raw, **change}, run_id)
             with self.assertRaises(ValueError):
                 vm_evidence.normalize(raw, "f" * 24)
             with self.assertRaises(ValueError):
