@@ -40,6 +40,7 @@
         let
           pkgs = import nixpkgs { inherit system; };
           herdrPackage = herdr.packages.${system}.herdr;
+          herdrClientCommand = import ./nix/herdr-client-command.nix { inherit pkgs herdrPackage; };
           releaseVersion = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./internal/cli/VERSION);
           aginctusCli = pkgs.buildGoModule {
             pname = "aginctus";
@@ -125,7 +126,7 @@
                   system.stateVersion = "26.05";
 
                   environment.systemPackages = [
-                    herdrPackage
+                    herdrClientCommand
                     pkgs.openssh
                     sshClientIdentityHelper
                     sshHostTrustHelper
