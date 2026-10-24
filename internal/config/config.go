@@ -166,6 +166,7 @@ var defaults = map[string]any{
 		"compose": map[string]any{
 			"project": "aginctus-gateway",
 		},
+		"litellm": map[string]any{"forwardClientHeaders": false},
 		"images": map[string]any{
 			"litellm":  "ghcr.io/berriai/litellm:v1.103.0",
 			"postgres": "docker.io/library/postgres:17-alpine",

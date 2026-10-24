@@ -53,14 +53,21 @@ ag.orchestration(cfg.id,
             LITELLM_MASTER_KEY: '${AGINCTUS_GATEWAY_MASTER_KEY}',
             LITELLM_SALT_KEY: '${AGINCTUS_GATEWAY_SALT_KEY}',
             STORE_MODEL_IN_DB: 'True',
-          },
+          } + (if cfg.forwardClientHeaders then {
+            CONFIG_FILE_PATH: '/app/aginctus-client-headers.yaml',
+          } else {}),
           networks: if cfg.egressNetwork == '' then ['management'] else {
             management: {
               'x-incus-compose': { internal: true },
             },
             egress: if cfg.egressIPv4Address == '' then {} else { ipv4_address: cfg.egressIPv4Address },
           },
-        },
+        } + (if cfg.forwardClientHeaders then {
+          configs: [{
+            source: 'aginctus-client-headers',
+            target: '/app/aginctus-client-headers.yaml',
+          }],
+        } else {}),
       },
       volumes: {
         'gateway-postgres': {},
@@ -80,6 +87,12 @@ ag.orchestration(cfg.id,
           },
         }),
       }),
-    },
+    } + (if cfg.forwardClientHeaders then {
+      configs: {
+        'aginctus-client-headers': {
+          content: cfg.clientHeaderForwardingContent,
+        },
+      },
+    } else {}),
   }),
 ])

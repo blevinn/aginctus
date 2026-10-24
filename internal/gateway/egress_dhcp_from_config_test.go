@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -85,7 +86,7 @@ func TestFromConfigEgressDHCP(t *testing.T) {
 				if strings.Contains(err.Error(), "sensitive-input") {
 					t.Fatalf("error discloses input: %v", err)
 				}
-				if spec != (Spec{}) {
+				if !reflect.DeepEqual(spec, Spec{}) {
 					t.Fatalf("invalid policy returned a usable spec: %+v", spec)
 				}
 				return

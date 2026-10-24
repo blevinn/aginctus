@@ -14,6 +14,9 @@
     "images": {
       "litellm": "ghcr.io/berriai/litellm:v1.103.0",
       "postgres": "docker.io/library/postgres:17-alpine"
+    },
+    "litellm": {
+      "forwardClientHeaders": false
     }
   },
   "incus": {

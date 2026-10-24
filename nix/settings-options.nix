@@ -40,6 +40,17 @@ in
         default = "docker.io/library/postgres:17-alpine";
       };
     };
+    litellm.forwardClientHeaders = mkOption {
+      type = types.either types.bool (types.listOf types.str);
+      default = false;
+      description = ''
+        Forward eligible client headers globally when true, or only for the
+        model groups named in a string list. False and an empty list disable
+        forwarding. Lists select model groups, not header names, and cannot
+        exclude models from global forwarding. This may expose additional
+        x-* request headers to upstream providers.
+      '';
+    };
   };
 
   infrastructure.herdr = {

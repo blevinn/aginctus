@@ -162,10 +162,23 @@ nix develop -c python3 scripts/gateway/register-openai-model.py \
 The new route never calls the upstream on dry-run or registration.
 Successful registry lookup proves *only* that LiteLLM stored the alias.
 
-### Preferred model-group forwarding candidate (inactive; #456)
+### Declarative model-scoped forwarding (#456)
 
-The updated #456 decision is **configuration first**. This opt-in fixture
-uses the existing stock LiteLLM v1.103.0 `--config` YAML path:
+Aginctus supports [declarative client header forwarding](configuration.md#declarative-client-header-forwarding)
+globally or for selected model groups. For the pilot's one approved alias,
+configure a list on the operator-managed host:
+
+```nix
+services.aginctus.settings.gateway.litellm.forwardClientHeaders = [ "aginctus-go-pilot" ];
+```
+
+The default is `false`; `true` selects global forwarding and a string list
+selects model groups. This pilot example uses only the listed alias. Both
+`aginctus gateway render` and the actual Jsonnet orchestration plan declare
+the same LiteLLM config, delivered by pinned incus-compose's inline `configs`
+support to `/app/aginctus-client-headers.yaml`. Only LiteLLM receives that file and
+the matching `environment.CONFIG_FILE_PATH`; PostgreSQL and runtime secrets
+are unchanged. The pilot list renders stock LiteLLM YAML:
 
 ```yaml
 model_list: []
@@ -175,15 +188,44 @@ litellm_settings:
       - aginctus-go-pilot
 ```
 
-It is stored in `deploy/litellm-go/model-group-forwarding.yaml`. The default
-Aginctus gateway Compose/Incus configuration does **not** load or mount it.
-The empty static model list does not register the approved alias, which must
-still be verified independently via the PostgreSQL model registry in an
-isolated test. No master/salt credentials, model keys, or provider endpoints
-are included in this file.
+The existing `deploy/litellm-go/model-group-forwarding.yaml` remains an
+offline reference; tests compare its parsed policy with the declared content
+from **both** renderers. No host bind mount, custom Python callback, alternate
+gateway image, new model registration or provider secret is introduced.
+`model_list: []` does not remove or re-register the separately managed
+database model alias.
 
-**Security limitation:** The setting selects the *model group*, not
-individual headers. LiteLLM's pinned forwarding helper admits eligible
+**Pilot migration and rollback:** a manually staged
+`/app/aginctus-go-pilot.yaml` and its `environment.CONFIG_FILE_PATH` on owned
+`aginctus-gateway/litellm-1` differ from the generic declared target above.
+The old path is drift, not an automatically adopted equivalent policy.
+After a human reviews the exact running instance ownership, attached volumes,
+image fingerprint, gateway/PostgreSQL readiness, the current source YAML and
+the proposed render, update the pinned Aginctus package and host NixOS
+settings. Keep automatic gateway reconciliation disabled until the rollout
+is explicitly approved and planned. Plan an ownership-checked, LiteLLM-only
+config-path update and controlled stop/start, preserving the old file and
+path for rollback; do not run `aginctus gateway apply`
+to repair drift blindly. The pinned Compose driver rejects incompatible
+existing instance settings and will not automatically recreate it. The
+inline config is written to newly created or stopped/started instances; do
+not mistake rendering or a no-op apply on an *already running* instance for
+proof that its on-disk file was rewritten. Inspect the new policy file,
+effective config path, active config, and model registry after the change.
+Retire the old staged file only after confirming activation and rollback.
+
+If the policy must be disabled, first set the declared option to `false`,
+then plan a **LiteLLM-only**, ownership-checked removal of the previous
+`environment.CONFIG_FILE_PATH` and staged file with a restart, separately
+verifying application/database readiness; Incus Compose does not
+automatically delete surplus environment fields or files. Never recreate
+PostgreSQL, reset salts, rotate master/provider keys, or broaden network
+routing as part of this migration. This is a controlled pilot adoption,
+not a completed production reconciliation acceptance.
+
+**Security limitation:** The list selects model groups, not individual
+headers; boolean `true` forwards globally without per-model opt-outs.
+LiteLLM's pinned forwarding helper admits eligible
 `x-*` headers except `x-stainless*`, and `anthropic-beta`. That may leak
 synthetic `x-custom-secret`, tracing, or workload metadata. Its separate
 credential-cleaning behavior must be verified against adversarial inputs
@@ -194,7 +236,7 @@ original `User-Agent` or canonicalize `x-opencode-session-id` into
 Run these no-provider checks first:
 
 ```sh
-nix develop -c go test ./internal/gateway -run 'TestGoModelGroupForwarding' -v
+nix --quiet develop -c go test ./internal/gateway -run 'TestClientHeaderForwarding' -v
 nix develop -c python3 -m py_compile scripts/gateway/probe_model_group_forwarding.py
 
 # Optional pinned stock image probe with networking disabled; this tests the
@@ -211,9 +253,10 @@ The probe prints only synthetic **header names** and forwarded/not-forwarded
 classifications, never values. It verifies stock model-scoped helper
 behavior but **not** an actual outbound native Responses HTTP request, DB
 model registration, or provider-credential separation. Those remain
-mandatory, offline/mock-upstream gates under #456. No pilot activation,
-gateway rebuild, global forwarding, wildcard, broad provider-auth
-forwarding, or billable inference is authorized by this fixture. If
+mandatory, offline/mock-upstream gates under #456. A declarative opt-in
+does not by itself authorize pilot activation, gateway rebuild, global
+forwarding, wildcard groups, broad provider-auth forwarding or billable
+inference. If
 actual pinned tests show missing identifying `User-Agent`, incompatible
 session-header spelling, or unacceptable `x-*` leakage, reassess the
 inactive selective hook merged in #470 as a targeted fallback.
@@ -244,9 +287,10 @@ Compose deployment installs either file or enables this callback. The pinned
 LiteLLM callback-loading behavior, dispatch order, actual header metadata,
 Responses adapter, provider credentials and upstream HTTP delivery must be
 verified with the *real* pinned LiteLLM image and an offline mock provider
-before applying any configuration to the pilot. Never enable global
-`forward_client_headers_to_llm_api`; broad model-group `x-*` forwarding
-is not a substitute for this allowlist.
+before applying any configuration to the pilot. The callback's narrow header
+allowlist is a different policy from the built-in global or model-group
+forwarding modes. Selecting global mode requires accepting eligible-header
+exposure across all upstreams; it does not provide this callback's allowlist.
 
 Run the local, offline unit suite:
 
