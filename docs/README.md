@@ -7,6 +7,7 @@ generally discoverable should be linked from this index.
 ## Start here
 
 - [Getting started](getting-started.md) — prerequisites, NixOS side effects, non-mutating inspection, and explicitly approved deployment.
+- [Home Manager operator integration](home-manager.md) — standalone user installation and coexistence with NixOS host firewall policy (v0.2).
 - [CLI operations](cli.md) — supported command families, mutation boundaries, dry-run and force semantics.
 
 ## Current architecture and component contracts
