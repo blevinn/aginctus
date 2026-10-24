@@ -3,7 +3,6 @@
 No network requests, keys, model registration or callback modification.
 Only predetermined header *names* and pass/block classifications are printed.
 """
-import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -55,6 +54,7 @@ def main(config_path):
         )
         litellm.add_user_information_to_llm_headers = False
         proxy_server.llm_router = None
+
         def apply(model):
             data = {"model": model}
             return LiteLLMProxyRequestSetup.add_headers_to_llm_call_by_model_group(
