@@ -409,6 +409,9 @@
         opencode-workload-socket-alignment = import ./nix/opencode-workload-check.nix {
           inherit self nixpkgs system;
         };
+        testenv-recovery-module = import ./nix/testenv-worker-check.nix {
+          inherit self nixpkgs system;
+        };
       });
 
       devShells = forAllSystems (
