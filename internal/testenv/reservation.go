@@ -57,6 +57,17 @@ func (s *RunStore) reserveVMRunWithTTL(ttl time.Duration) (string, string, error
 	if syncErr != nil || closeErr != nil {
 		return "", "", errors.New("VM reservation directory sync failed")
 	}
+	// Sync the *parent* to persist the newly created run directory itself.
+	// Otherwise a crash can lose the entry while leaving an owned cgroup.
+	rootHandle, err := os.Open(s.root)
+	if err != nil {
+		return "", "", errors.New("VM run store unavailable for durability")
+	}
+	syncErr = rootHandle.Sync()
+	closeErr = rootHandle.Close()
+	if syncErr != nil || closeErr != nil {
+		return "", "", errors.New("VM run store sync failed")
+	}
 	return id, dir, nil
 }
 
