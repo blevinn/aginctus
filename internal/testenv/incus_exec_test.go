@@ -3,7 +3,6 @@ package testenv
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -39,7 +38,6 @@ func TestIncusGuestExecUsesOwnedAgentAndLiteralArgv(t *testing.T) {
 		strings.Join(fake.argv, "\x00") != strings.Join(args, "\x00") {
 		t.Fatalf("guest exec altered argv/exit: %#v %#v %v", out, fake.argv, err)
 	}
-	_ = filepath.Clean(args[0]) // demonstrate input is a clean guest-only path
 }
 
 func TestIncusGuestExecRejectsUnsafeArgvAndLimits(t *testing.T) {
