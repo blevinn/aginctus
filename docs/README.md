@@ -51,6 +51,9 @@ currently supported configuration or a release acceptance claim.
 
 ## Operations and gateway integration
 
+- [Start here: gateway and egress operator path](gateway-operator-path.md) —
+  staged read-only checks, separately authorized network maintenance,
+  provider registration, scoped keys, inference evidence and revocation.
 - [Gateway egress network](gateway-egress-network.md) — LiteLLM
   egress bridge, OCI NIC, and DHCP design.
 - [Gateway API key pilot](gateway-api-key-pilot.md) — operator
