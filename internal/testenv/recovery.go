@@ -138,16 +138,20 @@ func RecoverAbandoned(ctx context.Context, store *RunStore, cgroups *CgroupManag
 				_ = cg.Close()
 			}
 		}
+		failed := err != nil
 		if err != nil {
-			summary.Failed++
 			failures = append(failures, fmt.Errorf("run %s could not verify cgroup removal: %w", id, err))
 		} else {
-			summary.Recovered++
 			receipt.Cgroup = "empty_and_removed"
 		}
 		if err := store.writeRecoveryReceipt(receipt); err != nil {
 			failures = append(failures, fmt.Errorf("run %s recovery receipt unavailable: %w", id, err))
+			failed = true
+		}
+		if failed {
 			summary.Failed++
+		} else {
+			summary.Recovered++
 		}
 	}
 	return summary, errors.Join(failures...)
