@@ -123,6 +123,24 @@ These capabilities are still not exposed over CLI/MCP until a trusted
 control service authorizes agent requests and disposable-host
 guest-agent integration tests pass.
 
+## Bounded Incus run-expiration sweep
+
+`ReconcileExpiredIncusVMs` provides one trusted, **bounded** cleanup
+iteration over up to 64 verified owned instances. It calls the same
+policy-validated `ListOwned` and `Destroy` as other backend methods;
+only expired run handles are destroyed. A foreign instance cannot
+gain deletion rights from a recognizable name alone. Malformed
+reserved testenv names fail closed rather than being silently adopted.
+
+This library call is **not a scheduled watchdog** and does not cover
+untracked instances that disappeared due to Incus automatic ephemeral
+cleanup. It reports success only after destroy verifies the instance
+has gone; it does not attest separate guest artifact collection,
+storage pool usage or cleanup receipts. A separate, installed worker
+service must arrange scheduled recovery on boot/restart and regularly
+afterward, using a trusted wall clock and its own daemon credentials.
+Ephemeral VM behavior alone is not a substitute for this recovery pass.
+
 ## Operations and failure model
 
 1. **Create:** mint cryptographic run ID and an owner/generation marker in trusted state; validate the project's restrictions and limits, image fingerprint, root volume quota and no NIC before calling Incus. Create a uniquely named VM with fixed devices/profile; re-read it after creation. Name collision or preexisting foreign metadata fails closed. No implicit adoption.
