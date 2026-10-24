@@ -38,13 +38,12 @@ def valid_failure_details(item: dict) -> bool:
     if "failed_cases" not in item:
         return "cases_truncated" not in item
     cases = item["failed_cases"]
-    truncated = item.get("cases_truncated")
     if item["status"] != "fail" or not isinstance(cases, list):
         return False
     if not 1 <= len(cases) <= MAX_CASES:
         return False
-    if truncated is not None and (
-        truncated is not True or len(cases) != MAX_CASES
+    if "cases_truncated" in item and (
+        item["cases_truncated"] is not True or len(cases) != MAX_CASES
     ):
         return False
     seen: set[str] = set()
