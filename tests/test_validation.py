@@ -146,7 +146,14 @@ if name == "git":
                         self.assertIn("Hermetic: 8 passed, 0 failed, 0 errors", result.stdout)
                     else:
                         self.assertNotEqual(result.returncode, 0, result.stderr)
-                        self.assertIn("Hermetic: 7 passed, 1 failed, 0 errors", result.stdout)
+                        failed_groups = sum(failure in commands for commands in groups)
+                        if failure == "syntax":
+                            failed_groups = 1
+                        self.assertIn(
+                            f"Hermetic: {8 - failed_groups} passed, "
+                            f"{failed_groups} failed, 0 errors",
+                            result.stdout,
+                        )
                     observed = []
                     for commands in groups:
                         if failure in commands:
