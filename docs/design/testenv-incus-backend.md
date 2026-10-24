@@ -103,6 +103,26 @@ VM image, worker/daemon credential segregation, snapshot/reset policy,
 and real disposable-host KVM acceptance. These backend methods are not
 exposed through CLI/MCP without a trusted authorization service.
 
+## Bounded native guest execution
+
+The next backend increment uses the Incus VM agent directly, not host
+`incus exec` subprocesses, host Python, or QEMU sockets. Its optional
+`Exec` capability is advertised only for installed clients implementing
+the narrow agent interface. Requests require an authenticated run handle,
+a running guest with sufficient remaining TTL, a clean absolute
+guest executable, at most 32 argv elements/8 KiB and at most 30 seconds.
+Incus stdout and stderr streams share a 64 KiB capture bound. A guest
+exit code is reported separately from an unavailable agent, oversized
+output or unverified completion. Arbitrary shell metacharacters stay
+literal argv; the host does not interpolate them.
+
+Cancellation triggers best-effort Incus operation cancellation, but the
+backend does **not** claim that this always kills guest processes.
+Independent instance expiration and worker recovery remain required.
+These capabilities are still not exposed over CLI/MCP until a trusted
+control service authorizes agent requests and disposable-host
+guest-agent integration tests pass.
+
 ## Operations and failure model
 
 1. **Create:** mint cryptographic run ID and an owner/generation marker in trusted state; validate the project's restrictions and limits, image fingerprint, root volume quota and no NIC before calling Incus. Create a uniquely named VM with fixed devices/profile; re-read it after creation. Name collision or preexisting foreign metadata fails closed. No implicit adoption.
