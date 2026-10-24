@@ -80,7 +80,7 @@ type VMRetention string
 
 const (
 	VMEphemeral VMRetention = "ephemeral"
-	VMRetained VMRetention = "retained"
+	VMRetained  VMRetention = "retained"
 )
 
 type VMCreateSpec struct {
