@@ -27,6 +27,7 @@
     {
       nixosModules = {
         aginctus = import ./nix/nixos-module.nix { inherit self; };
+        aginctusTestenvRecovery = import ./nix/testenv-worker.nix { inherit self; };
         default = self.nixosModules.aginctus;
       };
 
@@ -52,6 +53,13 @@
             postInstall = ''
               wrapProgram "$out/bin/aginctus" --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.incus ]}"
             '';
+          };
+          testenvRecovery = pkgs.buildGoModule {
+            pname = "aginctus-testenv-recover";
+            version = releaseVersion;
+            src = ./.;
+            vendorHash = "sha256-ao0Q95mYJ8xWhKWwhBQsBjtdF8bWMAXRG+c/kNOZkSQ=";
+            subPackages = [ "./cmd/aginctus-testenv-recover" ];
           };
           oauthGatewayDaemon = pkgs.buildGoModule {
             pname = "aginctus-oauth-gateway";
@@ -380,6 +388,8 @@
           testenv-isolated-vm = import ./nix/vm-harness/isolated-vm.nix {
             inherit self nixpkgs system;
           };
+          # Trusted standalone watchdog binary; installation is opt-in.
+          testenv-recovery = testenvRecovery;
           herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
             inherit
               self
