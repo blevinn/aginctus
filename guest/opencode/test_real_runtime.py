@@ -28,7 +28,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError):
             self.send_error(400)
             return
-        type(self).calls.append((self.path, self.headers.get("Authorization"), body.get("model")))
+        # Record only runtime header metadata in the disposable loopback mock.
+        # Never log either the bearer credential or session identifiers.
+        session = (self.headers.get("x-opencode-session")
+                   or self.headers.get("x-opencode-session-id"))
+        user_agent = self.headers.get("User-Agent", "")
+        type(self).calls.append(
+            (self.path, self.headers.get("Authorization"), body.get("model"),
+             session, user_agent)
+        )
         if self.path != "/v1/responses" or self.headers.get("Authorization") != "Bearer integration-only-key":
             self.send_error(403)
             return
@@ -98,12 +106,21 @@ def main(binary):
                 cwd=root, env=env, capture_output=True, text=True, timeout=90, check=False)
             assert Handler.calls, "real OpenCode did not reach the mock gateway"
             assert all(p == "/v1/responses" and auth == "Bearer integration-only-key"
-                       and model == "test-model" for p, auth, model in Handler.calls), (
+                       and model == "test-model" for p, auth, model, _, _ in Handler.calls), (
                            "unexpected endpoint, authentication or model selection")
+            # A valid test must use a genuine OpenCode session, not an
+            # Aginctus-invented per-request marker. Support native header names
+            # across OpenCode versions; neither is printed in test output.
+            sessions = [session for _, _, _, session, _ in Handler.calls]
+            assert all(sessions), "pinned OpenCode did not emit a native session header"
+            assert len(set(sessions)) == 1, "OpenCode changed session identity during one run"
+            assert all("opencode" in ua.lower() for _, _, _, _, ua in Handler.calls), (
+                "pinned OpenCode did not identify itself in User-Agent")
             assert result.returncode == 0, (
                 "OpenCode exited unsuccessfully (stdout/stderr suppressed to avoid credential leaks)")
             assert EXPECTED in result.stdout, "OpenCode did not consume the SSE response"
-            print("PASS: real OpenCode received authenticated streaming Responses output")
+            print("PASS: real OpenCode sent native session and identifying User-Agent "
+                  "with authenticated streaming Responses output")
         finally:
             server.shutdown()
             server.server_close()
