@@ -55,7 +55,16 @@ test-nix-firewall:
 # Boot a pinned real Incus guest using the shared VM fixture (#427).
 # Always explicit: excluded from check-all and normal CI.
 test-vm-smoke:
-    nix build -L --no-link .#vm-harness-smoke
+    python3 scripts/vm_harness/runner.py test smoke
+
+# Inspect the same VM fixture with the interactive NixOS test driver.
+# Run under a dedicated unprivileged worker identity, never on pilot host.
+vm-debug:
+    python3 scripts/vm_harness/runner.py debug smoke
+
+# Hostless safety tests for runner command/environment selection.
+test-vm-runner:
+    python3 -m unittest discover -s scripts/vm_harness -p 'test_*.py' -v
 
 # Builds and runs a disposable QEMU VM with real Incus and the packaged CLI.
 # Unlike 'just test', this is a heavyweight integration check.

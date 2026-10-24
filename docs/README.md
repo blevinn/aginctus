@@ -91,6 +91,8 @@ currently supported configuration or a release acceptance claim.
 
 ## Acceptance and validation
 
+- [Disposable NixOS VM harness](vm-harness.md) — experimental
+  opt-in Aginctus/Incus VM tests and agent-debugging security limits.
 - [Start here: OpenCode acceptance decision path](acceptance-opencode.md) —
   distinguish offline mocks, read-only inspection, owned Herdr lifecycle,
   and separately authorized real provider inference; no implicit sign-off.
