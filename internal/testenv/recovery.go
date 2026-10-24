@@ -102,21 +102,37 @@ func RecoverAbandoned(ctx context.Context, store *RunStore, cgroups *CgroupManag
 		}
 		summary.Scanned++
 		rec, err := store.ReadRun(id)
-		if err != nil {
-			// Missing or malformed run records are NOT permission to
-			// terminate arbitrary processes or cgroups.
-			summary.Failed++
-			failures = append(failures, fmt.Errorf("run %s has untrusted ownership record", id))
-			continue
-		}
-		liveStart, err := processIdentity(rec.PID)
-		if now.Before(rec.ExpiresAt) && err == nil && liveStart == rec.ProcessStart {
-			summary.Skipped++
-			continue
-		}
 		reason := "process_missing_or_changed"
-		if !now.Before(rec.ExpiresAt) {
-			reason = "expired"
+		if err != nil {
+			// An absent run.json may mean a crash after the durable
+			// reservation but before process binding. A malformed,
+			// symlinked or otherwise existing run.json must NOT cause
+			// a fallback to reservation-only recovery.
+			if _, statErr := os.Lstat(filepath.Join(store.root, id, "run.json")); !os.IsNotExist(statErr) {
+				summary.Failed++
+				failures = append(failures, fmt.Errorf("run %s has untrusted ownership record", id))
+				continue
+			}
+			reservation, reservationErr := store.readVMReservation(id)
+			if reservationErr != nil {
+				summary.Failed++
+				failures = append(failures, fmt.Errorf("run %s lacks a trusted startup reservation", id))
+				continue
+			}
+			if now.Before(reservation.CreatedAt.Add(unboundVMGrace)) {
+				summary.Skipped++
+				continue
+			}
+			reason = "startup_unbound"
+		} else {
+			liveStart, lookupErr := processIdentity(rec.PID)
+			if now.Before(rec.ExpiresAt) && lookupErr == nil && liveStart == rec.ProcessStart {
+				summary.Skipped++
+				continue
+			}
+			if !now.Before(rec.ExpiresAt) {
+				reason = "expired"
+			}
 		}
 		// A completed run with independently recorded session evidence
 		// and no remaining run cgroup requires no further action.
