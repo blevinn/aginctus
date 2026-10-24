@@ -109,6 +109,9 @@ func Run(
 	case "doctor":
 		return runDoctor(ctx, commandArgs[1:], stdout, stderr, incusClient)
 	case "operator":
+		if len(commandArgs) > 1 && commandArgs[1] == "state-audit" {
+			return runOperatorStateAudit(commandArgs[1:], stdout, stderr, effective)
+		}
 		return runOperatorPreflight(ctx, commandArgs[1:], stdout, stderr)
 	case "images":
 		return runImages(ctx, commandArgs[1:], stdout, stderr)
@@ -1147,6 +1150,7 @@ Commands:
   status            Inspect all configured resource groups (read-only)
   doctor [--fix]    Inspect Incus; --fix may configure a loopback HTTPS listener
   operator preflight --project NAME   Inspect Incus/project read access (no writes)
+  operator state-audit --owner system|user  Inspect gateway secret-state metadata only (no writes)
   images list|ls    List local Incus images and aliases (read-only)
   images update NAME PATH   Import an image from a Nix result directory (mutation)
   config show       Print the effective merged configuration

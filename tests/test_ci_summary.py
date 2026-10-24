@@ -98,6 +98,49 @@ class CISummaryTests(unittest.TestCase):
             self.assertIn("| `nix` | PASS | 0.0s | 0 |", markdown)
             self.assertNotIn("TOP_SECRET_SHOULD_NOT_RENDER", markdown)
 
+    def test_bounded_case_details_are_rendered_without_raw_output(self):
+        data = fixture(failed="python")
+        data["results"][2]["failed_cases"] = [
+            {"id": "test_example.Case.test_one", "kind": "fail"},
+            {"id": "test_example.Case.test_two", "kind": "error"},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "check-ci.json"
+            path.write_text(json.dumps(data))
+            loaded = ci_summary.load_report(path)
+            self.assertIsNotNone(loaded)
+            markdown = ci_summary.render_summary(loaded, {}, "a" * 40)
+            self.assertIn("test_example.Case.test_one", markdown)
+            self.assertIn("test_example.Case.test_two", markdown)
+            self.assertNotIn("TOP_SECRET_SHOULD_NOT_RENDER", markdown)
+
+    def test_rejects_malformed_or_misplaced_case_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "check-ci.json"
+            for metadata in (
+                {"failed_cases": [{"id": "secret\nINJECTION", "kind": "fail"}]},
+                {"failed_cases": [{"id": "anything", "kind": "nope"}]},
+                {"failed_cases": [{"id": "same", "kind": "fail"},
+                                  {"id": "same", "kind": "fail"}]},
+                {"failed_cases": None},
+                {"cases_truncated": True},
+                {"failed_cases": [{"id": "valid", "kind": "fail"}],
+                 "cases_truncated": None},
+                {"failed_cases": [{"id": "valid", "kind": "fail"}],
+                 "cases_truncated": True},
+            ):
+                with self.subTest(metadata=metadata):
+                    data = fixture(failed="python")
+                    data["results"][2].update(metadata)
+                    path.write_text(json.dumps(data))
+                    self.assertIsNone(ci_summary.load_report(path))
+            data = fixture()
+            data["results"][2]["failed_cases"] = [
+                {"id": "test_a.Case.test_b", "kind": "fail"}
+            ]
+            path.write_text(json.dumps(data))
+            self.assertIsNone(ci_summary.load_report(path))
+
     def test_report_cannot_contradict_successful_step(self):
         with tempfile.TemporaryDirectory() as root:
             base = Path(root)
