@@ -107,6 +107,79 @@ independently, and verify crash recovery plus cleanup before exposing
 mutating tools. The worker must run under a separate unprivileged Unix
 identity (not the pilot operator's account).
 
+## Independent recovery timer (opt-in, v0.2)
+
+A standalone recovery binary and **separate systemd timer** are now
+available from the testenv stack. This is deliberately an **independent
+watchdog**: the timer starts a new short-lived worker process on a
+fixed schedule, regardless of whether the foreground QEMU supervisor
+is still running. Neither the MCP server nor the coding agent starts
+or configures the watchdog.
+
+For an explicitly configured disposable NixOS/KVM worker:
+
+```nix
+{
+  inputs.aginctus.url = "github:blevinn/aginctus";
+  outputs = { self, nixpkgs, aginctus, ... }: {
+    nixosConfigurations.disposable-worker = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        aginctus.nixosModules.aginctusTestenvRecovery
+        {
+          services.aginctusTestenvRecovery = {
+            enable = true;
+            # Must be an existing, worker-owned, delegated cgroup v2
+            # subtree. Do not copy this illustrative path blindly.
+            delegatedCgroupRoot =
+              "/sys/fs/cgroup/system.slice/aginctus-testenv-worker.service";
+          };
+        }
+      ];
+    };
+  };
+}
+```
+
+The operator must independently establish that subtree's ownership
+and controller delegation (`cpu`, `memory`, `pids`). **The module
+does not configure a delegated service manager or grant itself sudo.**
+It fails closed if the service or root lacks delegation. It also does
+not install a foreground VM launcher; that package is still internal
+and not agent-accessible.
+
+The opt-in module `aginctusTestenvRecovery` creates a static,
+non-login system worker `aginctus-testenv`; the one-shot service
+runs under that account with `NoNewPrivileges`, an empty capability
+set, private devices/tmp/home, a root-owned immutable executable,
+and only its state directory plus explicitly configured cgroup
+subtree writable. It creates a `0700` run state directory under
+`/var/lib/aginctus-testenv/runs`, and invokes a recovery sweep
+on boot and approximately once per minute thereafter.
+
+Operator checks, on a dedicated disposable host **only**:
+
+```sh
+nix build --no-link .#testenv-recovery
+nix build --no-link .#checks.x86_64-linux.testenv-recovery-module
+nix --quiet flake check --no-update-lock-file
+
+systemctl status aginctus-testenv-recovery.timer
+systemctl list-timers aginctus-testenv-recovery.timer
+sudo systemctl start aginctus-testenv-recovery.service
+journalctl -u aginctus-testenv-recovery.service -n 50 --no-pager
+```
+
+**Security gates still open:** test true cgroup delegation under
+systemd, kill the foreground supervisor with SIGKILL, confirm that
+the independent service reclaims only expired/abandoned owned VM
+cgroups, test boot/restart behavior, prove host disk/guest-store
+quotas and bounded retention, and validate the actual pinned QEMU
+guest-agent/Incus networking boundary. Without those tests, no
+agent-facing `vm up/exec/destroy` or MCP mutation tool should
+be enabled. Neither green unit tests nor a running timer prove
+complete cleanup or live inference.
+
 ## Abandoned-session recovery scan (work in progress)
 
 `RecoverAbandoned` now implements one bounded, **trusted-worker-only**
