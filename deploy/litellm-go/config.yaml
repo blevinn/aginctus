@@ -1,0 +1,7 @@
+# The database remains the authority for registered model aliases and secrets.
+# STORE_MODEL_IN_DB=true is still supplied by the existing gateway environment.
+# Do not place credentials, model registrations or provider API keys here.
+model_list: []
+litellm_settings:
+  callbacks:
+    - litellm_opencode_go_hook.proxy_handler_instance
