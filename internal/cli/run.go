@@ -108,6 +108,8 @@ func Run(
 		return runAggregateApply(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "doctor":
 		return runDoctor(ctx, commandArgs[1:], stdout, stderr, incusClient)
+	case "operator":
+		return runOperatorPreflight(ctx, commandArgs[1:], stdout, stderr)
 	case "images":
 		return runImages(ctx, commandArgs[1:], stdout, stderr)
 	case "config":
@@ -1144,6 +1146,7 @@ Commands:
   remove            Remove configured resources in reverse dependency order (mutation)
   status            Inspect all configured resource groups (read-only)
   doctor [--fix]    Inspect Incus; --fix may configure a loopback HTTPS listener
+  operator preflight --project NAME   Inspect Incus/project read access (no writes)
   images list|ls    List local Incus images and aliases (read-only)
   images update NAME PATH   Import an image from a Nix result directory (mutation)
   config show       Print the effective merged configuration
