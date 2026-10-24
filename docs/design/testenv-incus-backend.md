@@ -39,6 +39,14 @@ Future backend support can extend the registry with provider-specific names and 
 
 `aginctus testenv vm backend [incus]` is the first implemented read-only discovery path. It **does not open Incus or claim provisioning is available**. Both `vm backend qemu` and unsafe arguments are rejected.
 
+## Offline Incus policy planning
+
+[#477](https://github.com/blevinn/aginctus/issues/477) adds `IncusProjectPolicy(pool)` and `PlanIncusVM(spec, ref, pool, now)`, both pure builders. The read-only command `aginctus testenv vm policy` prints an **intended** project policy for a dedicated `testenv` storage pool. It does not create a project, import an image, contact the host daemon or verify delegation.
+
+The proposed project has `restricted=true`, `restricted.devices.nic=block`, `restricted.devices.disk=block` (root disk still permitted), blocked low-level VM options and PCI/USB/unix/proxy passthrough, explicit pool access, `features.networks=false`, and aggregate limits (two VMs, four CPUs, 10 GiB configured memory, 64 GiB project disk quota). Nested virtualization is an intentional, explicit exception. Snapshots are **blocked initially** and must remain unavailable until a separately authorized, bounded snapshot/restore path is implemented.
+
+For a VM the plan includes one managed root disk, no inherited profiles/NICs, a pinned image SHA-256 fingerprint, a 1–2 vCPU/512–5120 MiB limit, run ownership metadata and an expiration timestamp. The trusted Incus adapter must validate server state before applying the plan and re-read actual devices afterward. A safe offline policy map is **not proof** that the server enforces it.
+
 ## Incus control-plane and project security
 
 For MVP, install a **dedicated worker Incus daemon** on a separate disposable KVM host (or separately isolated worker), rather than sharing the pilot operator's unrestricted Unix socket. The trusted Aginctus service is the sole daemon client. Coding agents must not join `incus-admin` or receive the daemon's Unix socket, admin certificates, or arbitrary `incus` CLI access. **Incus project scoping by itself is insufficient if the caller has full daemon-admin authority.**
