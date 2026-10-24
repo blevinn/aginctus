@@ -63,6 +63,7 @@ func TestVMCreateSpecRejectsUntrustedPolicies(t *testing.T) {
 		func(s *VMCreateSpec) { s.MemoryMiB = 8192 },
 		func(s *VMCreateSpec) { s.RootDiskGiB = 0 },
 		func(s *VMCreateSpec) { s.TimeToLive = 3 * time.Hour },
+		func(s *VMCreateSpec) { s.Retention = "unsafe" },
 	} {
 		spec := good
 		mutate(&spec)
