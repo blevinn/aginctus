@@ -25,15 +25,15 @@ type IncusProjectPlan struct {
 // append raw QEMU options, host bind mounts, inherited host profiles,
 // network devices or mutable image aliases.
 type IncusInstancePlan struct {
-	Project           string                       `json:"project"`
-	Name              string                       `json:"name"`
-	Type              string                       `json:"type"`
-	ImageFingerprint  string                       `json:"image_fingerprint"`
-	Profiles          []string                     `json:"profiles"`
-	Config            map[string]string            `json:"config"`
-	Devices           map[string]map[string]string `json:"devices"`
-	ExpiresAt         time.Time                    `json:"expires_at"`
-	Ephemeral         bool                         `json:"ephemeral"`
+	Project          string                       `json:"project"`
+	Name             string                       `json:"name"`
+	Type             string                       `json:"type"`
+	ImageFingerprint string                       `json:"image_fingerprint"`
+	Profiles         []string                     `json:"profiles"`
+	Config           map[string]string            `json:"config"`
+	Devices          map[string]map[string]string `json:"devices"`
+	ExpiresAt        time.Time                    `json:"expires_at"`
+	Ephemeral        bool                         `json:"ephemeral"`
 }
 
 // IncusProjectPolicy produces an explicit allowlist, with no inherited
@@ -46,26 +46,26 @@ func IncusProjectPolicy(storagePool string) (IncusProjectPlan, error) {
 	return IncusProjectPlan{
 		Name: DefaultVMProject,
 		Config: map[string]string{
-			"restricted":                         "true",
+			"restricted":                           "true",
 			"restricted.virtual-machines.lowlevel": "block",
 			"restricted.virtual-machines.nesting":  "allow",
-			"restricted.devices.nic":              "block",
-			"restricted.devices.disk":             "block",
-			"restricted.devices.pci":              "block",
-			"restricted.devices.usb":              "block",
-			"restricted.devices.unix-char":        "block",
-			"restricted.devices.unix-block":       "block",
-			"restricted.devices.proxy":            "block",
-			"restricted.snapshots":                "block",
-			"restricted.storage-pools.access":     storagePool,
-			"features.profiles":                   "true",
-			"features.networks":                   "false",
-			"limits.containers":                   "0",
-			"limits.virtual-machines":             "2",
-			"limits.instances":                    "2",
-			"limits.cpu":                          "4",
-			"limits.memory":                       "10GiB",
-			"limits.disk":                         "64GiB",
+			"restricted.devices.nic":               "block",
+			"restricted.devices.disk":              "block",
+			"restricted.devices.pci":               "block",
+			"restricted.devices.usb":               "block",
+			"restricted.devices.unix-char":         "block",
+			"restricted.devices.unix-block":        "block",
+			"restricted.devices.proxy":             "block",
+			"restricted.snapshots":                 "block",
+			"restricted.storage-pools.access":      storagePool,
+			"features.profiles":                    "true",
+			"features.networks":                    "false",
+			"limits.containers":                    "0",
+			"limits.virtual-machines":              "2",
+			"limits.instances":                     "2",
+			"limits.cpu":                           "4",
+			"limits.memory":                        "10GiB",
+			"limits.disk":                          "64GiB",
 		},
 	}, nil
 }
@@ -100,11 +100,11 @@ func PlanIncusVM(spec VMCreateSpec, ref VMRef, storagePool string, now time.Time
 		ImageFingerprint: ref.ImageFingerprint,
 		Profiles:         []string{},
 		Config: map[string]string{
-			"limits.cpu":                 strconv.Itoa(spec.CPU),
-			"limits.memory":              fmt.Sprintf("%dMiB", spec.MemoryMiB),
-			"security.nesting":           "true",
-			"user.aginctus.testenv.run": ref.RunID,
-			"user.aginctus.testenv.image": ref.ImageFingerprint,
+			"limits.cpu":                    strconv.Itoa(spec.CPU),
+			"limits.memory":                 fmt.Sprintf("%dMiB", spec.MemoryMiB),
+			"security.nesting":              "true",
+			"user.aginctus.testenv.run":     ref.RunID,
+			"user.aginctus.testenv.image":   ref.ImageFingerprint,
 			"user.aginctus.testenv.expires": now.UTC().Add(spec.TimeToLive).Format(time.RFC3339Nano),
 		},
 		Devices: map[string]map[string]string{

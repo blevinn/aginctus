@@ -43,7 +43,7 @@ func TestGoModelGroupForwardingConfigIsStrictlyScoped(t *testing.T) {
 func TestGoModelGroupForwardingDoesNotActivateStockGateway(t *testing.T) {
 	spec := Spec{
 		ID: "local", Project: "aginctus-gateway", Network: "aginctus-mgmt",
-		LiteLLMImage: "ghcr.io/berriai/litellm:v1.103.0-stable",
+		LiteLLMImage:  "ghcr.io/berriai/litellm:v1.103.0-stable",
 		PostgresImage: "docker.io/library/postgres:17-alpine",
 	}
 	rendered, err := spec.RenderCompose()
