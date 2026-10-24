@@ -107,6 +107,50 @@ independently, and verify crash recovery plus cleanup before exposing
 mutating tools. The worker must run under a separate unprivileged Unix
 identity (not the pilot operator's account).
 
+## Delegated cgroup v2 resource guard (next supervisor increment)
+
+The foreground supervisor can now require a **dedicated delegated
+cgroup v2 subtree** owned by the test worker. This is a host
+installation prerequisite, **not** an MCP/client-controlled argument:
+
+- `cpu`, `memory`, and `pids` must appear in both
+  `cgroup.controllers` and `cgroup.subtree_control`. A missing
+  controller, inaccessible subtree, non-worker-owned root or symlinked
+  root aborts the launch. No automatic `sudo`, host systemd mutation,
+  or silent fallback to unbounded QEMU is permitted.
+- Before child creation the supervisor writes `cpu.max = 200000 100000`
+  (two CPUs), `memory.max = 5368709120` (5 GiB including host QEMU
+  overhead), `memory.swap.max = 0`, `memory.oom.group = 1`,
+  and `pids.max = 256` into the new run-specific cgroup.
+- Linux `clone3(CLONE_INTO_CGROUP)` is selected by
+  `syscall.SysProcAttr.UseCgroupFD`, so there is no period between
+  creating the QEMU process and moving it into its quota.
+- On completion, the supervisor calls `cgroup.kill`, requires
+  `populated 0` from `cgroup.events`, and removes that cgroup.
+  A failed kill, unreadable events, nonempty cgroup or failed removal
+  surfaces an error; the session receipt records cgroup status
+  independently from `cleanup: not_verified`.
+
+The exported `RunPinnedVMSession` now **requires** a validated
+`CgroupManager`. The legacy non-cgroup helper remains private and
+is used for hostless fake-process unit tests only. There is **no**
+agent-facing mutation enabled by this change.
+
+Example configuration for a future dedicated systemd user-worker
+installation: place the worker service in a cgroup with
+`Delegate=cpu memory pids`, grant that worker a distinct delegated
+subtree, and pass its immutable absolute path to
+`OpenCgroupManager`. Exact unit files and the full isolated worker
+packaging are tracked in #461. Ordinary interactive user sessions
+usually **do not** have suitable delegation; failure is expected.
+The worker must not have the pilot user's Incus socket or credentials.
+
+**Outstanding:** host disk quotas, unattended crash/reboot recovery,
+an independently supervised TTL watchdog, verified network isolation
+under KVM, and guest-agent boot readiness. Cgroup closure alone
+is not a complete host isolation proof. Default `just check-all`
+does not launch QEMU or require cgroup delegation.
+
 ## Foreground VM supervisor increment (#459)
 
 The session library now starts a **trusted Nix-store VM launcher** using
