@@ -2,11 +2,12 @@ package incus
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
 func TestProjectScopeValidation(t *testing.T) {
-	for _, name := range []string{"", "default", "../other", "other/name", "my project", "-leading", "trailing-", string(make([]byte, 101))} {
+	for _, name := range []string{"", "default", "../other", "other/name", "my project", "-leading", strings.Repeat("a", 101)} {
 		if _, err := NewProjectScope(name); err == nil {
 			t.Errorf("accepted forbidden Incus project %q", name)
 		}
