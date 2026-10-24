@@ -83,14 +83,18 @@ func Run(
 		return 0
 	}
 
-	// Lifecycle unit discovery reads only systemd metadata for this user and
-	// the host. It must not load host/user configuration or accept overrides.
-	if len(commandArgs) > 1 && commandArgs[0] == "operator" && commandArgs[1] == "units-audit" {
+	// Unit and package authority diagnostics must not load application
+	// configuration, inspect credentials, or accept configuration overrides.
+	if len(commandArgs) > 1 && commandArgs[0] == "operator" &&
+		(commandArgs[1] == "units-audit" || commandArgs[1] == "package-audit") {
 		if len(options.Overrides) != 0 || options.ConfigurationFile != "" {
-			fmt.Fprintln(stderr, "operator units-audit: configuration overrides are not supported")
+			fmt.Fprintf(stderr, "operator %s: configuration overrides are not supported\n", commandArgs[1])
 			return 2
 		}
-		return runOperatorUnitsAudit(ctx, commandArgs[2:], stdout, stderr)
+		if commandArgs[1] == "units-audit" {
+			return runOperatorUnitsAudit(ctx, commandArgs[2:], stdout, stderr)
+		}
+		return runOperatorPackageAudit(commandArgs[2:], stdout, stderr)
 	}
 
 	// The test environment does not consume pilot configuration or Incus.
@@ -1162,6 +1166,7 @@ Commands:
   operator preflight --project NAME   Inspect Incus/project read access (no writes)
   operator state-audit --owner system|user  Inspect gateway secret-state metadata only (no writes)
   operator units-audit --owner system|user  Inspect system/current-user lifecycle units (no writes)
+  operator package-audit --owner system|user  Compare declared NixOS/HM CLI package identity (no writes)
   images list|ls    List local Incus images and aliases (read-only)
   images update NAME PATH   Import an image from a Nix result directory (mutation)
   config show       Print the effective merged configuration
