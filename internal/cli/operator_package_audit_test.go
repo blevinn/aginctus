@@ -104,7 +104,7 @@ func TestOperatorPackageAuditPair(t *testing.T) {
 func TestOperatorPackageAuditArguments(t *testing.T) {
 	for _, tc := range []struct {
 		args []string
-		ok bool
+		ok   bool
 	}{
 		{[]string{"--owner=user"}, true},
 		{[]string{"--owner", "system"}, true},
