@@ -17,6 +17,9 @@ just check report
 just check report-json
 ```
 
+The Nix development-shell startup banner is sent to stderr, so
+`nix develop -c just check report-json` retains JSON-only stdout.
+
 Both commands execute the same explicitly allowlisted safe `just check` suites:
 `go`, `lint`, `python`, `shell-tests`, `shell`, `markdown`, `docs-examples`, and
 `nix`. The adapter runs all eight even when an earlier suite fails, so it reports
