@@ -1150,6 +1150,7 @@ Commands:
   status            Inspect all configured resource groups (read-only)
   doctor [--fix]    Inspect Incus; --fix may configure a loopback HTTPS listener
   operator preflight --project NAME   Inspect Incus/project read access (no writes)
+  operator state-audit --owner system|user  Inspect gateway secret-state metadata only (no writes)
   images list|ls    List local Incus images and aliases (read-only)
   images update NAME PATH   Import an image from a Nix result directory (mutation)
   config show       Print the effective merged configuration
