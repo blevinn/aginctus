@@ -52,6 +52,11 @@ check-docs-examples:
 test-nix-firewall:
     nix build -L --no-link .#firewall-iptables-integration .#firewall-firewalld-integration .#firewall-nixos-nft-integration
 
+# Boot a pinned real Incus guest using the shared VM fixture (#427).
+# Always explicit: excluded from check-all and normal CI.
+test-vm-smoke:
+    nix build -L --no-link .#vm-harness-smoke
+
 # Builds and runs a disposable QEMU VM with real Incus and the packaged CLI.
 # Unlike 'just test', this is a heavyweight integration check.
 test-nix *args:
