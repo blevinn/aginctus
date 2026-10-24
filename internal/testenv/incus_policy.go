@@ -33,6 +33,7 @@ type IncusInstancePlan struct {
 	Config            map[string]string            `json:"config"`
 	Devices           map[string]map[string]string `json:"devices"`
 	ExpiresAt         time.Time                    `json:"expires_at"`
+	Ephemeral         bool                         `json:"ephemeral"`
 }
 
 // IncusProjectPolicy produces an explicit allowlist, with no inherited
@@ -95,6 +96,7 @@ func PlanIncusVM(spec VMCreateSpec, ref VMRef, storagePool string, now time.Time
 		Project:          DefaultVMProject,
 		Name:             ref.Instance,
 		Type:             "virtual-machine",
+		Ephemeral:        spec.Retention != VMRetained,
 		ImageFingerprint: ref.ImageFingerprint,
 		Profiles:         []string{},
 		Config: map[string]string{
