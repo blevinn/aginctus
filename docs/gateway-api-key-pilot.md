@@ -339,6 +339,18 @@ permission to enable global forwarding or relax the isolation policy.
 
 Execute from the repository root. On NixOS, use **rootless Podman from Nix**:
 no Docker daemon and no system-level Podman installation is required.
+Podman obtained through `nix shell` on this host did not find either
+`$HOME/.config/containers/policy.json` or `/etc/containers/policy.json`.
+For this audit, set `CONTAINERS_POLICY_JSON` **only on the Podman command**
+to the checked-in `deploy/litellm-go/podman-probe-policy.json`.
+That file rejects all image sources by default and permits precisely
+`ghcr.io/berriai/litellm:v1.103.0-stable` for this fixture. The
+`insecureAcceptAnything` entry means **no cryptographic signature check**
+is performed on that one tagged image: it is not a verification of publisher
+identity or immutable provenance. Do not use the file for production images
+or install it as a global/default trust policy. Verify an immutable OCI
+digest before any rollout, and keep this policy scoped to this disposable test.
+
 Rootless Podman still requires the host's preexisting user-namespace/subuid
 configuration and setuid `newuidmap`/`newgidmap` helpers; if these are absent,
 do not modify the host for this test. Use the existing disposable test VM/
@@ -350,7 +362,8 @@ The command below temporarily obtains Podman from Nix and runs the stock
 LiteLLM image with exactly the same network and filesystem restrictions:
 
 ```sh
-nix shell nixpkgs#podman --command podman run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
+CONTAINERS_POLICY_JSON="$PWD/deploy/litellm-go/podman-probe-policy.json" \
+  nix shell nixpkgs#podman --command podman run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
   -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 \
   -e PYTHONDONTWRITEBYTECODE=1 \
   --mount type=bind,src="$PWD/deploy/litellm-go/model-group-forwarding.yaml",dst=/run/aginctus-policy.yaml,readonly \
