@@ -351,3 +351,83 @@ func TestInvalidOverrideDoesNotEchoValue(t *testing.T) {
 		t.Fatal("invalid override error disclosed its value")
 	}
 }
+
+func TestIncusProjectScopeDefaultAndPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	systemPath := filepath.Join(dir, "system.json")
+	userPath := filepath.Join(dir, "user.json")
+	explicitPath := filepath.Join(dir, "explicit.json")
+
+	writeFile(t, systemPath, `{"incus":{"project":"system-project"}}`)
+	writeFile(t, userPath, `{"incus":{"project":"user-project"}}`)
+	writeFile(t, explicitPath, `{"incus":{"project":"explicit-project"}}`)
+
+	loader := &Loader{
+		SystemPath: filepath.Join(dir, "missing-system"),
+		UserPath: filepath.Join(dir, "missing-user"),
+		Environment: nil,
+	}
+	check := func(label, want string, options Options) {
+		t.Helper()
+		cfg, err := loader.Load(options)
+		if err != nil {
+			t.Fatalf("%s: load: %v", label, err)
+		}
+		scope, err := cfg.IncusProjectScope()
+		if err != nil || scope.Name != want {
+			t.Fatalf("%s: resolved scope %+v, err %v, want %q", label, scope, err, want)
+		}
+		if got, err := cfg.String("incus.project"); err != nil || got != want {
+			t.Fatalf("%s: rendered project = %q, err %v; want %q", label, got, err, want)
+		}
+	}
+	check("default", "aginctus", Options{})
+	loader.SystemPath = systemPath
+	check("system", "system-project", Options{})
+	loader.UserPath = userPath
+	check("user", "user-project", Options{})
+	loader.Environment = []string{"AGINCTUS_INCUS_PROJECT=environment-project"}
+	check("environment", "environment-project", Options{})
+	check("explicit", "explicit-project", Options{ConfigurationFile: explicitPath})
+	check("CLI override", "cli-project", Options{
+		ConfigurationFile: explicitPath, Overrides: []string{"incus.project=cli-project"},
+	})
+}
+
+func TestIncusProjectScopeRejectsInvalidValuesBeforeUse(t *testing.T) {
+	loader := &Loader{
+		SystemPath: filepath.Join(t.TempDir(), "missing-system"),
+		UserPath: filepath.Join(t.TempDir(), "missing-user"),
+		Environment: nil,
+	}
+	for _, value := range []string{
+		"default", "", "../other", "other/project", "project with space",
+		"-leading", strings.Repeat("a", 101), "null", "true", "123",
+	} {
+		t.Run(value, func(t *testing.T) {
+			if cfg, err := loader.Load(Options{Overrides: []string{"incus.project=" + value}}); err == nil {
+				t.Fatalf("accepted invalid incus.project %q: %+v", value, cfg)
+			} else if !strings.Contains(err.Error(), "incus.project") {
+				t.Fatalf("missing setting name in failure: %v", err)
+			}
+		})
+	}
+	for _, contents := range []string{
+		`{"incus":{"project":"default"}}`,
+		`{"incus":{"project":false}}`,
+		`{"incus":{"project":null}}`,
+	} {
+		t.Run(contents, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "invalid.json")
+			writeFile(t, path, contents)
+			if _, err := loader.Load(Options{ConfigurationFile: path}); err == nil {
+				t.Fatalf("accepted invalid JSON incus.project: %s", contents)
+			}
+		})
+	}
+	loader.Environment = []string{"AGINCTUS_INCUS_PROJECT=default"}
+	if _, err := loader.Load(Options{}); err == nil {
+		t.Fatal("accepted environment-selected default Incus project")
+	}
+}
+
