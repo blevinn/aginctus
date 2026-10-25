@@ -220,7 +220,7 @@ class MockGo(http.server.BaseHTTPRequestHandler):
 
 
 def send(port, alias, session, authenticated=True, *, user_agent="opencode/1.15.11",
-         key=PROXY_KEY, extra_body=None, extra_headers=None):
+         key=PROXY_KEY, extra_body=None, extra_headers=None, chat=False):
     headers = {
         "Content-Type": "application/json",
         "User-Agent": user_agent,
@@ -235,9 +235,11 @@ def send(port, alias, session, authenticated=True, *, user_agent="opencode/1.15.
         headers["Authorization"] = "Bearer " + key
     headers.update(extra_headers or {})
     req = Request(
-        "http://127.0.0.1:" + str(port) + "/v1/responses",
+        "http://127.0.0.1:" + str(port) + ("/v1/chat/completions" if chat else "/v1/responses"),
         data=json.dumps({
-            "model": alias, "input": "Synthetic local transport check",
+            "model": alias,
+            **({"messages": [{"role": "user", "content": "Synthetic local transport check"}]}
+               if chat else {"input": "Synthetic local transport check"}),
             "stream": True,
             **(extra_body or {}),
         }).encode(),
@@ -526,6 +528,16 @@ def run_production(bundle, launcher, binary, postgres_bin):
             if not isinstance(key, str) or key in (PROXY_KEY, UPSTREAM_KEY):
                 raise RuntimeError("restricted synthetic key invalid")
             print("PASS: unchanged rendered callback config with local DB models and restricted key")
+            # A valid chat body and authorized key must not bypass the selected
+            # route's protocol boundary, even with otherwise valid identity.
+            for session, agent in ((None, "python-httpx/0.28"), (SESSION_A, user_agent)):
+                before = len(MockGo.calls)
+                status, _ = send(port, ALIAS, session, key=key, user_agent=agent, chat=True)
+                upstream_calls = len(MockGo.calls) - before
+                if status != 400 or upstream_calls:
+                    raise RuntimeError(
+                        f"Responses-only chat control: HTTP {status}, upstream calls {upstream_calls}")
+            print("PASS: Responses-only chat controls HTTP 400, zero upstream calls (invalid and valid identity)")
             client = root / "client"
             client.mkdir()
             sessions = []
@@ -594,6 +606,15 @@ def run_production(bundle, launcher, binary, postgres_bin):
                     or any(headers.get(h) == v for h, v in SENTINELS.items())):
                 raise RuntimeError("body injection escaped credential/header separation")
             print("PASS: unrelated alias scope, anonymous, malformed/missing/conflicting metadata, body spoof and injection controls")
+            deleted = admin_request(port, "/key/delete", {"keys": [key]})
+            if (not isinstance(deleted, dict) or not isinstance(deleted.get("deleted_keys"), list)
+                    or not deleted["deleted_keys"]):
+                raise RuntimeError("synthetic virtual-key deletion unconfirmed")
+            before = len(MockGo.calls)
+            status, _ = send(port, ALIAS, sessions[0], key=key, user_agent=user_agent)
+            require_unauthenticated_rejection(status, len(MockGo.calls) - before)
+            (client / "gateway" / "workload-key").unlink()
+            print(f"PASS: synthetic virtual key deleted; subsequent Responses HTTP {status}, zero upstream calls; local key removed")
     finally:
         fake.shutdown()
         fake.server_close()

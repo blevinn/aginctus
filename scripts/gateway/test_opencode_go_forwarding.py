@@ -103,11 +103,21 @@ class ForwardingTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 mod.sanitize_go_headers({"model": mod.GO_ALIAS, **invalid}, "aresponses")
 
-    def test_unrelated_model_and_nonresponses_are_unmodified(self):
-        for call_type, model in (("acompletion", mod.GO_ALIAS),
-                                 ("aresponses", "other-model")):
+    def test_approved_alias_rejects_every_nonresponses_type_before_mutation(self):
+        for call_type in ("acompletion", "completion", "atext_completion", "embedding", "", None):
+            for original in (sample(), {"model": mod.GO_ALIAS}):
+                before = copy.deepcopy(original)
+                with self.subTest(call_type=call_type), self.assertRaisesRegex(
+                    ValueError, "requires native Responses"
+                ):
+                    mod.sanitize_go_headers(original, call_type)
+                self.assertEqual(before, original)
+
+    def test_unrelated_model_is_unmodified_for_all_call_types(self):
+        for call_type in ("aresponses", "acompletion", "completion", "atext_completion",
+                          "embedding", "", None):
             original = sample()
-            original["model"] = model
+            original["model"] = "other-model"
             before = copy.deepcopy(original)
             self.assertIs(mod.sanitize_go_headers(original, call_type), original)
             self.assertEqual(before, original)
@@ -160,6 +170,12 @@ class ForwardingTests(unittest.TestCase):
                     rejected.exception.detail, "Invalid OpenCode Go session metadata"
                 )
                 self.assertNotIn("secret", str(rejected.exception))
+
+            with self.assertRaises(FakeHTTPException) as rejected:
+                asyncio.run(hook.proxy_handler_instance.async_pre_call_hook(
+                    None, None, sample(), "acompletion"))
+            self.assertEqual(rejected.exception.status_code, 400)
+            self.assertEqual(rejected.exception.detail, "Invalid OpenCode Go session metadata")
 
             unrelated = sample()
             unrelated["model"] = "other-model"

@@ -37,8 +37,10 @@ def sanitize_go_headers(data, call_type):
     The caller must install this as an actual LiteLLM async_pre_call_hook.
     A missing/invalid native session fails closed instead of issuing a new one.
     """
-    if call_type != "aresponses" or data.get("model") != GO_ALIAS:
+    if data.get("model") != GO_ALIAS:
         return data
+    if call_type != "aresponses":
+        raise ValueError("OpenCode Go requires native Responses")
     headers = _request_headers(data)
     sessions = [headers[name] for name in _SESSION_HEADERS if name in headers]
     if not sessions or any(not _SESSION.fullmatch(s) for s in sessions):
