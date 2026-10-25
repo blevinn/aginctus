@@ -1031,6 +1031,10 @@ func runWorkload(
 	if len(args) > 1 && args[0] == "gateway" && args[1] == "provision" {
 		return runWorkloadGatewayProvision(ctx, args[2:], stdout, stderr, effective)
 	}
+	if len(args) > 1 && args[0] == "apply" &&
+		(args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
+		return runScopedWorkloadApplyRender(ctx, args[1:], stdout, stderr, effective)
+	}
 	if len(args) > 1 && (args[0] == "start" || args[0] == "stop") &&
 		(args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
 		if args[0] == "start" {
@@ -1166,6 +1170,7 @@ func workloadIDs(effective *config.Config) []string {
 func printWorkloadUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] workload ls")
 	fmt.Fprintln(w, "       aginctus [global options] workload apply [name] [--dry-run] [--force]")
+	fmt.Fprintln(w, "       aginctus [global options] workload apply --project NAME WORKLOAD-ID --render  (read-only, instance-only; never authorizes writes)")
 	fmt.Fprintln(w, "       aginctus [global options] workload remove [name] [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] workload start [name]")
 	fmt.Fprintln(w, "       aginctus [global options] workload start --project NAME WORKLOAD-ID --confirm-start  (existing stopped instance only; mutates)")
@@ -1202,6 +1207,7 @@ Commands:
   herdr client status --project NAME  Inspect verified owned local-project Herdr client (read-only)
   workload status --project NAME [name]  Inspect verified owned local-project workloads (read-only)
   workload ls --project NAME  List running owned local-project workloads (read-only)
+  workload apply --project NAME WORKLOAD-ID --render  Render owned-project instance-only preview (read-only; NOT executable authorization)
   workload start --project NAME WORKLOAD-ID --confirm-start  Start one verified stopped local-project workload (mutation)
   workload stop --project NAME WORKLOAD-ID --confirm-stop  Stop one verified running local-project workload (mutation)
   images import --project NAME ALIAS PATH --confirm-create  Create a new alias only in a verified owned local project (mutation)

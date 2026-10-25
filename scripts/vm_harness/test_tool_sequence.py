@@ -65,7 +65,6 @@ def inline_continuation(previous_step):
         ],
     }
 
-
 class ToolSequenceTests(unittest.TestCase):
     def test_exact_order_of_scripted_tool_calls(self):
         seq = ToolSequence()

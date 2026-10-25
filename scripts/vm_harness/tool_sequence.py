@@ -97,7 +97,6 @@ def validate_inline_continuation(body, nonce, step, workdir):
     ):
         raise SequenceError("forged or mismatched function call/result pair")
 
-
 def fixture_response(nonce, step, workdir, model):
     output = []
     if step < 3:
