@@ -59,7 +59,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if type(self).sequence is not None:
             try:
                 _, document = type(self).sequence.next(body)
-            except ValueError:
+            except ValueError as exc:
+                raw_tools = body.get("tools")
+                tool_names = [
+                    item.get("name") for item in raw_tools
+                    if isinstance(item, dict) and isinstance(item.get("name"), str)
+                ][:16] if isinstance(raw_tools, list) else []
+                raw_input = body.get("input")
+                input_items = [
+                    item.get("type") for item in raw_input
+                    if isinstance(item, dict) and isinstance(item.get("type"), str)
+                ][:16] if isinstance(raw_input, list) else []
+                print(
+                    "Synthetic tool sequence rejected request:", exc,
+                    f"tools={tool_names} previous={isinstance(body.get('previous_response_id'), str)}",
+                    f"input_type={type(raw_input).__name__} input_items={input_items}",
+                    file=sys.stderr,
+                )
                 self.send_error(400)
                 return
             wire = type(self).sequence_stream(document)
@@ -112,7 +128,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
 def verify_tool_workspace(root, nonce, response_steps, continuations, stdout):
     """Inspect run-owned files, never infer execution from model text alone."""
     if "synthetic-tools-complete:" + nonce not in stdout or response_steps != 3:
-        raise AssertionError("synthetic tool protocol did not reach terminal state")
+        raise AssertionError(
+            "synthetic tool protocol did not reach terminal state: "
+            f"steps={response_steps} "
+            f"completion_marker={'synthetic-tools-complete:' + nonce in stdout} "
+            f"continuation_count={sum(map(len, continuations))}"
+        )
     observed = {call_id for group in continuations for call_id in group}
     expected = {"call_" + nonce + "_" + str(i) for i in range(3)}
     if observed != expected:
@@ -187,14 +208,31 @@ def main(binary, inspect_tools=False, execute_tools=False):
                        XDG_DATA_HOME=str(root / "data"), XDG_CACHE_HOME=str(root / "cache"),
                        XDG_STATE_HOME=str(root / "state"),
                        OPENCODE_DISABLE_AUTOUPDATE="true")
-            result = subprocess.run(
-                [sys.executable, str(LAUNCHER), binary, "run", "--model", "aginctus/" + MODEL,
-                 ("Inspect calc.go and calc_test.go, fix Add using the real read/edit "
-                  "tools, run go test ./... with the bash tool. nonce=" + nonce)
-                 if execute_tools else
-                 ("Read calc.go and identify the error, then respond with " + EXPECTED)
-                 if inspect_tools else EXPECTED + " (repeat this marker verbatim)"],
-                cwd=root, env=env, capture_output=True, text=True, timeout=90, check=False)
+            try:
+                result = subprocess.run(
+                    [sys.executable, str(LAUNCHER), binary, "run", "--model", "aginctus/" + MODEL,
+                     ("Inspect calc.go and calc_test.go, fix Add using the real read/edit "
+                      "tools, run go test ./... with the bash tool. nonce=" + nonce)
+                     if execute_tools else
+                     ("Read calc.go and identify the error, then respond with " + EXPECTED)
+                     if inspect_tools else EXPECTED + " (repeat this marker verbatim)"],
+                    cwd=root, env=env, capture_output=True, text=True, timeout=180, check=False)
+            except subprocess.TimeoutExpired as exc:
+                captured = "\n".join(
+                    value.decode("utf-8", "replace") if isinstance(value, bytes) else value or ""
+                    for value in (exc.stdout, exc.stderr)
+                )
+                captured = captured.replace("integration-only-key", "[REDACTED]")
+                captured = captured.replace(nonce, "[NONCE]")
+                if captured:
+                    print("OpenCode timeout output (bounded/redacted):", file=sys.stderr)
+                    print(captured[-4000:], file=sys.stderr)
+                raise AssertionError(
+                    "pinned OpenCode timed out: "
+                    f"requests={len(Handler.calls)} "
+                    f"tool_continuations={sum(map(len, Handler.continuations))} "
+                    f"timeout={exc.timeout}s"
+                ) from None
             assert Handler.calls, "real OpenCode did not reach the mock gateway"
             assert all(p == "/v1/responses" and auth == "Bearer integration-only-key"
                        and model == MODEL for p, auth, model, _, _ in Handler.calls), (
@@ -233,6 +271,7 @@ def main(binary, inspect_tools=False, execute_tools=False):
                 assert len(unique) >= 1, "real client declared no usable tool names"
                 assert not any(Handler.continuations), (
                     "text-only mock unexpectedly received a tool-result continuation")
+                print("Observed tool schema fingerprints:", observed)
                 print("PASS: pinned OpenCode declared bounded real tool names and schemas")
                 print("NOTE: tool invocation, execution, fixture edits not verified")
             else:

@@ -77,6 +77,7 @@ def main():
             cleanup = env.get("AGINCTUS_ACCEPTANCE_HERDR_CLEANUP", str(Path(__file__).with_name("guest-owned.py")))
             if not python_helper(cleanup):
                 raise RuntimeError("reviewed per-run guest cleanup helper required")
+            inspector = str(Path(__file__).with_name("guest-owned.py"))
             cleanup_failed = False
             try:
                 step = "stage"
@@ -135,6 +136,17 @@ def main():
                 except (OSError, subprocess.SubprocessError):
                     cleanup_failed = True
                     print("WARN: guest cleanup helper failed; staged directory may leak", file=sys.stderr)
+                # Independent readback through the fixed guest-side inspector,
+                # even if the operator-selected cleanup hook claimed success.
+                # A failed cleanup must still be inspected and remain failed.
+                try:
+                    subprocess.run([
+                        sys.executable, inspector, "inspect-absent",
+                        str(base), identity, guest,
+                    ], check=True, timeout=60, capture_output=True, text=True)
+                except (OSError, subprocess.SubprocessError):
+                    cleanup_failed = True
+                    print("WARN: guest directory absence not confirmed", file=sys.stderr)
             # Preserve any primary exception raised in the try block; otherwise
             # a close/cleanup failure cannot be reported as smoke success.
             if cleanup_failed:
