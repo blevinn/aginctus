@@ -26,7 +26,7 @@ class PinnedResponsesProbeTests(unittest.TestCase):
         self.assertGreater(len(incremental), 2)
         self.assertEqual(b"".join(incremental), expected)
         self.assertIn(b"event: response.completed", expected)
-        self.assertTrue(expected.endswith(b"data: [DONE]\\n\\n"))
+        self.assertTrue(expected.endswith(b"data: [DONE]\n\n"))
         with self.assertRaises(ValueError):
             probe.sse_chunks("unsupported")
 
