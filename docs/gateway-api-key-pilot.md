@@ -453,8 +453,11 @@ git pull --ff-only
 nix --quiet develop -c python3 -m unittest discover \
   -s scripts/gateway -p 'test_pinned_litellm_responses.py' -v
 
+policy=$(mktemp)
+trap 'rm -f "$policy"' EXIT
+printf '%s\n' '{"default":[{"type":"reject"}],"transports":{"docker":{"ghcr.io/berriai/litellm:v1.103.0":[{"type":"insecureAcceptAnything"}]}}}' >"$policy"
 nix shell nixpkgs#podman --command podman run \
-  --signature-policy "$PWD/deploy/litellm-go/podman-probe-policy.json" \
+  --signature-policy "$policy" \
   --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
   -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 \
   -e PYTHONDONTWRITEBYTECODE=1 \
