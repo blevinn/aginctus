@@ -66,6 +66,9 @@ currently supported configuration or a release acceptance claim.
   egress bridge, OCI NIC, and DHCP design.
 - [Gateway API key pilot](gateway-api-key-pilot.md) — operator
   workflow for registering and rotating API-key providers.
+- [Selective OpenCode Go forwarding](selective-go-forwarding.md) — embedded
+  callback delivery, explicit activation, offline protocol acceptance, read-only
+  audit, migration/rollback, and separately authorized live acceptance.
 - [Gateway workload key pilot](gateway-workload-key-pilot.md) —
   scoped virtual-key lifecycle for pilot inference.
 - [Gateway inference smoke](gateway-inference-smoke.md) —

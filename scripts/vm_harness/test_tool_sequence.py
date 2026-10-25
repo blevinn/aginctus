@@ -6,7 +6,12 @@ from urllib.error import HTTPError
 from urllib.request import ProxyHandler, Request, build_opener
 
 from scripts.vm_harness.synthetic_responses import TOKEN, SyntheticServer
-from scripts.vm_harness.tool_sequence import SequenceError, ToolSequence, stream
+from scripts.vm_harness.tool_sequence import (
+    SequenceError,
+    ToolSequence,
+    stream,
+    tool_arguments,
+)
 
 NONCE = "fixture_abc123XYZ"
 TOOLS = [
@@ -37,6 +42,29 @@ def continuation(previous_step):
             }]}
 
 
+def inline_continuation(previous_step):
+    call_id = f"call_{NONCE}_{previous_step}"
+    return {
+        "model": "synthetic-test", "stream": True, "tools": TOOLS,
+        "input": [
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": "Fix the Go fixture: nonce=" + NONCE}
+            ]},
+            {
+                "type": "function_call", "id": f"fc_{NONCE}_{previous_step}",
+                "call_id": call_id,
+                "name": ("read", "edit", "bash")[previous_step],
+                "arguments": json.dumps(
+                    tool_arguments(previous_step, "/workspace", NONCE), separators=(",", ":")
+                ),
+            },
+            {
+                "type": "function_call_output", "call_id": call_id,
+                "output": "synthetic tool result, not independently verified",
+            },
+        ],
+    }
+
 class ToolSequenceTests(unittest.TestCase):
     def test_exact_order_of_scripted_tool_calls(self):
         seq = ToolSequence()
@@ -57,6 +85,23 @@ class ToolSequenceTests(unittest.TestCase):
                 self.assertIn(NONCE, item["content"][0]["text"])
         with self.assertRaises(SequenceError):
             seq.next(continuation(2))
+
+    def test_pinned_client_inline_function_call_continuations(self):
+        seq = ToolSequence()
+        seq.next(initial())
+        for previous_step in range(3):
+            nonce, response = seq.next(inline_continuation(previous_step))
+            self.assertEqual(nonce, NONCE)
+            self.assertEqual(response["id"], f"resp_{NONCE}_{previous_step + 1}")
+        self.assertEqual(seq._steps[NONCE], 3)
+
+    def test_rejected_toolless_probe_does_not_reserve_nonce(self):
+        seq = ToolSequence()
+        with self.assertRaises(SequenceError):
+            seq.next({**initial(), "tools": []})
+        nonce, response = seq.next(initial())
+        self.assertEqual(nonce, NONCE)
+        self.assertEqual(response["output"][0]["name"], "read")
 
     def test_missing_schema_unordered_and_forged_results_fail_closed(self):
         for mutated in (

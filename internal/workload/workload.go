@@ -2,9 +2,11 @@ package workload
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/blevinn/aginctus/internal/config"
+	incusscope "github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
@@ -137,6 +139,59 @@ ag.orchestration('workload-' + cfg.workload.id, steps)`,
 			},
 		},
 	)
+}
+
+// PlanScopedExisting generates a read-only review artifact for the owned
+// project's *existing* workload. It intentionally removes the host-managed
+// bridge step; a project-local reconciliation must never create/change it.
+//
+// This does NOT grant mutation authority, prove the Incus driver's connection
+// is local, or prevent incus-apply from creating a missing instance. A future
+// write path must enforce those guarantees independently at mutation time.
+func (s Spec) PlanScopedExisting(scope incusscope.ProjectScope) (orchestration.Plan, error) {
+	if _, err := incusscope.NewProjectScope(scope.Name); err != nil {
+		return orchestration.Plan{}, err
+	}
+	plan, err := s.Plan("upsert", false)
+	if err != nil {
+		return orchestration.Plan{}, err
+	}
+	if len(plan.Steps) != 2 ||
+		plan.Steps[0].ID != "management-network" ||
+		plan.Steps[1].ID != "workload-"+s.ID || plan.Steps[1].Driver != "apply" {
+		return orchestration.Plan{}, fmt.Errorf("unexpected workload orchestration structure")
+	}
+	step := plan.Steps[1]
+	var cfg applydriver.Config
+	if err := json.Unmarshal(step.Configuration, &cfg); err != nil {
+		return orchestration.Plan{}, fmt.Errorf("invalid workload apply configuration")
+	}
+	if cfg.Operation != "upsert" || cfg.Project != "" || !cfg.EnsureRunning ||
+		!cfg.RejectUnsupportedChanges || len(cfg.Documents) != 1 ||
+		cfg.RequireExistingConfig["user.aginctus.managed"] != "true" ||
+		cfg.RequireExistingConfig["user.aginctus.resource"] != "workload" ||
+		cfg.RequireExistingConfig["user.aginctus.workload"] != s.ID {
+		return orchestration.Plan{}, fmt.Errorf("unsafe workload reconciliation template")
+	}
+	var target struct {
+		Kind string `json:"kind"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(cfg.Documents[0], &target); err != nil ||
+		target.Kind != "instance" || target.Name != s.Name {
+		return orchestration.Plan{}, fmt.Errorf("unexpected scoped workload target")
+	}
+	cfg.Project = scope.Name
+	cfg.RequireExistingConfig["user.aginctus.role"] = "agent-workload"
+	step.Configuration, err = json.Marshal(cfg)
+	if err != nil {
+		return orchestration.Plan{}, fmt.Errorf("cannot encode scoped workload plan")
+	}
+	plan.Steps = []orchestration.Step{step}
+	if err := plan.Validate(); err != nil {
+		return orchestration.Plan{}, err
+	}
+	return plan, nil
 }
 
 func (s Spec) Execute(ctx context.Context, options Options) error {
