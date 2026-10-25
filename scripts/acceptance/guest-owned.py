@@ -1,6 +1,7 @@
 """Owned guest directory stage/cleanup through authenticated Incus guest exec.
 
 Only for the empty Herdr workspace lifecycle smoke. Never removes fixture trees.
+Read-only inspect-absent checks guest filesystem state independently after cleanup.
 """
 import os
 import re
@@ -24,7 +25,8 @@ owner="$(id -u)"
 safe_dir() {
     [ -d "$1" ] && [ ! -L "$1" ] || exit 1
     [ "$(stat -c %u "$1")" = "$owner" ] || exit 1
-    [ -z "$(find "$1" -maxdepth 0 -perm /022 -print)" ] || exit 1
+    # Owner-private: group/other may neither read nor traverse this parent.
+    [ -z "$(find "$1" -maxdepth 0 -perm /077 -print)" ] || exit 1
 }
 check_marker() {
     safe_dir "$root"
@@ -52,12 +54,19 @@ cleanup)
     rm -- "$marker"
     rmdir -- "$base"
     ;;
+inspect-absent)
+    # An independent read-only post-cleanup query. A successful cleanup
+    # command is not proof that its target disappeared. Require a safe
+    # parent and reject both a real directory and a dangling symlink.
+    safe_dir "$root"
+    [ ! -e "$base" ] && [ ! -L "$base" ] || exit 1
+    ;;
 *) exit 1 ;;
 esac
 '''
 
 def run(mode, local_workspace, identity, guest):
-    if mode not in ("stage", "cleanup") or not IDENTITY.fullmatch(identity):
+    if mode not in ("stage", "cleanup", "inspect-absent") or not IDENTITY.fullmatch(identity):
         raise ValueError("invalid stage operation or run ID")
     if guest != ROOT + "/" + identity:
         raise ValueError("invalid guest path")
@@ -73,7 +82,7 @@ def run(mode, local_workspace, identity, guest):
 if __name__ == "__main__":
     try:
         if len(sys.argv) != 5:
-            raise ValueError("usage: guest-owned.py stage|cleanup LOCAL_WORKSPACE RUN_ID GUEST_PATH")
+            raise ValueError("usage: guest-owned.py stage|cleanup|inspect-absent LOCAL_WORKSPACE RUN_ID GUEST_PATH")
         run(*sys.argv[1:])
     except (OSError, ValueError, subprocess.SubprocessError):
         print("FAIL: guest ownership operation (details suppressed)", file=sys.stderr)
