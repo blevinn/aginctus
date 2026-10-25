@@ -14,6 +14,8 @@ import threading
 from pathlib import Path
 from typing import ClassVar
 
+from tool_contract import ContractError, declarations, results
+
 LAUNCHER = Path(__file__).with_name("launch.py")
 EXPECTED = "AGINCTUS_MOCK_RESPONSE_OK"
 MODEL = "aginctus-go-pilot"
@@ -21,6 +23,8 @@ MODEL = "aginctus-go-pilot"
 
 class Handler(http.server.BaseHTTPRequestHandler):
     calls: ClassVar[list] = []
+    tools: ClassVar[list] = []
+    continuations: ClassVar[list] = []
 
     def do_POST(self):
         payload = self.rfile.read(int(self.headers.get("Content-Length", "0")))
@@ -38,6 +42,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             (self.path, self.headers.get("Authorization"), body.get("model"),
              session, user_agent)
         )
+        try:
+            tool_meta = declarations(body) if body.get("tools") else ()
+            continuation_ids = results(body)
+        except ContractError:
+            self.send_error(400)
+            return
+        type(self).tools.append(tool_meta)
+        type(self).continuations.append(continuation_ids)
         if self.path != "/v1/responses" or self.headers.get("Authorization") != "Bearer integration-only-key":
             self.send_error(403)
             return
@@ -80,7 +92,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def main(binary):
+def main(binary, inspect_tools=False):
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         state = root / "gateway"
@@ -88,6 +100,10 @@ def main(binary):
         (state / "workload-key").write_text("integration-only-key\n")
         (state / "workload-key").chmod(0o600)
         Handler.calls = []
+        Handler.tools = []
+        Handler.continuations = []
+        if inspect_tools:
+            (root / "calc.go").write_text("package calc\nfunc Add(a,b int) int { return a-b }\n")
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -103,7 +119,8 @@ def main(binary):
                        OPENCODE_DISABLE_AUTOUPDATE="true")
             result = subprocess.run(
                 [sys.executable, str(LAUNCHER), binary, "run", "--model", "aginctus/" + MODEL,
-                 EXPECTED + " (repeat this marker verbatim)"],
+                 ("Read calc.go and identify the error, then respond with " + EXPECTED)
+                if inspect_tools else EXPECTED + " (repeat this marker verbatim)"],
                 cwd=root, env=env, capture_output=True, text=True, timeout=90, check=False)
             assert Handler.calls, "real OpenCode did not reach the mock gateway"
             assert all(p == "/v1/responses" and auth == "Bearer integration-only-key"
@@ -120,14 +137,26 @@ def main(binary):
             assert result.returncode == 0, (
                 "OpenCode exited unsuccessfully (stdout/stderr suppressed to avoid credential leaks)")
             assert EXPECTED in result.stdout, "OpenCode did not consume the SSE response"
-            print("PASS: real OpenCode sent native session and identifying User-Agent "
-                  "with authenticated streaming Responses output")
+            if inspect_tools:
+                # Deliberately observe declarations, NOT successful tool use.
+                # Subsequent PRs must exercise actual call/result round trips.
+                observed = [tools for tools in Handler.tools if tools]
+                assert observed, "real OpenCode did not declare any Responses tools"
+                unique = {name for tools in observed for name, _ in tools}
+                assert len(unique) >= 1, "real client declared no usable tool names"
+                assert not any(Handler.continuations), (
+                    "text-only mock unexpectedly received a tool-result continuation")
+                print("PASS: pinned OpenCode declared bounded real tool names and schemas")
+                print("NOTE: tool invocation, execution, fixture edits not verified")
+            else:
+                print("PASS: real OpenCode sent native session and identifying User-Agent "
+                      "with authenticated streaming Responses output")
         finally:
             server.shutdown()
             server.server_close()
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        sys.exit("Usage: test_real_runtime.py /absolute/path/to/pinned/opencode")
-    main(sys.argv[1])
+    if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[2] != "--inspect-tools"):
+        sys.exit("Usage: test_real_runtime.py /absolute/path/to/pinned/opencode [--inspect-tools]")
+    main(sys.argv[1], inspect_tools=len(sys.argv) == 3)
