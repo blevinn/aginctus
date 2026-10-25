@@ -1,10 +1,15 @@
-{ self, nixpkgs, system }:
+{
+  self,
+  nixpkgs,
+  system,
+}:
 let
   pkgs = import nixpkgs { inherit system; };
   guest = (import ./incus-vm-image.nix { inherit self nixpkgs system; }).guest;
   cfg = guest.config;
 in
 assert cfg.virtualisation.incus.enable;
+assert cfg.networking.nftables.enable;
 assert cfg.virtualisation.incus.agent.enable;
 assert !cfg.services.openssh.enable;
 assert !cfg.systemd.network.enable;
