@@ -2,7 +2,12 @@
 # Used in BOTH the NixOS test-driver guest and the Incus VM image.
 # Outer worker policy and batch-VM sizing are intentionally separate.
 { self, system }:
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 {
   imports = [ self.nixosModules.default ];
   system.stateVersion = "26.05";

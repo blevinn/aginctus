@@ -64,15 +64,52 @@ class RunnerTests(unittest.TestCase):
     def test_gateway_topology_is_an_explicit_target(self):
         self.assertEqual(
             runner.build_arguments("gateway-topology", False)[-1],
-            ".#vm-harness-gateway-topology",
+            ".#vm-harness-gateway-topology.driver",
         )
-        self.assertNotIn("INCUS_SOCKET", runner.clean_environment({"INCUS_SOCKET": "pilot"}))
+        self.assertNotIn(
+            "INCUS_SOCKET", runner.clean_environment({"INCUS_SOCKET": "pilot"})
+        )
 
     def test_ownership_recovery_is_an_explicit_target(self):
         self.assertEqual(
             runner.build_arguments("ownership-recovery", False)[-1],
             ".#vm-harness-ownership-recovery",
         )
+
+    def test_networked_scenario_records_runtime_result(self):
+        for code in (0, 42):
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                results = [
+                    subprocess.CompletedProcess([], 0, "abc123\n", ""),
+                    subprocess.CompletedProcess([], 0, "", ""),
+                    subprocess.CompletedProcess([], 0, "/nix/store/driver\n", ""),
+                    subprocess.CompletedProcess([], code, "private runtime output", ""),
+                ]
+                with (
+                    patch.object(runner, "ROOT", root),
+                    patch.object(
+                        runner,
+                        "driver_from_build",
+                        return_value=Path("/nix/store/driver/bin/nixos-test-driver"),
+                    ),
+                    patch.object(runner.subprocess, "run", side_effect=results) as run,
+                    contextlib.redirect_stdout(io.StringIO()) as stdout,
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
+                    self.assertEqual(runner.main(["test", "gateway-topology"]), code)
+                invocation = run.call_args
+                self.assertEqual(invocation.args[0][-1], "--no-interactive")
+                self.assertNotEqual(invocation.kwargs["cwd"], root)
+                self.assertNotIn("INCUS_SOCKET", invocation.kwargs["env"])
+                record = json.loads(
+                    next(
+                        (root / ".vm-harness-results").glob("*/result.json")
+                    ).read_text()
+                )
+                self.assertEqual(record["failure_stage"], "runtime" if code else None)
+                self.assertEqual(record["status"], "fail" if code else "pass")
+                self.assertNotIn("private runtime output", stdout.getvalue())
 
     def test_rejects_missing_or_foreign_driver(self):
         for value in ("", "/tmp/evil", "/nix/store/one\n/nix/store/two"):

@@ -60,7 +60,7 @@ func TestMCPDiscoveryAndReadOnlyTools(t *testing.T) {
 		t.Fatalf("unexpected tools: %#v", names)
 	}
 	items := results[2]["result"].(map[string]any)
-	if len(items["structuredContent"].(map[string]any)["scenarios"].([]any)) != 4 {
+	if len(items["structuredContent"].(map[string]any)["scenarios"].([]any)) != 5 {
 		t.Fatalf("unexpected scenarios: %#v", items)
 	}
 	plan := results[3]["result"].(map[string]any)["structuredContent"].(map[string]any)

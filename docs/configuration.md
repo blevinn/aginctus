@@ -146,14 +146,58 @@ NixOS/Home Manager options validate the same name constraints during
 module evaluation. For example, `AGINCTUS_INCUS_PROJECT` selects
 this setting through the regular environment override mechanism.
 
-**Important transition boundary:** This setting is **declarative only**
-in the present implementation. Existing v0.1 `apply`, `remove`,
-`status`, `images update`, gateway Compose and other Incus callers
-have **not** yet been redirected to the selected project. In particular,
-`config get incus.project` does **not** prove that any running instance,
-alias, volume or gateway currently belongs to that project. Do not
-use the setting to initiate a live pilot migration or grant additional
+**Important transition boundary:** This setting is a **declared target**,
+not a migration trigger. The opt-in, read-only `images list|ls --project
+NAME` command consumes it after verifying the exact ownership and
+feature policy of the **local** Incus project. Existing v0.1 `apply`,
+`remove`, `status`, `images update`, gateway Compose and other Incus
+callers have **not** yet been redirected to the selected project.
+In particular, `config get incus.project` does **not** prove that a
+running instance, alias, volume or gateway belongs to that project.
+Do not use the setting to initiate live migration or grant additional
 operator privileges.
+
+For example, on an authorized local operator account:
+
+```sh
+aginctus images list --project aginctus
+aginctus images ls --project=aginctus
+```
+
+These calls verify that `incus.project` equals the explicit flag, then
+inspect the local project policy and list its image aliases through
+`incus --force-local --project NAME image list --format json`. Foreign,
+drifted, inaccessible or not-visible project state fails closed. The
+legacy `images list` (no flag) and `images update NAME PATH` remain
+ambient-project v0.1 operations.
+
+The separate **explicit create-only** `images import` writes a **new**
+image alias into the declared local project, if that alias does not
+already exist:
+
+```sh
+aginctus images import --project aginctus my-test-image /path/to/nix-image --confirm-create
+```
+
+This is a real mutation. Use it only on an authorized disposable Incus
+host until real project integration tests have passed. It requires an
+existing, exactly owned/policy-compatible local project; before the
+import it checks both that policy and target alias absence **twice**,
+and uses `incus --force-local --project NAME image import ... --alias
+ALIAS` **without** `--reuse`. Incus must reject any concurrent
+same-name alias creation, not silently overwrite another writer. After
+import, the command verifies the local project again and requires the
+alias to point to the expected SHA-256 fingerprint derived from the
+metadata and rootfs files. If the server refuses creation or the
+post-import result is uncertain, it reports an error and **never deletes
+or rolls back** potentially shared resources.
+
+This initial writer cannot replace/adopt any existing alias, even one
+that looks Aginctus-owned: image-alias provenance, concurrent updater
+exclusion, mutation-time authority and scoped rollback remain open.
+Existing `images update` and its systemd units are **not** redirected.
+No active workloads, gateway instances, persistent volumes, Linux
+bridges or NixOS/Home Manager owners are migrated by selecting a project.
 
 The earlier `operator project-plan --project NAME` is read-only;
 `operator project-ensure --project NAME --confirm-create` may create a

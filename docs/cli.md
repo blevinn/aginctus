@@ -18,6 +18,44 @@ Some gateway egress `plan`, `preflight`, `audit`, `model render` and `credential
 
 The older `workload <name> ensure|teardown` forms remain supported for compatibility; prefer `workload apply|remove [name]` in new examples.
 
+## Explicit local Incus image inventory (read-only)
+
+```sh
+aginctus images list --project aginctus
+```
+
+The opt-in `images list|ls --project NAME` uses the local Incus Unix
+socket, never the selected remote or ambient project. The name must
+match the effective `incus.project` config and the local project must
+have matching Aginctus ownership markers and required feature policy.
+Failing or restricted project inspection is an error, not a silent
+fallback to the default project. It does not import or change images.
+The no-flag `images list` remains a legacy v0.1 ambient-project view
+until migration. See [configuration](configuration.md) for the rollout
+boundary.
+
+## Explicit create-only scoped image import (mutation)
+
+On an **approved, disposable local Incus host** with an existing compatible
+Aginctus project:
+
+```sh
+aginctus images import --project aginctus my-test-image /path/to/nix-image --confirm-create
+```
+
+Unlike `images list --project`, this **mutates the local project**.
+It accepts only an **absent** alias: the command checks exact project
+ownership and feature policy plus alias absence, repeats those checks
+before the import, and calls Incus with `--force-local --project`
+without `--reuse`. Incus must reject a conflicting alias, including
+one created after preflight. It verifies that the resulting alias points
+to the expected image fingerprint; if verification fails, it reports
+uncertain state without automatically deleting or rolling back an image.
+This first write slice **does not update/replace an existing alias**,
+move v0.1 images, activate systemd services, or authorize Home Manager
+reconciliation. Existing `images update NAME PATH` still uses the legacy
+ambient project. See [configuration](configuration.md) for migration limits.
+
 ## Commands that change state
 
 | Surface | Side effect or prerequisite |
