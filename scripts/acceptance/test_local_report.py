@@ -170,9 +170,10 @@ class LocalReportTests(unittest.TestCase):
                     st_uid = original_uid + 1
                 return DifferentOwner()
 
-            with patch.object(local_report.os, "fstat", side_effect=wrong_owner):
-                with self.assertRaises(ValueError):
-                    self.write(root)
+            with patch.object(local_report.os, "fstat", side_effect=wrong_owner), self.assertRaises(
+                ValueError
+            ):
+                self.write(root)
             self.assertEqual(list(root.iterdir()), [])
 
 
