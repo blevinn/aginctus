@@ -39,6 +39,28 @@ func parseOperatorProjectPlanArgs(args []string) (incusscope.ProjectScope, error
 	return incusscope.NewProjectScope(project)
 }
 
+// assessObservedProjectList separates the read-only project policy decision
+// from its callers. Restricted enumeration cannot establish nonexistence.
+func assessObservedProjectList(scope incusscope.ProjectScope, raw []byte) (string, error) {
+	var projects []observedProject
+	if err := json.Unmarshal(raw, &projects); err != nil || projects == nil {
+		return "", fmt.Errorf("invalid incus project enumeration")
+	}
+	status := "not-visible"
+	matches := 0
+	for _, project := range projects {
+		if project.Name != scope.Name {
+			continue
+		}
+		matches++
+		status = string(scope.AssessProject(project.Name, project.Config))
+	}
+	if matches > 1 {
+		return "", fmt.Errorf("duplicate incus project identity")
+	}
+	return status, nil
+}
+
 func runOperatorProjectPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	scope, err := parseOperatorProjectPlanArgs(args)
 	if err != nil {
@@ -55,22 +77,9 @@ func runOperatorProjectPlan(ctx context.Context, args []string, stdout, stderr i
 		fmt.Fprintln(stderr, "operator project-plan: unable to verify Incus project enumeration")
 		return 1
 	}
-	var projects []observedProject
-	if err := json.Unmarshal(raw, &projects); err != nil || projects == nil {
-		fmt.Fprintln(stderr, "operator project-plan: invalid Incus project enumeration")
-		return 1
-	}
-	status := "not-visible"
-	matches := 0
-	for _, project := range projects {
-		if project.Name != scope.Name {
-			continue
-		}
-		matches++
-		status = string(scope.AssessProject(project.Name, project.Config))
-	}
-	if matches > 1 {
-		fmt.Fprintln(stderr, "operator project-plan: ambiguous project enumeration")
+	status, err := assessObservedProjectList(scope, raw)
+	if err != nil {
+		fmt.Fprintln(stderr, "operator project-plan: invalid or ambiguous Incus project enumeration")
 		return 1
 	}
 	report := projectPlanReport{
