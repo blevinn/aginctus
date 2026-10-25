@@ -11,9 +11,13 @@ daemon and the restricted `aginctus-testenv` project. Never import it into
 the v0.1 pilot's Incus daemon, nor give the worker's daemon socket, signing
 key or admin privileges to a coding agent.
 
-The image includes Incus guest-agent loading, guest-local Incus, the
-store-pinned Aginctus CLI, Btrfs tooling and no configured networking or SSH
-service. **An image setting alone does not prevent guest root from adding
+The image now imports the **same shared Aginctus NixOS host module**
+used by `nix/vm-harness/guest.nix`, including the real system integration,
+Herdr image definition and Incus configuration. It includes Incus guest-agent
+loading, guest-local Incus, the store-pinned Aginctus CLI, Btrfs tooling
+and no configured networking or SSH service. It does **not** reconcile
+workloads or the gateway automatically; fixtures trigger those steps after
+Incus initialization. **An image setting alone does not prevent guest root from adding
 network configuration.** The outer Incus project must prohibit NICs and
 host-device passthrough; this isolation requires separate real-host proof.
 
