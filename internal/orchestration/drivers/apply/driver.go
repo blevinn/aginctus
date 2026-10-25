@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	incusapply "github.com/abiosoft/incus-apply/apply"
 	"sigs.k8s.io/yaml"
 
+	incusscope "github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/orchestration"
 )
 
@@ -59,6 +61,52 @@ func (d *Driver) Validate(raw json.RawMessage) error {
 		return fmt.Errorf("preflight incus-apply resources: %w", err)
 	}
 	return nil
+}
+
+// PlanScopedInstance is a read-only native Incus diff for exactly one
+// explicitly project-bound, ownership-guarded existing workload instance.
+// The pinned NewNative backend connects using ConnectIncusUnix and applies
+// the project through UseProject. No mutation path is exposed by this method.
+// A returned preview can still become stale or report a proposed creation;
+// callers must independently reject unsafe actions and must never treat this
+// result as permission to write.
+func (d *Driver) PlanScopedInstance(ctx context.Context, raw json.RawMessage) (incusapply.Preview, error) {
+	if err := ctx.Err(); err != nil {
+		return incusapply.Preview{}, err
+	}
+	cfg, err := parseConfig(raw)
+	if err != nil {
+		return incusapply.Preview{}, err
+	}
+	if cfg.Operation != incusapply.Upsert || !cfg.EnsureRunning ||
+		!cfg.RejectUnsupportedChanges || len(cfg.Documents) != 1 ||
+		cfg.RequireExistingConfig["user.aginctus.managed"] != "true" ||
+		cfg.RequireExistingConfig["user.aginctus.resource"] != "workload" ||
+		cfg.RequireExistingConfig["user.aginctus.role"] != "agent-workload" ||
+		cfg.RequireExistingConfig["user.aginctus.workload"] == "" {
+		return incusapply.Preview{}, fmt.Errorf("scoped instance requires explicit upsert and complete ownership guards")
+	}
+	if _, err := incusscope.NewProjectScope(cfg.Project); err != nil {
+		return incusapply.Preview{}, fmt.Errorf("scoped instance project invalid")
+	}
+	var target struct {
+		Kind    string `json:"kind"`
+		Name    string `json:"name"`
+		Remote  string `json:"remote"`
+		Project string `json:"project"`
+	}
+	if err := json.Unmarshal(cfg.Documents[0], &target); err != nil ||
+		target.Kind != "instance" || target.Name == "" ||
+		strings.ContainsAny(target.Name, ":/") || target.Remote != "" || target.Project != "" {
+		return incusapply.Preview{}, fmt.Errorf("scoped instance target invalid or ambiguous")
+	}
+	stream, err := renderDocuments(cfg.Documents)
+	if err != nil {
+		return incusapply.Preview{}, err
+	}
+	// clientOptions passes Project, never Remote, to the pinned native
+	// backend. This is read-only even when the diff reports "create".
+	return d.newClient(clientOptions(cfg)).PlanContext(ctx, bytes.NewReader(stream))
 }
 
 func clientOptions(cfg Config) incusapply.Options {
