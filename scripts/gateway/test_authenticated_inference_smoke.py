@@ -3,9 +3,11 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
     "gateway_smoke", Path(__file__).with_name("authenticated-inference-smoke.py"))
@@ -26,8 +28,9 @@ def transcript(marker, state="completed", output=True):
 
 
 class MockOpener:
-    def __init__(self, marker):
+    def __init__(self, marker, visible=("coding",)):
         self.marker = marker
+        self.visible = visible
         self.calls = []
 
     def open(self, req, timeout):
@@ -36,7 +39,7 @@ class MockOpener:
         if req.full_url.endswith("/v1/models") and authorization != "Bearer good-workload":
             raise mod.HTTPError(req.full_url, 401, "secret leaked in error", None, None)
         if req.full_url.endswith("/v1/models"):
-            data = b'{"data": [{"id":"coding"}]}'
+            data = json.dumps({"data": [{"id": name} for name in self.visible]}).encode()
         elif req.full_url.endswith("/health/liveliness"):
             data = b"ok"
         elif req.full_url.endswith("/v1/responses"):
@@ -88,6 +91,99 @@ class SmokeTests(unittest.TestCase):
         with self.assertRaises(mod.SmokeError):
             mod.run("http://10.0.0.9:4000", "coding", "master", "master", fake, marker)
         self.assertEqual(len(fake.calls), 5)
+
+    def test_authorization_only_is_read_only_and_requires_exact_scope(self):
+        marker = "AGINCTUS_OK_TEST123"
+        fake = MockOpener(marker)
+        checked = mod.run_authorization(
+            "http://10.0.0.9:4000", "coding", "good-workload", "master", fake
+        )
+        self.assertIs(checked, fake)
+        self.assertEqual(len(fake.calls), 4)
+        self.assertEqual(
+            [req.full_url for req in fake.calls],
+            ["http://10.0.0.9:4000/health/liveliness"]
+            + ["http://10.0.0.9:4000/v1/models"] * 3,
+        )
+        self.assertTrue(all(req.get_method() == "GET" for req in fake.calls))
+        self.assertTrue(all(req.data is None for req in fake.calls))
+        self.assertNotIn("/v1/responses", " ".join(req.full_url for req in fake.calls))
+
+        excessive = MockOpener(marker, visible=("coding", "unrelated"))
+        with self.assertRaisesRegex(mod.SmokeError, "exact one-alias"):
+            mod.run_authorization(
+                "http://10.0.0.9:4000", "coding", "good-workload", "master", excessive
+            )
+        self.assertEqual(len(excessive.calls), 4)
+        with self.assertRaises(mod.SmokeError):
+            mod.run_authorization(
+                "http://10.0.0.9:4000", "coding", "master", "master", excessive
+            )
+        self.assertEqual(len(excessive.calls), 4)
+
+    def test_authorization_only_fails_if_anonymous_or_invalid_key_is_accepted(self):
+        for unexpected in (0, 1):
+            with self.subTest(unexpected=unexpected):
+                responses = [
+                    (200, b"ok"),
+                    (200, b"unexpected") if unexpected == 0 else (401, b""),
+                    (200, b"unexpected") if unexpected == 1 else (401, b""),
+                ]
+                with patch.object(mod, "request", side_effect=responses) as probe:
+                    with self.assertRaisesRegex(mod.SmokeError, "missing/invalid key"):
+                        mod.run_authorization(
+                            "http://10.0.0.9:4000", "coding", "good-workload", "master",
+                            opener=object(),
+                        )
+                self.assertLessEqual(probe.call_count, 3)
+                self.assertNotIn("/v1/responses", " ".join(
+                    call.args[2] for call in probe.call_args_list
+                ))
+
+    def test_authorization_only_cli_uses_protected_secrets_without_responses(self):
+        with tempfile.TemporaryDirectory() as root:
+            key = Path(root) / "workload"
+            key.write_text("good-workload\n")
+            key.chmod(0o600)
+            state = Path(root) / "aginctus/gateway/local/secrets.json"
+            state.parent.mkdir(parents=True)
+            state.write_text(json.dumps({"AGINCTUS_GATEWAY_MASTER_KEY": "master"}))
+            state.chmod(0o600)
+            argv = [
+                "--endpoint", "http://10.0.0.9:4000",
+                "--alias", "coding", "--workload-key-file", str(key),
+            ]
+            out = io.StringIO()
+            fake = MockOpener("AGINCTUS_OK_TEST123")
+            with (
+                patch.dict(os.environ, {"XDG_STATE_HOME": root}),
+                patch.object(mod, "build_opener", return_value=fake),
+                contextlib.redirect_stdout(out),
+            ):
+                self.assertEqual(mod.main([*argv, "--auth-only"]), 0)
+            self.assertEqual(json.loads(out.getvalue()), {
+                "gateway_authorization": "pass",
+                "upstream_inference": "not_verified",
+                "agent_tools": "not_verified",
+                "credential_egress": "not_verified",
+                "complete_acceptance": False,
+            })
+            self.assertEqual(len(fake.calls), 4)
+            self.assertNotIn("good-workload", out.getvalue())
+            self.assertNotIn("master", out.getvalue())
+            out = io.StringIO()
+            with (
+                patch.dict(os.environ, {"XDG_STATE_HOME": root}),
+                patch.object(mod, "build_opener", return_value=MockOpener(
+                    "AGINCTUS_OK_TEST123", visible=("coding", "unrelated")
+                )),
+                contextlib.redirect_stdout(out),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                self.assertEqual(mod.main([*argv, "--auth-only"]), 1)
+            self.assertEqual(out.getvalue(), "")
+            with self.assertRaises(SystemExit):
+                mod.main([*argv, "--auth-only", "--run"])
 
     def test_http_error_classification_is_bounded_and_never_logs_provider_text(self):
         marker = "AGINCTUS_OK_TEST123"
