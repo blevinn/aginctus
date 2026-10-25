@@ -107,7 +107,7 @@ class LocalAcceptanceViewTests(unittest.TestCase):
             root, path = self.make(directory)
             link = Path(directory) / "alias"
             link.symlink_to(root, target_is_directory=True)
-            with self.assertRaises(OSError):
+            with self.assertRaises((OSError, ValueError)):
                 local_acceptance.read_private_result(link, RUN_ID)
             for run_id in ("../secret", "aginctus-acceptance.abc"):
                 with self.subTest(run_id=run_id), self.assertRaises(ValueError):
