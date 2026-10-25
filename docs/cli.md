@@ -18,6 +18,22 @@ Some gateway egress `plan`, `preflight`, `audit`, `model render` and `credential
 
 The older `workload <name> ensure|teardown` forms remain supported for compatibility; prefer `workload apply|remove [name]` in new examples.
 
+## Explicit local Incus image inventory (read-only)
+
+```sh
+aginctus images list --project aginctus
+```
+
+The opt-in `images list|ls --project NAME` uses the local Incus Unix
+socket, never the selected remote or ambient project. The name must
+match the effective `incus.project` config and the local project must
+have matching Aginctus ownership markers and required feature policy.
+Failing or restricted project inspection is an error, not a silent
+fallback to the default project. It does not import or change images.
+The no-flag `images list` remains a legacy v0.1 ambient-project view
+until migration. See [configuration](configuration.md) for the rollout
+boundary.
+
 ## Commands that change state
 
 | Surface | Side effect or prerequisite |
