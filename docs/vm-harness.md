@@ -145,7 +145,6 @@ is configured.
 Subsequent slices add registered synthetic Responses traffic, real
 Herdr/OpenCode tool execution, packet-level negative network assertions,
 fault injection, and independently verified resource/evidence cleanup.
-
 ## Synthetic Responses fixture (protocol layer)
 
 `scripts/vm_harness/synthetic_responses.py` implements a small, local-only
