@@ -245,7 +245,7 @@ docker run --rm --network none --read-only --tmpfs /tmp \
   -e PYTHONDONTWRITEBYTECODE=1 \
   --mount type=bind,src="$PWD/deploy/litellm-go/model-group-forwarding.yaml",dst=/run/aginctus-go.yaml,readonly \
   --mount type=bind,src="$PWD/scripts/gateway/probe_model_group_forwarding.py",dst=/run/aginctus-probe.py,readonly \
-  --entrypoint /app/.venv/bin/python ghcr.io/berriai/litellm:v1.103.0-stable \
+  --entrypoint /app/.venv/bin/python ghcr.io/berriai/litellm:v1.103.0 \
   /run/aginctus-probe.py /run/aginctus-go.yaml
 ```
 
@@ -347,7 +347,7 @@ For this audit, pass the supported **`podman run --signature-policy PATH`**
 option, pointing to `deploy/litellm-go/podman-probe-policy.json`.
 Podman uses that policy for this invocation only.
 That file rejects all image sources by default and permits precisely
-`ghcr.io/berriai/litellm:v1.103.0-stable` for this fixture. The
+`ghcr.io/berriai/litellm:v1.103.0` for this fixture. The
 `insecureAcceptAnything` entry means **no cryptographic signature check**
 is performed on that one tagged image: it is not a verification of publisher
 identity or immutable provenance. Do not use the file for production images
@@ -373,7 +373,7 @@ nix shell nixpkgs#podman --command podman run \
   --mount type=bind,src="$PWD/deploy/litellm-go/model-group-forwarding.yaml",dst=/run/aginctus-policy.yaml,readonly \
   --mount type=bind,src="$PWD/scripts/gateway/probe_pinned_litellm_responses.py",dst=/run/aginctus-probe.py,readonly \
   --entrypoint /app/.venv/bin/python \
-  ghcr.io/berriai/litellm:v1.103.0-stable \
+  ghcr.io/berriai/litellm:v1.103.0 \
   /run/aginctus-probe.py /run/aginctus-policy.yaml
 ```
 
