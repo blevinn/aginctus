@@ -276,7 +276,10 @@ with **only** `x-opencode-session` and `User-Agent`. Two conflicting native
 headers, invalid/missing/oversized values and generic HTTP-library User-Agents
 fail closed. It never issues its own session ID or forwards the workload
 bearer token, `x-api-key`, arbitrary `x-*`, or body-supplied
-`extra_headers`. Other aliases and non-Responses calls are not modified.
+`extra_headers`. The approved alias rejects non-`aresponses` call types with
+the callback's generic HTTP 400, including valid Chat Completions requests;
+it does not silently bypass identity validation on another protocol. Other
+aliases are not modified for any call type.
 
 This provides a verifiable *policy and callback contract*; it is **not an
 activated runtime integration**. To run the callback, the two Python files
