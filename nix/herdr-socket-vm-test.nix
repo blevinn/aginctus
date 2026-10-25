@@ -275,7 +275,7 @@ pkgs.testers.runNixOSTest {
     HostKeyAlias aginctus-dev
     HostKeyAlgorithms ssh-ed25519
     ConnectTimeout 5
-"""
+    """
     client.succeed("printf '%s\\n' " + shlex.quote(ssh_config)
                    + " > /var/lib/aginctus/ssh/machines/aginctus-dev.conf")
     assert client.succeed("ssh -o BatchMode=yes aginctus-dev id -un").strip() == "agent"
