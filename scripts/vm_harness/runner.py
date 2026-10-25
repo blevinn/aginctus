@@ -27,6 +27,7 @@ SCENARIOS = {
     "runtime-lifecycle": "vm-harness-runtime-lifecycle",
     "gateway-topology": "vm-harness-gateway-topology",
     "synthetic-gateway": "vm-harness-synthetic-gateway",
+    "opencode-tool-loopback": "vm-harness-opencode-tool-loopback",
     "ownership-recovery": "vm-harness-ownership-recovery",
 }
 NETWORKED_SCENARIOS = {"gateway-topology", "synthetic-gateway"}
