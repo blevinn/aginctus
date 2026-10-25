@@ -59,7 +59,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if type(self).sequence is not None:
             try:
                 _, document = type(self).sequence.next(body)
-            except ValueError:
+            except ValueError as exc:
+                print("Synthetic tool sequence rejected the request:", exc, file=sys.stderr)
                 self.send_error(400)
                 return
             wire = type(self).sequence_stream(document)
@@ -233,6 +234,7 @@ def main(binary, inspect_tools=False, execute_tools=False):
                 assert len(unique) >= 1, "real client declared no usable tool names"
                 assert not any(Handler.continuations), (
                     "text-only mock unexpectedly received a tool-result continuation")
+                print("Observed tool schema fingerprints:", observed)
                 print("PASS: pinned OpenCode declared bounded real tool names and schemas")
                 print("NOTE: tool invocation, execution, fixture edits not verified")
             else:
