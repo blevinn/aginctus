@@ -131,23 +131,27 @@ func runScopedWorkloadTransition(
 	}
 	state, err = findScopedManagedInstance(instances, spec.Name, "workload", "agent-workload", spec.ID)
 	if err != nil || !strings.EqualFold(state, required) {
-		fmt.Fprintln(stderr, prefix+"instance changed before mutation; no start attempted")
+		fmt.Fprintln(stderr, prefix+"instance changed before mutation; no transition attempted")
 		return 1
 	}
 	if err := mutate(ctx, scope, spec.Name); err != nil {
-		fmt.Fprintln(stderr, prefix+"scoped Incus start failed; inspect local project before retrying")
+		fmt.Fprintln(stderr, prefix+"scoped Incus transition failed; inspect local project before retrying")
 		return 1
 	}
 	_, instances, err = readScopedManagedInstances(ctx, cfg, project)
 	if err != nil {
-		fmt.Fprintln(stderr, prefix+"post-start project inventory unverified; inspect before retrying")
+		fmt.Fprintln(stderr, prefix+"post-transition project inventory unverified; inspect before retrying")
 		return 1
 	}
 	state, err = findScopedManagedInstance(instances, spec.Name, "workload", "agent-workload", spec.ID)
 	if err != nil || !strings.EqualFold(state, completed) {
-		fmt.Fprintln(stderr, prefix+"running state not verified; inspect before retrying")
+		fmt.Fprintln(stderr, prefix+"expected state not verified; inspect before retrying")
 		return 1
 	}
-	fmt.Fprintf(out, "workload %q: %sed in project %q\n", spec.ID, action, project)
+	verb := "started"
+	if action == "stop" {
+		verb = "stopped"
+	}
+	fmt.Fprintf(out, "workload %q: %s in project %q\n", spec.ID, verb, project)
 	return 0
 }
