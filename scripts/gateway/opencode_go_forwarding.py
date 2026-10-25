@@ -7,7 +7,12 @@ import re
 
 GO_ALIAS = "aginctus-go-pilot"
 _SESSION = re.compile(r"ses_[A-Za-z0-9_-]{8,128}\Z", re.ASCII)
-_USER_AGENT = re.compile(r"opencode/[A-Za-z0-9._+-]{1,60}\Z", re.IGNORECASE | re.ASCII)
+_VERSION = r"[A-Za-z0-9._+-]{1,60}"
+# OpenCode's OpenAI SDK appends its provider-utils and Bun runtime identities.
+_USER_AGENT = re.compile(
+    r"opencode/" + _VERSION + r"(?: ai-sdk/provider-utils/" + _VERSION
+    + r" runtime/bun/" + _VERSION + r")?\Z", re.IGNORECASE | re.ASCII,
+)
 _SESSION_HEADERS = ("x-opencode-session", "x-opencode-session-id")
 
 
@@ -32,8 +37,10 @@ def sanitize_go_headers(data, call_type):
     The caller must install this as an actual LiteLLM async_pre_call_hook.
     A missing/invalid native session fails closed instead of issuing a new one.
     """
-    if call_type != "aresponses" or data.get("model") != GO_ALIAS:
+    if data.get("model") != GO_ALIAS:
         return data
+    if call_type != "aresponses":
+        raise ValueError("OpenCode Go requires native Responses")
     headers = _request_headers(data)
     sessions = [headers[name] for name in _SESSION_HEADERS if name in headers]
     if not sessions or any(not _SESSION.fullmatch(s) for s in sessions):

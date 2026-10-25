@@ -33,9 +33,23 @@ class LifecycleTests(unittest.TestCase):
 
     def test_lifecycle_owned_ids_and_cleanup(self):
         events = []
+        closed = False
+
         def record(machine, *args):
+            nonlocal closed
             events.append(args)
+            if args == ("workspace", "list"):
+                workspaces = [] if closed else [
+                    {"workspace_id": "w99", "label": self.identity},
+                    {"workspace_id": "unrelated", "label": "leave-alone"},
+                ]
+                return json.dumps({"result": {
+                    "type": "workspace_list", "workspaces": workspaces,
+                }})
+            if args == ("workspace", "close", "w99"):
+                closed = True
             return self.fake(machine, *args)
+
         with patch.object(mod, "invoke", side_effect=record):
             mod.phase("open", str(self.base), self.identity)
             info = mod.load(self.base, self.identity)
@@ -51,7 +65,146 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(events[0][:2], ("workspace", "create"))
         self.assertEqual(events[1][:2], ("agent", "start"))
         self.assertEqual(events[2][:2], ("agent", "prompt"))
-        self.assertEqual(events[-1], ("workspace", "close", "w99"))
+        self.assertEqual(events[-3:], [
+            ("workspace", "list"),
+            ("workspace", "close", "w99"),
+            ("workspace", "list"),
+        ])
+
+    def seed_owned(self):
+        with patch.object(mod, "invoke", side_effect=self.fake):
+            mod.phase("open", str(self.base), self.identity)
+        self.assertTrue(mod.state_path(self.base).exists())
+
+    def test_missing_or_wrong_ownership_in_inventory_blocks_close(self):
+        self.seed_owned()
+        for workspaces in (
+            [],
+            [{"workspace_id": "w99", "label": "other-run"}],
+            [{"workspace_id": "w-other", "label": self.identity}],
+            [
+                {"workspace_id": "w99", "label": self.identity},
+                {"workspace_id": "w-other", "label": self.identity},
+            ],
+        ):
+            with self.subTest(workspaces=workspaces):
+                listing = json.dumps({"result": {
+                    "type": "workspace_list", "workspaces": workspaces,
+                }})
+                with patch.object(mod, "invoke", return_value=listing) as invoke, self.assertRaises(
+                    RuntimeError
+                ):
+                    mod.phase("close", str(self.base), self.identity)
+                invoke.assert_called_once_with("pilot", "workspace", "list")
+                self.assertTrue(mod.state_path(self.base).exists())
+
+    def test_zero_exit_from_close_is_not_remote_cleanup_proof(self):
+        self.seed_owned()
+        listing = json.dumps({"result": {
+            "type": "workspace_list",
+            "workspaces": [{"workspace_id": "w99", "label": self.identity}],
+        }})
+        calls = []
+
+        def no_removal(machine, *args):
+            calls.append(args)
+            if args == ("workspace", "list"):
+                return listing
+            self.assertEqual(args, ("workspace", "close", "w99"))
+            return "{}"
+
+        with patch.object(mod, "invoke", side_effect=no_removal), self.assertRaises(
+            RuntimeError
+        ):
+            mod.phase("close", str(self.base), self.identity)
+        self.assertEqual(calls, [
+            ("workspace", "list"),
+            ("workspace", "close", "w99"),
+            ("workspace", "list"),
+        ])
+        self.assertTrue(mod.state_path(self.base).exists())
+
+    def test_other_workspace_with_same_run_label_blocks_postclose_proof(self):
+        self.seed_owned()
+        calls = []
+
+        def replacement(machine, *args):
+            calls.append(args)
+            if args == ("workspace", "list"):
+                key = "w99" if len(calls) == 1 else "orphan"
+                return json.dumps({"result": {
+                    "type": "workspace_list",
+                    "workspaces": [{"workspace_id": key, "label": self.identity}],
+                }})
+            return "{}"
+
+        with patch.object(mod, "invoke", side_effect=replacement), self.assertRaises(
+            RuntimeError
+        ):
+            mod.phase("close", str(self.base), self.identity)
+        self.assertEqual(calls, [
+            ("workspace", "list"),
+            ("workspace", "close", "w99"),
+            ("workspace", "list"),
+        ])
+        self.assertTrue(mod.state_path(self.base).exists())
+
+    def test_invalid_inventory_is_never_empty_success(self):
+        invalid = (
+            "{}",
+            "[]",
+            '{"result":{"type":"workspace_list","workspaces":null}}',
+            '{"result":{"type":"other","workspaces":[]}}',
+            '{"result":{"type":"workspace_list","workspaces":[{}]}}',
+            '{"result":{"type":"workspace_list","workspaces":[{"workspace_id":23,"label":"x"}]}}',
+            '{"result":{"type":"workspace_list","workspaces":[42]}}',
+            '{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"w99","label":"a"},{"workspace_id":"w99","label":"b"}]}}',
+            "{not JSON",
+            "x" * 65537,
+        )
+        for payload in invalid:
+            with self.subTest(payload=payload[:80]), patch.object(
+                mod, "invoke", return_value=payload
+            ), self.assertRaises(RuntimeError):
+                mod.workspace_inventory("pilot")
+
+    def test_unreadable_postclose_inventory_keeps_ownership_record(self):
+        self.seed_owned()
+        present = json.dumps({"result": {
+            "type": "workspace_list",
+            "workspaces": [{"workspace_id": "w99", "label": self.identity}],
+        }})
+        calls = []
+
+        def missing_post(machine, *args):
+            calls.append(args)
+            if args == ("workspace", "list"):
+                return present if len(calls) == 1 else "{}"
+            return "{}"
+
+        with patch.object(mod, "invoke", side_effect=missing_post), self.assertRaises(
+            RuntimeError
+        ):
+            mod.phase("close", str(self.base), self.identity)
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(mod.state_path(self.base).exists())
+
+    def test_nonzero_close_cannot_remove_ownership_record(self):
+        self.seed_owned()
+        listing = json.dumps({"result": {
+            "type": "workspace_list",
+            "workspaces": [{"workspace_id": "w99", "label": self.identity}],
+        }})
+        def fails_close(machine, *args):
+            if args == ("workspace", "list"):
+                return listing
+            raise RuntimeError("close command failed")
+
+        with patch.object(mod, "invoke", side_effect=fails_close), self.assertRaises(
+            RuntimeError
+        ):
+            mod.phase("close", str(self.base), self.identity)
+        self.assertTrue(mod.state_path(self.base).exists())
 
     def test_rejects_unstaged_or_unsafe_workspace(self):
         with patch.dict(os.environ, {"AGINCTUS_ACCEPTANCE_GUEST_STAGED": ""}):

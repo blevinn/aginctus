@@ -121,8 +121,21 @@ Each run writes a new private
 directory, 0600 record), with fixed IDs, run identity, UTC time and exact
 host-runner outcomes for the fixture edit and `go test`. The report also
 records whether the runner's **stop/close commands** returned successfully.
-A failing stop or close now makes the harness fail, even if the fixture
+A failing stop or close makes the harness fail, even if the fixture
 test passed; command success is **not** independent proof of cleanup.
+
+On every reached harness exit path, the host runner removes its own disposable
+local root, checks that the root path is absent (including dangling symlinks),
+and records `local_workspace_removed: pass|fail`. Failed removal returns a
+nonzero exit and cannot become a successful local check in the optional
+read-only viewer or aggregate coverage report. Older local records lacking
+this observation remain readable, with the removal check marked `not_run`.
+
+This observation covers **only the host's own disposable directory**. It does
+not inspect or prove deletion of remote Herdr workspaces, Incus instances,
+storage volumes, active agents or any other resources; those remain
+`cleanup: not_verified`. Diagnostics from `rm` are suppressed to avoid
+leaking guest-writable paths.
 
 Reports always label native agent/tool evidence, real gateway-side Responses
 completion, credential/egress enforcement, and owned-resource cleanup as

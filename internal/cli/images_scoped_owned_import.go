@@ -97,6 +97,14 @@ func runScopedOwnedImageImport(ctx context.Context, args []string, stdout, stder
 		fmt.Fprintln(stderr, "images import-owned: project must match the declared incus.project setting")
 		return 2
 	}
+	// Serialize all participating image writers in this local project,
+	// including distinct aliases which could have matching fingerprints.
+	release, err := acquireScopedImageMutationLease(scope)
+	if err != nil {
+		fmt.Fprintln(stderr, "images import-owned: project writer lease unavailable; no import attempted")
+		return 1
+	}
+	defer release()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	if err := verifyScopedImageProject(ctx, scope); err != nil {
