@@ -20,6 +20,7 @@ SCENARIOS = (
     "smoke",
     "storage-network",
     "runtime-lifecycle",
+    "gateway-topology",
     "ownership-recovery",
 )
 RUN_ID = re.compile(r"[0-9a-f]{24}\Z")
