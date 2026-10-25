@@ -1,18 +1,26 @@
 # Real Incus Compose gateway and packaged Herdr/OpenCode deployment.
 # This is explicitly heavyweight and may need OCI registry access for
 # image caching; it never registers or calls an external model provider.
-{ self, nixpkgs, system }:
+{ self, nixpkgs, system, synthetic ? false }:
 let
   pkgs = import nixpkgs { inherit system; };
+  lib = nixpkgs.lib;
+  syntheticProbe = pkgs.writeShellScriptBin "aginctus-vm-synthetic-probe" ''
+    exec ${pkgs.python3}/bin/python3 ${../../scripts/vm_harness/synthetic_gateway_probe.py} ${../../scripts/vm_harness/synthetic_responses.py}
+  '';
 in
 pkgs.testers.runNixOSTest {
-  name = "aginctus-vm-harness-gateway-topology";
+  name = if synthetic then "aginctus-vm-harness-synthetic-gateway" else "aginctus-vm-harness-gateway-topology";
   nodes.machine =
     { lib, ... }:
     {
       imports = [ (import ./guest.nix { inherit self system; }) ];
       virtualisation.memorySize = lib.mkForce 8192;
       virtualisation.diskSize = lib.mkForce 32768;
+      environment.systemPackages = lib.optionals synthetic [ syntheticProbe ];
+      # The synthetic upstream binds only to the guest's inner egress bridge.
+      networking.firewall.interfaces."aginctus-egress".allowedTCPPorts =
+        lib.optionals synthetic [ 9080 ];
       services.aginctus.images.opencodeWorkload = {
         enable = lib.mkForce true;
         source = self.packages.${system}.opencode-workload;
@@ -35,7 +43,7 @@ pkgs.testers.runNixOSTest {
     cli = "aginctus --configuration-file /etc/aginctus/config.json"
     # Actually execute the real gateway Apply+Compose engine. Successful
     # rendering/status without application readiness does NOT pass this test.
-    machine.succeed(f"{cli} gateway up")
+    machine.succeed(f"XDG_STATE_HOME=/run/aginctus-vm-gateway-state {cli} gateway up")
     machine.succeed("incus project show aginctus-gateway")
     machine.succeed("incus network show aginctus-mgmt")
     machine.succeed("incus network show aginctus-egress")
@@ -70,5 +78,9 @@ pkgs.testers.runNixOSTest {
     )
     # Never register a model here: application health is not synthetic
     # Responses inference, and no real provider should be contacted.
+  '' + lib.optionalString synthetic ''
+    # Unlike topology-only acceptance, this calls real LiteLLM APIs and
+    # proves scoped-key routing to the private, test-only Responses server.
+    machine.succeed("aginctus-vm-synthetic-probe")
   '';
 }
