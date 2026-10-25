@@ -109,6 +109,28 @@ and restricted-key behavior, but does not deploy or verify the live pilot.
 Neither a unit-test pass nor a healthy proxy proves active callback loading or
 successful Go inference.
 
+### Stock forwarding negative-audit fixture
+
+The retained audit can reproduce the stock-policy failure without a provider.
+With the stock `ghcr.io/berriai/litellm:v1.103.0` image already cached, run:
+
+```sh
+nix --quiet shell nixpkgs#podman -c podman run \
+  --signature-policy "$PWD/deploy/litellm-go/podman-probe-policy.json" \
+  --pull=never --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
+  -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 -e PYTHONDONTWRITEBYTECODE=1 \
+  -v "$PWD:/probe:ro" --entrypoint /app/.venv/bin/python \
+  ghcr.io/berriai/litellm:v1.103.0 \
+  /probe/scripts/gateway/probe_pinned_litellm_responses.py \
+  /probe/deploy/litellm-go/model-group-forwarding.yaml --require-safe
+```
+
+Its expected nonzero strict verdict rejects unsafe forwarding, not transport
+functionality. The command-local Podman policy rejects other image references
+and does not verify publisher signatures; it is a test prerequisite, not a
+production trust policy. Use the digest-qualified packaged probes in the
+selective runbook for positive acceptance.
+
 ## Required live compatibility and cleanup gates
 
 After separate deployment and spending authorization, use the

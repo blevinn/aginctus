@@ -117,9 +117,15 @@ the pilot firewall. They use a cached PostgreSQL **18.6 binary**, not the declar
 production PostgreSQL image, and do not validate upgrades or persistent gateway
 restart. aarch64 execution and a real wrong-version OCI image are unrun; the
 version rejection has import-level regression coverage. Fast, single-packet
-buffered synthetic replies exposed a client event-subscription timing issue;
-the accepted fixture sends complete incremental SSE, and does not establish
-reliability for every buffering pattern. External Go entitlement, provider
+buffered replies expose the real client's event-consumer completion defect,
+tracked in [#542](https://github.com/blevinn/aginctus/issues/542): completed
+parts exist in its disposable database, but the CLI can exit before printing
+terminal text/stop events. This reproduces directly and through the gateway.
+The accepted fixture sends complete incremental SSE and does not establish
+buffered-output reliability. A minimal source fix is feasible, but the exact
+pinned source/dependency/tool closure is not cached and its realization is
+blocked; no unverified patch or sleep-based production workaround is shipped.
+External Go entitlement, provider
 accounting, billing and model-driven filesystem tools remain live release gates.
 
 ### Reproduce without contacting providers
