@@ -71,6 +71,10 @@ test-vm-gateway-topology:
     python3 scripts/vm_harness/runner.py test gateway-topology
 test-vm-synthetic-gateway:
     python3 scripts/vm_harness/runner.py test synthetic-gateway
+# Genuine pinned OpenCode tool execution INSIDE a disposable no-egress VM.
+# Still a loopback synthetic model: not Herdr/LiteLLM acceptance.
+test-vm-opencode-tool-loopback:
+    python3 scripts/vm_harness/runner.py test opencode-tool-loopback
 
 # Real Incus foreign-resource and daemon-outage recovery assertions.
 test-vm-ownership-recovery:
