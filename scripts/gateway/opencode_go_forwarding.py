@@ -7,7 +7,12 @@ import re
 
 GO_ALIAS = "aginctus-go-pilot"
 _SESSION = re.compile(r"ses_[A-Za-z0-9_-]{8,128}\Z", re.ASCII)
-_USER_AGENT = re.compile(r"opencode/[A-Za-z0-9._+-]{1,60}\Z", re.IGNORECASE | re.ASCII)
+_VERSION = r"[A-Za-z0-9._+-]{1,60}"
+# OpenCode's OpenAI SDK appends its provider-utils and Bun runtime identities.
+_USER_AGENT = re.compile(
+    r"opencode/" + _VERSION + r"(?: ai-sdk/provider-utils/" + _VERSION
+    + r" runtime/bun/" + _VERSION + r")?\Z", re.IGNORECASE | re.ASCII,
+)
 _SESSION_HEADERS = ("x-opencode-session", "x-opencode-session-id")
 
 

@@ -2,7 +2,9 @@ package gateway
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -14,6 +16,81 @@ import (
 	composeproject "github.com/lxc/incus-compose/project"
 	"sigs.k8s.io/yaml"
 )
+
+// TestExportGoDeployment is an opt-in, test-only bridge to the isolated runtime
+// probe. Export the actual pinned-loader deliveries, never a parallel config.
+func TestExportGoDeployment(t *testing.T) {
+	dir := os.Getenv("AGINCTUS_EXPORT_GO_DEPLOYMENT")
+	if dir == "" {
+		t.Skip("set AGINCTUS_EXPORT_GO_DEPLOYMENT to export")
+	}
+	image := os.Getenv("AGINCTUS_PROBE_LITELLM_IMAGE")
+	effective, err := (&config.Loader{}).Load(config.Options{Overrides: []string{
+		"gateway.litellm.selectiveGoForwarding=true", "gateway.images.litellm=" + image,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := FromConfig(effective)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := spec.RenderCompose()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Optionally consume a direct `aginctus gateway render` export through the
+	// same pinned loader. This seam exists only in this explicitly opted-in test.
+	if source := os.Getenv("AGINCTUS_GO_COMPOSE_FILE"); source != "" {
+		data, err := os.ReadFile(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rendered = string(data)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dir, "compose.yaml")
+	if err := os.WriteFile(file, []byte(rendered), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"AGINCTUS_GATEWAY_MASTER_KEY", "AGINCTUS_GATEWAY_SALT_KEY", "AGINCTUS_GATEWAY_POSTGRES_PASSWORD"} {
+		t.Setenv(key, "synthetic-only")
+	}
+	project, err := composeproject.New().Load(context.Background(), composeproject.LoadFiles([]string{file}), composeproject.LoadName(spec.Project), composeproject.LoadOsEnv())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := project.Services["litellm"]
+	if len(project.Configs) != 3 || len(service.Configs) != 3 || service.Image != image {
+		t.Fatal("unexpected deployment deliveries")
+	}
+	manifest := map[string]string{}
+	for _, attachment := range service.Configs {
+		name := filepath.Base(attachment.Target)
+		content := project.Configs[attachment.Source].Content
+		if content != gatewayassets.Files()[name] || attachment.Target != gatewayassets.PythonPath+"/"+name {
+			t.Fatal("deployment differs from canonical bundle")
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		manifest[name] = fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
+	}
+	for name, value := range map[string]any{
+		"manifest.json":   manifest,
+		"deployment.json": map[string]any{"image": service.Image, "environment": service.Environment},
+	} {
+		data, err := json.MarshalIndent(value, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), append(data, '\n'), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 
 func TestSelectiveGoRenderAndPinnedLoader(t *testing.T) {
 	for _, stock := range []string{"false", "[]"} {
