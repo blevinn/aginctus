@@ -484,8 +484,59 @@ blocks approval of selective forwarding. A callback import failure, status
 runtime compatibility issue; do not weaken the assertions or enable
 stock forwarding as a workaround.
 
+### Embedded callback bundle (Stage B)
+
+The Go package `github.com/blevinn/aginctus/scripts/gateway` is named
+`gatewayassets`. It embeds the two canonical Python sources in that directory
+and `selective-go.yaml` directly. No custom OCI image or copied Python source is
+required. `Files()` returns a fresh `map[string]string` with exactly
+`config.yaml`, `litellm_opencode_go_hook.py`, and `opencode_go_forwarding.py`.
+`Manifest()` returns a fresh map of those filenames to lowercase SHA-256 hex
+digests of the raw bytes. It identifies contents, not runtime image provenance.
+
+`ConfigPath` is `/app/aginctus-go/config.yaml`; `PythonPath` is
+`/app/aginctus-go`. The config contains only the selective callback setting,
+without routes, credentials, or any broad forwarding option. The gateway can
+deliver these public files using existing incus-compose inline configs and set
+`PYTHONPATH` to `PythonPath`. Production delivery and activation belong to the
+gateway integration stage.
+
+The independently exercisable test exporter writes those three files and
+deterministic `manifest.json` (sorted JSON keys, two-space indent, final newline).
+The probe verifies every manifest digest, enforces the exact callback-only YAML,
+checks import origins, and starts the actual proxy with those packaged modules.
+Only synthetic loopback routes and authentication are added to the packaged
+settings for testing. Missing config or either module must stop the actual proxy
+at startup. Malformed/missing sessions and non-OpenCode UA must receive 4xx with
+zero additional upstream calls. Export and run from the repository root:
+
+```sh
+mkdir -p /tmp/opencode/456-bundle
+nix --quiet develop -c env AGINCTUS_EXPORT_GO_BUNDLE=/tmp/opencode/456-bundle \
+  go test ./scripts/gateway -count=1 -v
+policy=$(mktemp)
+trap 'rm -f "$policy"' EXIT
+printf '%s\n' '{"default":[{"type":"reject"}],"transports":{"docker":{"ghcr.io/berriai/litellm:v1.103.0":[{"type":"insecureAcceptAnything"}]}}}' >"$policy"
+nix --quiet shell nixpkgs#podman -c podman run \
+  --signature-policy "$policy" \
+  --pull=never --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
+  -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 -e PYTHONDONTWRITEBYTECODE=1 \
+  --mount type=bind,src=/tmp/opencode/456-bundle,dst=/app/aginctus-go,readonly \
+  --mount type=bind,src="$PWD/deploy/litellm-go/model-group-forwarding.yaml",dst=/run/aginctus-policy.yaml,readonly \
+  --mount type=bind,src="$PWD/scripts/gateway/probe_pinned_litellm_responses.py",dst=/run/aginctus-probe.py,readonly \
+  --entrypoint /app/.venv/bin/python ghcr.io/berriai/litellm:v1.103.0 \
+  /run/aginctus-probe.py /run/aginctus-policy.yaml --packaged-hook /app/aginctus-go
+```
+
+The pinned stock image must already be cached; `--pull=never` forbids downloads.
+`--packaged-hook BUNDLE_DIR` and `--selective-hook` are mutually exclusive;
+packaged mode always requires strict policy. The manifest detects changed or
+incomplete delivery, not malicious replacement of both the assets and manifest.
+Go tests separately establish byte equality with the canonical source fixtures.
+
 Even a full selective-hook PASS does not establish safe deployment:
-an immutable-digest-pinned callback-equipped OCI image and explicitly
+an immutable-digest-pinned stock OCI runtime with a runtime version guard,
+callback delivery through public inline Compose configs, and explicitly
 declarative gateway selection, dynamic database alias routing, scoped
 virtual keys, and an operator-approved bounded inference request still
 remain. Never modify the current Incus gateway, real keys or host policy

@@ -1,5 +1,8 @@
 """Pure offline tests for stock LiteLLM native Responses audit harness."""
+import hashlib
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -14,6 +17,44 @@ POLICY = {"model_list": [], "litellm_settings": {
 
 
 class PinnedResponsesProbeTests(unittest.TestCase):
+    def test_missing_session_is_absent_on_wire(self):
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = b""
+        with patch.object(probe.OPENER, "open", return_value=response) as op:
+            probe.send(12345, probe.ALIAS, None)
+        headers = {k.lower(): v for k, v in op.call_args.args[0].header_items()}
+        self.assertNotIn("x-opencode-session", headers)
+
+    def test_packaged_bundle_rejects_missing_or_modified_files_before_import(self):
+        root = Path(__file__).parent
+        assets = {"config.yaml": (root / "selective-go.yaml").read_bytes()}
+        for name in ("litellm_opencode_go_hook.py", "opencode_go_forwarding.py"):
+            assets[name] = (root / name).read_bytes()
+        manifest = {name: hashlib.sha256(data).hexdigest() for name, data in assets.items()}
+        for name in assets:
+            for missing in (True, False):
+                with self.subTest(name=name, missing=missing), tempfile.TemporaryDirectory() as tmp:
+                    bundle = Path(tmp)
+                    for asset, data in assets.items():
+                        (bundle / asset).write_bytes(data)
+                    (bundle / "manifest.json").write_text(json.dumps(manifest))
+                    if missing:
+                        (bundle / name).unlink()
+                    else:
+                        (bundle / name).write_bytes(b"tampered")
+                    with self.assertRaises((OSError, RuntimeError)):
+                        probe.load_packaged_hook(bundle)
+
+    def test_packaged_policy_rejects_broad_forwarding(self):
+        policy = {"litellm_settings": {
+            "callbacks": ["litellm_opencode_go_hook.proxy_handler_instance"],
+        }}
+        probe.verify_packaged_policy(policy)
+        policy["litellm_settings"]["forward_client_headers_to_llm_api"] = True
+        with self.assertRaisesRegex(RuntimeError, "callback-only"):
+            probe.verify_packaged_policy(policy)
+
     def test_operator_runbook_uses_ephemeral_podman_policy(self):
         runbook_path = Path(__file__).resolve().parents[2] / (
             "docs/gateway-api-key-pilot.md")
