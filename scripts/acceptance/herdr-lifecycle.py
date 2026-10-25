@@ -79,11 +79,9 @@ def workspace_inventory(machine):
             raise RuntimeError("invalid Herdr workspace entry")
         wid = workspace.get("workspace_id")
         label = workspace.get("label")
-        if (
-            not isinstance(wid, str) or not wid
-            or not isinstance(label, str)
-            or wid in inventory
-        ):
+        # Unrelated workspaces may have no label; only the selected
+        # owned ID must carry the exact label asserted by this run.
+        if not isinstance(wid, str) or not wid or wid in inventory:
             raise RuntimeError("ambiguous Herdr workspace inventory")
         inventory[wid] = label
     return inventory
