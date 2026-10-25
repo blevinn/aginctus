@@ -215,6 +215,25 @@ mismatch is a failed test requiring investigation, never a reason to return
 a synthetic green result. No outer persistent Incus worker/MCP mutation is
 enabled by this scenario.
 
+## Real LiteLLM Responses function-call transport (pre-Herdr)
+
+The opt-in `gateway_tool_transport.py` verifier builds four **fake-result**
+Responses HTTP turns through the **real LiteLLM** alias and the test-only
+synthetic upstream: `read`, `edit`, `bash`, then a terminal message.
+It rejects mismatched response IDs, call IDs, ordering, missing terminal
+completion, and unexpected upstream observation counts. The unchanged
+`synthetic-gateway` test remains text-only. `synthetic_gateway_probe.py`
+supports the separate trusted fixture startup switch `--tool-sequence`,
+but no public client can remotely enable tool mode.
+
+**No tool actually executes in this transport probe.** The
+`function_call_output` bodies are explicit synthetic acknowledgements,
+not legitimate agent receipts. This increment only isolates potential
+LiteLLM Responses translation problems before real Herdr/OpenCode
+integration under #558. It cannot satisfy #531/#431 by itself. The
+separate operator-only NixOS VM scenario and packaged Python source
+dependencies follow in the next stack increment.
+
 ## Machine-readable run evidence
 
 Every `runner.py test <scenario>` invocation writes an independent,
