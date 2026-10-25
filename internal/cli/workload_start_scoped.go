@@ -13,8 +13,8 @@ import (
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
-// This is an opt-in, existing-instance-only operation. Never forward a
-// scoped start through the v0.1 default-project lifecycle runner.
+// These are opt-in, existing-instance-only operations. Never forward
+// project-scoped transitions through the v0.1 default-project runner.
 var startScopedWorkloadIncus = func(ctx context.Context, scope incusscope.ProjectScope, instance string) error {
 	return exec.CommandContext(ctx, "incus", scopedWorkloadStartArgs(scope, instance)...).Run()
 }
@@ -23,7 +23,17 @@ func scopedWorkloadStartArgs(scope incusscope.ProjectScope, instance string) []s
 	return []string{"--force-local", "--project", scope.Name, "start", instance}
 }
 
-// A manual start must not race any of the known installed system/current-user
+// Stop is separate from the legacy v0.1 default-project transition and uses
+// the same explicit local-project argument ordering as start.
+var stopScopedWorkloadIncus = func(ctx context.Context, scope incusscope.ProjectScope, instance string) error {
+	return exec.CommandContext(ctx, "incus", scopedWorkloadStopArgs(scope, instance)...).Run()
+}
+
+func scopedWorkloadStopArgs(scope incusscope.ProjectScope, instance string) []string {
+	return []string{"--force-local", "--project", scope.Name, "stop", instance}
+}
+
+// A manual transition must not race known installed system/current-user
 // Aginctus reconcilers. This is only a conservative denial gate: an absent
 // allowlist is NOT evidence of exclusive control over Incus.
 func requireNoKnownLifecycleUnits(ctx context.Context) error {
@@ -38,19 +48,38 @@ func requireNoKnownLifecycleUnits(ctx context.Context) error {
 }
 
 func runScopedWorkloadStart(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
+	return runScopedWorkloadTransition(ctx, args, out, stderr, cfg, "start", startScopedWorkloadIncus)
+}
+
+func runScopedWorkloadStop(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
+	return runScopedWorkloadTransition(ctx, args, out, stderr, cfg, "stop", stopScopedWorkloadIncus)
+}
+
+// Both operations require an explicit project and a confirmed single ID.
+// Read/verify, mutation and postflight run under one cooperative project
+// lease, but independent Incus clients are still not fenced by that lease.
+func runScopedWorkloadTransition(
+	ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config,
+	action string, mutate func(context.Context, incusscope.ProjectScope, string) error,
+) int {
 	project, rest, err := parseScopedInstanceStatusArgs(args)
-	if err != nil || len(rest) != 2 || rest[0] == "" || rest[1] != "--confirm-start" {
-		fmt.Fprintln(stderr, "Usage: aginctus workload start --project NAME WORKLOAD-ID --confirm-start")
+	if err != nil || len(rest) != 2 || rest[0] == "" || rest[1] != "--confirm-"+action {
+		fmt.Fprintf(stderr, "Usage: aginctus workload %s --project NAME WORKLOAD-ID --confirm-%s\n", action, action)
 		return 2
 	}
+	required, completed := "stopped", "running"
+	if action == "stop" {
+		required, completed = "running", "stopped"
+	}
+	prefix := "workload " + action + ": "
 	spec, err := workload.FromConfig(cfg, rest[0])
 	if err != nil {
-		fmt.Fprintln(stderr, "workload start: invalid selected workload configuration")
+		fmt.Fprintln(stderr, prefix+"invalid selected workload configuration")
 		return 1
 	}
 	scope, err := cfg.IncusProjectScope()
 	if err != nil || scope.Name != project {
-		fmt.Fprintln(stderr, "workload start: requested project must match incus.project")
+		fmt.Fprintln(stderr, prefix+"requested project must match incus.project")
 		return 2
 	}
 	// Share the existing cooperative per-project writer lease with the
@@ -58,7 +87,7 @@ func runScopedWorkloadStart(ctx context.Context, args []string, out, stderr io.W
 	// not honor it, so the checks below must still fail closed.
 	release, err := acquireScopedImageMutationLease(scope)
 	if err != nil {
-		fmt.Fprintln(stderr, "workload start: project writer lease unavailable; no instance transition attempted")
+		fmt.Fprintln(stderr, prefix+"project writer lease unavailable; no instance transition attempted")
 		return 1
 	}
 	defer release()
@@ -66,25 +95,25 @@ func runScopedWorkloadStart(ctx context.Context, args []string, out, stderr io.W
 	defer cancel()
 
 	if err := requireNoKnownLifecycleUnits(ctx); err != nil {
-		fmt.Fprintln(stderr, "workload start: known or unverified lifecycle controller; refusing manual start")
+		fmt.Fprintln(stderr, prefix+"known or unverified lifecycle controller; refusing manual start")
 		return 1
 	}
 	_, instances, err := readScopedManagedInstances(ctx, cfg, project)
 	if err != nil {
-		fmt.Fprintln(stderr, "workload start: owned local project inventory unverified")
+		fmt.Fprintln(stderr, prefix+"owned local project inventory unverified")
 		return 1
 	}
 	state, err := findScopedManagedInstance(instances, spec.Name, "workload", "agent-workload", spec.ID)
 	if err != nil {
-		fmt.Fprintln(stderr, "workload start: instance ownership unverified")
+		fmt.Fprintln(stderr, prefix+"instance ownership unverified")
 		return 1
 	}
 	switch {
-	case strings.EqualFold(state, "running"):
-		fmt.Fprintf(out, "workload %q: already running in project %q\n", spec.ID, project)
+	case strings.EqualFold(state, completed):
+		fmt.Fprintf(out, "workload %q: already %s in project %q\n", spec.ID, completed, project)
 		return 0
-	case !strings.EqualFold(state, "stopped"):
-		fmt.Fprintln(stderr, "workload start: a verified stopped instance is required; creation is not supported")
+	case !strings.EqualFold(state, required):
+		fmt.Fprintln(stderr, prefix+"a verified "+required+" instance is required; instance creation/removal is not supported")
 		return 1
 	}
 
@@ -92,33 +121,33 @@ func runScopedWorkloadStart(ctx context.Context, args []string, out, stderr io.W
 	// These observations happen immediately before the one scoped write;
 	// they are not an Incus transaction or a globally fenced lock.
 	if err := requireNoKnownLifecycleUnits(ctx); err != nil {
-		fmt.Fprintln(stderr, "workload start: lifecycle authority changed or is unverified")
+		fmt.Fprintln(stderr, prefix+"lifecycle authority changed or is unverified")
 		return 1
 	}
 	_, instances, err = readScopedManagedInstances(ctx, cfg, project)
 	if err != nil {
-		fmt.Fprintln(stderr, "workload start: project or instance inventory changed before mutation")
+		fmt.Fprintln(stderr, prefix+"project or instance inventory changed before mutation")
 		return 1
 	}
 	state, err = findScopedManagedInstance(instances, spec.Name, "workload", "agent-workload", spec.ID)
-	if err != nil || !strings.EqualFold(state, "stopped") {
-		fmt.Fprintln(stderr, "workload start: instance changed before mutation; no start attempted")
+	if err != nil || !strings.EqualFold(state, required) {
+		fmt.Fprintln(stderr, prefix+"instance changed before mutation; no start attempted")
 		return 1
 	}
-	if err := startScopedWorkloadIncus(ctx, scope, spec.Name); err != nil {
-		fmt.Fprintln(stderr, "workload start: scoped Incus start failed; inspect local project before retrying")
+	if err := mutate(ctx, scope, spec.Name); err != nil {
+		fmt.Fprintln(stderr, prefix+"scoped Incus start failed; inspect local project before retrying")
 		return 1
 	}
 	_, instances, err = readScopedManagedInstances(ctx, cfg, project)
 	if err != nil {
-		fmt.Fprintln(stderr, "workload start: post-start project inventory unverified; inspect before retrying")
+		fmt.Fprintln(stderr, prefix+"post-start project inventory unverified; inspect before retrying")
 		return 1
 	}
 	state, err = findScopedManagedInstance(instances, spec.Name, "workload", "agent-workload", spec.ID)
-	if err != nil || !strings.EqualFold(state, "running") {
-		fmt.Fprintln(stderr, "workload start: running state not verified; inspect before retrying")
+	if err != nil || !strings.EqualFold(state, completed) {
+		fmt.Fprintln(stderr, prefix+"running state not verified; inspect before retrying")
 		return 1
 	}
-	fmt.Fprintf(out, "workload %q: started in project %q\n", spec.ID, project)
+	fmt.Fprintf(out, "workload %q: %sed in project %q\n", spec.ID, action, project)
 	return 0
 }
