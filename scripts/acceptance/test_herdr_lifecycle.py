@@ -82,6 +82,10 @@ class LifecycleTests(unittest.TestCase):
             [],
             [{"workspace_id": "w99", "label": "other-run"}],
             [{"workspace_id": "w-other", "label": self.identity}],
+            [
+                {"workspace_id": "w99", "label": self.identity},
+                {"workspace_id": "w-other", "label": self.identity},
+            ],
         ):
             with self.subTest(workspaces=workspaces):
                 listing = json.dumps({"result": {
@@ -110,6 +114,31 @@ class LifecycleTests(unittest.TestCase):
             return "{}"
 
         with patch.object(mod, "invoke", side_effect=no_removal), self.assertRaises(
+            RuntimeError
+        ):
+            mod.phase("close", str(self.base), self.identity)
+        self.assertEqual(calls, [
+            ("workspace", "list"),
+            ("workspace", "close", "w99"),
+            ("workspace", "list"),
+        ])
+        self.assertTrue(mod.state_path(self.base).exists())
+
+    def test_other_workspace_with_same_run_label_blocks_postclose_proof(self):
+        self.seed_owned()
+        calls = []
+
+        def replacement(machine, *args):
+            calls.append(args)
+            if args == ("workspace", "list"):
+                key = "w99" if len(calls) == 1 else "orphan"
+                return json.dumps({"result": {
+                    "type": "workspace_list",
+                    "workspaces": [{"workspace_id": key, "label": self.identity}],
+                }})
+            return "{}"
+
+        with patch.object(mod, "invoke", side_effect=replacement), self.assertRaises(
             RuntimeError
         ):
             mod.phase("close", str(self.base), self.identity)
