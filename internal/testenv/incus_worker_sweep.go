@@ -13,8 +13,8 @@ import (
 // TrustedIncusSweepOptions are configured ONLY by an installed dedicated
 // worker service. Never populate them from a workload checkout or MCP input.
 type TrustedIncusSweepOptions struct {
-	SocketPath string
-	StoragePool string
+	SocketPath    string
+	StoragePool   string
 	PolicyKeyPath string
 }
 
@@ -25,7 +25,8 @@ func readTrustedWorkerKey(path string) ([]byte, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return nil, errors.New("invalid worker policy credential path")
 	}
-	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	// Nonblocking open lets the descriptor check reject FIFOs without waiting for a writer.
+	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, errors.New("trusted worker credential unavailable")
 	}
@@ -42,6 +43,7 @@ func readTrustedWorkerKey(path string) ([]byte, error) {
 	}
 	key := make([]byte, 32)
 	if _, err := io.ReadFull(file, key); err != nil {
+		clear(key)
 		return nil, errors.New("trusted worker policy credential unreadable")
 	}
 	return key, nil
@@ -72,7 +74,9 @@ func RunTrustedIncusExpirySweep(ctx context.Context, cfg TrustedIncusSweepOption
 		return empty, err
 	}
 	defer func() {
-		for i := range key { key[i] = 0 }
+		for i := range key {
+			key[i] = 0
+		}
 	}()
 	client, err := ConnectTrustedIncusVMClient(ctx, cfg.SocketPath)
 	if err != nil {
@@ -82,5 +86,6 @@ func RunTrustedIncusExpirySweep(ctx context.Context, cfg TrustedIncusSweepOption
 	if err != nil {
 		return empty, err
 	}
+	defer clear(backend.policyKey)
 	return ReconcileExpiredIncusVMs(ctx, backend, now)
 }

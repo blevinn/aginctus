@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -19,7 +20,7 @@ func TestTrustedWorkerKeyRejectsSymlinkLoosePermissionsAndWrongSize(t *testing.T
 	if err != nil || len(key) != 32 {
 		t.Fatalf("trusted private key not accepted: %v", err)
 	}
-	for _, item := range []struct{name, path string}{
+	for _, item := range []struct{ name, path string }{
 		{"relative", "key"},
 		{"directory", dir},
 	} {
@@ -30,22 +31,63 @@ func TestTrustedWorkerKeyRejectsSymlinkLoosePermissionsAndWrongSize(t *testing.T
 		})
 	}
 	link := filepath.Join(dir, "symlink")
-	if err := os.Symlink(good, link); err != nil { t.Fatal(err) }
-	if _, err := readTrustedWorkerKey(link); err == nil { t.Fatal("symlink credential admitted") }
-	if err := os.Chmod(good, 0644); err != nil { t.Fatal(err) }
-	if _, err := readTrustedWorkerKey(good); err == nil { t.Fatal("group/world-readable credential admitted") }
-	if err := os.Chmod(good, 0600); err != nil { t.Fatal(err) }
-	if err := os.WriteFile(good, []byte("too-short"), 0600); err != nil { t.Fatal(err) }
-	if _, err := readTrustedWorkerKey(good); err == nil { t.Fatal("short credential admitted") }
-	if err := os.WriteFile(good, make([]byte, 33), 0600); err != nil { t.Fatal(err) }
-	if _, err := readTrustedWorkerKey(good); err == nil { t.Fatal("oversized credential admitted") }
+	if err := os.Symlink(good, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readTrustedWorkerKey(link); err == nil {
+		t.Fatal("symlink credential admitted")
+	}
+	if err := os.Chmod(good, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readTrustedWorkerKey(good); err == nil {
+		t.Fatal("group/world-readable credential admitted")
+	}
+	if err := os.Chmod(good, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(good, []byte("too-short"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readTrustedWorkerKey(good); err == nil {
+		t.Fatal("short credential admitted")
+	}
+	if err := os.WriteFile(good, make([]byte, 33), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readTrustedWorkerKey(good); err == nil {
+		t.Fatal("oversized credential admitted")
+	}
+}
+
+func TestTrustedWorkerKeyRejectsFIFOAndHardLinks(t *testing.T) {
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "fifo")
+	if err := syscall.Mkfifo(fifo, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readTrustedWorkerKey(fifo); err == nil {
+		t.Fatal("FIFO credential admitted")
+	}
+	key := filepath.Join(dir, "key")
+	if err := os.WriteFile(key, make([]byte, 32), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Link(key, filepath.Join(dir, "hardlink")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readTrustedWorkerKey(key); err == nil {
+		t.Fatal("multiply linked credential admitted")
+	}
 }
 
 func TestTrustedSweepRefusesInvalidConfigBeforeDaemon(t *testing.T) {
-	if os.Geteuid() == 0 { t.Skip("worker process is explicitly non-root") }
+	if os.Geteuid() == 0 {
+		t.Skip("worker process is explicitly non-root")
+	}
 	cfg := TrustedIncusSweepOptions{
-		SocketPath: "/var/lib/incus/unix.socket",
-		StoragePool: "testenv",
+		SocketPath:    "/var/lib/incus/unix.socket",
+		StoragePool:   "testenv",
 		PolicyKeyPath: "/does-not-exist/worker.key",
 	}
 	if _, err := RunTrustedIncusExpirySweep(context.Background(), cfg, time.Time{}); err == nil {

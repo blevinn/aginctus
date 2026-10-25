@@ -22,8 +22,8 @@ func run(ctx context.Context, args []string, getenv func(string) string, stdout,
 		return 2
 	}
 	options := testenv.TrustedIncusSweepOptions{
-		SocketPath: getenv("AGINCTUS_TESTENV_WORKER_SOCKET"),
-		StoragePool: getenv("AGINCTUS_TESTENV_WORKER_POOL"),
+		SocketPath:    getenv("AGINCTUS_TESTENV_WORKER_SOCKET"),
+		StoragePool:   getenv("AGINCTUS_TESTENV_WORKER_POOL"),
 		PolicyKeyPath: getenv("AGINCTUS_TESTENV_POLICY_KEY_FILE"),
 	}
 	ctx, cancel := context.WithTimeout(ctx, 120*time.Second)

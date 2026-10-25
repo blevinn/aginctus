@@ -20,7 +20,7 @@ func TestSweepExecutableRejectsArgumentsBeforeAnyPrivileges(t *testing.T) {
 		return testenv.IncusReconcileResult{}, nil
 	}
 	var out, errOut bytes.Buffer
-	code := run(context.Background(), []string{"--socket=/tmp/other"}, func(string) string {return ""}, &out, &errOut)
+	code := run(context.Background(), []string{"--socket=/tmp/other"}, func(string) string { return "" }, &out, &errOut)
 	if code != 2 || called || out.Len() != 0 {
 		t.Fatalf("arbitrary daemon argument reached worker: %d %t %q", code, called, out.String())
 	}
@@ -37,8 +37,8 @@ func TestSweepExecutableOnlyReportsAggregateCounts(t *testing.T) {
 		return testenv.IncusReconcileResult{Scanned: 2, Skipped: 1, Destroyed: 1}, nil
 	}
 	env := map[string]string{
-		"AGINCTUS_TESTENV_WORKER_SOCKET": "/var/lib/incus/unix.socket",
-		"AGINCTUS_TESTENV_WORKER_POOL": "testenv",
+		"AGINCTUS_TESTENV_WORKER_SOCKET":   "/var/lib/incus/unix.socket",
+		"AGINCTUS_TESTENV_WORKER_POOL":     "testenv",
 		"AGINCTUS_TESTENV_POLICY_KEY_FILE": "/run/credentials/key",
 	}
 	var out, errOut bytes.Buffer
@@ -56,7 +56,7 @@ func TestSweepExecutableRedactsUntrustedFailures(t *testing.T) {
 			errors.New("provider leaked token=secret and run-path=/pilot/data")
 	}
 	var out, errOut bytes.Buffer
-	code := run(context.Background(), nil, func(string) string {return ""}, &out, &errOut)
+	code := run(context.Background(), nil, func(string) string { return "" }, &out, &errOut)
 	if code != 1 || !strings.Contains(out.String(), "failed=1") ||
 		strings.Contains(out.String()+errOut.String(), "secret") ||
 		strings.Contains(out.String()+errOut.String(), "/pilot") {
