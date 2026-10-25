@@ -188,14 +188,22 @@ def main(binary, inspect_tools=False, execute_tools=False):
                        XDG_DATA_HOME=str(root / "data"), XDG_CACHE_HOME=str(root / "cache"),
                        XDG_STATE_HOME=str(root / "state"),
                        OPENCODE_DISABLE_AUTOUPDATE="true")
-            result = subprocess.run(
-                [sys.executable, str(LAUNCHER), binary, "run", "--model", "aginctus/" + MODEL,
-                 ("Inspect calc.go and calc_test.go, fix Add using the real read/edit "
-                  "tools, run go test ./... with the bash tool. nonce=" + nonce)
-                 if execute_tools else
-                 ("Read calc.go and identify the error, then respond with " + EXPECTED)
-                 if inspect_tools else EXPECTED + " (repeat this marker verbatim)"],
-                cwd=root, env=env, capture_output=True, text=True, timeout=90, check=False)
+            try:
+                result = subprocess.run(
+                    [sys.executable, str(LAUNCHER), binary, "run", "--model", "aginctus/" + MODEL,
+                     ("Inspect calc.go and calc_test.go, fix Add using the real read/edit "
+                      "tools, run go test ./... with the bash tool. nonce=" + nonce)
+                     if execute_tools else
+                     ("Read calc.go and identify the error, then respond with " + EXPECTED)
+                     if inspect_tools else EXPECTED + " (repeat this marker verbatim)"],
+                    cwd=root, env=env, capture_output=True, text=True, timeout=90, check=False)
+            except subprocess.TimeoutExpired as exc:
+                raise AssertionError(
+                    "pinned OpenCode timed out: "
+                    f"requests={len(Handler.calls)} "
+                    f"tool_continuations={sum(map(len, Handler.continuations))} "
+                    f"timeout={exc.timeout}s"
+                ) from None
             assert Handler.calls, "real OpenCode did not reach the mock gateway"
             assert all(p == "/v1/responses" and auth == "Bearer integration-only-key"
                        and model == MODEL for p, auth, model, _, _ in Handler.calls), (
