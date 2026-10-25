@@ -53,6 +53,7 @@ assert [entry["status"] for entry in report["results"]] == [
     "pass", "pass", "not_run", "not_run", "not_run", "not_run",
 ]
 assert report["cleanup_commands"] == {"stop": "pass", "close": "pass"}
+assert report["local_workspace_removed"] == "pass"
 assert report["upstream_inference"] == "not_verified"
 assert report["complete_acceptance"] is False
 PY
@@ -87,8 +88,35 @@ assert cleanup_failure[0]["status"] == "fail"
 assert cleanup_failure[0]["results"][0]["status"] == "pass"
 assert cleanup_failure[0]["results"][1]["status"] == "pass"
 assert cleanup_failure[0]["cleanup"] == "not_verified"
+assert all(report["local_workspace_removed"] == "pass" for report in reports)
 PY
 unset ACCEPTANCE_TEST_CLEANUP_FAIL
+
+# A failed local rm must not yield PASS or claim that the workspace is gone.
+# This wrapper affects only the invoked harness, and its leftover root lives
+# beneath the test's own temporary directory for the EXIT trap to remove.
+mkdir -p "$tmp/bin"
+cat >"$tmp/bin/rm" <<'EOF'
+#!/usr/bin/env bash
+exit 19
+EOF
+chmod +x "$tmp/bin/rm"
+if TMPDIR="$tmp" PATH="$tmp/bin:$PATH" bash scripts/acceptance/opencode.sh mock; then
+  echo "unexpected local-removal pass" >&2; exit 1
+fi
+python3 - "$tmp/reports" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+reports = [json.loads(path.read_text()) for path in Path(sys.argv[1]).glob("*/result.json")]
+assert len(reports) == 4
+bad = [report for report in reports if report["local_workspace_removed"] == "fail"]
+assert len(bad) == 1
+assert bad[0]["status"] == "fail"
+assert bad[0]["harness_exit_code"] != 0
+assert bad[0]["cleanup"] == "not_verified"
+PY
 rm "$tmp/events/"*
 mkdir -m 755 "$tmp/unsafe-results"
 chmod 755 "$tmp/unsafe-results"
