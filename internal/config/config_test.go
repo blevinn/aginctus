@@ -363,8 +363,8 @@ func TestIncusProjectScopeDefaultAndPrecedence(t *testing.T) {
 	writeFile(t, explicitPath, `{"incus":{"project":"explicit-project"}}`)
 
 	loader := &Loader{
-		SystemPath: filepath.Join(dir, "missing-system"),
-		UserPath: filepath.Join(dir, "missing-user"),
+		SystemPath:  filepath.Join(dir, "missing-system"),
+		UserPath:    filepath.Join(dir, "missing-user"),
 		Environment: nil,
 	}
 	check := func(label, want string, options Options) {
@@ -396,8 +396,8 @@ func TestIncusProjectScopeDefaultAndPrecedence(t *testing.T) {
 
 func TestIncusProjectScopeRejectsInvalidValuesBeforeUse(t *testing.T) {
 	loader := &Loader{
-		SystemPath: filepath.Join(t.TempDir(), "missing-system"),
-		UserPath: filepath.Join(t.TempDir(), "missing-user"),
+		SystemPath:  filepath.Join(t.TempDir(), "missing-system"),
+		UserPath:    filepath.Join(t.TempDir(), "missing-user"),
 		Environment: nil,
 	}
 	for _, value := range []string{
