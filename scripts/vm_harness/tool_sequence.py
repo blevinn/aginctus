@@ -73,7 +73,7 @@ def tool_arguments(step, workdir, nonce):
     raise SequenceError("invalid synthetic tool step")
 
 
-def fixture_response(nonce, step, workdir):
+def fixture_response(nonce, step, workdir, model):
     output = []
     if step < 3:
         name = STEP_NAMES[step]
@@ -95,7 +95,7 @@ def fixture_response(nonce, step, workdir):
     return {
         "id": "resp_" + nonce + "_" + str(step),
         "object": "response", "created_at": int(time.time()),
-        "model": "synthetic-test", "status": "completed", "output": output,
+        "model": model, "status": "completed", "output": output,
         "usage": {"input_tokens": 12, "output_tokens": 8, "total_tokens": 20},
     }
 
@@ -141,7 +141,7 @@ def stream(response):
     ) + "data: [DONE]\n\n").encode()
 
 class ToolSequence:
-    def __init__(self, workdir="/workspace"):
+    def __init__(self, workdir="/workspace", model="synthetic-test"):
         # Only trusted test harness code constructs this object. The default
         # guest path is fixed; a temporary host loopback probe may supply its
         # own run-owned /tmp workspace. Never take workdir from HTTP input.
@@ -150,14 +150,17 @@ class ToolSequence:
             (workdir.startswith("/tmp/") and os.path.normpath(workdir) == workdir)
         ):
             raise SequenceError("untrusted fixture workspace root")
+        if model not in ("synthetic-test", "aginctus-go-pilot"):
+            raise SequenceError("unsupported trusted fixture alias")
         self.workdir = workdir
+        self.model = model
         self._lock = threading.Lock()
         self._steps = {}
 
     def next(self, body):
         """Emit one response only after an authenticated ordered continuation."""
         if not isinstance(body, dict) or body.get("model") not in (
-            "synthetic-test", "openai/synthetic-test"
+            self.model, "openai/" + self.model
         ) or body.get("stream") is not True:
             raise SequenceError("invalid tool-mode request")
         previous = body.get("previous_response_id")
@@ -190,4 +193,4 @@ class ToolSequence:
                     raise SequenceError("malformed function output")
                 step = previous_step + 1
                 self._steps[nonce] = step
-            return nonce, fixture_response(nonce, step, self.workdir)
+            return nonce, fixture_response(nonce, step, self.workdir, self.model)
