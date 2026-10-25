@@ -11,9 +11,9 @@ import (
 // Incus start operation. Never infer guest readiness from "Running" alone.
 // These bounds also keep an unavailable guest from tying up a worker forever.
 const (
-	MaxIncusAgentReadiness = 2 * time.Minute
-	incusAgentProbeTimeout = 2 * time.Second
-	incusAgentProbeInterval = 100 * time.Millisecond
+	MaxIncusAgentReadiness    = 2 * time.Minute
+	incusAgentProbeTimeout    = 2 * time.Second
+	incusAgentProbeInterval   = 100 * time.Millisecond
 	incusAgentProbeExecutable = "/run/current-system/sw/bin/true"
 )
 

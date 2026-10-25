@@ -28,7 +28,7 @@ func (c *readinessFakeIncusClient) ExecGuest(_ context.Context, _ string, argv [
 func TestIncusAgentReadinessAfterNativeStart(t *testing.T) {
 	client := &readinessFakeIncusClient{
 		fakeIncusVMClient: newFakeIncusClient(t),
-		readyAfter: 3,
+		readyAfter:        3,
 	}
 	backend, err := newTestIncusBackend(client, "testenv")
 	if err != nil {
@@ -52,7 +52,7 @@ func TestIncusAgentReadinessAfterNativeStart(t *testing.T) {
 func TestIncusAgentTimeoutPreservesRecoverableHandle(t *testing.T) {
 	client := &readinessFakeIncusClient{
 		fakeIncusVMClient: newFakeIncusClient(t),
-		readyAfter: 1000000,
+		readyAfter:        1000000,
 	}
 	backend, _ := newTestIncusBackend(client, "testenv")
 	ref, err := backend.CreateReadyIncusVM(context.Background(), admittedSpec(), 150*time.Millisecond)
@@ -114,7 +114,9 @@ func TestIncusAgentRejectsBadBudgetAndCancellation(t *testing.T) {
 		}
 	}
 	ref, err := backend.Create(context.Background(), admittedSpec())
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if err := backend.WaitForIncusVMAgent(ctx, ref, time.Second); !errors.Is(err, context.Canceled) {
