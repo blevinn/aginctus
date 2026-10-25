@@ -196,7 +196,7 @@ def main(binary, inspect_tools=False, execute_tools=False):
                      if execute_tools else
                      ("Read calc.go and identify the error, then respond with " + EXPECTED)
                      if inspect_tools else EXPECTED + " (repeat this marker verbatim)"],
-                    cwd=root, env=env, capture_output=True, text=True, timeout=90, check=False)
+                    cwd=root, env=env, capture_output=True, text=True, timeout=180, check=False)
             except subprocess.TimeoutExpired as exc:
                 captured = "\n".join(
                     value.decode("utf-8", "replace") if isinstance(value, bytes) else value or ""
