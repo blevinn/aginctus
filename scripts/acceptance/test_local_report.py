@@ -12,7 +12,6 @@ from unittest.mock import patch
 
 from scripts.acceptance import local_report
 
-
 RUN_ID = "aginctus-acceptance.ABCD1234"
 
 
