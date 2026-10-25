@@ -118,6 +118,35 @@ Incus environment during validation, not on the v0.1 pilot. Keep
 unchanged until separate owner arbitration and atomic update/rollback
 work is complete.
 
+## Cooperative scoped image-writer exclusion
+
+The two opt-in, create-only commands, `images import --project` and
+`images import-owned --project`, now hold the **same project-wide**
+Linux abstract Unix socket lease from their initial project inspection
+through final import verification. If another participating Aginctus
+image writer already holds that lease, the command fails **before**
+contacting Incus. Different aliases in the same project still conflict:
+they might resolve to an identical image fingerprint. Different
+projects have independent lease names.
+
+A lease is automatically released when its process exits, including
+after a crash; it needs no writable shared lockfile, NixOS tmpfiles
+rule, or global group. On non-Linux platforms, these opt-in writes
+fail closed rather than skip the lease. On a host where the system and
+user operators share a **network namespace**, this serializes their
+participating Aginctus processes even when their UIDs differ.
+
+**This is only cooperative exclusion, never authorization.** A process
+holding an abstract socket cannot prove its identity or lifecycle
+ownership. Unrelated Incus commands, external controllers, network
+namespaces, systemd services running the legacy `images update`,
+and concurrent Incus administrators do **not** acquire this lease.
+Another local process can intentionally hold its name and deny writes.
+The lease therefore does not make `replace-plan` authoritative and
+does not enable alias replacement, Home Manager handoff, or live pilot
+migration. Host/controller authority and project-scoped atomic
+replacement/rollback remain future work.
+
 ## Proposed scoped image replacement (read-only)
 
 ```sh
