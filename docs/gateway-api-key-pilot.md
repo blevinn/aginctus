@@ -417,9 +417,22 @@ activate `services.aginctus.settings.gateway.litellm.forwardClientHeaders`
 for this alias simply because it forwards the session; keep the running
 gateway unchanged.
 
-The selective callback from #470 is a candidate but has **not yet been
-verified in real pinned provider-bound Responses HTTP**. The stacked
-selective-hook test extends the same #528 pinned-image, loopback-only,
+**Observed selective-mode result, 2026-10-25 (PR #535):**
+the operator reached the real pinned LiteLLM v1.103.0 native Responses
+upstream. Authentic sessions were preserved, unrelated x-* and
+anthropic-beta client headers were blocked, the original OpenCode
+User-Agent was preserved, and a separate model remained isolated.
+However, a malformed Go session was rejected with HTTP **500**, not
+HTTP 4xx, and no new provider call. This proves the positive header
+allowlist but **fails the client-error rejection contract**. The pinned
+proxy converts a bare `ValueError` from the callback into 500.
+PR #535 now adapts only those expected sanitizer `ValueError`
+failures into a generic FastAPI `HTTPException(status_code=400)`,
+without reproducing rejected request/header contents. The corrected
+HTTP status and the independent spoofed-UA case are **pending a real
+pinned OCI rerun**; do not claim strict selective-mode acceptance yet.
+
+The stacked selective-hook test extends the same #528 pinned-image, loopback-only,
 synthetic-provider probe. It installs **the actual repo callback files**
 as two read-only container bind mounts, enabling their Python import
 path only inside that disposable OCI invocation. The dynamically generated
