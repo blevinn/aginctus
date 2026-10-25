@@ -6,10 +6,32 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"reflect"
 	"testing"
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
+
+func TestOperatorProjectCreateArgv(t *testing.T) {
+	scope, err := incusscope.NewProjectScope("aginctus")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"--force-local", "project", "create", "aginctus",
+		"--config", "features.images=true",
+		"--config", "features.networks=false",
+		"--config", "features.profiles=true",
+		"--config", "features.storage.volumes=true",
+		"--config", "user.aginctus.deployment=aginctus",
+		"--config", "user.aginctus.managed=true",
+		"--config", "user.aginctus.resource=deployment-project",
+	}
+	got := localProjectCreateArgs(scope)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("local project create args: got %q, want %q", got, want)
+	}
+}
 
 func TestOperatorProjectEnsureArgs(t *testing.T) {
 	for _, args := range [][]string{
