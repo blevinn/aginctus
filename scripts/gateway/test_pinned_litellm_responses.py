@@ -15,6 +15,19 @@ POLICY = {"model_list": [], "litellm_settings": {
 
 
 class PinnedResponsesProbeTests(unittest.TestCase):
+    def test_operator_runbook_uses_supported_podman_policy_flag(self):
+        runbook_path = Path(__file__).resolve().parents[2] / (
+            "docs/gateway-api-key-pilot.md")
+        runbook = runbook_path.read_text(encoding="utf-8")
+        self.assertIn(
+            '--signature-policy "$PWD/deploy/litellm-go/podman-probe-policy.json"',
+            runbook,
+        )
+        self.assertNotIn(
+            'CONTAINERS_POLICY_JSON="$PWD/deploy/litellm-go/podman-probe-policy.json"',
+            runbook,
+        )
+
     def test_podman_signature_policy_is_exactly_one_tag_and_default_deny(self):
         policy_path = Path(__file__).resolve().parents[2] / (
             "deploy/litellm-go/podman-probe-policy.json")
