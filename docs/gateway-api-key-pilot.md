@@ -346,15 +346,15 @@ Podman obtained through `nix shell` on this host did not find either
 The previous suggestion to set `CONTAINERS_POLICY_JSON` was incorrect:
 this environment variable does not select Podman's image policy.
 For this audit, pass the supported **`podman run --signature-policy PATH`**
-option, pointing to `deploy/litellm-go/podman-probe-policy.json`.
-Podman uses that policy for this invocation only.
-That file rejects all image sources by default and permits precisely
+option with an ephemeral policy created by the command below. The policy
+rejects all image sources by default and permits precisely
 `ghcr.io/berriai/litellm:v1.103.0` for this fixture. The
 `insecureAcceptAnything` entry means **no cryptographic signature check**
 is performed on that one tagged image: it is not a verification of publisher
-identity or immutable provenance. Do not use the file for production images
-or install it as a global/default trust policy. Verify an immutable OCI
-digest before any rollout, and keep this policy scoped to this disposable test.
+identity or immutable provenance. The policy is deliberately not stored in
+the repository or installed as a global/default trust policy. Verify an
+immutable OCI digest before any rollout, and keep this exception scoped to
+this disposable test.
 
 Rootless Podman still requires the host's preexisting user-namespace/subuid
 configuration and setuid `newuidmap`/`newgidmap` helpers; if these are absent,
@@ -367,8 +367,11 @@ The command below temporarily obtains Podman from Nix and runs the stock
 LiteLLM image with exactly the same network and filesystem restrictions:
 
 ```sh
+policy=$(mktemp)
+trap 'rm -f "$policy"' EXIT
+printf '%s\n' '{"default":[{"type":"reject"}],"transports":{"docker":{"ghcr.io/berriai/litellm:v1.103.0":[{"type":"insecureAcceptAnything"}]}}}' >"$policy"
 nix shell nixpkgs#podman --command podman run \
-  --signature-policy "$PWD/deploy/litellm-go/podman-probe-policy.json" \
+  --signature-policy "$policy" \
   --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
   -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 \
   -e PYTHONDONTWRITEBYTECODE=1 \

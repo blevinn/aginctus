@@ -1,6 +1,5 @@
 """Pure offline tests for stock LiteLLM native Responses audit harness."""
 import importlib.util
-import json
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -15,16 +14,16 @@ POLICY = {"model_list": [], "litellm_settings": {
 
 
 class PinnedResponsesProbeTests(unittest.TestCase):
-    def test_operator_runbook_uses_supported_podman_policy_flag(self):
+    def test_operator_runbook_uses_ephemeral_podman_policy(self):
         runbook_path = Path(__file__).resolve().parents[2] / (
             "docs/gateway-api-key-pilot.md")
         runbook = runbook_path.read_text(encoding="utf-8")
         self.assertIn(
-            '--signature-policy "$PWD/deploy/litellm-go/podman-probe-policy.json"',
+            'policy=$(mktemp)',
             runbook,
         )
         self.assertNotIn(
-            'CONTAINERS_POLICY_JSON="$PWD/deploy/litellm-go/podman-probe-policy.json"',
+            'podman-probe-policy.json',
             runbook,
         )
 
@@ -39,18 +38,10 @@ class PinnedResponsesProbeTests(unittest.TestCase):
         self.assertIn("ghcr.io/berriai/litellm:v1.103.0", runbook)
         self.assertNotIn("ghcr.io/berriai/litellm:v1.103.0-stable", runbook)
 
-    def test_podman_signature_policy_is_exactly_one_tag_and_default_deny(self):
+    def test_probe_does_not_ship_an_insecure_signature_policy(self):
         policy_path = Path(__file__).resolve().parents[2] / (
             "deploy/litellm-go/podman-probe-policy.json")
-        policy = json.loads(policy_path.read_text(encoding="utf-8"))
-        self.assertEqual(policy, {
-            "default": [{"type": "reject"}],
-            "transports": {"docker": {
-                "ghcr.io/berriai/litellm:v1.103.0": [
-                    {"type": "insecureAcceptAnything"},
-                ],
-            }},
-        })
+        self.assertFalse(policy_path.exists())
 
     def test_anonymous_control_has_no_alternative_auth_headers(self):
         response = MagicMock()
