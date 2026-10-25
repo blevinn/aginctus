@@ -226,7 +226,9 @@ confuse aggregate `not_run` with a failed test.
   introduced. Never count unexecuted checks as passes.
 - Design a signed or otherwise independently verifiable live-acceptance
   receipt under explicit operator approval and source-scoped authority before
-  adding a live importer or any complete-acceptance success state.
+  adding a live importer or any complete-acceptance success state. The
+  [proposed trust contract](live-acceptance-receipts.md) tracks that separate
+  v0.2 work in #514; no live receipt verifier is implemented yet.
 - Evolve `schema_version` for incompatible changes, and use stable suite IDs.
 
 VM evidence semantics remain unchanged. Future schema adapters must not
