@@ -64,14 +64,6 @@ jobs:
             ~/.cache/go-build
           key: hermetic-go-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'flake.lock') }}
 
-      # Temporary PR diagnostic: only static rule IDs for files touched by #533.
-      - name: diagnose changed-file lint (temporary)
-        run: |
-          nix --quiet develop --no-update-lock-file -c ruff check --diff scripts/acceptance/test_local_report.py || true
-          nix --quiet develop --no-update-lock-file -c shellcheck -f gcc scripts/acceptance/opencode.sh scripts/acceptance/opencode-test.sh || true
-          # End the temporary diagnostic run before expensive suites.
-          exit 1
-
       - name: populate Go module cache
         run: nix --quiet develop --no-update-lock-file -c go mod download
 
