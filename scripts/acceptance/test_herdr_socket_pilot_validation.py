@@ -32,6 +32,8 @@ class PilotTests(unittest.TestCase):
         if args[:3] == ["herdr", "machine", "list"]:
             return 0, json.dumps([{"label": mod.WORKLOAD, "target": mod.WORKLOAD,
                                    "session": "default", "enabled": True}])
+        if args[:4] == ["ssh", "-o", "BatchMode=yes", mod.WORKLOAD]:
+            return 0, mod.EXPECTED_CONFIG_HOME + "\n"
         if args[:3] == ["herdr", "machine", "status"]:
             return 0, json.dumps([{"label": mod.WORKLOAD, "status": "reachable"}])
         if args[:2] == ["herdr", "--machine"]:
@@ -124,6 +126,18 @@ class PilotTests(unittest.TestCase):
             return self.fake(instance, args, **kwargs)
         rc, output, _ = self.run_check(empty_status)
         self.assertEqual(rc, 1, output)
+
+    def test_missing_remote_xdg_config_blocks_workspace(self):
+        def missing_xdg(instance, args, **kwargs):
+            if args[:4] == ["ssh", "-o", "BatchMode=yes", mod.WORKLOAD]:
+                return 0, ""
+            return self.fake(instance, args, **kwargs)
+        rc, output, calls = self.run_check(missing_xdg)
+        self.assertEqual(rc, 1)
+        self.assertIn("FAIL: managed SSH delivers Herdr explicit-session config directory", output)
+        self.assertNotIn("secret", output)
+        self.assertTrue(any(call.args[1][:4] == [
+            "ssh", "-o", "BatchMode=yes", mod.WORKLOAD] for call in calls))
 
     def test_nonzero_or_invalid_workspace_output_is_not_success(self):
         for code, response in ((2, "secret failure"), (0, "healthy"), (0, "[]"),
