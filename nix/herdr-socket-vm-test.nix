@@ -93,10 +93,71 @@ pkgs.testers.runNixOSTest {
     virtualisation.memorySize = 1024;
   };
 
+  nodes.client = {
+    imports = [
+      (import ./guest-state-bindings.nix {
+        bindings = [
+          {
+            class = "system";
+            subdir = "herdr";
+            target = "/var/lib/herdr";
+          }
+          {
+            class = "system";
+            subdir = "ssh";
+            target = "/var/lib/aginctus/ssh";
+          }
+        ];
+      })
+    ];
+    system.stateVersion = "26.05";
+    environment.systemPackages = [
+      (import ./herdr-client-command.nix { inherit pkgs herdrPackage; })
+    ];
+    # Disposable stand-in for an Incus-attached filesystem, never pilot storage.
+    systemd.mounts = [
+      {
+        what = "tmpfs";
+        where = "/var/lib/aginctus/state/system";
+        type = "tmpfs";
+        wantedBy = [ "multi-user.target" ];
+      }
+    ];
+  };
+
   testScript = ''
     import json
 
     start_all()
+    client.wait_for_unit("var-lib-herdr.mount")
+    client.wait_for_unit("var-lib-aginctus-ssh.mount")
+    client.succeed('test "$(stat -c %d:%i /var/lib/herdr)" = "$(stat -c %d:%i /var/lib/aginctus/state/system/herdr)"')
+    client.succeed('test "$(stat -c %d:%i /var/lib/aginctus/ssh)" = "$(stat -c %d:%i /var/lib/aginctus/state/system/ssh)"')
+
+    # Seed only a nonsecret catalog fixture, never SSH credentials. Bare Incus
+    # exec has no XDG environment; the shipped command must still read/write
+    # the daemon's persistent catalog, ignoring ambient rootfs XDG paths.
+    catalog = {"version": 1, "ssh": [{
+        "id": "0123456789abcdef0123456789abcdef", "label": "aginctus-dev",
+        "target": "aginctus-dev", "session": "default", "enabled": True,
+    }]}
+    client.succeed("mkdir -p /var/lib/herdr/herdr/client")
+    client.succeed("printf '%s' '" + json.dumps(catalog) + "' > /var/lib/herdr/herdr/client/endpoints.json")
+    bare_cli = "env -i PATH=/run/current-system/sw/bin HOME=/root herdr "
+    rows = json.loads(client.succeed(bare_cli + "machine list --json"))
+    assert len(rows) == 1 and rows[0]["enabled"] and rows[0]["label"] == "aginctus-dev", rows
+    client.succeed(bare_cli + "machine disable " + catalog["ssh"][0]["id"])
+    saved = json.loads(client.succeed("cat /var/lib/aginctus/state/system/herdr/herdr/client/endpoints.json"))
+    assert saved["ssh"][0]["enabled"] is False, saved
+    client.succeed("test ! -e /root/.local/state/herdr/client/endpoints.json")
+    # Unbind/rebind simulates rediscovery of the same data without creating a
+    # private identity. This is not a real Incus guest-recreation acceptance.
+    client.succeed("systemctl stop var-lib-herdr.mount")
+    client.fail(bare_cli + "machine list --json")
+    client.succeed("systemctl start var-lib-herdr.mount")
+    rows = json.loads(client.succeed(bare_cli + "machine list --json"))
+    assert len(rows) == 1 and rows[0]["enabled"] is False, rows
+    client.succeed("test ! -e /var/lib/aginctus/ssh/manifest")
     machine.wait_for_unit("multi-user.target")
 
     # The sshd and herdr services must agree on HERDR_SOCKET_PATH. This

@@ -1,212 +1,152 @@
 #!/usr/bin/env python3
-"""Operator validation script for review finding #254: the freshly built
-``aginctus-dev`` workload image must start the pinned Herdr server and
-let the SSH-invoked Herdr CLI reach it without a manual symlink.
+"""Read-only existing-pilot checks for #254, without inference or bootstrap.
 
-This script is read-only on the operator's host: it does not rebuild,
-remove, restart, or modify the actual ``aginctus-dev`` pilot instance.
-It only inspects:
-
-* The systemd ``herdr`` service environment on the guest matches the
-  sshd ``SetEnv`` line (sockets agree).
-* The socket file exists at the agreed path.
-* The Herdr CLI on the guest can reach the server via the configured
-  socket and returns a valid JSON envelope.
-* ``herdr --machine aginctus-dev workspace list`` succeeds using the
-  managed strict-SSH authentication (no password, no manual symlink).
-* Service restart and guest recreation preserve the behaviour.
-* Missing or unhealthy socket states fail predictably.
-
-Each step prints PASS/FAIL with a phase label so the operator can
-attribute failures to the specific gate.
-
-Exit codes:
-* ``0`` — every step PASS.
-* ``1`` — one or more steps FAIL (details suppressed, never logs
-  secret material).
-
-This script does NOT pull live inference, does NOT touch credentials,
-does NOT modify firewall policy, and does NOT execute any Aginctus
-state mutation. It is safe to run against the pilot instance.
-
-Prerequisites:
-* ``aginctus`` CLI is installed.
-* The pilot ``aginctus-dev`` workload is built with PR #328's
-  ``HERDR_SOCKET_PATH`` alignment.
-* The operator has the SSH key provisioned for the workload's
-  ``agent`` account.
+Remote machine operations run in the Herdr client, not the workload. Missing
+credentials are reported by exit code, never created. This does not establish
+fresh-guest, restart or recreation acceptance; those need separate evidence.
 """
 import json
-import re
+import shlex
 import subprocess
 import sys
 
-# The Herdr CLI requires the running Herdr server to listen on a Unix
-# socket inside the workload. The merged socket path comes from
-# PR #328 and is the same one the test VM in
-# ``nix/herdr-socket-vm-test.nix`` asserts on.
 EXPECTED_SOCKET_PATH = "/var/lib/herdr/config/herdr/herdr.sock"
-SAFE_MACHINE_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$")
-INSTANCE_NAME = "aginctus-dev"
+CLIENT = "aginctus-herdr"
+WORKLOAD = "aginctus-dev"
 
 
-def run_remote(guest_exec_args, *, timeout=30):
-    """Run a command inside the workload via `incus exec`.
-
-    Returns (rc, stdout).  Stderr is captured separately so the caller
-    can decide whether to merge it for JSON envelopes.  Errors never
-    leak command output: only the rc is returned.
-    """
+def run_remote(instance, arguments, *, merge_stderr=False):
+    """Capture helper protocols internally; never print guest output."""
     try:
-        completed = subprocess.run(
-            ["incus", "exec", INSTANCE_NAME, "--", *guest_exec_args],
-        capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
+        result = subprocess.run(
+            ["incus", "--project", "default", "exec", instance, "--", *arguments],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT if merge_stderr else subprocess.PIPE,
+            text=True, timeout=30, check=False,
         )
     except subprocess.TimeoutExpired:
         return 124, ""
-    except FileNotFoundError:
+    except OSError:
         return 127, ""
-    return completed.returncode, completed.stdout
+    return result.returncode, result.stdout
 
 
 def expect(condition, phase, details=""):
-    """Record a phase result and print a sanitized PASS/FAIL line."""
-    if condition:
-        print("PASS: " + phase)
-        return True
-    print("FAIL: " + phase + (" (" + details + ")" if details else ""), file=sys.stderr)
-    return False
+    print(("PASS: " if condition else "FAIL: ") + phase
+          + (" (" + details + ")" if details else ""),
+          file=sys.stdout if condition else sys.stderr)
+    return bool(condition)
+
+
+def parse_json(output):
+    try:
+        return json.loads(output)
+    except ValueError:
+        return None
+
+
+def inspect(instance, helper, *arguments):
+    rc, output = run_remote(instance, [helper, "inspect", *arguments])
+    classification = {0: "present", 3: "absent", 1: "unsafe/inconsistent",
+                      2: "invalid invocation"}.get(rc, "transport/helper failure")
+    ok = expect(rc == 0, instance + " " + helper, f"rc={rc}, {classification}")
+    return ok, output
 
 
 def main():
     if sys.argv[1:]:
-        sys.exit("usage: herdr-socket-pilot-validation.py")
-    if not SAFE_MACHINE_NAME.fullmatch(INSTANCE_NAME):
-        sys.exit("instance name is not a safe managed Herdr target")
-
+        print("usage: herdr-socket-pilot-validation.py", file=sys.stderr)
+        return 2
     results = []
 
-    # Phase 1: sshd SetEnv and herdr systemd Environment agree. Both are
-    # read from the guest, which is authoritative: the on-host sshd query
-    # never reflected the workload's own sshd configuration.
-    rc, stdout = run_remote([
-        "sh", "-c",
-        "sshd -T 2>/dev/null | grep -i '^setenv HERDR_SOCKET_PATH'",
-    ])
-    guest_setenv = stdout.strip()
-    results.append(expect(
-        guest_setenv.endswith(EXPECTED_SOCKET_PATH),
-        "workload sshd SetEnv HERDR_SOCKET_PATH=" + EXPECTED_SOCKET_PATH,
-    ))
+    rc, output = run_remote(WORKLOAD, ["sshd", "-T"])
+    sshd = {key.lower(): value for line in output.splitlines() if " " in line
+            for key, value in [line.split(" ", 1)]}
+    results.append(expect(rc == 0 and
+                          "HERDR_SOCKET_PATH=" + EXPECTED_SOCKET_PATH
+                          in shlex.split(sshd.get("setenv", "")),
+                          "workload sshd socket environment"))
+    results.append(expect(rc == 0 and all(
+        sshd.get(key) == value for key, value in {
+            "passwordauthentication": "no", "kbdinteractiveauthentication": "no",
+            "permitrootlogin": "no", "allowagentforwarding": "no",
+            "allowtcpforwarding": "no", "allowstreamlocalforwarding": "no",
+            "x11forwarding": "no", "permittunnel": "no", "permituserrc": "no",
+        }.items()), "strict workload SSH posture"))
 
-    rc, stdout = run_remote([
-        "sh", "-c",
-        "systemctl show herdr.service -p Environment --no-pager",
-    ])
-    herdr_env = stdout.strip()
-    results.append(expect(
-        "HERDR_SOCKET_PATH=" + EXPECTED_SOCKET_PATH in herdr_env
-        or 'HERDR_SOCKET_PATH="' + EXPECTED_SOCKET_PATH + '"' in herdr_env,
-        "workload herdr.service Environment HERDR_SOCKET_PATH=" + EXPECTED_SOCKET_PATH,
-    ))
+    rc, output = run_remote(WORKLOAD, [
+        "systemctl", "show", "herdr.service", "-p", "Environment", "--value"])
+    results.append(expect(rc == 0 and
+                          "HERDR_SOCKET_PATH=" + EXPECTED_SOCKET_PATH in shlex.split(output),
+                          "workload systemd socket environment"))
+    rc, _ = run_remote(WORKLOAD, ["test", "-S", EXPECTED_SOCKET_PATH])
+    results.append(expect(rc == 0, "workload socket exists"))
+    rc, _ = run_remote(WORKLOAD, ["test", "!", "-L", "/home/agent/.config/herdr"])
+    results.append(expect(rc == 0, "manual socket symlink absent"))
 
-    # Phase 2: the socket file exists at the agreed path.
-    rc, stdout = run_remote(["test", "-S", EXPECTED_SOCKET_PATH])
-    results.append(expect(rc == 0, "socket file at " + EXPECTED_SOCKET_PATH))
+    identity_ok, identity = inspect(CLIENT, "aginctus-ssh-client-identity")
+    trust_ok, _ = inspect(CLIENT, "aginctus-ssh-host-trust", WORKLOAD)
+    authorization_ok, authorization = inspect(WORKLOAD, "aginctus-ssh-authorize", "agent")
+    results.extend([identity_ok, trust_ok, authorization_ok])
+    if identity_ok and authorization_ok:
+        keys = [line.removeprefix("public_key\t") for line in identity.splitlines()
+                if line.startswith("public_key\t")]
+        results.append(expect(len(keys) == 1 and keys[0] == authorization.strip(),
+                              "workload authorization matches client identity"))
+    if not all(results):
+        print("BLOCKED: remote probes require healthy socket, identity, trust and authorization; "
+              "no reconciliation attempted", file=sys.stderr)
+        return 1
 
-    # Phase 3: the Herdr CLI reaches the server via the configured
-    # socket and returns a valid JSON envelope.  The SSH environment
-    # derives HERDR_SOCKET_PATH from the sshd SetEnv, so the operator
-    # does NOT set it manually and does NOT install a symlink.
-    rc, stdout = run_remote([
-        "sh", "-c",
-        "su - agent -c 'herdr machine list --json'",
-    ])
-    parsed = None
-    try:
-        parsed = json.loads(stdout)
-    except (json.JSONDecodeError, ValueError):
-        pass
-    results.append(expect(
-        isinstance(parsed, list),
-        "herdr CLI reaches the server without manual HERDR_SOCKET_PATH",
-    ))
+    rc, output = run_remote(CLIENT, ["herdr", "machine", "list", "--json"])
+    catalog = parse_json(output)
+    entries = [entry for entry in catalog if isinstance(entry, dict)
+               and entry.get("label") == WORKLOAD] if isinstance(catalog, list) else []
+    registered = expect(rc == 0 and len(entries) == 1
+                        and entries[0].get("target") == WORKLOAD
+                        and entries[0].get("session") == "default"
+                        and entries[0].get("enabled") is True,
+                        "client machine catalog contains intended enabled workload")
+    if not registered:
+        print("BLOCKED: managed machine registration required; no reconciliation attempted",
+              file=sys.stderr)
+        return 1
 
-    # Phase 4: `herdr --machine <label> workspace list` succeeds via
-    # managed strict SSH.  This is the operator-acceptance command from
-    # the issue body.
-    rc, stdout = run_remote([
-        "sh", "-c",
-        "su - agent -c 'herdr --machine " + INSTANCE_NAME + " workspace list'",
-    ])
-    # `workspace list` prints a JSON envelope on success. Accept either
-    # the documented envelope or a plain success line; what matters is
-    # that the CLI did not surface NotFound or fall back to a local
-    # socket.
-    results.append(expect(
-        rc == 0 and stdout.strip(),
-        "herdr --machine " + INSTANCE_NAME + " workspace list via managed SSH",
-    ))
+    rc, output = run_remote(CLIENT, ["herdr", "machine", "status", WORKLOAD, "--json"])
+    status = parse_json(output)
+    results.append(expect(rc == 0 and isinstance(status, list) and len(status) == 1
+                          and isinstance(status[0], dict)
+                          and status[0].get("label") == WORKLOAD
+                          and status[0].get("status") == "reachable",
+                          "targeted client machine status reports reachable"))
 
-    # Phase 5: missing or unhealthy socket states fail predictably.
-    # `herdr api snapshot` always contacts the server; pointing it at
-    # a non-existent socket must surface the server_not_running code
-    # instead of a silent hang.
-    rc, stdout = run_remote([
-        "sh", "-c",
-        "su - agent -c 'export HERDR_SOCKET_PATH=/run/herdr/missing.sock && "
-        "herdr api snapshot' 2>&1 || true",
-    ])
-    parsed_missing = None
-    try:
-        parsed_missing = json.loads(stdout)
-    except (json.JSONDecodeError, ValueError):
-        pass
-    results.append(expect(
-        isinstance(parsed_missing, dict)
-        and parsed_missing.get("error", {}).get("code") == "server_not_running",
-        "missing socket returns server_not_running error envelope",
-    ))
+    rc, output = run_remote(CLIENT, ["herdr", "--machine", WORKLOAD, "workspace", "list"])
+    envelope = parse_json(output)
+    result = envelope.get("result") if isinstance(envelope, dict) else None
+    results.append(expect(rc == 0 and isinstance(result, dict)
+                          and result.get("type") == "workspace_list"
+                          and isinstance(result.get("workspaces"), list),
+                          "client remote workspace list via managed SSH"))
 
-    # Phase 6: strict SSH posture must not be weakened.  The
-    # ``AuthorizedKeysFile`` and ``PasswordAuthentication`` values are
-    # the relevant security controls.
-    rc, stdout = run_remote([
-        "sh", "-c",
-        "sshd -T 2>/dev/null | grep -E '^passwordauthentication "
-        "|^kbdinteractiveauthentication |^permitrootlogin "
-        "|^allowagentforwarding |^allowtcpforwarding "
-        "|^allowstreamlocalforwarding |^x11forwarding '",
-    ])
-    sshd_lines = stdout.lower()
-    strict = all(
-        line in sshd_lines
-        for line in (
-            "passwordauthentication no",
-            "kbdinteractiveauthentication no",
-            "permitrootlogin no",
-            "allowagentforwarding no",
-            "allowtcpforwarding no",
-            "allowstreamlocalforwarding no",
-            "x11forwarding no",
-        )
-    )
-    results.append(expect(strict, "strict SSH posture preserved on workload"))
-
-    if all(results):
-        print("OVERALL: PASS (every gate green)")
-        return 0
-    failed = sum(1 for ok in results if not ok)
-    print("OVERALL: FAIL (" + str(failed) + " of " + str(len(results)) + " gates red)", file=sys.stderr)
-    return 1
+    # This deliberate negative probe is the only environment override. Positive
+    # remote discovery above relies on sshd, never a per-call socket override.
+    rc, output = run_remote(WORKLOAD, [
+        "su", "-", "agent", "-c",
+        "HERDR_SOCKET_PATH=/run/herdr/missing.sock herdr api snapshot"], merge_stderr=True)
+    envelope = parse_json(output)
+    error = envelope.get("error") if isinstance(envelope, dict) else None
+    results.append(expect(rc not in (0, 124, 127) and isinstance(error, dict)
+                          and error.get("code") == "server_not_running",
+                          "missing socket rejected"))
+    if not all(results):
+        return 1
+    print("OVERALL: PASS (existing guest only; restart/recreation not tested)")
+    return 0
 
 
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (RuntimeError, ValueError, KeyError, json.JSONDecodeError) as error:
-        print("FAIL: pilot validation script error (" + str(error) + ")", file=sys.stderr)
+    except (RuntimeError, ValueError, KeyError, TypeError):
+        print("FAIL: invalid pilot probe response (output suppressed)", file=sys.stderr)
         sys.exit(1)
