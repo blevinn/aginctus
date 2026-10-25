@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
 
 const (
@@ -57,6 +59,21 @@ func (c *Config) String(path string) (string, error) {
 		return "", fmt.Errorf("configuration key %q must be a string, got %T", path, value)
 	}
 	return typed, nil
+}
+
+// IncusProjectScope resolves the declarative project selection using the
+// same validated identity used for read-only policy and create-only planning.
+// A selected project is NOT proof that the current v0.1 lifecycle uses it.
+func (c *Config) IncusProjectScope() (incusscope.ProjectScope, error) {
+	name, err := c.String("incus.project")
+	if err != nil {
+		return incusscope.ProjectScope{}, fmt.Errorf("incus.project: %w", err)
+	}
+	scope, err := incusscope.NewProjectScope(name)
+	if err != nil {
+		return incusscope.ProjectScope{}, fmt.Errorf("incus.project: %w", err)
+	}
+	return scope, nil
 }
 
 func (c *Config) Bool(path string) (bool, error) {
@@ -149,7 +166,13 @@ func (l *Loader) Load(options Options) (*Config, error) {
 		}
 	}
 
-	return &Config{values: values}, nil
+	selected := &Config{values: values}
+	// Validate once after all precedence layers have been applied. An
+	// invalid selection must not be silently interpreted as "default".
+	if _, err := selected.IncusProjectScope(); err != nil {
+		return nil, err
+	}
+	return selected, nil
 }
 
 var defaults = map[string]any{
@@ -201,6 +224,7 @@ var defaults = map[string]any{
 		},
 	},
 	"incus": map[string]any{
+		"project": incusscope.DefaultAginctusProject,
 		"management": map[string]any{
 			"network": map[string]any{
 				"name": "aginctus-mgmt",

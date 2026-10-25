@@ -27,6 +27,15 @@ let
     }).config;
 
   base = evaluate { };
+  alternateProject = evaluate {
+    services.aginctus.settings.incus.project = "aginctus-alt";
+  };
+  invalidProjectDefault = evaluate {
+    services.aginctus.settings.incus.project = "default";
+  };
+  invalidProjectPath = evaluate {
+    services.aginctus.settings.incus.project = "../escape";
+  };
   kernelRoutingOnly = evaluate {
     services.aginctus.settings.firewall.egress.allowTailscaleRouting = false;
   };
@@ -185,6 +194,10 @@ assert !base.services.aginctus.reconcile.enable;
 assert !base.services.aginctus.reconcile.gateway;
 assert !(builtins.hasAttr "aginctus-reconcile" base.systemd.services);
 assert settings.incus.management.network.name == "integration-mgmt";
+assert settings.incus.project == "aginctus";
+assert alternateProject.services.aginctus.settings.incus.project == "aginctus-alt";
+assert !(builtins.tryEval invalidProjectDefault.services.aginctus.settings.incus.project).success;
+assert !(builtins.tryEval invalidProjectPath.services.aginctus.settings.incus.project).success;
 assert settings.firewall.zone == "aginctus-dns";
 assert settings.firewall.egress.allowTailscaleRouting;
 assert !kernelRoutingOnly.services.aginctus.settings.firewall.egress.allowTailscaleRouting;

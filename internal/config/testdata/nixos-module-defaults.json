@@ -20,6 +20,7 @@
     }
   },
   "incus": {
+    "project": "aginctus",
     "management": {
       "network": {
         "ipv4": {

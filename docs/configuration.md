@@ -121,6 +121,51 @@ For example, a system file may define:
 
 and a user file may override only the name without repeating the rest of the object.
 
+## Selected Incus project (v0.2 foundation)
+
+`incus.project` is the declarative, single-deployment **target** for
+v0.2 Incus project isolation. It defaults to `aginctus` in the Go
+config loader, the NixOS module (`services.aginctus.settings.incus.project`)
+and Home Manager (`programs.aginctus.settings.incus.project`).
+
+The selected project is visible in ordinary, read-only config inspection:
+
+```sh
+aginctus config get incus.project
+aginctus --config=incus.project=aginctus-lab config get incus.project
+```
+
+The value must be a nonempty Incus project name containing 1–100 ASCII
+letters, digits, dots, underscores or hyphens, beginning with a letter
+or digit. The special Incus project `default` is **not** a valid
+Aginctus deployment target. The Go loader validates the effective
+value **after** system, user, environment, explicit file and CLI
+override precedence is resolved. A mistyped, malformed, or
+`default` selection fails before host-facing commands execute. The
+NixOS/Home Manager options validate the same name constraints during
+module evaluation. For example, `AGINCTUS_INCUS_PROJECT` selects
+this setting through the regular environment override mechanism.
+
+**Important transition boundary:** This setting is **declarative only**
+in the present implementation. Existing v0.1 `apply`, `remove`,
+`status`, `images update`, gateway Compose and other Incus callers
+have **not** yet been redirected to the selected project. In particular,
+`config get incus.project` does **not** prove that any running instance,
+alias, volume or gateway currently belongs to that project. Do not
+use the setting to initiate a live pilot migration or grant additional
+operator privileges.
+
+The earlier `operator project-plan --project NAME` is read-only;
+`operator project-ensure --project NAME --confirm-create` may create a
+fresh, explicitly selected **local** project, but does not move or
+manage resources. Full explicit project propagation remains in
+[#200](https://github.com/blevinn/aginctus/issues/200), gateway
+co-location in [#201](https://github.com/blevinn/aginctus/issues/201)
+and reversible v0.1 migration in
+[#202](https://github.com/blevinn/aginctus/issues/202).
+Until then, retain the existing project layout and avoid changing the
+operator's ambient Incus selection as a workaround.
+
 ## Gateway egress DHCP input
 
 `gateway.egress.network.ipv4.dhcp` is optional. Omitting it preserves the

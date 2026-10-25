@@ -68,6 +68,24 @@ in
     };
   };
 
+  # Declarative v0.2 project target. Existing v0.1 lifecycle operations
+  # are not redirected until explicit project threading and migration land.
+  incus.project = mkOption {
+    type = types.addCheck types.str (
+      name:
+      name != "default"
+      && builtins.stringLength name <= 100
+      && builtins.match "[A-Za-z0-9][A-Za-z0-9_.-]*" name != null
+    );
+    default = "aginctus";
+    description = ''
+      Intended dedicated Incus project for the single Aginctus deployment.
+      The default Incus project is never a valid v0.2 lifecycle target.
+      This option is only declarative until project-scoped callers and the
+      controlled v0.1 migration are implemented.
+    '';
+  };
+
   incus.management.network = {
     name = mkOption {
       type = types.str;

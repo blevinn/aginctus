@@ -55,6 +55,27 @@ let
       settings.incus.management.network.name = "operator-test";
     };
   };
+  alternateProject = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      settings.incus.project = "aginctus-user";
+    };
+  };
+  invalidProjectDefault = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      settings.incus.project = "default";
+    };
+  };
+  invalidProjectPath = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      settings.incus.project = "../escape";
+    };
+  };
   invalidNested = evaluate {
     programs.aginctus = {
       enable = true;
@@ -83,6 +104,10 @@ assert !(builtins.hasAttr "aginctus/operator-package.json" disabled.xdg.configFi
 assert disabled.assertions == [ ];
 assert enabled.home.packages == [ stub ];
 assert enabled.programs.aginctus.settings.incus.management.network.name == "operator-test";
+assert enabled.programs.aginctus.settings.incus.project == "aginctus";
+assert alternateProject.programs.aginctus.settings.incus.project == "aginctus-user";
+assert !(builtins.tryEval invalidProjectDefault.programs.aginctus.settings.incus.project).success;
+assert !(builtins.tryEval invalidProjectPath.programs.aginctus.settings.incus.project).success;
 assert enabled.programs.aginctus.settings.gateway.id == "local";
 assert enabled.programs.aginctus.settings.firewall.zone == "aginctus-dns";
 assert enabled.programs.aginctus.settings.workloads.dev.runtime.type == "opencode";
