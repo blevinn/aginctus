@@ -9,13 +9,14 @@ import http.server
 import importlib.metadata
 import json
 import os
-from pathlib import Path
 import socket
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+from pathlib import Path
+from typing import ClassVar
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
@@ -115,8 +116,8 @@ def response_events():
 
 
 class MockGo(http.server.BaseHTTPRequestHandler):
-    calls = []
-    lock = threading.Lock()
+    calls: ClassVar[list] = []
+    lock: ClassVar[threading.Lock] = threading.Lock()
 
     def do_POST(self):
         try:
@@ -190,8 +191,12 @@ def wait_ready(port, process):
     raise RuntimeError("isolated LiteLLM readiness timed out")
 
 
-def evaluate(calls):
-    """Only print predetermined classifications, never raw header values."""
+def evaluate(calls, *, report=True):
+    """Only report predetermined classifications, never raw header values."""
+
+    def emit(message):
+        if report:
+            print(message)
     if len(calls) != 4 or any(c["path"] != "/v1/responses" for c in calls):
         raise RuntimeError("expected four native provider-bound Responses calls")
     if any(c["headers"].get("authorization") != "Bearer " + UPSTREAM_KEY for c in calls):
@@ -204,18 +209,18 @@ def evaluate(calls):
     if any(calls[3]["headers"].get(header) == marker
            for header, marker in SENTINELS.items()):
         raise RuntimeError("non-Go model forwarded client metadata")
-    print("PASS: actual pinned proxy sent native Responses to local fake upstream")
-    print("PASS: session unchanged for repeat and distinct between conversations")
-    print("PASS: non-Go model did not receive the client Go session")
+    emit("PASS: actual pinned proxy sent native Responses to local fake upstream")
+    emit("PASS: session unchanged for repeat and distinct between conversations")
+    emit("PASS: non-Go model did not receive the client Go session")
     risk = False
     for header, marker in SENTINELS.items():
         copied = any(c["headers"].get(header) == marker for c in calls[:3])
-        print(("RISK: " if copied else "PASS: ") + header
+        emit(("RISK: " if copied else "PASS: ") + header
               + (" forwarded" if copied else " blocked"))
         risk = risk or copied
     ua = all(c["headers"].get("user-agent") == "opencode/1.15.11"
              for c in calls[:3])
-    print(("PASS: " if ua else "RISK: ") + "original OpenCode User-Agent "
+    emit(("PASS: " if ua else "RISK: ") + "original OpenCode User-Agent "
           + ("preserved" if ua else "not preserved"))
     return not risk and ua
 
