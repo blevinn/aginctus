@@ -1178,6 +1178,7 @@ Commands:
   operator project-ensure --project NAME --confirm-create  Create only an owned local Incus project (explicit mutation)
   images list|ls    List local Incus images and aliases (read-only; legacy ambient project)
   images list|ls --project NAME  List verified owned local-project images (read-only)
+  images import --project NAME ALIAS PATH --confirm-create  Create a new alias only in a verified owned local project (mutation)
   images update NAME PATH   Import an image from a Nix result directory (mutation)
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
