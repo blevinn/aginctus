@@ -18,7 +18,9 @@ KEY = "ssh-ed25519 fixture aginctus:1"
 class PilotTests(unittest.TestCase):
     def fake(self, instance, args, **kwargs):
         if args == ["sshd", "-T"]:
-            return 0, "SetEnv HERDR_SOCKET_PATH=" + mod.EXPECTED_SOCKET_PATH + "\n" + "\n".join(
+            return 0, ("SetEnv HERDR_SOCKET_PATH=" + mod.EXPECTED_SOCKET_PATH
+                       + " XDG_CONFIG_HOME=" + mod.EXPECTED_CONFIG_HOME + "\n"
+                       + "\n".join(
                 key + " no" for key in (
                     "passwordauthentication", "kbdinteractiveauthentication", "permitrootlogin",
                     "allowagentforwarding", "allowtcpforwarding", "allowstreamlocalforwarding",
