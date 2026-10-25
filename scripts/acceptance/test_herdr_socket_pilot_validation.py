@@ -91,6 +91,37 @@ class PilotTests(unittest.TestCase):
                     self.assertNotIn("ensure", str(calls))
                     self.assertNotIn("reconcile", str(calls))
 
+    def test_repeated_setenv_lines_preserve_both_required_assignments(self):
+        for spelling in ("SetEnv", "setenv"):
+            for reverse in (False, True):
+                with self.subTest(spelling=spelling, reverse=reverse):
+                    def fake(instance, args, **kwargs):
+                        rc, output = self.fake(instance, args, **kwargs)
+                        if args == ["sshd", "-T"]:
+                            first, rest = output.split("\n", 1)
+                            settings = first.split(" ", 1)[1].split()
+                            if reverse:
+                                settings.reverse()
+                            output = "\n".join(spelling + " " + value for value in settings)
+                            output += "\n" + rest
+                        return rc, output
+                    rc, output, _ = self.run_check(fake)
+                    self.assertEqual(rc, 0, output)
+
+    def test_missing_sshd_assignment_blocks_remote_probes(self):
+        for assignment in ("HERDR_SOCKET_PATH=" + mod.EXPECTED_SOCKET_PATH,
+                           "XDG_CONFIG_HOME=" + mod.EXPECTED_CONFIG_HOME):
+            with self.subTest(assignment=assignment):
+                def fake(instance, args, **kwargs):
+                    rc, output = self.fake(instance, args, **kwargs)
+                    if args == ["sshd", "-T"]:
+                        output = output.replace(assignment, "")
+                    return rc, output
+                rc, output, calls = self.run_check(fake)
+                self.assertEqual(rc, 1, output)
+                self.assertIn("FAIL: workload sshd explicit-session socket environment", output)
+                self.assertFalse(any(call.args[1][0] == "herdr" for call in calls))
+
     def test_mismatched_authorization_blocks_remote_commands(self):
         def fake(instance, args, **kwargs):
             if args[0] == "aginctus-ssh-authorize":
