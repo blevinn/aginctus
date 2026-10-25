@@ -7,6 +7,7 @@ must execute each call; independent host assertions prove modifications.
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import time
@@ -99,23 +100,54 @@ def fixture_response(nonce, step, workdir):
 
 
 def stream(response):
+    """Responses SSE: item-added → argument delta/done → item-done → completed."""
     item = response["output"][0]
-    name = "response.output_item.done"
+    started = {**item, "status": "in_progress"}
+    if item["type"] == "function_call":
+        started["arguments"] = ""
+    else:
+        started["content"] = []
     events = [
-        ("response.created", {"type": "response.created",
-                              "response": {**response, "status": "in_progress", "output": []}}),
-        (name, {"type": name, "output_index": 0, "item": item}),
-        ("response.completed", {"type": "response.completed", "response": response}),
+        ("response.created", {"response": {**response, "status": "in_progress", "output": []}}),
+        ("response.output_item.added", {"output_index": 0, "item": started}),
     ]
+    if item["type"] == "function_call":
+        identity = {"item_id": item["id"], "output_index": 0}
+        events.extend([
+            ("response.function_call_arguments.delta",
+             {**identity, "delta": item["arguments"]}),
+            ("response.function_call_arguments.done",
+             {**identity, "arguments": item["arguments"]}),
+        ])
+    else:
+        part = item["content"][0]
+        identity = {"item_id": item["id"], "output_index": 0, "content_index": 0}
+        events.extend([
+            ("response.content_part.added", {**identity, "part": {**part, "text": ""}}),
+            ("response.output_text.delta", {**identity, "delta": part["text"]}),
+            ("response.output_text.done", {**identity, "text": part["text"]}),
+            ("response.content_part.done", {**identity, "part": part}),
+        ])
+    events.extend([
+        ("response.output_item.done", {"output_index": 0, "item": item}),
+        ("response.completed", {"response": response}),
+    ])
     return ("".join(
-        "event: " + typ + "\ndata: " + json.dumps(doc, separators=(",", ":")) + "\n\n"
-        for typ, doc in events
-    ) + "data: [DONE]\n\n").encode()
-
+        "event: " + kind + "\\ndata: " + json.dumps(
+            {"type": kind, "sequence_number": n, **payload}, separators=(",", ":")
+        ) + "\\n\\n"
+        for n, (kind, payload) in enumerate(events, 1)
+    ) + "data: [DONE]\\n\\n").encode()
 
 class ToolSequence:
     def __init__(self, workdir="/workspace"):
-        if workdir != "/workspace":
+        # Only trusted test harness code constructs this object. The default
+        # guest path is fixed; a temporary host loopback probe may supply its
+        # own run-owned /tmp workspace. Never take workdir from HTTP input.
+        if not isinstance(workdir, str) or not (
+            workdir == "/workspace" or
+            (workdir.startswith("/tmp/") and os.path.normpath(workdir) == workdir)
+        ):
             raise SequenceError("untrusted fixture workspace root")
         self.workdir = workdir
         self._lock = threading.Lock()
