@@ -23,7 +23,7 @@ diff --git a/packages/opencode/src/cli/cmd/run.ts b/packages/opencode/src/cli/cm
 +              idle = true
 +              break
              }
- 
+
              if (event.type === "permission.asked") {
 @@ -755,7 +757,8 @@
                }
@@ -36,9 +36,9 @@ diff --git a/packages/opencode/src/cli/cmd/run.ts b/packages/opencode/src/cli/cm
          const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
          const client = args.attach ? attachSDK(cwd) : sdk
 @@ -765,43 +768,78 @@
- 
+
          await share(client, sessionID)
- 
+
 -        if (!args.interactive) {
 -          const events = await client.event.subscribe()
 -          loop(client, events).catch((e) => {
@@ -148,6 +148,6 @@ diff --git a/packages/opencode/src/cli/cmd/run.ts b/packages/opencode/src/cli/cm
 +            controller.abort()
 +          }
 +        }
- 
+
          const model = pick(args.model)
          const { runInteractiveMode } = await runtimeTask
