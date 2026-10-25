@@ -40,9 +40,9 @@ Unavailable/denied daemon state fails closed without printing raw
 external diagnostics.
 
 The existing no-`--project` status and unflagged start/stop/apply/remove
-operations retain v0.1 behavior. The separate confirmed start below is the
-only opt-in scoped workload mutation; it does not migrate the pilot or
-enable project-scoped orchestration.
+operations retain v0.1 behavior. The separately confirmed start/stop
+transitions below are the only opt-in scoped workload mutations; they do not
+migrate the pilot or enable project-scoped orchestration.
 
 ## Transition one existing scoped workload (explicit mutation)
 
