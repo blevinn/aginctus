@@ -122,7 +122,9 @@ func TestScopedImageInventoryRejectsImplicitOrMismatchedProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	priorProject, priorImage, priorLegacy := inspectLocalProjects, inspectScopedImages, runIncusImage
-	t.Cleanup(func() { inspectLocalProjects, inspectScopedImages, runIncusImage = priorProject, priorImage, priorLegacy })
+	t.Cleanup(func() {
+		inspectLocalProjects, inspectScopedImages, runIncusImage = priorProject, priorImage, priorLegacy
+	})
 	inspectLocalProjects = func(context.Context) ([]byte, error) {
 		t.Fatal("project queried for invalid arguments")
 		return nil, nil
@@ -149,7 +151,9 @@ func TestScopedImageInventoryRejectsImplicitOrMismatchedProject(t *testing.T) {
 
 func TestScopedImageInventoryUsesCLIDispatch(t *testing.T) {
 	previousProjects, previousImages, previousLegacy := inspectLocalProjects, inspectScopedImages, runIncusImage
-	t.Cleanup(func() { inspectLocalProjects, inspectScopedImages, runIncusImage = previousProjects, previousImages, previousLegacy })
+	t.Cleanup(func() {
+		inspectLocalProjects, inspectScopedImages, runIncusImage = previousProjects, previousImages, previousLegacy
+	})
 	inspectLocalProjects = func(context.Context) ([]byte, error) {
 		return []byte(`[{"name":"aginctus","config":{"user.aginctus.managed":"true","user.aginctus.resource":"deployment-project","user.aginctus.deployment":"aginctus","features.images":"true","features.profiles":"true","features.storage.volumes":"true","features.networks":"false"}}]`), nil
 	}

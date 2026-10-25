@@ -176,7 +176,9 @@ func TestScopedImageImportInvalidArgsNeverContactIncus(t *testing.T) {
 		t.Fatal(err)
 	}
 	beforeProjects, beforeImages, beforeImport := inspectLocalProjects, inspectScopedImages, importScopedImage
-	t.Cleanup(func() { inspectLocalProjects, inspectScopedImages, importScopedImage = beforeProjects, beforeImages, beforeImport })
+	t.Cleanup(func() {
+		inspectLocalProjects, inspectScopedImages, importScopedImage = beforeProjects, beforeImages, beforeImport
+	})
 	inspectLocalProjects = func(context.Context) ([]byte, error) {
 		t.Fatal("queried Incus for invalid args")
 		return nil, nil
@@ -209,7 +211,9 @@ func TestScopedImageImportTopLevelDispatch(t *testing.T) {
 	}
 	dir, fingerprint := scopedImportFixture(t)
 	oldProjects, oldImages, oldImport, oldLegacy := inspectLocalProjects, inspectScopedImages, importScopedImage, runIncusImage
-	t.Cleanup(func() { inspectLocalProjects, inspectScopedImages, importScopedImage, runIncusImage = oldProjects, oldImages, oldImport, oldLegacy })
+	t.Cleanup(func() {
+		inspectLocalProjects, inspectScopedImages, importScopedImage, runIncusImage = oldProjects, oldImages, oldImport, oldLegacy
+	})
 	owned := `[{"name":"aginctus","config":{"user.aginctus.managed":"true","user.aginctus.resource":"deployment-project","user.aginctus.deployment":"aginctus","features.images":"true","features.profiles":"true","features.storage.volumes":"true","features.networks":"false"}}]`
 	inspectLocalProjects = func(context.Context) ([]byte, error) { return []byte(owned), nil }
 	images := 0
