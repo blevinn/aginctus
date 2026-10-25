@@ -188,6 +188,7 @@
             cp ${./guest/opencode/provision.py} $out/provision.py
             cp ${./guest/opencode/launch.py} $out/launch.py
             cp ${./guest/opencode/gateway_endpoint.py} $out/gateway_endpoint.py
+            cp ${./guest/opencode/go_session_plugin.js} $out/go_session_plugin.js
           '';
 
           # Runtime-only gateway configuration: no endpoint, model or key is

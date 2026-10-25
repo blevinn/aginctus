@@ -36,13 +36,19 @@ class Gateway(http.server.BaseHTTPRequestHandler):
 MOCK_CLIENT = """#!/usr/bin/env python3
 import json, os, urllib.request
 cfg = json.loads(os.environ['OPENCODE_CONFIG_CONTENT'])
-assert cfg['model'] == 'aginctus/test-model'
+assert cfg['model'] in ('aginctus/test-model', 'aginctus/aginctus-go-pilot')
+if cfg['model'] == 'aginctus/aginctus-go-pilot':
+    assert len(cfg['plugin']) == 1
+    assert cfg['plugin'][0].startswith('file://')
+    assert cfg['plugin'][0].endswith('/go_session_plugin.js')
+else:
+    assert 'plugin' not in cfg
 p = cfg['provider']['aginctus']
 assert p['npm'] == '@ai-sdk/openai'
 assert p['options']['apiKey'] == '{env:AGINCTUS_LITELLM_KEY}'
 request = urllib.request.Request(
     p['options']['baseURL'] + '/responses',
-    data=json.dumps({'model': 'test-model', 'input': 'hello'}).encode(),
+    data=json.dumps({'model': cfg['model'].split('/', 1)[1], 'input': 'hello'}).encode(),
     headers={'Authorization': 'Bearer ' + os.environ['AGINCTUS_LITELLM_KEY'],
              'Content-Type': 'application/json'},
 )
@@ -88,6 +94,18 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(Gateway.calls, [("/v1/responses", "Bearer shared-test-key",
                                          {"model": "test-model", "input": "hello"})])
+
+    def test_go_alias_loads_only_the_nix_packaged_session_plugin(self):
+        self.configure(model="aginctus-go-pilot")
+        result = self.launch()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(Gateway.calls), 1)
+        self.assertEqual(Gateway.calls[0][2]["model"], "aginctus-go-pilot")
+
+    def test_non_go_alias_does_not_load_go_session_plugin(self):
+        result = self.launch()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(Gateway.calls), 1)
 
     def test_fail_closed_missing_key(self):
         self.key.unlink()

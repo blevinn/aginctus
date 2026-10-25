@@ -1,4 +1,4 @@
-# Test reporting contract (proposal and incremental implementation)
+# Test reporting: implemented tiers and local acceptance extension
 
 Tracking: [#491](https://github.com/blevinn/aginctus/issues/491). Related: [#347](https://github.com/blevinn/aginctus/issues/347).
 
@@ -130,9 +130,10 @@ rather than conflating a successful Nix derivation with verified upstream
 model inference or cleanup. No duration is invented because the source
 does not record it. The original private evidence is left untouched.
 
-This view is not ingested by the hermetic CI reporter, and v0.1 live
-acceptance or cryptographic approval/attestation still require separate
-work. Only the known VM harness synthetic evidence format is supported;
+This view is not ingested by the hermetic CI reporter, and live
+acceptance still requires separate operator authorization and actual
+independent observations. Signing local test results is not required.
+Only the known VM harness synthetic evidence format is supported;
 there is no generic free-form log importer.
 
 ## Explicit read-only pilot preflight presentation (phase D2)
@@ -211,12 +212,16 @@ The four live-only dimensions—agent/tool trace, real upstream inference,
 credential/egress enforcement, and scoped cleanup—are **always `not_run`**.
 The composite can therefore never return success or claim
 `complete_acceptance: true` yet, even when all supplied lower tiers pass.
-A future operator-controlled and independently verifiable receipt protocol
-must be designed under the live authorization gates (#122/#257/#118)
-before any live evidence importer or successful combined sign-off can exist.
-This intentionally prevents an arbitrary JSON claim or mock marker from
-turning an agent-facing report into provider authorization evidence. Never
-confuse aggregate `not_run` with a failed test.
+A future **trusted local runner** may record its own per-run observations
+outside the agent-writable workspace, under the existing live authorization
+gates (#122/#257/#118). Such a report must distinguish genuinely observed
+agent/tool execution, gateway-side Responses completion, credential/egress
+checks, and independently inspected cleanup from self-reported success.
+An arbitrary JSON file or mock marker must never turn an agent-facing
+report into verified provider inference. Local test results need no
+cryptographic signing or trust-store management; protect the runner and
+private report storage instead. Never confuse aggregate `not_run` with a
+failed test.
 
 ## Migration and extension
 
@@ -224,9 +229,12 @@ confuse aggregate `not_run` with a failed test.
   structured event source exists, without scraping arbitrary diagnostic text.
 - Represent `skipped` / `not-run` when future selectors or early aborts are
   introduced. Never count unexecuted checks as passes.
-- Design a signed or otherwise independently verifiable live-acceptance
-  receipt under explicit operator approval and source-scoped authority before
-  adding a live importer or any complete-acceptance success state.
+- Implement narrowly scoped, **local runner-owned acceptance evidence** (#514,
+  #521) before optional read-only coverage integration (#522). The runner must
+  independently observe each result and write bounded private reports outside
+  agent-controlled workspaces; absence of proof remains `not_run` or
+  `unverified`. No signer, certificate or cryptographic verifier is planned
+  for this local reporting workflow.
 - Evolve `schema_version` for incompatible changes, and use stable suite IDs.
 
 VM evidence semantics remain unchanged. Future schema adapters must not
