@@ -65,10 +65,22 @@ func TestHelpOfflineInventory(t *testing.T) {
 		"network firewall policy", "network firewall reconcile", "herdr authorize", "herdr pin-host", "herdr register",
 		"network firewall egress reconcile|revoke",
 		"workload gateway provision", "--require-function-call", "network ensure", "herdr client ensure", "workload <name> ensure|teardown",
-		"operator state-audit --owner system|user", "operator units-audit --owner system|user", "operator package-audit --owner system|user", "operator project-plan --project NAME", "operator project-ensure --project NAME --confirm-create",
+		"operator state-audit --owner system|user", "operator units-audit --owner system|user", "operator package-audit --owner system|user", "operator project-plan --project NAME", "operator project-ensure --project NAME --confirm-create", "images list|ls --project NAME",
 	} {
 		if !strings.Contains(top.String(), want) {
 			t.Errorf("help missing %q", want)
+		}
+	}
+}
+
+func TestHelpScopedImageReadInventory(t *testing.T) {
+	for _, args := range [][]string{{"help"}, {"help", "images"}, {"images", "--help"}} {
+		var stdout, stderr bytes.Buffer
+		if code := Run(context.Background(), args, &stdout, &stderr, nil, nil); code != 0 || stderr.Len() != 0 {
+			t.Fatalf("args=%q code=%d stderr=%q", args, code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "images list|ls --project NAME") {
+			t.Fatalf("scoped image read missing from help %q", args)
 		}
 	}
 }
