@@ -1,7 +1,7 @@
 """Pure offline tests for stock LiteLLM native Responses audit harness."""
 import importlib.util
-from pathlib import Path
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 path = Path(__file__).with_name("probe_pinned_litellm_responses.py")
@@ -60,30 +60,30 @@ class PinnedResponsesProbeTests(unittest.TestCase):
         return result
 
     def test_explicit_risk_classification_and_strict_success(self):
-        self.assertTrue(probe.evaluate(self.sample_calls()))
-        self.assertFalse(probe.evaluate(self.sample_calls(copied=True)))
-        self.assertFalse(probe.evaluate(self.sample_calls(ua="python-httpx/0.28")))
+        self.assertTrue(probe.evaluate(self.sample_calls(), report=False))
+        self.assertFalse(probe.evaluate(self.sample_calls(copied=True), report=False))
+        self.assertFalse(probe.evaluate(self.sample_calls(ua="python-httpx/0.28"), report=False))
 
     def test_reject_wrong_auth_and_session_contamination(self):
         calls = self.sample_calls()
         calls[1]["headers"]["x-opencode-session"] = probe.SESSION_B
         with self.assertRaisesRegex(RuntimeError, "session"):
-            probe.evaluate(calls)
+            probe.evaluate(calls, report=False)
         calls = self.sample_calls()
         calls[0]["headers"]["authorization"] = "Bearer " + probe.PROXY_KEY
         with self.assertRaisesRegex(RuntimeError, "upstream authorization"):
-            probe.evaluate(calls)
+            probe.evaluate(calls, report=False)
         calls = self.sample_calls()
         calls[3]["headers"]["x-opencode-session"] = probe.SESSION_A
         with self.assertRaisesRegex(RuntimeError, "non-Go"):
-            probe.evaluate(calls)
+            probe.evaluate(calls, report=False)
 
     def test_reject_unrelated_model_client_metadata_leak(self):
         calls = self.sample_calls()
         calls[3]["headers"]["x-unapproved-probe"] = (
             probe.SENTINELS["x-unapproved-probe"])
         with self.assertRaisesRegex(RuntimeError, "non-Go model forwarded"):
-            probe.evaluate(calls)
+            probe.evaluate(calls, report=False)
 
     def test_streaming_response_terminal_and_synthetic_only(self):
         events = probe.response_events()
