@@ -115,8 +115,11 @@ The retained audit can reproduce the stock-policy failure without a provider.
 With the stock `ghcr.io/berriai/litellm:v1.103.0` image already cached, run:
 
 ```sh
+policy=$(mktemp)
+trap 'rm -f "$policy"' EXIT
+printf '%s\n' '{"default":[{"type":"insecureAcceptAnything"}]}' > "$policy"
 nix --quiet shell nixpkgs#podman -c podman run \
-  --signature-policy "$PWD/deploy/litellm-go/podman-probe-policy.json" \
+  --signature-policy "$policy" \
   --pull=never --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
   -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 -e PYTHONDONTWRITEBYTECODE=1 \
   -v "$PWD:/probe:ro" --entrypoint /app/.venv/bin/python \
