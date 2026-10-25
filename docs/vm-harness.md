@@ -196,6 +196,25 @@ execution. Even a successful standalone client probe is **not** a
 full VM/Herdr/gateway audit or network-isolation result. Existing
 `synthetic-gateway` remains text-only and unchanged.
 
+## Disposable VM execution of the actual OpenCode tool protocol
+
+`just test-vm-opencode-tool-loopback` is a separate, heavyweight NixOS
+test-driver VM scenario. It installs the actual flake-pinned OpenCode and
+Go runtimes, boots without a default network route or SSH, and executes
+the opt-in scripted Responses `read/edit/bash` test under a non-root
+guest-only identity. The full test fixture is assembled into one immutable
+Nix store tree; arbitrary host path selection and inherited testenv opt-in
+flags are not forwarded.
+
+The test requires actual source editing, a nonce-marked tool-created file,
+and passing independent `go test ./...` in the private guest workspace.
+It deliberately **does not** use Herdr, LiteLLM, the synthetic gateway VM,
+or live providers. Its passing status must **not** be reported as nine-phase
+full-stack or gateway-audit acceptance. A pinned tool schema/continuation
+mismatch is a failed test requiring investigation, never a reason to return
+a synthetic green result. No outer persistent Incus worker/MCP mutation is
+enabled by this scenario.
+
 ## Machine-readable run evidence
 
 Every `runner.py test <scenario>` invocation writes an independent,
