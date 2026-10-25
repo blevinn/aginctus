@@ -198,6 +198,15 @@ def main(binary, inspect_tools=False, execute_tools=False):
                      if inspect_tools else EXPECTED + " (repeat this marker verbatim)"],
                     cwd=root, env=env, capture_output=True, text=True, timeout=90, check=False)
             except subprocess.TimeoutExpired as exc:
+                captured = "\n".join(
+                    value.decode("utf-8", "replace") if isinstance(value, bytes) else value or ""
+                    for value in (exc.stdout, exc.stderr)
+                )
+                captured = captured.replace("integration-only-key", "[REDACTED]")
+                captured = captured.replace(nonce, "[NONCE]")
+                if captured:
+                    print("OpenCode timeout output (bounded/redacted):", file=sys.stderr)
+                    print(captured[-4000:], file=sys.stderr)
                 raise AssertionError(
                     "pinned OpenCode timed out: "
                     f"requests={len(Handler.calls)} "
