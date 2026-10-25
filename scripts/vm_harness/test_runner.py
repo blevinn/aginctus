@@ -61,6 +61,13 @@ class RunnerTests(unittest.TestCase):
             ".#vm-harness-runtime-lifecycle",
         )
 
+    def test_gateway_topology_is_an_explicit_target(self):
+        self.assertEqual(
+            runner.build_arguments("gateway-topology", False)[-1],
+            ".#vm-harness-gateway-topology",
+        )
+        self.assertNotIn("INCUS_SOCKET", runner.clean_environment({"INCUS_SOCKET": "pilot"}))
+
     def test_ownership_recovery_is_an_explicit_target(self):
         self.assertEqual(
             runner.build_arguments("ownership-recovery", False)[-1],
