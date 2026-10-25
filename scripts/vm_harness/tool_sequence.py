@@ -85,17 +85,18 @@ def validate_inline_continuation(body, nonce, step, workdir):
     if len(calls) != 1 or len(outputs) != 1:
         raise SequenceError("expected one explicit function call and result")
     name = STEP_NAMES[step]
-    if (
-        calls[0].get("id") != expected_item
-        or calls[0].get("call_id") != expected_call
-        or calls[0].get("name") != name
-        or calls[0].get("arguments") != json.dumps(
-            tool_arguments(step, workdir, nonce), separators=(",", ":")
-        )
-        or outputs[0].get("call_id") != expected_call
-        or not isinstance(outputs[0].get("output"), str)
+    if calls[0].get("id") != expected_item:
+        raise SequenceError("function call item ID mismatch")
+    if calls[0].get("call_id") != expected_call or outputs[0].get("call_id") != expected_call:
+        raise SequenceError("function call/result ID mismatch")
+    if calls[0].get("name") != name:
+        raise SequenceError("function call name mismatch")
+    if calls[0].get("arguments") != json.dumps(
+        tool_arguments(step, workdir, nonce), separators=(",", ":")
     ):
-        raise SequenceError("forged or mismatched function call/result pair")
+        raise SequenceError("function call arguments mismatch")
+    if not isinstance(outputs[0].get("output"), str):
+        raise SequenceError("function result is malformed")
 
 def fixture_response(nonce, step, workdir, model):
     output = []
