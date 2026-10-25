@@ -178,6 +178,53 @@ removal. Those remain `not_verified`, and
 write the operator's report directory would invalidate this trust boundary;
 keep the directory restricted to a separate trusted operator principal.
 
+### Operator-only, non-inference gateway authorization checks (#521)
+
+The existing `scripts/gateway/authenticated-inference-smoke.py` now has a
+**separate `--auth-only` mode**, requiring explicit operator selection.
+It reuses the existing private gateway endpoint and owner-only secret-file
+checks and performs only:
+
+- `GET /health/liveliness` against the reviewed private LiteLLM endpoint.
+- `GET /v1/models` **without** a key and with a randomly generated invalid
+  key, both required to return 401/403.
+- `GET /v1/models` using the operator-selected *workload* key, required to
+  return exactly the selected model alias and no other visible aliases.
+  The workload key must differ from the protected gateway master key.
+
+Run a dry run before explicitly choosing the non-inference authorization
+probe. These values come from a separately reviewed pilot configuration,
+not from defaults guessed by this document:
+
+```sh
+nix develop -c python3 scripts/gateway/authenticated-inference-smoke.py \
+  --endpoint "$GATEWAY_PRIVATE_ENDPOINT" \
+  --gateway-id "$GATEWAY_ID" \
+  --alias "$GATEWAY_MODEL_ALIAS" \
+  --workload-key-file "$PRIVATE_WORKLOAD_KEY_FILE"
+
+# Same options with --auth-only for an explicitly authorized, non-billable
+# host-to-gateway HTTP check. Do NOT add --run (billable inference).
+```
+
+The mode makes **no** `/v1/responses` request, launches no workload or agent,
+does not allocate or revoke keys, and neither probes guest network routes nor
+changes firewall policy. Successful output is bounded, versioned JSON
+(`profile: gateway_authorization`, `gateway_authorization: pass`);
+errors return nonzero and fixed `status: error` without secrets or raw
+gateway contents. It keeps `upstream_inference`, `agent_tools`, and
+`credential_egress` explicitly `not_verified` and
+`complete_acceptance: false`.
+
+This proves only the **observed model-list authorization controls** at the
+private gateway, from the operator's host. It does not establish credential
+absence inside a guest, negative guest egress enforcement, real upstream
+inference, or completion of the native OpenCode acceptance run. The original
+`--run` paid Responses smoke remains separately gated and still performs
+these same checks before making any model request. Normal CI uses only
+mocked HTTP fixtures and never invokes `--auth-only` or `--run` against
+a live gateway.
+
 ### Operator-only gateway spend-log correlation probe (preparatory #521)
 
 `scripts/gateway/inspect_responses_spend.py` can inspect **one previously
