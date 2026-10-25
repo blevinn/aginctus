@@ -68,6 +68,11 @@ def load_report(path: Path) -> dict | None:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError):
         return None
+    return validate_report(data)
+
+
+def validate_report(data: object) -> dict | None:
+    """Validate a decoded hermetic report without reading another file."""
     if not isinstance(data, dict):
         return None
     if data.get("schema_version") != 1 or data.get("profile") != "hermetic":

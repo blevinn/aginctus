@@ -116,3 +116,13 @@ preflight-report check:
 [no-cd]
 preflight-report-json check:
     @python3 scripts/checks/preflight_report.py --format json {{quote(check)}}
+
+# Read-only composition of an explicitly supplied prior hermetic JSON report.
+# This never runs checks or imports live acceptance as proof of inference.
+[no-cd]
+coverage hermetic_json:
+    @python3 -m scripts.checks.coverage --format text --hermetic-json {{quote(hermetic_json)}}
+
+[no-cd]
+coverage-json hermetic_json:
+    @python3 -m scripts.checks.coverage --format json --hermetic-json {{quote(hermetic_json)}}
