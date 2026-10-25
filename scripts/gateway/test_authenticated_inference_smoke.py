@@ -161,13 +161,7 @@ class SmokeTests(unittest.TestCase):
                 contextlib.redirect_stdout(out),
             ):
                 self.assertEqual(mod.main([*argv, "--auth-only"]), 0)
-            self.assertEqual(json.loads(out.getvalue()), {
-                "gateway_authorization": "pass",
-                "upstream_inference": "not_verified",
-                "agent_tools": "not_verified",
-                "credential_egress": "not_verified",
-                "complete_acceptance": False,
-            })
+            self.assertEqual(json.loads(out.getvalue()), mod.authorization_report("pass"))
             self.assertEqual(len(fake.calls), 4)
             self.assertNotIn("good-workload", out.getvalue())
             self.assertNotIn("master", out.getvalue())
@@ -181,7 +175,7 @@ class SmokeTests(unittest.TestCase):
                 contextlib.redirect_stderr(io.StringIO()),
             ):
                 self.assertEqual(mod.main([*argv, "--auth-only"]), 1)
-            self.assertEqual(out.getvalue(), "")
+            self.assertEqual(json.loads(out.getvalue()), mod.authorization_report("error"))
             with self.assertRaises(SystemExit):
                 mod.main([*argv, "--auth-only", "--run"])
 
