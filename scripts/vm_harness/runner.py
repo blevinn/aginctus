@@ -24,6 +24,7 @@ SCENARIOS = {
     "smoke": "vm-harness-smoke",
     "storage-network": "vm-harness-storage-network",
     "runtime-lifecycle": "vm-harness-runtime-lifecycle",
+    "gateway-topology": "vm-harness-gateway-topology",
     "ownership-recovery": "vm-harness-ownership-recovery",
 }
 # Explicit allowlist: do not propagate secrets, Incus remotes, Nix build hooks,
