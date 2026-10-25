@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/workload"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/workload"
 )
 
 // This is an opt-in, existing-instance-only operation. Never forward a
