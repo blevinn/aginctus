@@ -20,7 +20,7 @@ type ProjectScope struct {
 
 func NewProjectScope(name string) (ProjectScope, error) {
 	if !projectNamePattern.MatchString(name) || name == "default" {
-		return ProjectScope{}, fmt.Errorf("Incus project must be explicit, valid and non-default")
+		return ProjectScope{}, fmt.Errorf("incus project must be explicit, valid and non-default")
 	}
 	return ProjectScope{Name: name}, nil
 }
