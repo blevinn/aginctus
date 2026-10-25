@@ -71,6 +71,42 @@ class PinnedResponsesProbeTests(unittest.TestCase):
             ):
                 probe.require_unauthenticated_rejection(code, upstream)
 
+    def test_selective_mode_loads_exact_hook_without_any_broad_forwarding(self):
+        route = probe.render_config(POLICY, 8765, selective_hook=True)
+        self.assertEqual(route["litellm_settings"], {
+            "callbacks": ["litellm_opencode_go_hook.proxy_handler_instance"],
+        })
+        self.assertNotIn("model_group_settings", route["litellm_settings"])
+        self.assertEqual({entry["model_name"] for entry in route["model_list"]},
+                         {probe.ALIAS, probe.OTHER})
+
+    def test_selective_negative_controls_require_fourxx_and_no_upstream(self):
+        for status in (400, 401, 403, 422):
+            with self.subTest(status=status), patch.object(
+                probe, "send", return_value=(status, b"")
+            ):
+                probe.MockGo.calls = []
+                probe.check_rejected_without_upstream(
+                    1234, probe.SESSION_A, user_agent="bogus/1.0")
+        for status in (200, 500):
+            with self.subTest(status=status), patch.object(
+                probe, "send", return_value=(status, b"")
+            ), self.assertRaisesRegex(RuntimeError, "failed closed"):
+                probe.MockGo.calls = []
+                probe.check_rejected_without_upstream(
+                    1234, probe.SESSION_A, user_agent="bogus/1.0")
+        probe.MockGo.calls = [{}]
+
+        def recorded(*_args, **_kwargs):
+            probe.MockGo.calls.append({})
+            return 403, b""
+
+        with patch.object(probe, "send", side_effect=recorded), self.assertRaisesRegex(
+            RuntimeError, "upstream_delta=1"
+        ):
+            probe.check_rejected_without_upstream(
+                1234, probe.SESSION_A, user_agent="bogus/1.0")
+
     def test_model_group_scope_must_be_exact(self):
         probe.verify_policy(POLICY)
         for groups in (["*"], [probe.OTHER], [probe.ALIAS, probe.OTHER]):

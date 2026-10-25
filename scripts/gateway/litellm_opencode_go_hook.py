@@ -9,7 +9,19 @@ from opencode_go_forwarding import sanitize_go_headers
 
 class AginctusGoSessionHook(CustomLogger):
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
-        return sanitize_go_headers(data, call_type)
+        try:
+            return sanitize_go_headers(data, call_type)
+        except ValueError:
+            # The pinned native Responses proxy translates HTTPException to an
+            # OpenAI-compatible 400. Bare ValueError becomes an internal 500.
+            # Keep policy diagnostics and attacker-controlled header values out
+            # of the HTTP response; reject before any upstream call.
+            from fastapi import HTTPException
+
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid OpenCode Go session metadata",
+            ) from None
 
 
 proxy_handler_instance = AginctusGoSessionHook()

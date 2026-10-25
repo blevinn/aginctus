@@ -405,6 +405,93 @@ execution remain separate release acceptance gates. The real paid pilot
 must still be explicitly authorized and use a short-lived restricted key
 whose post-test revocation is verified.
 
+### Measured stock rejection and opt-in selective callback transport (#456)
+
+**Observed 2026-10-25:** The actual stock LiteLLM v1.103.0 native
+Responses integration from #528 preserved genuine Go sessions and denied
+unauthenticated requests, but **forwarded** unrelated `x-unapproved-probe`,
+`x-litellm-probe`, and `anthropic-beta` values to the mock provider,
+and **lost the original identifying OpenCode User-Agent**. Stock
+model-group forwarding is therefore **rejected for this Go pilot**. Do not
+activate `services.aginctus.settings.gateway.litellm.forwardClientHeaders`
+for this alias simply because it forwards the session; keep the running
+gateway unchanged.
+
+**Observed selective-mode result, 2026-10-25 (PR #535):**
+the operator reached the real pinned LiteLLM v1.103.0 native Responses
+upstream. Authentic sessions were preserved, unrelated x-* and
+anthropic-beta client headers were blocked, the original OpenCode
+User-Agent was preserved, and a separate model remained isolated.
+However, a malformed Go session was rejected with HTTP **500**, not
+HTTP 4xx, and no new provider call. This proves the positive header
+allowlist but **fails the client-error rejection contract**. The pinned
+proxy converts a bare `ValueError` from the callback into 500.
+PR #535 now adapts only those expected sanitizer `ValueError`
+failures into a generic FastAPI `HTTPException(status_code=400)`,
+without reproducing rejected request/header contents. The corrected
+HTTP status and the independent spoofed-UA case are **pending a real
+pinned OCI rerun**; do not claim strict selective-mode acceptance yet.
+
+The stacked selective-hook test extends the same #528 pinned-image, loopback-only,
+synthetic-provider probe. It installs **the actual repo callback files**
+as two read-only container bind mounts, enabling their Python import
+path only inside that disposable OCI invocation. The dynamically generated
+LiteLLM config loads
+`litellm_opencode_go_hook.proxy_handler_instance` via
+`litellm_settings.callbacks` and contains **no** stock model-group or
+global forwarding declaration. This is a test harness, **not an image
+or configuration deployed to the actual LiteLLM Incus guest**.
+
+After merging #528, checkout the selective-hook test branch and run
+the following from its root:
+
+```sh
+git fetch origin
+git switch test/456-selective-pinned-litellm-responses
+git pull --ff-only
+
+nix --quiet develop -c python3 -m unittest discover \
+  -s scripts/gateway -p 'test_pinned_litellm_responses.py' -v
+
+policy=$(mktemp)
+trap 'rm -f "$policy"' EXIT
+printf '%s\n' '{"default":[{"type":"reject"}],"transports":{"docker":{"ghcr.io/berriai/litellm:v1.103.0":[{"type":"insecureAcceptAnything"}]}}}' >"$policy"
+nix shell nixpkgs#podman --command podman run \
+  --signature-policy "$policy" \
+  --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
+  -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -e PYTHONPATH=/app \
+  --mount type=bind,src="$PWD/deploy/litellm-go/model-group-forwarding.yaml",dst=/run/aginctus-policy.yaml,readonly \
+  --mount type=bind,src="$PWD/scripts/gateway/probe_pinned_litellm_responses.py",dst=/run/aginctus-probe.py,readonly \
+  --mount type=bind,src="$PWD/scripts/gateway/opencode_go_forwarding.py",dst=/app/opencode_go_forwarding.py,readonly \
+  --mount type=bind,src="$PWD/scripts/gateway/litellm_opencode_go_hook.py",dst=/app/litellm_opencode_go_hook.py,readonly \
+  --entrypoint /app/.venv/bin/python \
+  ghcr.io/berriai/litellm:v1.103.0 \
+  /run/aginctus-probe.py /run/aginctus-policy.yaml --selective-hook
+```
+
+In this mode the harness always **requires strict safety**:
+native streaming Response completion, separate synthetic upstream auth,
+unchanged repeated native sessions, independent conversation separation,
+unrelated-model isolation, **all** unrelated client sentinels blocked,
+original OpenCode User-Agent preserved, plus invalid-session and
+non-OpenCode-UA cases rejected with HTTP 400/401/403/422 and *no*
+additional upstream calls. It prints only fixed PASS/RISK/FAIL categories,
+never header values, tokens or raw proxy errors. Any failed assertion
+blocks approval of selective forwarding. A callback import failure, status
+500, absent metadata, lost UA or leakage is a genuine unresolved pinned
+runtime compatibility issue; do not weaken the assertions or enable
+stock forwarding as a workaround.
+
+Even a full selective-hook PASS does not establish safe deployment:
+an immutable-digest-pinned callback-equipped OCI image and explicitly
+declarative gateway selection, dynamic database alias routing, scoped
+virtual keys, and an operator-approved bounded inference request still
+remain. Never modify the current Incus gateway, real keys or host policy
+as part of these synthetic tests.
+
+
 ### Required live Go compatibility gate — before claiming #122 complete
 
 OpenCode Go states it is designed for coding-agent traffic and that

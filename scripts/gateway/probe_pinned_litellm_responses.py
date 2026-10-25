@@ -5,6 +5,7 @@ No provider credentials, external network, database or live gateway.
 """
 import argparse
 import http.server
+import importlib
 import importlib.metadata
 import json
 import os
@@ -51,7 +52,7 @@ def verify_policy(policy):
         raise RuntimeError("stock policy is not the reviewed one-alias fixture")
 
 
-def render_config(policy, upstream_port):
+def render_config(policy, upstream_port, *, selective_hook=False):
     verify_policy(policy)
     return {
         "model_list": [{
@@ -62,7 +63,10 @@ def render_config(policy, upstream_port):
                 "api_key": UPSTREAM_KEY,
             },
         } for name in (ALIAS, OTHER)],
-        "litellm_settings": policy["litellm_settings"],
+        "litellm_settings": (
+            {"callbacks": ["litellm_opencode_go_hook.proxy_handler_instance"]}
+            if selective_hook else policy["litellm_settings"]
+        ),
         "general_settings": {"master_key": PROXY_KEY},
     }
 
@@ -147,10 +151,10 @@ class MockGo(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def send(port, alias, session, authenticated=True):
+def send(port, alias, session, authenticated=True, *, user_agent="opencode/1.15.11"):
     headers = {
         "Content-Type": "application/json",
-        "User-Agent": "opencode/1.15.11",
+        "User-Agent": user_agent,
         "x-opencode-session": session,
         **(SENTINELS if authenticated else {}),
     }
@@ -237,8 +241,32 @@ def require_unauthenticated_rejection(status, upstream_calls):
         )
 
 
-def run(fixture, require_safe):
+def verify_selective_hook_import():
+    # No Python stubs or substitutes: confirm the actual LiteLLM CustomLogger
+    # instance and its two mounted production callback modules can be imported.
+    from litellm.integrations.custom_logger import CustomLogger
+
+    hook = importlib.import_module("litellm_opencode_go_hook")
+    if not isinstance(hook.proxy_handler_instance, CustomLogger):
+        raise RuntimeError("selective callback is not a pinned LiteLLM CustomLogger")
+
+
+def check_rejected_without_upstream(port, session, *, user_agent):
+    before = len(MockGo.calls)
+    status, _ = send(port, ALIAS, session, user_agent=user_agent)
+    after = len(MockGo.calls)
+    # Do not infer rejection from a transport failure or a normal 200.
+    if status not in (400, 401, 403, 422) or after != before:
+        raise RuntimeError(
+            "selective hook failed closed negative case "
+            f"(http_status={status}, upstream_delta={after - before})"
+        )
+
+
+def run(fixture, require_safe, *, selective_hook=False):
     verify_isolation()
+    if selective_hook:
+        verify_selective_hook_import()
     import yaml  # pinned image dependency; deliberately optional in dev-shell tests
 
     policy = yaml.safe_load(Path(fixture).read_text(encoding="utf-8"))
@@ -250,8 +278,9 @@ def run(fixture, require_safe):
     try:
         with tempfile.TemporaryDirectory() as tmp:
             config = Path(tmp) / "test-only.yaml"
-            config.write_text(yaml.safe_dump(render_config(policy, fake.server_port)),
-                              encoding="utf-8")
+            config.write_text(yaml.safe_dump(render_config(
+                policy, fake.server_port, selective_hook=selective_hook)),
+                encoding="utf-8")
             port = free_port()
             proxy = subprocess.Popen([
                 "/app/.venv/bin/litellm", "--config", str(config),
@@ -268,6 +297,12 @@ def run(fixture, require_safe):
                 if status != 200 or b"response.completed" not in body:
                     raise RuntimeError("proxy did not return terminal Responses SSE")
             safe = evaluate(MockGo.calls)
+            if selective_hook:
+                check_rejected_without_upstream(
+                    port, "invalid-session", user_agent="opencode/1.15.11")
+                check_rejected_without_upstream(
+                    port, SESSION_A, user_agent="python-httpx/0.28")
+                print("PASS: selective hook rejects invalid session and spoofed User-Agent")
             if not safe and require_safe:
                 raise RuntimeError("stock policy does not satisfy strict upstream isolation")
             print("DECISION: " + ("strict policy passes" if safe else
@@ -288,9 +323,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture")
     parser.add_argument("--require-safe", action="store_true")
+    parser.add_argument("--selective-hook", action="store_true",
+                        help="enable installed #470 callback instead of broad group forwarding")
     args = parser.parse_args()
     try:
-        run(args.fixture, args.require_safe)
+        run(args.fixture, args.require_safe or args.selective_hook,
+            selective_hook=args.selective_hook)
     except (RuntimeError, OSError, ValueError, KeyError) as error:
         print("FAIL: " + str(error), file=sys.stderr)
         return 1
