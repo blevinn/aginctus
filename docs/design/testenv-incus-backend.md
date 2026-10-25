@@ -115,14 +115,23 @@ return the sealed recovery handle without authorizing adoption. Destroy accepts
 already-absent instances only after validating the handle and live project;
 absence attests neither former ownership nor separate storage/evidence cleanup.
 
-Create success currently means the Incus start operation completed, not that
-the guest agent or inner services are ready. A finite agent-readiness probe is
-a required worker admission gate before exposing lifecycle mutation over CLI/MCP.
+Raw `VMBackend.Create` success confirms the Incus start operation,
+**not** an answering VM agent. The intended worker entrypoint is now
+`CreateReadyIncusVM`, which retains the signed created run handle on
+readiness failure, and `WaitForIncusVMAgent`. Admission repeatedly verifies
+the same run ownership and that the VM is Running, then executes **only**
+`/run/current-system/sw/bin/true` inside the guest using the bounded
+Incus-agent transport. Each attempt has at most a 2-second timeout and the
+whole readiness window cannot exceed 2 minutes; zero, negative and unbounded
+waits are denied. Unowned/deleted/stopped resources fail without adoption,
+and caller cancellation terminates the probe. An absent agent is **not**
+proof that the VM stopped or cleaned up; keep its signed handle for GC.
+This is still a trusted internal API, **not yet exposed through CLI/MCP**.
 
-**Still pending:** an independently scheduled TTL/orphan sweep, a pinned
-Incus NixOS VM image, worker/daemon credential segregation and policy-key
-provisioning, finite agent-readiness admission, snapshot/reset policy,
-and real disposable-host KVM acceptance. These backend methods are not
+**Still pending:** independently scheduled TTL/orphan recovery, worker/daemon
+credential segregation and policy-key provisioning, snapshot/reset policy,
+and real disposable-host KVM/agent readiness acceptance. The opt-in Incus
+NixOS image is staged in #506 but has not been imported or boot-tested. These backend methods are not
 exposed through CLI/MCP without a trusted authorization service.
 
 ## Bounded native guest execution
@@ -185,7 +194,7 @@ Ephemeral VM behavior alone is not a substitute for this recovery pass.
 ## Operations and failure model
 
 1. **Create:** mint cryptographic run ID and an owner/generation marker in trusted state; validate the project's restrictions and limits, image fingerprint, root volume quota and no NIC before calling Incus. Create a uniquely named VM with fixed devices/profile; re-read it after creation. Name collision or preexisting foreign metadata fails closed. No implicit adoption.
-2. **Start/Status:** start through Incus. The installed worker must add a finite `incus-agent` readiness probe before agent-facing admission; that probe remains pending. Incus "running" does not mean guest service ready or inner Incus initialized.
+2. **Start/Status:** start through Incus. The trusted worker uses `CreateReadyIncusVM` for a finite `incus-agent` readiness probe before admission; real-worker acceptance remains pending. Incus "running" does not mean guest service ready or inner Incus initialized.
 3. **Exec:** allow argv-array commands inside the *guest*, never a host Python or shell interpreter. Enforce caller authorization, argv count/bytes, runtime/output size limits and redaction; distinguish a nonzero guest status from transport failure.
 4. **Snapshot/Reset:** use Incus snapshots within run scope when supported; check snapshot/generation ownership. Reject unsupported capabilities explicitly. Reset must not affect unrelated disks/volumes.
 5. **Destroy/GC:** expire by trusted TTL, enumerate only controlled project and ownership markers, stop/delete via Incus operations, and re-read instance + root volume/snapshots to verify removal. On failure, write an honest `cleanup:not_verified` receipt; never delete foreign instances based solely on prefix matches. Resume cleanup after daemon restart, control service crash, or worker reboot via independent timer.
