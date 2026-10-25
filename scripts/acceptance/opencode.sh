@@ -13,6 +13,13 @@ if [[ "$mode" == live && "${AGINCTUS_ACCEPTANCE_LIVE:-}" != "I_UNDERSTAND" ]]; t
   echo "live mode requires AGINCTUS_ACCEPTANCE_LIVE=I_UNDERSTAND" >&2; exit 2
 fi
 
+# An operator may explicitly opt into a private persistent report. Validate the
+# destination BEFORE any adapter / provider work; never create it implicitly.
+reporter="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/local_report.py"
+if [[ -n "${AGINCTUS_ACCEPTANCE_REPORT_ROOT:-}" ]]; then
+  python3 "$reporter" --check-root "$AGINCTUS_ACCEPTANCE_REPORT_ROOT" || exit 1
+fi
+
 root="$(mktemp -d "${TMPDIR:-/tmp}/aginctus-acceptance.XXXXXXXX")"
 workspace="$root/workspace"
 mkdir -p "$workspace"
@@ -21,22 +28,50 @@ run_id="$(basename "$root")"
 started=0
 opened=0
 success=0
+fixture_status=not_run
+tests_status=not_run
+stop_status=not_run
+close_status=not_run
 
 cleanup() {
   local status=$?
   trap - EXIT
   if (( started )); then
-    "$AGINCTUS_ACCEPTANCE_ADAPTER" stop "$workspace" "$run_id" >/dev/null 2>&1 || echo "WARN: agent stop failed ($run_id)" >&2
+    if "$AGINCTUS_ACCEPTANCE_ADAPTER" stop "$workspace" "$run_id" >/dev/null 2>&1; then
+      stop_status=pass
+    else
+      stop_status=fail
+      status=1
+      echo "WARN: agent stop failed ($run_id)" >&2
+    fi
   fi
   if (( opened )); then
-    "$AGINCTUS_ACCEPTANCE_ADAPTER" close "$workspace" "$run_id" >/dev/null 2>&1 || echo "WARN: workspace close failed ($run_id)" >&2
+    if "$AGINCTUS_ACCEPTANCE_ADAPTER" close "$workspace" "$run_id" >/dev/null 2>&1; then
+      close_status=pass
+    else
+      close_status=fail
+      status=1
+      echo "WARN: workspace close failed ($run_id)" >&2
+    fi
   fi
-  if (( success )); then
+  # The host runner knows its own fixture/test exits and cleanup COMMAND
+  # exits. None of these independently proves real inference or removed state.
+  if [[ -n "${AGINCTUS_ACCEPTANCE_REPORT_ROOT:-}" ]]; then
+    if ! python3 "$reporter" --output-root "$AGINCTUS_ACCEPTANCE_REPORT_ROOT" \
+      --run-id "$run_id" --mode "$mode" --exit-code "$status" \
+      --fixture "$fixture_status" --tests "$tests_status" \
+      --stop "$stop_status" --close "$close_status"; then
+      status=1
+      echo "ERROR: acceptance evidence recording failed" >&2
+    fi
+  fi
+  if (( success && status == 0 )); then
     echo "PASS: $mode acceptance ($run_id)"
   else
     echo "FAIL: $mode acceptance ($run_id), exit $status" >&2
   fi
-  # Never emit adapter output: it may contain credentials. Reports contain only fixed labels.
+  # Never emit adapter output: it may contain credentials. The optional
+  # persisted report contains only fixed labels and runner-observed statuses.
   rm -rf -- "$root"
   exit "$status"
 }
@@ -78,9 +113,15 @@ started=1
 
 # Compare exact expected source change, then execute the actual test, not a mock.
 if ! grep -Eq 'return a[[:space:]]*\+[[:space:]]*b' "$workspace/calc.go"; then
+  fixture_status=fail
   echo "FAIL: expected source modification missing" >&2; exit 1
 fi
-(cd "$workspace" && go test ./...) >"$root/tests.out" 2>&1 || { echo "FAIL: workspace tests" >&2; exit 1; }
+fixture_status=pass
+if ! (cd "$workspace" && go test ./...) >"$root/tests.out" 2>&1; then
+  tests_status=fail
+  echo "FAIL: workspace tests" >&2; exit 1
+fi
+tests_status=pass
 "$AGINCTUS_ACCEPTANCE_ADAPTER" credential-check "$workspace" "$nonce" >"$root/creds.out" 2>&1 || { echo "FAIL: workload credential isolation" >&2; exit 1; }
 "$AGINCTUS_ACCEPTANCE_ADAPTER" gateway-evidence "$workspace" "$nonce" >"$root/gateway.out" 2>&1 || { echo "FAIL: gateway evidence" >&2; exit 1; }
 # The adapter MUST output a single signed-off indicator only after inspecting
