@@ -308,6 +308,66 @@ by weakening the filters. #456 remains open until the runtime hook is
 upstream. A real OpenCode Go inference request remains separately gated by
 #122 and #123; existing pilot credentials are revoked.
 
+### Isolated pinned LiteLLM native Responses transport audit (#456)
+
+The merged #518 client integration proves real OpenCode sends the session header
+to a synthetic local Responses endpoint, **not** that LiteLLM sends it to
+the upstream Go provider. The `probe_pinned_litellm_responses.py` utility
+executes **actual stock LiteLLM v1.103.0** with a locally configured static
+Go alias and an unrelated alias, plus a local mock Responses provider, inside
+one OCI container. Container networking is **disabled**, and the script refuses
+to execute unless the only interface is loopback and the explicit opt-in flag
+is present. No provider credentials, live DB registration, host Incus changes
+or paid model request are involved.
+
+The probe reads and verifies the exact `model-group-forwarding.yaml` policy.
+It creates synthetic *different* proxy and upstream bearer keys; verifies
+unauthenticated requests are denied; issues multiple streaming native
+`/v1/responses` requests using repeated and distinct synthetic session IDs;
+checks the provider-bound session values are byte-for-byte identical, ensures
+the unrelated model group has no forwarded Go session, checks provider auth
+is replaced rather than leaked, and classifies `x-*`/`anthropic-beta` and the
+original identifying `User-Agent`. Its terminal output contains only
+PASS/RISK/FAIL classification, never header values or session IDs.
+
+**This is a measurement, not security-policy acceptance.** A successful
+transport may still print RISK for the stock selector's arbitrary eligible
+client `x-*` header exposure or for loss of the OpenCode `User-Agent`. The
+stricter `--require-safe` option exits nonzero for those risks. Such a
+failure is evidence to evaluate the existing selective #470 callback, *not*
+permission to enable global forwarding or relax the isolation policy.
+
+Execute from the repository root with Docker and the stock OCI image:
+
+```sh
+docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
+  -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  --mount type=bind,src="$PWD/deploy/litellm-go/model-group-forwarding.yaml",dst=/run/aginctus-policy.yaml,readonly \
+  --mount type=bind,src="$PWD/scripts/gateway/probe_pinned_litellm_responses.py",dst=/run/aginctus-probe.py,readonly \
+  --entrypoint /app/.venv/bin/python \
+  ghcr.io/berriai/litellm:v1.103.0-stable \
+  /run/aginctus-probe.py /run/aginctus-policy.yaml
+```
+
+Then deliberately rerun the same invocation with `--require-safe` appended.
+Do not confuse the expected policy rejection with native Responses transport
+failure. For unit tests (no LiteLLM/Docker needed):
+
+```sh
+nix --quiet develop -c python3 -m unittest discover \
+  -s scripts/gateway -p 'test_pinned_litellm_responses.py' -v
+```
+
+A version tag is **not an immutable image digest**; verify the OCI digest
+before any promotion. This test intentionally uses transient *static* model
+definitions, not the live database-registered Go alias. Model-registry
+routing, restricted virtual keys, upstream provider attribution, adversarial
+headers from the *actual* OpenCode client, and full Herdr-managed tool
+execution remain separate release acceptance gates. The real paid pilot
+must still be explicitly authorized and use a short-lived restricted key
+whose post-test revocation is verified.
+
 ### Required live Go compatibility gate — before claiming #122 complete
 
 OpenCode Go states it is designed for coding-agent traffic and that
