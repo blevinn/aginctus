@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"reflect"
+	"strings"
 	"testing"
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
@@ -78,15 +78,15 @@ func TestOperatorProjectEnsureFailClosed(t *testing.T) {
 	drift := encode([]observedProject{{Name: scope.Name, Config: driftPolicy}})
 	invisible := []byte("[]")
 	cases := []struct {
-		name           string
-		first, second  []byte
-		readError      error
-		secondError    error
-		createError    error
-		wantCode       int
-		wantCreates    int
-		wantReads      int
-		wantResult     string
+		name          string
+		first, second []byte
+		readError     error
+		secondError   error
+		createError   error
+		wantCode      int
+		wantCreates   int
+		wantReads     int
+		wantResult    string
 	}{
 		{"compatible existing no mutation", owned, nil, nil, nil, nil, 0, 0, 1, "existing"},
 		{"foreign existing never adopted", foreign, nil, nil, nil, nil, 1, 0, 1, ""},
