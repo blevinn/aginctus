@@ -14,7 +14,7 @@ import (
 
 const scopedStatusOwnedProject = `[{"name":"aginctus","config":{"user.aginctus.managed":"true","user.aginctus.resource":"deployment-project","user.aginctus.deployment":"aginctus","features.images":"true","features.profiles":"true","features.storage.volumes":"true","features.networks":"false"}}]`
 const scopedStatusWorkload = `{"name":"aginctus-dev","status":"Running","config":{"user.aginctus.managed":"true","user.aginctus.resource":"workload","user.aginctus.role":"agent-workload","user.aginctus.workload":"dev"},"project":"aginctus"}`
-const scopedStatusHerdr = `{"name":"aginctus-herdr-client","status":"Stopped","config":{"user.aginctus.managed":"true","user.aginctus.resource":"infrastructure","user.aginctus.role":"herdr-client"},"project":"aginctus"}`
+const scopedStatusHerdr = `{"name":"aginctus-herdr","status":"Stopped","config":{"user.aginctus.managed":"true","user.aginctus.resource":"infrastructure","user.aginctus.role":"herdr-client"},"project":"aginctus"}`
 
 func TestScopedInstanceListArgumentsAndParsing(t *testing.T) {
 	scope, _ := incusscope.NewProjectScope("aginctus")
@@ -68,7 +68,7 @@ func TestScopedInstanceStatusCommands(t *testing.T) {
 		{[]string{"workload", "status", "--project=aginctus"}, `workload "dev": Running`},
 		{[]string{"workload", "ls", "--project", "aginctus"}, "dev"},
 		{[]string{"workload", "list", "--project=aginctus"}, "dev"},
-		{[]string{"herdr", "client", "status", "--project", "aginctus"}, `Herdr client "aginctus-herdr-client": Stopped`},
+		{[]string{"herdr", "client", "status", "--project", "aginctus"}, `Herdr client "aginctus-herdr": Stopped`},
 	} {
 		var out, errOut bytes.Buffer
 		code := Run(context.Background(), tc.args, &out, &errOut, &fakeIncusClient{}, loader)
@@ -118,7 +118,7 @@ func TestScopedInstanceStatusFailsClosed(t *testing.T) {
 		{"unavailable project", "error", data, false, 0},
 		{"missing project", "[]", data, false, 0},
 		{"foreign same-name workload", scopedStatusOwnedProject, `[{"name":"aginctus-dev","config":{},"project":"aginctus"}]`, false, 1},
-		{"wrong response project", scopedStatusOwnedProject, strings.Replace(scopedStatusWorkload, `"project":"aginctus"`, `"project":"default"`, 1), false, 1},
+		{"wrong response project", scopedStatusOwnedProject, "[" + strings.Replace(scopedStatusWorkload, `"project":"aginctus"`, `"project":"default"`, 1) + "]", false, 1},
 		{"duplicate instance names", scopedStatusOwnedProject, "[" + scopedStatusWorkload + "," + scopedStatusWorkload + "]", false, 1},
 		{"invalid instance JSON", scopedStatusOwnedProject, "null", false, 1},
 		{"oversized instance list", scopedStatusOwnedProject, strings.Repeat("x", maxProjectListBytes+1), false, 1},
