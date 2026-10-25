@@ -11,6 +11,7 @@ let
     inherit system;
     modules = [
       "${nixpkgs}/nixos/modules/virtualisation/incus-virtual-machine.nix"
+      (import ../vm-harness/aginctus-host.nix { inherit self system; })
       (
         { lib, pkgs, ... }:
         {
@@ -18,9 +19,8 @@ let
           # The Incus VM image module supplies the Incus agent loader, EFI
           # boot and qcow2 output. Explicitly retain the native guest agent.
           virtualisation.incus.agent.enable = true;
-          # Inner Incus is the system under test, not the outer worker daemon.
-          virtualisation.incus.enable = true;
-          networking.nftables.enable = true;
+          # The shared host module supplies the inner Incus daemon,
+          # Aginctus NixOS integration and pinned workload image identity.
 
           # No guest network configuration, DHCP, SSH, credentials or
           # writable host mounts. Outer instance policy also has NO NIC.
@@ -29,15 +29,7 @@ let
           systemd.network.enable = lib.mkForce false;
           services.openssh.enable = lib.mkForce false;
 
-          environment.systemPackages = [
-            pkgs.btrfs-progs
-            pkgs.git
-            pkgs.incus
-            pkgs.iproute2
-            pkgs.jq
-            pkgs.util-linux
-            self.packages.${system}.aginctus
-          ];
+          environment.systemPackages = [ pkgs.git pkgs.util-linux ];
         }
       )
     ];
