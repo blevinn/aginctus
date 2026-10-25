@@ -18,7 +18,7 @@ var inspectLocalProjects = func(ctx context.Context) ([]byte, error) {
 	return exec.CommandContext(ctx, "incus", "--force-local", "project", "list", "--format", "json").Output()
 }
 
-var createLocalProject = func(ctx context.Context, scope incusscope.ProjectScope) error {
+func localProjectCreateArgs(scope incusscope.ProjectScope) []string {
 	policy := scope.DesiredConfig()
 	keys := make([]string, 0, len(policy))
 	for key := range policy {
@@ -29,10 +29,14 @@ var createLocalProject = func(ctx context.Context, scope incusscope.ProjectScope
 	for _, key := range keys {
 		args = append(args, "--config", key+"="+policy[key])
 	}
+	return args
+}
+
+var createLocalProject = func(ctx context.Context, scope incusscope.ProjectScope) error {
 	// Incus creation is atomic and refuses an already-existing project.
 	// Never use edit/set/delete, overwrite a conflicting name, or print the
 	// command's output (which is external, potentially sensitive data).
-	return exec.CommandContext(ctx, "incus", args...).Run()
+	return exec.CommandContext(ctx, "incus", localProjectCreateArgs(scope)...).Run()
 }
 
 type operatorProjectEnsureReport struct {
