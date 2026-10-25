@@ -134,4 +134,3 @@ must provide genuine independent evidence for those dimensions before
 [#522](https://github.com/blevinn/aginctus/issues/522) may present them as
 verified. Do not ingest agent-written JSON or gateway nonce markers as proof.
 This local workflow requires no cryptographic signing service.
-
