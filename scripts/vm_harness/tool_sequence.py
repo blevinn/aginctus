@@ -181,7 +181,7 @@ class ToolSequence:
                 if match is None:
                     raise SequenceError("invalid previous Responses identity")
                 nonce, previous_step = match.group(1), int(match.group(2))
-                if self._steps.get(nonce) != previous_step + 1 or previous_step >= 3:
+                if self._steps.get(nonce) != previous_step or previous_step >= 3:
                     raise SequenceError("duplicate or out-of-order tool continuation")
                 inputs = body.get("input")
                 if not isinstance(inputs, list):
