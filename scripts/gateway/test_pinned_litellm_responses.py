@@ -28,6 +28,17 @@ class PinnedResponsesProbeTests(unittest.TestCase):
             runbook,
         )
 
+    def test_probe_image_matches_aginctus_gateway_pin(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        gateway_settings = (repo_root / "nix/settings-options.nix").read_text(
+            encoding="utf-8")
+        self.assertIn('default = "ghcr.io/berriai/litellm:v1.103.0";',
+                      gateway_settings)
+        runbook = (repo_root / "docs/gateway-api-key-pilot.md").read_text(
+            encoding="utf-8")
+        self.assertIn("ghcr.io/berriai/litellm:v1.103.0", runbook)
+        self.assertNotIn("ghcr.io/berriai/litellm:v1.103.0-stable", runbook)
+
     def test_podman_signature_policy_is_exactly_one_tag_and_default_deny(self):
         policy_path = Path(__file__).resolve().parents[2] / (
             "deploy/litellm-go/podman-probe-policy.json")
@@ -35,7 +46,7 @@ class PinnedResponsesProbeTests(unittest.TestCase):
         self.assertEqual(policy, {
             "default": [{"type": "reject"}],
             "transports": {"docker": {
-                "ghcr.io/berriai/litellm:v1.103.0-stable": [
+                "ghcr.io/berriai/litellm:v1.103.0": [
                     {"type": "insecureAcceptAnything"},
                 ],
             }},
