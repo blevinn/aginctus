@@ -17,7 +17,9 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-from synthetic_responses import TOKEN
+# Both scripts are pinned separately into the guest Nix store. Validate
+# consistency with the synthetic upstream in hostless protocol tests.
+TOKEN = "synthetic-fixture-only"
 
 ALIAS = "aginctus-vm-synthetic"
 STATE = Path("/run/aginctus-vm-gateway-state/aginctus/gateway/local/secrets.json")
