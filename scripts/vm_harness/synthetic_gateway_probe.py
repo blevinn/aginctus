@@ -214,29 +214,42 @@ def run(server_script):
     if not isinstance(scoped, str) or not scoped or scoped == master:
         raise Failure("scoped synthetic workload key was not issued")
 
-    # Negative auth controls must fail *before* any upstream request.
-    for forbidden in (None, "synthetic-invalid-key"):
-        try:
-            request(base, "/v1/models", forbidden)
-        except Failure as exc:
-            if "HTTP 401" not in str(exc) and "HTTP 403" not in str(exc):
-                raise
-        else:
-            raise Failure("unauthorized LiteLLM model listing accepted")
-    if ALIAS not in model_ids(request(base, "/v1/models", scoped)):
-        raise Failure("scoped workload cannot see synthetic alias")
+    try:
+        # Negative auth controls must fail *before* any upstream request.
+        for forbidden in (None, "synthetic-invalid-key"):
+            try:
+                request(base, "/v1/models", forbidden)
+            except Failure as exc:
+                if "HTTP 401" not in str(exc) and "HTTP 403" not in str(exc):
+                    raise
+            else:
+                raise Failure("unauthorized LiteLLM model listing accepted")
+        if ALIAS not in model_ids(request(base, "/v1/models", scoped)):
+            raise Failure("scoped workload cannot see synthetic alias")
 
-    nonce = secrets.token_hex(12)
-    raw = request(base, "/v1/responses", scoped, {
-        "model": ALIAS,
-        "input": "Return this deterministic fixture marker: nonce=" + nonce,
-        "stream": True,
-    })
-    verify_stream(raw, nonce)
-    observed = json.loads(request(upstream, "/_observed/" + nonce, TOKEN))
-    if observed.get("count") != 1:
-        raise Failure("synthetic upstream did not independently observe request")
-    print("PASS: real LiteLLM scoped-key synthetic Responses route (no live provider)")
+        nonce = secrets.token_hex(12)
+        raw = request(base, "/v1/responses", scoped, {
+            "model": ALIAS,
+            "input": "Return this deterministic fixture marker: nonce=" + nonce,
+            "stream": True,
+        })
+        verify_stream(raw, nonce)
+        observed = json.loads(request(upstream, "/_observed/" + nonce, TOKEN))
+        if observed.get("count") != 1:
+            raise Failure("synthetic upstream did not independently observe request")
+    finally:
+        # This is a real LiteLLM virtual key despite its fake-only model
+        # scope. Revoke it even if inference fails; uncertain revocation
+        # causes test failure rather than an assertion of clean teardown.
+        request(base, "/key/delete", master, {"keys": [scoped]})
+    try:
+        request(base, "/v1/models", scoped)
+    except Failure as exc:
+        if "HTTP 401" not in str(exc) and "HTTP 403" not in str(exc):
+            raise
+    else:
+        raise Failure("revoked synthetic workload token still accepted")
+    print("PASS: real LiteLLM scoped-key synthetic Responses and revocation (no live provider)")
     print("NOTE: Herdr/OpenCode tool execution, gateway audit and cleanup not verified")
 
 
