@@ -95,7 +95,7 @@ func runScopedWorkloadTransition(
 	defer cancel()
 
 	if err := requireNoKnownLifecycleUnits(ctx); err != nil {
-		fmt.Fprintln(stderr, prefix+"known or unverified lifecycle controller; refusing manual start")
+		fmt.Fprintln(stderr, prefix+"known or unverified lifecycle controller; refusing manual transition")
 		return 1
 	}
 	_, instances, err := readScopedManagedInstances(ctx, cfg, project)
