@@ -134,3 +134,33 @@ must provide genuine independent evidence for those dimensions before
 [#522](https://github.com/blevinn/aginctus/issues/522) may present them as
 verified. Do not ingest agent-written JSON or gateway nonce markers as proof.
 This local workflow requires no cryptographic signing service.
+
+### Inspect one existing private run (read-only)
+
+After a separately authorized acceptance execution writes a record, select its
+exact `aginctus-acceptance.<8-character-suffix>` run ID. These commands only
+read an owner-private record from the configured directory and **never**
+launch an agent, invoke Incus or contact a model provider:
+
+```sh
+# AGINCTUS_ACCEPTANCE_REPORT_ROOT remains set as above.
+nix develop -c just check acceptance-report <run-id>
+nix develop -c just check acceptance-report-json <run-id>
+```
+
+The viewer validates the run ID, the root/run/file ownership and permissions,
+no-follow path resolution, a maximum 16 KiB record, the fixed local-result
+schema, and consistency between observed exit codes and reported outcomes.
+Text mode prints host-observed fixture/test and stop/close **command** statuses;
+JSON mode emits one compact object with the same bounded information. No raw
+child output, absolute filesystem paths, credentials or provider payloads are
+included. A missing, unsafe or malformed record produces a bounded error
+instead of reinterpreting the file as a pass.
+
+Both viewer commands intentionally return nonzero, even if all local checks
+passed: this record **cannot** by itself prove OpenCode tool execution, real
+Responses inference, credential/egress enforcement or independent resource
+removal. Those remain `not_verified`, and
+`complete_acceptance` stays `false`. An untrusted agent's ability to
+write the operator's report directory would invalidate this trust boundary;
+keep the directory restricted to a separate trusted operator principal.
