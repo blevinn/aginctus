@@ -25,7 +25,8 @@ owner="$(id -u)"
 safe_dir() {
     [ -d "$1" ] && [ ! -L "$1" ] || exit 1
     [ "$(stat -c %u "$1")" = "$owner" ] || exit 1
-    [ -z "$(find "$1" -maxdepth 0 -perm /022 -print)" ] || exit 1
+    # Owner-private: group/other may neither read nor traverse this parent.
+    [ -z "$(find "$1" -maxdepth 0 -perm /077 -print)" ] || exit 1
 }
 check_marker() {
     safe_dir "$root"
