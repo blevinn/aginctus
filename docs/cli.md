@@ -18,6 +18,74 @@ Some gateway egress `plan`, `preflight`, `audit`, `model render` and `credential
 
 The older `workload <name> ensure|teardown` forms remain supported for compatibility; prefer `workload apply|remove [name]` in new examples.
 
+## Scoped Herdr and workload status (read-only)
+
+The v0.2 opt-in instance inspection commands explicitly select the
+declared, owned **local** Incus project:
+
+```sh
+aginctus herdr client status --project aginctus
+aginctus workload status --project aginctus dev
+aginctus workload ls --project aginctus
+```
+
+The project must match the effective `incus.project` configuration
+and have the exact Aginctus project ownership and feature policy.
+The commands use `incus --force-local --project NAME list --format json`,
+refuse invalid or duplicated instance identities, and inspect exact
+Herdr/workload ownership markers. Foreign or ambiguous instances cause
+an error, never a silent `absent` result. A multi-workload status or
+listing emits no partial output if a later instance is foreign.
+Unavailable/denied daemon state fails closed without printing raw
+external diagnostics.
+
+The existing no-`--project` status and unflagged start/stop/apply/remove
+operations retain v0.1 behavior. The separately confirmed start/stop
+transitions below are the only opt-in scoped workload mutations; they do not
+migrate the pilot or enable project-scoped orchestration.
+
+## Transition one existing scoped workload (explicit mutation)
+
+On an **approved disposable local Incus environment only**, after verifying
+the workload's ownership and current state:
+
+```sh
+aginctus workload status --project aginctus dev
+aginctus workload start --project aginctus dev --confirm-start
+aginctus workload stop --project aginctus dev --confirm-stop
+```
+
+Unlike the status command, **start boots a guest and can run its workload;
+stop shuts down a running guest and can interrupt its work**. Both require
+the explicit project matching effective `incus.project`, a single configured
+workload ID, and their own exact confirmation flag. Neither falls back to
+an ambient remote or the default project, creates or removes an instance,
+starts/stops all workloads, changes its volumes/profiles, or runs top-level
+`apply`. Start requires a verified stopped instance; stop requires a verified
+running instance. An already-completed transition is an idempotent no-op.
+
+Both transitions require exact local project policy and workload ownership
+markers, and check that **all four known Aginctus lifecycle units** are absent
+in both the host system manager and the invoking user's manager. Installed,
+active, failed, inaccessible or unknown unit state blocks the operation. The
+command repeats controller, project and instance-state checks immediately
+before exactly one `incus --force-local --project NAME start|stop INSTANCE`
+request. Both use the same cooperative project lease as scoped image imports.
+A failed post-transition inventory never reports success; the operator must
+inspect the guest instead of relying on automatic rollback (which could
+restart a deliberately stopped workload or stop a newly running one).
+
+**Security limit:** systemd inspection cannot find every other user's
+manager, renamed controllers or manual Incus writers. The cooperative lease
+does not fence legacy v0.1 reconcilers, uncooperative Incus clients or
+separate network namespaces. Ownership markers are self-declared rather
+than authenticated controller authority; actual Incus access is still
+enforced by the daemon. These safeguards narrow an explicitly approved
+operator action but **do not establish authority for unattended Home Manager
+reconciliation or system-to-user handoff** (#437/#441). Keep the pilot
+unchanged pending disposable-Incus acceptance and a separately approved
+migration (#443/#202).
+
 ## Explicit local Incus image inventory (read-only)
 
 ```sh
@@ -117,6 +185,35 @@ Incus environment during validation, not on the v0.1 pilot. Keep
 `images update`, `images import`, service units and migration paths
 unchanged until separate owner arbitration and atomic update/rollback
 work is complete.
+
+## Cooperative scoped image-writer exclusion
+
+The two opt-in, create-only commands, `images import --project` and
+`images import-owned --project`, now hold the **same project-wide**
+Linux abstract Unix socket lease from their initial project inspection
+through final import verification. If another participating Aginctus
+image writer already holds that lease, the command fails **before**
+contacting Incus. Different aliases in the same project still conflict:
+they might resolve to an identical image fingerprint. Different
+projects have independent lease names.
+
+A lease is automatically released when its process exits, including
+after a crash; it needs no writable shared lockfile, NixOS tmpfiles
+rule, or global group. On non-Linux platforms, these opt-in writes
+fail closed rather than skip the lease. On a host where the system and
+user operators share a **network namespace**, this serializes their
+participating Aginctus processes even when their UIDs differ.
+
+**This is only cooperative exclusion, never authorization.** A process
+holding an abstract socket cannot prove its identity or lifecycle
+ownership. Unrelated Incus commands, external controllers, network
+namespaces, systemd services running the legacy `images update`,
+and concurrent Incus administrators do **not** acquire this lease.
+Another local process can intentionally hold its name and deny writes.
+The lease therefore does not make `replace-plan` authoritative and
+does not enable alias replacement, Home Manager handoff, or live pilot
+migration. Host/controller authority and project-scoped atomic
+replacement/rollback remain future work.
 
 ## Proposed scoped image replacement (read-only)
 

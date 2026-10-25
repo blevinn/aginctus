@@ -32,6 +32,7 @@ fixture_status=not_run
 tests_status=not_run
 stop_status=not_run
 close_status=not_run
+local_workspace_removed=not_run
 
 cleanup() {
   local status=$?
@@ -54,13 +55,24 @@ cleanup() {
       echo "WARN: workspace close failed ($run_id)" >&2
     fi
   fi
-  # The host runner knows its own fixture/test exits and cleanup COMMAND
-  # exits. None of these independently proves real inference or removed state.
+  # Inspect the runner-owned disposable root *after* removing it, not just
+  # the rm exit code. This never proves remote Herdr/Incus resources vanished.
+  # Suppress cleanup diagnostics because guest-writable paths may be sensitive.
+  if rm -rf -- "$root" >/dev/null 2>&1 && [[ ! -e "$root" && ! -L "$root" ]]; then
+    local_workspace_removed=pass
+  else
+    local_workspace_removed=fail
+    status=1
+    echo "WARN: disposable local workspace removal not confirmed ($run_id)" >&2
+  fi
+  # The host runner knows its own fixture/test, cleanup command and local
+  # root-removal outcomes. None establishes upstream inference or remote cleanup.
   if [[ -n "${AGINCTUS_ACCEPTANCE_REPORT_ROOT:-}" ]]; then
     if ! python3 "$reporter" --output-root "$AGINCTUS_ACCEPTANCE_REPORT_ROOT" \
       --run-id "$run_id" --mode "$mode" --exit-code "$status" \
       --fixture "$fixture_status" --tests "$tests_status" \
-      --stop "$stop_status" --close "$close_status"; then
+      --stop "$stop_status" --close "$close_status" \
+      --local-workspace-removed "$local_workspace_removed"; then
       status=1
       echo "ERROR: acceptance evidence recording failed" >&2
     fi
@@ -70,9 +82,8 @@ cleanup() {
   else
     echo "FAIL: $mode acceptance ($run_id), exit $status" >&2
   fi
-  # Never emit adapter output: it may contain credentials. The optional
-  # persisted report contains only fixed labels and runner-observed statuses.
-  rm -rf -- "$root"
+  # Never emit adapter output: it may contain credentials. The disposable
+  # root was removed and independently checked before writing the report.
   exit "$status"
 }
 trap cleanup EXIT

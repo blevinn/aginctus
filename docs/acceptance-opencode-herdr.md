@@ -12,6 +12,45 @@ All phase calls require `AGINCTUS_ACCEPTANCE_HERDR_MACHINE` set to a reviewed sa
 
 A private `.herdr-owned.json` file records the Herdr-returned workspace/pane IDs and the selected machine, preventing later `stop`/`close` from targeting guessed or unrelated IDs. Closing the workspace is intentionally restricted to the recorded ID. If creation succeeds but response parsing or recording fails, the new remote workspace may remain: inspect Herdr by the unique run label and clean up that resource manually. Never automatically remove an unverified resource.
 
+### Independent Herdr workspace close readback
+
+The owned `close` phase now queries `herdr --machine <reviewed-machine> workspace list` **before** issuing `workspace close <owned-ID>`. The returned
+JSON must contain a bounded `result.type=workspace_list` inventory with
+unique valid workspace IDs; the exact ID in the private ownership record
+must be present and be the **only** workspace with that run label. It
+refuses to close an absent ID, a mismatched label, a second same-run-label
+workspace, or an ambiguous/malformed inventory. Other workspaces may have
+no labels; they are never targeted. After closing, no workspace with that
+run label may remain.
+
+After the close command returns successfully, the phase repeats this
+read-only query **against the same managed machine**. Only when that exact
+workspace ID is absent does it remove the local ownership record and
+acknowledge close success. A stale inventory still containing the ID,
+a malformed response, or a transport failure causes a nonzero result and
+retains the private ownership metadata while the enclosing disposable
+directory still exists. The smoke harness discards its temporary directory
+on exit, so investigate failed run IDs promptly through the managed Herdr
+client rather than relying on a persistent local ownership file. There is no
+automatic retry, credential creation, new agent permission, deletion of
+unrelated resources, or fallback to a local machine. This is exercised by
+hostless mock-inventory tests; no remote operation runs in normal CI.
+
+This verifies only that the selected **Herdr workspace** disappeared from
+the managed Herdr inventory at readback time. It cannot establish guest
+directory or volume deletion, process termination beyond Herdr's own
+workspace model, upstream Responses completion, or gateway/egress controls.
+The workspace smoke wrapper now also returns failure if its scoped
+`close` or guest-directory cleanup helper fails; warnings cannot be
+followed by a misleading PASS. The helper is still attempted even when
+the close operation fails.
+
+The generic live dispatcher may use different operator-supplied hooks, so
+the runner's existing `stop`/`close` command statuses do not automatically
+become independently verified remote cleanup in the private result or
+aggregate coverage. Keep `cleanup: not_verified` until the trusted runner
+itself integrates an independently checked full owned-resource inventory.
+
 The script is used as a **phase implementation**. Install small audited executable wrapper scripts named `open`, `start`, `prompt`, `wait`, `stop`, `close` in the hook directory. Each wrapper invokes `python3 /absolute/repo/scripts/acceptance/herdr-lifecycle.py <phase> "$@"` as a normal command (not `eval`). `preflight`, `credential-check`, and `gateway-evidence` must be implemented separately, and must fail closed rather than emit synthetic markers. The existing dispatcher refuses incomplete directories.
 
 ## Deterministic checks
