@@ -75,13 +75,6 @@ jobs:
           # Keep stdout as JSON, never merge raw subprocess stderr into it.
           nix --quiet develop --no-update-lock-file -c just check report-json | tee "$RUNNER_TEMP/check-ci.json"
 
-      # Temporary PR diagnostic: the aggregate JSON intentionally suppresses
-      # linter text, so surface just the static analyzer's findings.
-      - name: targeted Go lint diagnostics (PR 501 only)
-        if: ${{ failure() && github.event_name == 'pull_request' }}
-        continue-on-error: true
-        run: nix --quiet develop --no-update-lock-file -c golangci-lint run ./internal/incus/... ./internal/cli/...
-
       - name: gateway-config-parity flake check
         id: parity
         if: ${{ !cancelled() && steps.aggregate.outcome != 'skipped' }}
