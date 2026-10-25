@@ -61,6 +61,55 @@ class SmokeSafetyTests(unittest.TestCase):
             self.assertEqual(call.call_args.args[:4], ("incus", "exec", "aginctus-herdr", "--"))
 
 
+class SmokeCleanupReadbackTests(unittest.TestCase):
+    def test_failed_close_or_guest_cleanup_never_prints_pass(self):
+        env = {
+            "AGINCTUS_ACCEPTANCE_HERDR_SMOKE": "I_UNDERSTAND",
+            "AGINCTUS_ACCEPTANCE_HERDR_MACHINE": "aginctus-dev",
+            "AGINCTUS_ACCEPTANCE_HERDR_SMOKE_ROOT":
+                "/home/agent/aginctus-acceptance",
+        }
+        for fail_on in ("close", "cleanup"):
+            with self.subTest(fail_on=fail_on):
+                phases = []
+                messages = []
+
+                def remote(*args):
+                    if "machine" in args and "list" in args:
+                        return json.dumps([{"label": "aginctus-dev", "enabled": True}])
+                    return json.dumps({"result": {"type": "workspace_get"}})
+
+                def runner(args, **_kwargs):
+                    action = args[2] if len(args) > 2 else ""
+                    phases.append(action)
+                    if action == "open":
+                        workspace = Path(args[3])
+                        (workspace.parent / ".herdr-owned.json").write_text(
+                            json.dumps({
+                                "workspace_id": "ws-test",
+                                "agent_name": "acc_test",
+                            })
+                        )
+                    if action == fail_on:
+                        raise subprocess.CalledProcessError(1, args)
+                    return subprocess.CompletedProcess(args, 0, "", "")
+
+                with (
+                    patch.dict(os.environ, env),
+                    patch.object(smoke, "call", side_effect=remote),
+                    patch.object(smoke.subprocess, "run", side_effect=runner),
+                    patch("builtins.print", side_effect=lambda *v, **_k: messages.append(v[0])),
+                    self.assertRaisesRegex(RuntimeError, "cleanup could not be verified"),
+                ):
+                    smoke.main()
+                self.assertIn("close", phases)
+                self.assertIn("cleanup", phases)
+                self.assertFalse(any(
+                    message.startswith("PASS: remote Herdr workspace")
+                    for message in messages
+                ))
+
+
 class SmokeFinallyTests(unittest.TestCase):
     """Test the review-finding A14 contract: the finally block must
     always attempt the cleanup helper, and it must never replace the
