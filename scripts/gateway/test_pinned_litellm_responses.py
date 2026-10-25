@@ -82,18 +82,19 @@ class PinnedResponsesProbeTests(unittest.TestCase):
 
     def test_selective_negative_controls_require_fourxx_and_no_upstream(self):
         for status in (400, 401, 403, 422):
-            with self.subTest(status=status):
-                with patch.object(probe, "send", return_value=(status, b"")):
-                    probe.MockGo.calls = []
-                    probe.check_rejected_without_upstream(
-                        1234, probe.SESSION_A, user_agent="bogus/1.0")
+            with self.subTest(status=status), patch.object(
+                probe, "send", return_value=(status, b"")
+            ):
+                probe.MockGo.calls = []
+                probe.check_rejected_without_upstream(
+                    1234, probe.SESSION_A, user_agent="bogus/1.0")
         for status in (200, 500):
-            with self.subTest(status=status):
-                with patch.object(probe, "send", return_value=(status, b"")):
-                    probe.MockGo.calls = []
-                    with self.assertRaisesRegex(RuntimeError, "failed closed"):
-                        probe.check_rejected_without_upstream(
-                            1234, probe.SESSION_A, user_agent="bogus/1.0")
+            with self.subTest(status=status), patch.object(
+                probe, "send", return_value=(status, b"")
+            ), self.assertRaisesRegex(RuntimeError, "failed closed"):
+                probe.MockGo.calls = []
+                probe.check_rejected_without_upstream(
+                    1234, probe.SESSION_A, user_agent="bogus/1.0")
         probe.MockGo.calls = [{}]
 
         def recorded(*_args, **_kwargs):
