@@ -102,6 +102,7 @@ nix develop -c just test-vm-runner
 nix develop -c just test-vm-smoke
 nix develop -c just test-vm-storage-network
 nix develop -c just test-vm-runtime-lifecycle
+nix develop -c just test-vm-gateway-topology
 nix develop -c just test-vm-ownership-recovery
 nix develop -c just vm-debug
 ```
@@ -117,20 +118,46 @@ checks snapshot/daemon-restart visibility, and tests Aginctus management bridge
 idempotency and foreign-resource protection. The `runtime-lifecycle` test imports real Herdr and OpenCode images,
 reconciles their Incus instances, and invokes the real CLI's gateway render
 contract; it **does not yet boot LiteLLM/PostgreSQL or prove inference**.
-Subsequent slices add synthetic gateway inference,
-Herdr/OpenCode workflow assertions, fault injection, and redacted artifacts.
+The opt-in `gateway-topology` scenario goes further: it calls the real
+`aginctus gateway up` orchestration path, then requires Postgres `pg_isready`,
+LiteLLM's real `/health/liveliness`, and coexisting Herdr/OpenCode workloads.
+It also checks the management network's no-NAT/no-routing policy. It
+may need OCI registry access to download the pinned-version images inside
+the disposable guest and configures Incus HTTPS **only on guest loopback**
+for the compose image cache. This is not a hermetic/image-digest-pinned OCI
+test, not an agent workflow, and does **not** send a provider request or prove
+gateway model routing. It deliberately fails if real gateway deployment
+or application readiness fails; a rendered Compose model is insufficient.
+
+For this networked scenario the runner builds the pinned `.driver` output,
+then executes its fixed batch script outside the Nix build sandbox in a fresh
+temporary working directory, with the same sanitized environment and a
+15-minute timeout. Ordinary `nix build .#vm-harness-gateway-topology` cannot
+fetch OCI images inside a network-isolated build sandbox. The fixture selects
+the locked `pkgs.incus` daemon for OCI gateway controls, limits host DHCP to
+the outer NIC, permits only DNS/DHCP on the inner bridges, and keeps L2 bridge
+traffic separate from the routed management denial. An explicit management
+CIDR makes LiteLLM use management DNS, so PostgreSQL lookup does not depend
+on which of its two NICs happens to be enumerated first. Gateway Compose
+rendering and deployment both set this DNS server when a management IPv4 CIDR
+is configured.
+
+Subsequent slices add registered synthetic Responses traffic, real
+Herdr/OpenCode tool execution, packet-level negative network assertions,
+fault injection, and independently verified resource/evidence cleanup.
 
 ## Machine-readable run evidence
 
 Every `runner.py test <scenario>` invocation writes an independent,
 per-run `.vm-harness-results/<random-id>/result.json` with the scenario,
-pass/fail from the Nix derivation exit status, lockfile fingerprint,
+pass/fail from the Nix derivation or networked batch-driver exit status, lockfile fingerprint,
 base repository revision, tracked-source dirty status and UTC timestamp.
 Provenance is captured before the build; unavailable Git or lockfile metadata
 is recorded as `null`. The base revision alone does not identify dirty source,
 and this snapshot does not prevent concurrent source changes. Launch failures
 also produce a failure report with `failure_stage: launch`; a nonzero build
-exit records `failure_stage: build`. It **always** records
+exit records `failure_stage: build`; networked batch-driver failures record
+`failure_stage: runtime`. It **always** records
 `upstream_inference: not_verified` and `cleanup: not_verified`; these
 are not inferred from the presence of an Incus service or a green mock.
 

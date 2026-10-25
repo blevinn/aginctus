@@ -62,7 +62,9 @@ ag.orchestration(cfg.id,
             },
             egress: if cfg.egressIPv4Address == '' then {} else { ipv4_address: cfg.egressIPv4Address },
           },
-        } + (if cfg.forwardClientHeaders then {
+        } + (if std.get(cfg, 'managementDNSIPv4', '') != '' then {
+          dns: [cfg.managementDNSIPv4],
+        } else {}) + (if cfg.forwardClientHeaders then {
           configs: [{
             source: 'aginctus-client-headers',
             target: '/app/aginctus-client-headers.yaml',

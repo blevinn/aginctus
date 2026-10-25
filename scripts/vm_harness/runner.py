@@ -14,6 +14,7 @@ import os
 import secrets
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,8 +25,10 @@ SCENARIOS = {
     "smoke": "vm-harness-smoke",
     "storage-network": "vm-harness-storage-network",
     "runtime-lifecycle": "vm-harness-runtime-lifecycle",
+    "gateway-topology": "vm-harness-gateway-topology",
     "ownership-recovery": "vm-harness-ownership-recovery",
 }
+NETWORKED_SCENARIOS = {"gateway-topology"}
 # Explicit allowlist: do not propagate secrets, Incus remotes, Nix build hooks,
 # QEMU arguments, inherited integration flags or SSH agents to test processes.
 PASSTHROUGH = ("PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TERM")
@@ -41,7 +44,7 @@ def clean_environment(source: dict[str, str]) -> dict[str, str]:
 
 def build_arguments(scenario: str, interactive: bool) -> list[str]:
     target = SCENARIOS[scenario]
-    suffix = ".driver" if interactive else ""
+    suffix = ".driver" if interactive or scenario in NETWORKED_SCENARIOS else ""
     return [
         "nix",
         "--quiet",
@@ -115,6 +118,7 @@ def write_report(
     output_root: Path,
     *,
     launch_failed: bool = False,
+    runtime_failed: bool = False,
 ) -> Path:
     """Write synthetic-only, independently owned outcome metadata.
 
@@ -138,7 +142,7 @@ def write_report(
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "failure_stage": "launch"
         if launch_failed
-        else ("build" if exit_code else None),
+        else ("runtime" if runtime_failed else ("build" if exit_code else None)),
         "git_revision": provenance.git_revision,
         "git_dirty": provenance.git_dirty,
         "flake_lock_sha256": provenance.flake_lock_sha256,
@@ -167,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
         provenance = capture_provenance(env) if args.mode == "test" else Provenance()
         command = build_arguments(args.scenario, args.mode == "debug")
         launch_failed = False
+        runtime_failed = False
         try:
             result = subprocess.run(
                 command,
@@ -183,6 +188,34 @@ def main(argv: list[str] | None = None) -> int:
             result = subprocess.CompletedProcess(
                 command, 1, "", f"VM launcher failed: {exc}\n"
             )
+        if (
+            args.mode == "test"
+            and args.scenario in NETWORKED_SCENARIOS
+            and result.returncode == 0
+        ):
+            driver = driver_from_build(result.stdout)
+            # OCI provisioning needs worker network access, unavailable in a
+            # Nix build sandbox. Run only the immutable allowlisted driver.
+            with tempfile.TemporaryDirectory(prefix="aginctus-vm-") as state:
+                try:
+                    result = subprocess.run(
+                        [str(driver), "--no-interactive"],
+                        cwd=state,
+                        env=env,
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                        timeout=900,
+                    )
+                except subprocess.TimeoutExpired:
+                    result = subprocess.CompletedProcess(
+                        [], 1, "", "VM runtime timed out\n"
+                    )
+                except OSError:
+                    result = subprocess.CompletedProcess(
+                        [], 1, "", "VM runtime could not start\n"
+                    )
+            runtime_failed = result.returncode != 0
         if args.mode == "test":
             report = write_report(
                 args.scenario,
@@ -190,12 +223,16 @@ def main(argv: list[str] | None = None) -> int:
                 provenance,
                 ROOT / ".vm-harness-results",
                 launch_failed=launch_failed,
+                runtime_failed=runtime_failed,
             )
             print(f"VM evidence: {report}")
         if result.returncode != 0:
             print(result.stderr, file=sys.stderr, end="")
             return result.returncode
         if args.mode == "test":
+            if args.scenario in NETWORKED_SCENARIOS:
+                print(f"PASS: networked VM scenario: {args.scenario}")
+                return 0
             print(f"PASS: VM test derivation: {result.stdout.strip()}")
             return 0
         driver = driver_from_build(result.stdout)

@@ -53,6 +53,36 @@ func TestValidateRejectsEmptyImage(t *testing.T) {
 	}
 }
 
+func TestDualHomedGatewayUsesManagementDNS(t *testing.T) {
+	spec := Spec{
+		ID: "local", Project: "gateway", Network: "mgmt", EgressNetwork: "egress",
+		NetworkIPv4Address: "10.77.0.1/24", NetworkIPv6Address: "none",
+		LiteLLMImage: "litellm", PostgresImage: "postgres",
+	}
+	for _, address := range []string{"10.77.0.1/24", ""} {
+		spec.NetworkIPv4Address = address
+		rendered, err := spec.RenderCompose()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document struct {
+			Services map[string]struct {
+				DNS []string `json:"dns"`
+			} `json:"services"`
+		}
+		if err := yaml.Unmarshal([]byte(rendered), &document); err != nil {
+			t.Fatal(err)
+		}
+		want := []string(nil)
+		if address != "" {
+			want = []string{"10.77.0.1"}
+		}
+		if got := document.Services["litellm"].DNS; !reflect.DeepEqual(got, want) {
+			t.Fatalf("management address %q: DNS = %v, want %v", address, got, want)
+		}
+	}
+}
+
 func TestOrchestrationPlanOrdersNetworkBeforeComposeAndKeepsSecretReferences(t *testing.T) {
 	spec := Spec{
 		ID:                 "local",

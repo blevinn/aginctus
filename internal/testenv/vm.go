@@ -23,6 +23,7 @@ var vmScenarios = []Scenario{
 	{Name: "smoke", Target: "vm-harness-smoke", Description: "Real guest Incus and Herdr image smoke"},
 	{Name: "storage-network", Target: "vm-harness-storage-network", Description: "Guest-local Btrfs storage and management bridge"},
 	{Name: "runtime-lifecycle", Target: "vm-harness-runtime-lifecycle", Description: "Real Herdr/OpenCode provisioning and reconciliation"},
+	{Name: "gateway-topology", Target: "vm-harness-gateway-topology", Description: "Real guest-local LiteLLM/Postgres and Herdr/OpenCode topology (OCI pulls required; no inference)"},
 	{Name: "ownership-recovery", Target: "vm-harness-ownership-recovery", Description: "Foreign resource denial and guest daemon recovery"},
 }
 

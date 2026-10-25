@@ -20,6 +20,7 @@ SCENARIOS = (
     "smoke",
     "storage-network",
     "runtime-lifecycle",
+    "gateway-topology",
     "ownership-recovery",
 )
 RUN_ID = re.compile(r"[0-9a-f]{24}\Z")
@@ -92,7 +93,7 @@ def normalize(record: dict, run_id: str) -> dict:
         or type(exit_code) is not int
         or not -255 <= exit_code <= 255
         or (status == "pass") != (exit_code == 0)
-        or failure_stage not in ("launch", "build", None)
+        or failure_stage not in ("launch", "build", "runtime", None)
         or (status == "pass" and failure_stage is not None)
         or (status == "fail" and failure_stage is None)
         or record.get("verification_tier") != TIER
