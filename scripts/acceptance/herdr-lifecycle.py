@@ -136,12 +136,14 @@ def phase(action, workspace, identity, prompt=None):
         # Positive control: do not close a stale/reused ID, an unrelated
         # workspace, or anything absent from the independently read inventory.
         before = workspace_inventory(machine)
-        if before.get(wid) != identity:
-            raise RuntimeError("owned Herdr workspace not confirmed before close")
+        matching = {key for key, label in before.items() if label == identity}
+        if matching != {wid}:
+            raise RuntimeError("unique owned Herdr workspace not confirmed before close")
         invoke(machine, "workspace", "close", wid)
         # A zero exit from 'close' alone is not evidence the remote workspace
         # disappeared. Query the SAME saved machine again before acknowledging.
-        if wid in workspace_inventory(machine):
+        after = workspace_inventory(machine)
+        if wid in after or identity in after.values():
             raise RuntimeError("owned Herdr workspace remains after close")
         # Retain ownership metadata on any failure so the operator can inspect.
         state_path(base).unlink()
