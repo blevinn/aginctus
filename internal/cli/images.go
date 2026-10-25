@@ -45,15 +45,7 @@ func runImages(ctx context.Context, args []string, stdout, stderr io.Writer) int
 			fmt.Fprintf(stderr, "parse Incus image list: %v\n", err)
 			return 1
 		}
-		for _, img := range images {
-			if len(img.Aliases) == 0 {
-				fmt.Fprintln(stdout, img.Fingerprint)
-				continue
-			}
-			for _, a := range img.Aliases {
-				fmt.Fprintf(stdout, "%s\t%s\n", a.Name, img.Fingerprint)
-			}
-		}
+		printLocalImages(stdout, images)
 		return 0
 	}
 	if len(args) == 3 && args[0] == "update" {
@@ -67,6 +59,20 @@ func runImages(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	fmt.Fprintln(stderr, "Usage: aginctus images list|ls")
 	fmt.Fprintln(stderr, "       aginctus images update <name> <path>")
 	return 2
+}
+
+// printLocalImages retains the v0.1 tabular contract for both ambient and
+// explicitly scoped image inventories; no project identifier is inferred.
+func printLocalImages(stdout io.Writer, images []localImage) {
+	for _, img := range images {
+		if len(img.Aliases) == 0 {
+			fmt.Fprintln(stdout, img.Fingerprint)
+			continue
+		}
+		for _, a := range img.Aliases {
+			fmt.Fprintf(stdout, "%s\t%s\n", a.Name, img.Fingerprint)
+		}
+	}
 }
 
 func imageArtifact(dir, subdir, extension string) (string, error) {
