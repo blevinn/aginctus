@@ -73,6 +73,31 @@ def tool_arguments(step, workdir, nonce):
     raise SequenceError("invalid synthetic tool step")
 
 
+def validate_inline_continuation(body, nonce, step, workdir):
+    """Validate the pinned client's explicit function-call/result input pair."""
+    inputs = body.get("input")
+    if not isinstance(inputs, list):
+        raise SequenceError("missing actual tool continuation")
+    expected_call = "call_" + nonce + "_" + str(step)
+    expected_item = "fc_" + nonce + "_" + str(step)
+    calls = [item for item in inputs if isinstance(item, dict) and item.get("type") == "function_call"]
+    outputs = [item for item in inputs if isinstance(item, dict) and item.get("type") == "function_call_output"]
+    if len(calls) != 1 or len(outputs) != 1:
+        raise SequenceError("expected one explicit function call and result")
+    name = STEP_NAMES[step]
+    if (
+        calls[0].get("id") != expected_item
+        or calls[0].get("call_id") != expected_call
+        or calls[0].get("name") != name
+        or calls[0].get("arguments") != json.dumps(
+            tool_arguments(step, workdir, nonce), separators=(",", ":")
+        )
+        or outputs[0].get("call_id") != expected_call
+        or not isinstance(outputs[0].get("output"), str)
+    ):
+        raise SequenceError("forged or mismatched function call/result pair")
+
+
 def fixture_response(nonce, step, workdir, model):
     output = []
     if step < 3:
@@ -171,8 +196,16 @@ class ToolSequence:
                 if match is None:
                     raise SequenceError("initial tool task is missing nonce")
                 nonce = match.group(1)
-                if not NONCE.fullmatch(nonce) or nonce in self._steps or len(self._steps) >= MAX_SESSIONS:
-                    raise SequenceError("duplicate or over-capacity tool session")
+                if not NONCE.fullmatch(nonce) or len(self._steps) >= MAX_SESSIONS:
+                    raise SequenceError("invalid or over-capacity tool session")
+                if nonce in self._steps:
+                    step = self._steps[nonce]
+                    if step >= 3:
+                        raise SequenceError("tool session is already complete")
+                    tool_definitions(body)
+                    validate_inline_continuation(body, nonce, step, self.workdir)
+                    self._steps[nonce] = step + 1
+                    return nonce, fixture_response(nonce, step + 1, self.workdir, self.model)
                 tool_definitions(body)
                 step = 0
                 self._steps[nonce] = 0
