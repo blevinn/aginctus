@@ -69,6 +69,8 @@ test-vm-runtime-lifecycle:
 # May need OCI registry access; use a disposable NixOS KVM worker only.
 test-vm-gateway-topology:
     python3 scripts/vm_harness/runner.py test gateway-topology
+test-vm-synthetic-gateway:
+    python3 scripts/vm_harness/runner.py test synthetic-gateway
 
 # Real Incus foreign-resource and daemon-outage recovery assertions.
 test-vm-ownership-recovery:
