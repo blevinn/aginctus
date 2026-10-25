@@ -109,6 +109,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
+def verify_tool_workspace(root, nonce, response_steps, continuations, stdout):
+    """Inspect run-owned files, never infer execution from model text alone."""
+    if "synthetic-tools-complete:" + nonce not in stdout or response_steps != 3:
+        raise AssertionError("synthetic tool protocol did not reach terminal state")
+    observed = {call_id for group in continuations for call_id in group}
+    expected = {"call_" + nonce + "_" + str(i) for i in range(3)}
+    if observed != expected:
+        raise AssertionError("actual tool call/result continuity unverified")
+    edited = root / "calc.go"
+    if edited.is_symlink() or not edited.is_file() or "return a + b" not in edited.read_text():
+        raise AssertionError("agent did not edit run-owned Go source")
+    marker = root / ".aginctus-tool-test-ok"
+    if marker.is_symlink() or not marker.is_file() or marker.read_text() != nonce:
+        raise AssertionError("actual agent bash test command marker unavailable")
+
+
 def main(binary, inspect_tools=False, execute_tools=False):
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -180,15 +196,10 @@ def main(binary, inspect_tools=False, execute_tools=False):
             assert result.returncode == 0, (
                 "OpenCode exited unsuccessfully (stdout/stderr suppressed to avoid credential leaks)")
             if execute_tools:
-                assert "synthetic-tools-complete:" + nonce in result.stdout, (
-                    "real client did not consume terminal scripted tool response")
-                assert Handler.sequence._steps.get(nonce) == 3, (
-                    "real client did not complete read/edit/bash tool results")
-                assert "return a + b" in (root / "calc.go").read_text(), (
-                    "agent did not actually edit calc.go")
-                marker = root / ".aginctus-tool-test-ok"
-                assert marker.is_file() and marker.read_text() == nonce, (
-                    "agent bash command did not produce the independent test marker")
+                verify_tool_workspace(
+                    root, nonce, Handler.sequence._steps.get(nonce),
+                    Handler.continuations, result.stdout
+                )
                 final = subprocess.run(
                     ["go", "test", "./..."], cwd=root, capture_output=True,
                     timeout=60, check=False, env=dict(os.environ, GOPROXY="off"),
