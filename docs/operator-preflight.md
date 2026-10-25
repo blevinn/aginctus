@@ -93,3 +93,49 @@ provisioning and explicit project identity threaded through every API
 and subprocess. #201 co-locates the gateway and workloads and #202
 owns verified migration with backups and rollback. Do not run these
 operations on the live pilot merely because this diagnostic passes.
+
+
+## Explicit local project provisioning (#200, second slice)
+
+`project-plan` remains read-only. The separately invoked
+**create-only** command provisions a new dedicated Aginctus project on
+the **local** Incus daemon:
+
+```sh
+aginctus operator project-ensure --project aginctus --confirm-create
+```
+
+This is a **real mutation**. Run it only on an explicitly authorized
+disposable test host or as a deliberate provisioning step. It never
+uses `sudo`, `incus project switch`, or the caller's current Incus
+project. The Incus invocation includes `--force-local`; it will not
+implicitly create a remote project. It requires the explicit
+`--confirm-create` flag even when an existing project might be reused.
+
+The command first inspects `incus --force-local project list
+--format json` and applies the same exact policy defined above.
+If the desired project is already **compatible**, it reports
+`{"project":"aginctus","result":"existing","status":"compatible"}`
+without making any change. If it is `foreign` or
+`policy-drift`, it refuses to modify it: no adoption, metadata repair,
+renaming, or deletion.
+
+If enumeration reports `not-visible`, **do not infer absence**.
+Only an explicitly requested, atomic `incus --force-local project
+create` with all required `--config` flags is attempted. Incus
+itself rejects an existing name, including a foreign project that
+was hidden from the initial enumeration. A successful creation is
+reinspected and checked against the exact ownership and feature policy
+before success is reported. If verification fails, the command reports
+an uncertain result and **never automatically deletes or rolls back**
+the created project. The administrator must inspect it before retrying.
+
+The command creates **only** the project object. It does not initialize
+profiles, configure a root disk, grant network access, import images,
+create volumes/instances, or make a host bridge. Project-local images,
+profiles and storage volumes are selected by the policy, but the
+existing Linux bridge and Btrfs pool remain host-level. Existing v0.1
+Aginctus lifecycle commands still target their prior projects until
+#200's explicit scope threading, followed by #201 gateway co-location
+and #202 migration. A successful ensure is **not** authorization to
+reconcile workloads or move persistent state.

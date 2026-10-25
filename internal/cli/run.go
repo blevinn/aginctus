@@ -87,7 +87,7 @@ func Run(
 	// application config, read credentials or accept configuration overrides.
 	if len(commandArgs) > 1 && commandArgs[0] == "operator" &&
 		(commandArgs[1] == "units-audit" || commandArgs[1] == "package-audit" ||
-			commandArgs[1] == "project-plan") {
+			commandArgs[1] == "project-plan" || commandArgs[1] == "project-ensure") {
 		if len(options.Overrides) != 0 || options.ConfigurationFile != "" {
 			fmt.Fprintf(stderr, "operator %s: configuration overrides are not supported\n", commandArgs[1])
 			return 2
@@ -97,8 +97,10 @@ func Run(
 			return runOperatorUnitsAudit(ctx, commandArgs[2:], stdout, stderr)
 		case "package-audit":
 			return runOperatorPackageAudit(commandArgs[2:], stdout, stderr)
-		default:
+		case "project-plan":
 			return runOperatorProjectPlan(ctx, commandArgs[2:], stdout, stderr)
+		default:
+			return runOperatorProjectEnsure(ctx, commandArgs[2:], stdout, stderr)
 		}
 	}
 
@@ -1173,6 +1175,7 @@ Commands:
   operator units-audit --owner system|user  Inspect system/current-user lifecycle units (no writes)
   operator package-audit --owner system|user  Compare declared NixOS/HM CLI package identity (no writes)
   operator project-plan --project NAME  Inspect owned Incus project policy (no writes)
+  operator project-ensure --project NAME --confirm-create  Create only an owned local Incus project (explicit mutation)
   images list|ls    List local Incus images and aliases (read-only)
   images update NAME PATH   Import an image from a Nix result directory (mutation)
   config show       Print the effective merged configuration
