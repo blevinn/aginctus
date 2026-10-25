@@ -106,3 +106,13 @@ vm-report run_id:
 [no-cd]
 vm-report-json run_id:
     @python3 scripts/checks/vm_evidence.py --format json {{quote(run_id)}}
+
+# Operator-only, explicit read-only inspection of the configured pilot.
+# Not a dependency of ci/all; never runs a live acceptance or model request.
+[no-cd]
+preflight-report check:
+    @python3 scripts/checks/preflight_report.py --format text {{quote(check)}}
+
+[no-cd]
+preflight-report-json check:
+    @python3 scripts/checks/preflight_report.py --format json {{quote(check)}}

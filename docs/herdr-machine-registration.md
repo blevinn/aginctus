@@ -4,10 +4,16 @@ This is the canonical **current v0.1 Herdr/SSH procedure** for an Aginctus-owned
 
 The managed Herdr client is a **separate infrastructure container** entered by the host CLI; the workload runs its own Herdr server and agent as `agent`. Completing a Herdr SSH session does not prove model-backed OpenCode inference or gateway egress.
 
+The client image's `herdr` command sets the same persistent XDG paths as its
+daemon, including for non-login Incus exec. It refuses missing canonical or bind
+mounts instead of writing disposable rootfs state. No shell profile or per-call
+environment override is required. This wrapper belongs only to the client image;
+the workload's remote socket discovery remains controlled by sshd.
+
 ## Prerequisites
 
 - Initialized Incus, the configured management bridge, imported NixOS guest images, an owned **running** Herdr client and a distinct owned **running OpenCode container**, in the current CLI's `default` Incus project.
-- Herdr client has its expected persistent system-state volume, identity helper, trust and machine helpers. An existing identity must already be provisioned by its guest initialization; `aginctus herdr authorize` inspects it and **does not create or rotate a private key**.
+- Herdr client has its expected persistent system-state volume, identity helper, trust and machine helpers. An existing identity must already be provisioned by an explicitly approved bootstrap or recovered from verified persistent state. Guest startup prepares directories and mounts, **not an SSH identity**; `aginctus herdr authorize` inspects it and **does not create or rotate a private key**.
 - Workload image provides `aginctus-ssh-authorize`, an SSH server with Ed25519 host key and a compatible Herdr server. The CLI currently targets management interface `eth0`, user `agent`, an SSH alias equal to the managed instance name, and Herdr remote session `default`.
 - Confirm the current host's firewall permits the intended **internal** SSH path. Do not enable management NAT/routing, disable bridge filtering, change host firewall rules, or use `--force` to make a connectivity test pass.
 
@@ -42,6 +48,47 @@ incus exec aginctus-dev --project default -- aginctus-ssh-authorize inspect agen
 The two `inspect` helpers return exit status **3** for absent managed state; other nonzero codes require investigation. Public-key output and ownership markers are not private secrets, but avoid sharing unfiltered `incus config show --expanded`: gateway instances can include credentials and database URLs.
 
 If `inspect` reports a missing identity, verify the client state-volume mounts and guest image/service readiness first. Do not silently regenerate the key or replace the client. A rootfs-only legacy client requires a separately approved migration or reinitialization.
+
+### Distinguish absent state from lost state
+
+Capture helper return codes with output suppressed, including client host trust:
+
+```sh
+incus --project default exec aginctus-herdr -- aginctus-ssh-client-identity inspect >/dev/null 2>&1
+printf 'identity rc=%s\n' "$?"
+incus --project default exec aginctus-herdr -- aginctus-ssh-host-trust inspect aginctus-dev >/dev/null 2>&1
+printf 'trust rc=%s\n' "$?"
+incus --project default exec aginctus-dev -- aginctus-ssh-authorize inspect agent >/dev/null 2>&1
+printf 'authorization rc=%s\n' "$?"
+```
+
+`3` means absent, `1` unsafe/inconsistent, and `2` invalid invocation. An absent
+manifest alone does not establish an empty identity directory. Check metadata for
+the manifest, generations, trust and machine configuration, without reading keys.
+Verify the volume's ownership markers, creation time and attachment, then use
+guest `findmnt` to confirm the actual sources of the canonical and bind mounts.
+Successful `mountpoint` checks alone do not establish historical continuity.
+
+Compare instance and volume creation times with prior acceptance evidence. A new
+empty volume after a previously provisioned fleet is a recovery event, even if
+its name and ownership markers match. Check retained owned volumes, snapshots
+and backups before proposing new credentials. Do not infer the deletion mechanism
+from timestamps alone. Private identity recovery must stay within an explicitly
+approved scope and preserve trust; no copy of a private key belongs on the host.
+
+If no verified recovery source is available, obtain explicit approval before
+invoking the client's `aginctus-ssh-client-identity ensure`: it **generates a new
+private identity** when absent. Neither `apply` nor `authorize` performs that
+bootstrap. Establishing trust for a replacement workload also requires verifying
+its incarnation and SSH host key, rather than assuming an absent pin is approval.
+Then follow the supported authorize, pin-host and register sequence below.
+
+The read-only `scripts/acceptance/herdr-socket-pilot-validation.py` reports helper
+codes and gates remote probes on existing identity, trust and matching workload
+authorization. It runs the saved machine catalog and remote workspace command
+in **aginctus-herdr**, not in the workload. An empty local machine catalog is not
+socket or remote-reachability evidence. Its result covers the existing guest;
+fresh-guest, restart and recreation acceptance require separate observations.
 
 ## Explicit SSH bootstrap (mutates guest/client state)
 
@@ -80,6 +127,7 @@ The [closed Herdr connectivity issue #120](https://github.com/blevinn/aginctus/i
 - **Unexpected authorization/host key/SSH alias drift:** stop; do not overwrite the managed key or delete the host pin. Changed incarnation, IP or SSH identity requires explicit recovery and verification. Automatic rotation and incarnation-aware trust reset are not available.
 - **Revocation:** the workload guest's `aginctus-ssh-authorize remove agent` changes **only** its Aginctus-managed key file and does not remove ordinary administrator keys or terminate preexisting SSH sessions. Invoke it only after verifying target ownership and obtaining approval. `herdr client remove` is **not** automatic revocation on surviving workloads.
 - **Replacement:** importing a new image alias does not upgrade an existing running instance. Follow [persistent state and legacy-reset warnings](herdr-persistent-state-volumes.md); preserve the client's SSH identity, pinned trust and Herdr state before any approved deletion/recreation.
+- **Older non-login CLI state:** before deploying the persistent client-command wrapper, inspect metadata for `/root/.local/state/herdr/client/endpoints.json` as well as `/var/lib/herdr/herdr/client/endpoints.json`, and `/root/.config/herdr` as well as `/var/lib/herdr/config/herdr`. Earlier images set XDG paths in profiles and the daemon only; bare Incus exec could save the catalog outside the volume. Do not silently merge conflicting catalogs or assume switching paths recovers state. Preserve and migrate verified existing state only through a separately approved procedure.
 - **Security:** do not share private keys, snapshots containing them, token-bearing instance config or raw helper failure streams. A compromised client identity grants access to the non-root account on every workload that still authorizes it.
 
 ## Host-independent validation for changes to this workflow
