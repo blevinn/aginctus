@@ -133,11 +133,11 @@ func TestImageOwnerAuditScopedReadAndRedaction(t *testing.T) {
 	}
 	claim := expectedImageOwnerClaim(scope, "test-image", "system")
 	tests := []struct {
-		name, projects string
-		projectErr     error
-		imageOutput    []byte
-		imageErr       error
-		expectedStatus string
+		name, projects  string
+		projectErr      error
+		imageOutput     []byte
+		imageErr        error
+		expectedStatus  string
 		wantCode, reads int
 	}{
 		{name: "claimed", projects: auditOwnedProject, imageOutput: auditImageJSON([]string{"test-image"}, claim), expectedStatus: "claimed", wantCode: 0, reads: 1},
