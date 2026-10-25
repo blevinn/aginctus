@@ -58,10 +58,11 @@ class PinnedResponsesProbeTests(unittest.TestCase):
         response.read.return_value = b""
         response.__enter__.return_value = response
         for authenticated in (False, True):
-            with self.subTest(authenticated=authenticated):
-                with patch.object(probe.OPENER, "open", return_value=response) as op:
-                    status, _ = probe.send(12345, probe.ALIAS, probe.SESSION_A,
-                                           authenticated=authenticated)
+            with self.subTest(authenticated=authenticated), patch.object(
+                probe.OPENER, "open", return_value=response
+            ) as op:
+                status, _ = probe.send(12345, probe.ALIAS, probe.SESSION_A,
+                                       authenticated=authenticated)
                 self.assertEqual(status, 403)
                 request = op.call_args.args[0]
                 headers = {k.lower(): v for k, v in request.header_items()}
