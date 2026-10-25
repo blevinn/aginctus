@@ -3,6 +3,17 @@
 Parent design [#425](https://github.com/blevinn/aginctus/issues/425). This is
 **not** v0.1 pilot acceptance and does not verify real provider/OAuth traffic.
 
+## Shared host declaration
+
+The NixOS test-driver guest and the separately built persistent Incus VM
+image import `nix/vm-harness/aginctus-host.nix`, the single declaration of
+host-level Aginctus/Incus services and pinned image defaults. The test-driver
+wrapper owns only QEMU sizing; the persistent image owns the guest agent,
+EFI disk and image packaging. Both leave workload/gateway reconciliation
+operator-controlled until guest Incus is initialized. Sharing the host
+module does not establish real KVM/outer Incus isolation or synthetic model
+acceptance.
+
 ## Security and execution boundary
 
 The opt-in smoke scenario uses the pinned NixOS test driver to launch a QEMU
