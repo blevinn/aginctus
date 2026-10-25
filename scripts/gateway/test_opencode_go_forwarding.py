@@ -35,6 +35,18 @@ def sample(session=SESSION_A, **extra):
 
 
 class ForwardingTests(unittest.TestCase):
+    def test_real_sdk_user_agent_is_preserved_without_allowing_arbitrary_suffixes(self):
+        agent = "opencode/1.15.10 ai-sdk/provider-utils/4.0.19 runtime/bun/1.3.11"
+        data = mod.sanitize_go_headers(sample(**{"User-Agent": agent}), "aresponses")
+        self.assertEqual(data["headers"], {"x-opencode-session": SESSION_A, "User-Agent": agent})
+        for invalid in (agent + " extra/1.0", agent + "\r\nX-Api-Key: secret",
+                        agent.replace("runtime/bun", "runtime/python"),
+                        agent.replace("4.0.19", "a" * 61),
+                        agent.replace("opencode/1.15.10", "python/3.13"),
+                        "opencode/1.15.10 ai-sdk/provider-utils/4.0.19"):
+            with self.subTest(agent=invalid), self.assertRaises(ValueError):
+                mod.sanitize_go_headers(sample(**{"User-Agent": invalid}), "aresponses")
+
     def test_callback_rejects_wrong_or_missing_runtime_at_import(self):
         import importlib.metadata
 

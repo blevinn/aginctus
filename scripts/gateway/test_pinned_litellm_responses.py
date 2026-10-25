@@ -17,6 +17,32 @@ POLICY = {"model_list": [], "litellm_settings": {
 
 
 class PinnedResponsesProbeTests(unittest.TestCase):
+    def test_real_completion_requires_native_identity_terminal_stop_and_text(self):
+        session = "ses_test_generated_identity"
+        events = [
+            {"type": "step_start", "sessionID": session},
+            {"type": "text", "sessionID": session, "part": {"text": probe.MARKER}},
+            {"type": "step_finish", "sessionID": session, "part": {"reason": "stop"}},
+        ]
+
+        def output(rows):
+            return "\n".join(json.dumps(row) for row in rows)
+
+        self.assertEqual(probe.completed_native_session(output(events)), session)
+        self.assertEqual(probe.completed_native_session(output(events), session), session)
+        for rows in (events[:2], events[1:2], events[::2], [],
+                     [*events, {"type": "error"}],
+                     [*events, {"type": "text", "sessionID": "ses_another_identity"}],
+                     [{**row, "sessionID": probe.SESSION_A} for row in events],
+                     [{**row, "sessionID": "bad"} for row in events]):
+            with self.subTest(rows=rows), self.assertRaises(RuntimeError):
+                probe.completed_native_session(output(rows))
+        with self.assertRaises(RuntimeError):
+            probe.completed_native_session(output(events), "ses_wrong_resumed_identity")
+        for invalid in ("not-json", "[]", "null"):
+            with self.subTest(invalid=invalid), self.assertRaises(RuntimeError):
+                probe.completed_native_session(invalid)
+
     def test_missing_session_is_absent_on_wire(self):
         response = MagicMock()
         response.__enter__.return_value = response
