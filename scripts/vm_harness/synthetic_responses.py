@@ -15,9 +15,11 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 if __package__:
-    from .tool_sequence import SequenceError, ToolSequence, stream as tool_stream
+    from .tool_sequence import SequenceError, ToolSequence
+    from .tool_sequence import stream as tool_stream
 else:
-    from tool_sequence import SequenceError, ToolSequence, stream as tool_stream
+    from tool_sequence import SequenceError, ToolSequence
+    from tool_sequence import stream as tool_stream
 
 MAX_BODY = 16384
 TOKEN = "synthetic-fixture-only"

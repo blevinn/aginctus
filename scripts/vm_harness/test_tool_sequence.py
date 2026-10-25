@@ -5,7 +5,7 @@ import unittest
 from urllib.error import HTTPError
 from urllib.request import ProxyHandler, Request, build_opener
 
-from scripts.vm_harness.synthetic_responses import SyntheticServer, TOKEN
+from scripts.vm_harness.synthetic_responses import TOKEN, SyntheticServer
 from scripts.vm_harness.tool_sequence import SequenceError, ToolSequence, stream
 
 NONCE = "fixture_abc123XYZ"
@@ -15,9 +15,9 @@ TOOLS = [
     {"type": "function", "name": "edit",
      "parameters": {"type": "object", "properties": {
          "filePath": {"type": "string"}, "oldString": {"type": "string"},
-         "newString": {"type": "string"}}},
+          "newString": {"type": "string"}}}},
     {"type": "function", "name": "bash",
-     "parameters": {"type": "object", "properties": {"command": {"type": "string"}}},
+      "parameters": {"type": "object", "properties": {"command": {"type": "string"}}}},
 ]
 OPENER = build_opener(ProxyHandler({}))
 

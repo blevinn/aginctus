@@ -72,16 +72,16 @@ func TestImageReplacementPlanClassifiesStateAndControllers(t *testing.T) {
 		t.Fatal(err)
 	}
 	tests := []struct {
-		name          string
-		projects      string
-		projectErr    error
-		inventory     []byte
-		inventoryErr  error
-		systemUnit    []byte
-		userUnit      []byte
-		status        string
-		code          int
-		unitReads     int
+		name         string
+		projects     string
+		projectErr   error
+		inventory    []byte
+		inventoryErr error
+		systemUnit   []byte
+		userUnit     []byte
+		status       string
+		code         int
+		unitReads    int
 	}{
 		{name: "candidate but never authorized", projects: auditOwnedProject, inventory: current,
 			systemUnit: ownerInstalled, userUnit: otherAbsent, status: "candidate-requires-authorization", unitReads: 8},
