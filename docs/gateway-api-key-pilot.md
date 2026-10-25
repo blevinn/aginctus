@@ -341,8 +341,11 @@ Execute from the repository root. On NixOS, use **rootless Podman from Nix**:
 no Docker daemon and no system-level Podman installation is required.
 Podman obtained through `nix shell` on this host did not find either
 `$HOME/.config/containers/policy.json` or `/etc/containers/policy.json`.
-For this audit, set `CONTAINERS_POLICY_JSON` **only on the Podman command**
-to the checked-in `deploy/litellm-go/podman-probe-policy.json`.
+The previous suggestion to set `CONTAINERS_POLICY_JSON` was incorrect:
+this environment variable does not select Podman's image policy.
+For this audit, pass the supported **`podman run --signature-policy PATH`**
+option, pointing to `deploy/litellm-go/podman-probe-policy.json`.
+Podman uses that policy for this invocation only.
 That file rejects all image sources by default and permits precisely
 `ghcr.io/berriai/litellm:v1.103.0-stable` for this fixture. The
 `insecureAcceptAnything` entry means **no cryptographic signature check**
@@ -362,8 +365,9 @@ The command below temporarily obtains Podman from Nix and runs the stock
 LiteLLM image with exactly the same network and filesystem restrictions:
 
 ```sh
-CONTAINERS_POLICY_JSON="$PWD/deploy/litellm-go/podman-probe-policy.json" \
-  nix shell nixpkgs#podman --command podman run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
+nix shell nixpkgs#podman --command podman run \
+  --signature-policy "$PWD/deploy/litellm-go/podman-probe-policy.json" \
+  --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
   -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 \
   -e PYTHONDONTWRITEBYTECODE=1 \
   --mount type=bind,src="$PWD/deploy/litellm-go/model-group-forwarding.yaml",dst=/run/aginctus-policy.yaml,readonly \
