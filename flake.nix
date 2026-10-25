@@ -397,6 +397,10 @@
           vm-harness-gateway-topology = import ./nix/vm-harness/gateway-topology.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-synthetic-gateway = import ./nix/vm-harness/gateway-topology.nix {
+            inherit self nixpkgs system;
+            synthetic = true;
+          };
           vm-harness-ownership-recovery = import ./nix/vm-harness/ownership-recovery.nix {
             inherit self nixpkgs system;
           };

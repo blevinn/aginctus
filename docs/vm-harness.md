@@ -103,6 +103,7 @@ nix develop -c just test-vm-smoke
 nix develop -c just test-vm-storage-network
 nix develop -c just test-vm-runtime-lifecycle
 nix develop -c just test-vm-gateway-topology
+nix develop -c just test-vm-synthetic-gateway
 nix develop -c just test-vm-ownership-recovery
 nix develop -c just vm-debug
 ```
@@ -118,6 +119,18 @@ checks snapshot/daemon-restart visibility, and tests Aginctus management bridge
 idempotency and foreign-resource protection. The `runtime-lifecycle` test imports real Herdr and OpenCode images,
 reconciles their Incus instances, and invokes the real CLI's gateway render
 contract; it **does not yet boot LiteLLM/PostgreSQL or prove inference**.
+The `synthetic-gateway` scenario runs that same real gateway, then
+starts an in-VM test-only upstream on the guest's private egress bridge.
+It registers a synthetic-only Responses model with actual LiteLLM using
+the guest's protected master key, issues a scoped virtual key through the
+real gateway, checks unauthenticated model access rejection, then requires
+terminal SSE with a unique nonce and an independent count from the
+synthetic upstream. **No external provider is contacted.** This proves
+synthetic LiteLLM model routing only: it does not establish Herdr/OpenCode
+tool execution, gateway-side audit correlation, or packet-level isolation.
+The reporter must continue to show `upstream_inference: not_verified` for
+**real provider inference** even if synthetic routing succeeds.
+
 The opt-in `gateway-topology` scenario goes further: it calls the real
 `aginctus gateway up` orchestration path, then requires Postgres `pg_isready`,
 LiteLLM's real `/health/liveliness`, and coexisting Herdr/OpenCode workloads.
