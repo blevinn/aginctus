@@ -94,15 +94,17 @@ class PinnedResponsesProbeTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "failed closed"):
                         probe.check_rejected_without_upstream(
                             1234, probe.SESSION_A, user_agent="bogus/1.0")
-        with patch.object(probe, "send", return_value=(403, b"")):
-            probe.MockGo.calls = [{}]
-            def recorded(*_args, **_kwargs):
-                probe.MockGo.calls.append({})
-                return 403, b""
-            with patch.object(probe, "send", side_effect=recorded):
-                with self.assertRaisesRegex(RuntimeError, "upstream_delta=1"):
-                    probe.check_rejected_without_upstream(
-                        1234, probe.SESSION_A, user_agent="bogus/1.0")
+        probe.MockGo.calls = [{}]
+
+        def recorded(*_args, **_kwargs):
+            probe.MockGo.calls.append({})
+            return 403, b""
+
+        with patch.object(probe, "send", side_effect=recorded), self.assertRaisesRegex(
+            RuntimeError, "upstream_delta=1"
+        ):
+            probe.check_rejected_without_upstream(
+                1234, probe.SESSION_A, user_agent="bogus/1.0")
 
     def test_model_group_scope_must_be_exact(self):
         probe.verify_policy(POLICY)
