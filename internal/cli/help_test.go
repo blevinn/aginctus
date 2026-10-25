@@ -65,10 +65,22 @@ func TestHelpOfflineInventory(t *testing.T) {
 		"network firewall policy", "network firewall reconcile", "herdr authorize", "herdr pin-host", "herdr register",
 		"network firewall egress reconcile|revoke",
 		"workload gateway provision", "--require-function-call", "network ensure", "herdr client ensure", "workload <name> ensure|teardown",
-		"operator state-audit --owner system|user", "operator units-audit --owner system|user", "operator package-audit --owner system|user", "operator project-plan --project NAME", "operator project-ensure --project NAME --confirm-create", "images list|ls --project NAME", "images import --project NAME ALIAS PATH --confirm-create", "images owner-audit --project NAME --owner system|user ALIAS", "images import-owned --project NAME --owner system|user ALIAS PATH --confirm-create",
+		"operator state-audit --owner system|user", "operator units-audit --owner system|user", "operator package-audit --owner system|user", "operator project-plan --project NAME", "operator project-ensure --project NAME --confirm-create", "images list|ls --project NAME", "images import --project NAME ALIAS PATH --confirm-create", "images owner-audit --project NAME --owner system|user ALIAS", "images import-owned --project NAME --owner system|user ALIAS PATH --confirm-create", "images replace-plan --project NAME --owner system|user ALIAS PATH",
 	} {
 		if !strings.Contains(top.String(), want) {
 			t.Errorf("help missing %q", want)
+		}
+	}
+}
+
+func TestHelpImageReplacementPlanUsage(t *testing.T) {
+	for _, args := range [][]string{{"help"}, {"help", "images"}, {"images", "--help"}} {
+		var out, errOut bytes.Buffer
+		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
+			t.Fatalf("%q: code=%d, stderr=%q", args, code, errOut.String())
+		}
+		if !strings.Contains(out.String(), "images replace-plan --project NAME --owner system|user ALIAS PATH") {
+			t.Fatalf("replace-plan missing from help %q", args)
 		}
 	}
 }
