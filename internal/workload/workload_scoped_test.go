@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
-	"github.com/blevinn/aginctus/internal/orchestration"
 )
 
 func TestScopedExistingWorkloadPlanIsInstanceOnlyAndExplicitlyProjectBound(t *testing.T) {
@@ -54,8 +53,8 @@ func TestScopedExistingWorkloadPlanIsInstanceOnlyAndExplicitlyProjectBound(t *te
 		}
 	}
 	var doc struct {
-		Kind    string `json:"kind"`
-		Name    string `json:"name"`
+		Kind    string         `json:"kind"`
+		Name    string         `json:"name"`
 		Devices map[string]any `json:"devices"`
 	}
 	if err := json.Unmarshal(cfg.Documents[0], &doc); err != nil {
@@ -71,7 +70,7 @@ func TestScopedExistingWorkloadPlanIsInstanceOnlyAndExplicitlyProjectBound(t *te
 	if err != nil || len(legacy.Steps) != 2 {
 		t.Fatalf("legacy plan changed: %#v %v", legacy, err)
 	}
-	var legacyCfg struct { Project string `json:"project"` }
+	var legacyCfg struct{ Project string `json:"project"` }
 	if err := json.Unmarshal(legacy.Steps[1].Configuration, &legacyCfg); err != nil ||
 		legacyCfg.Project != "" {
 		t.Fatalf("legacy apply acquired implicit project: %q %v", legacyCfg.Project, err)
