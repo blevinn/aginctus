@@ -134,9 +134,9 @@ func TestImageOwnerAuditScopedReadAndRedaction(t *testing.T) {
 	claim := expectedImageOwnerClaim(scope, "test-image", "system")
 	tests := []struct {
 		name, projects string
-		projectErr error
-		imageOutput []byte
-		imageErr error
+		projectErr     error
+		imageOutput    []byte
+		imageErr       error
 		expectedStatus string
 		wantCode, reads int
 	}{
