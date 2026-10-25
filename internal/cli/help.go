@@ -40,7 +40,7 @@ func runHelp(args []string, stdout, stderr io.Writer) (int, bool) {
 	case "workload":
 		printWorkloadUsage(stdout)
 	case "images":
-		fmt.Fprintln(stdout, "Usage: aginctus [global options] images list|ls\n       aginctus [global options] images update NAME PATH")
+		fmt.Fprintln(stdout, "Usage: aginctus [global options] images list|ls\n       aginctus [global options] images list|ls --project NAME (read-only; owned local project)\n       aginctus [global options] images import --project NAME ALIAS PATH --confirm-create (create-only; owned local project)\n       aginctus [global options] images update NAME PATH (legacy v0.1 project)")
 	case "config":
 		fmt.Fprintln(stdout, "Usage: aginctus [global options] config show\n       aginctus [global options] config get <path>")
 	case "testenv":
