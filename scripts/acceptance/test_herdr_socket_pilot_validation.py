@@ -24,7 +24,7 @@ class PilotTests(unittest.TestCase):
                 key + " no" for key in (
                     "passwordauthentication", "kbdinteractiveauthentication", "permitrootlogin",
                     "allowagentforwarding", "allowtcpforwarding", "allowstreamlocalforwarding",
-                    "x11forwarding", "permittunnel", "permituserrc"))
+                    "x11forwarding", "permittunnel", "permituserrc")))
         if args[0] == "systemctl":
             return 0, "HERDR_SOCKET_PATH=" + mod.EXPECTED_SOCKET_PATH
         if args[0] == "aginctus-ssh-client-identity":
