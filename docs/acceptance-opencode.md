@@ -75,7 +75,28 @@ Read the [owned Herdr lifecycle runbook](acceptance-opencode-herdr.md) and valid
 
 Separate `AGINCTUS_ACCEPTANCE_HERDR_AGENT_SMOKE=I_UNDERSTAND` and `AGINCTUS_ACCEPTANCE_HERDR_AGENT_PROMPT=I_UNDERSTAND` authorizations are needed for startup and prompting respectively. Do not enable these merely because workspace-only smoke passes: first verify gateway model selection, workload credential restrictions, private routing, and that inference may be used. Workspace/agent operations are not a substitute for a tool trace or gateway-side evidence.
 
-### Optional private, runner-owned acceptance report
+## 4. Operator-authorized live nine-phase acceptance
+
+Only after the independent [#122 operator hold](https://github.com/blevinn/aginctus/issues/122) has been satisfied, use the [live adapter runbook](acceptance-opencode-live.md). The live harness requires `AGINCTUS_ACCEPTANCE_LIVE=I_UNDERSTAND`, an executable `AGINCTUS_ACCEPTANCE_ADAPTER`, and nine reviewed executable hooks under the absolute `AGINCTUS_ACCEPTANCE_LIVE_HOOKS` directory:
+
+```text
+preflight → open → start → prompt → wait → credential-check → gateway-evidence
+                                             ↘ stop → close (scoped cleanup)
+```
+
+The run's prompt asks the **actual OpenCode agent** to fix the temporary `Add` function and execute tests. A satisfactory operator record must independently corroborate all of the following: owned Herdr workspace and agent lifecycle; actual agent read/edit/test tool trace and expected fixture diff; local `go test ./...` success; absence of upstream provider credentials and direct-provider egress in the guest; and **gateway-side**, run-ID-correlated successful upstream model response with the expected Responses behavior. Do not accept guest-printed markers, a synthetic provider response, only an HTTP health check, or a changed file without a tool trace as substitutes.
+
+The live dispatcher itself supplies **no** gateway audit, private credential discovery, validated fixture transport or missing hooks. Incomplete/no-op hooks must fail closed. It passes the same opaque `RUN_ID` to each hook; it never passes secrets as command arguments. The harness suppresses hook stdout/stderr, except for exact gateway marker verification from its private temporary output file. These markers are interface assertions, not cryptographic proof.
+
+## Failure, cleanup and evidence handoff
+
+For any stage, stop on nonzero results. The local harness creates and removes **only its own temporary directory**; after a successful `open`, it attempts `close`, and after attempting `start` it also attempts `stop`, even following a later failure. An `open` that partially created remote resources but failed before acknowledgment needs hook-side cleanup or operator inspection. Failed stop/close operations require inspecting the **matching owned run ID** before manually removing anything. Never delete unrelated Herdr workspaces, Incus guests, volumes or existing host paths.
+
+Store any operator evidence in a separate, access-controlled, **redacted** record: run ID, UTC time, software versions, selected owned resource IDs, observed phase outcomes, independent tool/test traces, gateway-side request/response correlation and safe pass/fail statements for direct-egress and credential isolation. Do **not** collect raw request headers, provider replies, OAuth materials, keys or unredacted Incus/config dumps in logs or PR comments.
+
+Record real pilot evidence on the [#118 release checklist](https://github.com/blevinn/aginctus/issues/118) and its live gateway/egress gates (#122/#257). A closed documentation issue or a passing hermetic check does not authorize live deployment, billable inference or release sign-off.
+
+## Optional private, runner-owned acceptance report
 
 The existing `scripts/acceptance/opencode.sh` can now write a small **local**
 report if the operator explicitly supplies `AGINCTUS_ACCEPTANCE_REPORT_ROOT`.
@@ -114,23 +135,3 @@ must provide genuine independent evidence for those dimensions before
 verified. Do not ingest agent-written JSON or gateway nonce markers as proof.
 This local workflow requires no cryptographic signing service.
 
-## 4. Operator-authorized live nine-phase acceptance
-
-Only after the independent [#122 operator hold](https://github.com/blevinn/aginctus/issues/122) has been satisfied, use the [live adapter runbook](acceptance-opencode-live.md). The live harness requires `AGINCTUS_ACCEPTANCE_LIVE=I_UNDERSTAND`, an executable `AGINCTUS_ACCEPTANCE_ADAPTER`, and nine reviewed executable hooks under the absolute `AGINCTUS_ACCEPTANCE_LIVE_HOOKS` directory:
-
-```text
-preflight → open → start → prompt → wait → credential-check → gateway-evidence
-                                             ↘ stop → close (scoped cleanup)
-```
-
-The run's prompt asks the **actual OpenCode agent** to fix the temporary `Add` function and execute tests. A satisfactory operator record must independently corroborate all of the following: owned Herdr workspace and agent lifecycle; actual agent read/edit/test tool trace and expected fixture diff; local `go test ./...` success; absence of upstream provider credentials and direct-provider egress in the guest; and **gateway-side**, run-ID-correlated successful upstream model response with the expected Responses behavior. Do not accept guest-printed markers, a synthetic provider response, only an HTTP health check, or a changed file without a tool trace as substitutes.
-
-The live dispatcher itself supplies **no** gateway audit, private credential discovery, validated fixture transport or missing hooks. Incomplete/no-op hooks must fail closed. It passes the same opaque `RUN_ID` to each hook; it never passes secrets as command arguments. The harness suppresses hook stdout/stderr, except for exact gateway marker verification from its private temporary output file. These markers are interface assertions, not cryptographic proof.
-
-## Failure, cleanup and evidence handoff
-
-For any stage, stop on nonzero results. The local harness creates and removes **only its own temporary directory**; after a successful `open`, it attempts `close`, and after attempting `start` it also attempts `stop`, even following a later failure. An `open` that partially created remote resources but failed before acknowledgment needs hook-side cleanup or operator inspection. Failed stop/close operations require inspecting the **matching owned run ID** before manually removing anything. Never delete unrelated Herdr workspaces, Incus guests, volumes or existing host paths.
-
-Store any operator evidence in a separate, access-controlled, **redacted** record: run ID, UTC time, software versions, selected owned resource IDs, observed phase outcomes, independent tool/test traces, gateway-side request/response correlation and safe pass/fail statements for direct-egress and credential isolation. Do **not** collect raw request headers, provider replies, OAuth materials, keys or unredacted Incus/config dumps in logs or PR comments.
-
-Record real pilot evidence on the [#118 release checklist](https://github.com/blevinn/aginctus/issues/118) and its live gateway/egress gates (#122/#257). A closed documentation issue or a passing hermetic check does not authorize live deployment, billable inference or release sign-off.
