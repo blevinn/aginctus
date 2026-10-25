@@ -195,6 +195,28 @@ nix develop -c python3 -m scripts.checks.coverage --format json \
   --opencode-runtime-json /path/to/prior-opencode-runtime.json
 ```
 
+The operator can additionally select one **already-written local acceptance
+result** from the private directory created by the accepted OpenCode harness:
+
+```sh
+export AGINCTUS_ACCEPTANCE_REPORT_ROOT="$HOME/.local/state/aginctus/acceptance-results"
+nix develop -c python3 -m scripts.checks.coverage --format json \
+  --local-acceptance-run-id <existing-aginctus-acceptance-run-id>
+```
+
+This selector does **not** execute acceptance or accept a free-form JSON file
+path. It reuses the existing private local acceptance reader, validates the
+exact run ID and owner-only file permissions, and adds a fixed
+`acceptance/local_checks` row to the coverage inventory. That row reports
+the status of host-checked fixture edits, Go tests and **stop/close command
+results** only; it is marked `mock` or `live_partial` in the detail.
+A local `pass` describes those checks only—not native OpenCode tool traces,
+provider inference, gateway authorization, credential/egress controls or
+independently inspected remote cleanup. Failed runs stay `fail`, unreadable
+records become `error`, and omitted local results remain `not_run`.
+All four distinct `live/*` categories remain `not_run`, and
+`complete_acceptance` remains `false`.
+
 The coverage output is a bounded, synthetic-only `schema_version: 1` JSON
 document with `profile: coverage`, a fixed inventory, counts for `passed`,
 `failed`, `errors`, and `not_run`, and an overall `error`, `fail`
@@ -229,12 +251,13 @@ failed test.
   structured event source exists, without scraping arbitrary diagnostic text.
 - Represent `skipped` / `not-run` when future selectors or early aborts are
   introduced. Never count unexecuted checks as passes.
-- Implement narrowly scoped, **local runner-owned acceptance evidence** (#514,
-  #521) before optional read-only coverage integration (#522). The runner must
-  independently observe each result and write bounded private reports outside
-  agent-controlled workspaces; absence of proof remains `not_run` or
-  `unverified`. No signer, certificate or cryptographic verifier is planned
-  for this local reporting workflow.
+- Extend the runner-owned local acceptance evidence (#514, #521) with
+  genuine gateway-side, egress and independently inspected cleanup observations.
+  The optional read-only local source in coverage (#522) currently reports
+  **only** host fixture/test and cleanup-command outcomes; never promote
+  adapter markers or these partial results to the four live acceptance rows.
+  Absence of proof remains `not_run` or `unverified`. No signing service
+  or cryptographic verifier is planned for this local reporting workflow.
 - Evolve `schema_version` for incompatible changes, and use stable suite IDs.
 
 VM evidence semantics remain unchanged. Future schema adapters must not

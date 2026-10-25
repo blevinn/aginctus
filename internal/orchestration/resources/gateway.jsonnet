@@ -55,6 +55,9 @@ ag.orchestration(cfg.id,
             STORE_MODEL_IN_DB: 'True',
           } + (if cfg.forwardClientHeaders then {
             CONFIG_FILE_PATH: '/app/aginctus-client-headers.yaml',
+          } else {}) + (if cfg.selectiveGoForwarding then {
+            CONFIG_FILE_PATH: cfg.selectiveGoConfigPath,
+            PYTHONPATH: cfg.selectiveGoPythonPath,
           } else {}),
           networks: if cfg.egressNetwork == '' then ['management'] else {
             management: {
@@ -69,6 +72,8 @@ ag.orchestration(cfg.id,
             source: 'aginctus-client-headers',
             target: '/app/aginctus-client-headers.yaml',
           }],
+        } else {}) + (if cfg.selectiveGoForwarding then {
+          configs: cfg.selectiveGoAttachments,
         } else {}),
       },
       volumes: {
@@ -95,6 +100,8 @@ ag.orchestration(cfg.id,
           content: cfg.clientHeaderForwardingContent,
         },
       },
+    } else {}) + (if cfg.selectiveGoForwarding then {
+      configs: cfg.selectiveGoConfigs,
     } else {}),
   }),
 ])

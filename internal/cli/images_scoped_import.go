@@ -95,6 +95,14 @@ func runScopedImageImport(ctx context.Context, args []string, stdout, stderr io.
 		fmt.Fprintln(stderr, "images import: project must match the declared incus.project setting")
 		return 2
 	}
+	// Hold one project-wide cooperative writer lease through the final
+	// post-import observation, not merely the import subprocess.
+	release, err := acquireScopedImageMutationLease(scope)
+	if err != nil {
+		fmt.Fprintln(stderr, "images import: project writer lease unavailable; no import attempted")
+		return 1
+	}
+	defer release()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	if err := verifyScopedImageProject(ctx, scope); err != nil {

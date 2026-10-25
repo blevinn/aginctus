@@ -83,6 +83,8 @@ def normalize(record: dict, run_id: str) -> dict:
     created = record.get("created_utc")
     results = record.get("results")
     commands = record.get("cleanup_commands")
+    # Older runner-owned results have no local removal observation.
+    local_removed = record.get("local_workspace_removed", "not_run")
     if (
         type(record.get("schema_version")) is not int
         or record["schema_version"] != 1
@@ -104,6 +106,8 @@ def normalize(record: dict, run_id: str) -> dict:
         or not isinstance(commands, dict)
         or set(commands) != {"stop", "close"}
         or any(value not in local_report.STATES for value in commands.values())
+        or local_removed not in local_report.STATES
+        or (code == 0 and local_removed == "fail")
         or not isinstance(created, str)
     ):
         raise ValueError("invalid local acceptance envelope")
@@ -143,6 +147,10 @@ def normalize(record: dict, run_id: str) -> dict:
         {"id": f"acceptance/{phase}_command", "status": commands[phase]}
         for phase in ("stop", "close")
     )
+    observed.append({
+        "id": "acceptance/local_workspace_removed",
+        "status": local_removed,
+    })
     counts = {
         "passed": sum(row["status"] == "pass" for row in observed),
         "failed": sum(row["status"] == "fail" for row in observed),
