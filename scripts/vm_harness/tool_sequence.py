@@ -43,7 +43,7 @@ def tool_definitions(body):
         if not isinstance(tool, dict) or tool.get("type") != "function":
             continue
         name = tool.get("name")
-        if name not in REQUIRED:
+        if not isinstance(name, str) or name not in REQUIRED:
             continue
         schema = tool.get("parameters")
         if name in definitions or not isinstance(schema, dict) or schema.get("type") != "object":
