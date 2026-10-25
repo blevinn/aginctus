@@ -250,7 +250,7 @@ pkgs.testers.runNixOSTest {
     # Test-only keys live in the disposable VM. No production SSH identity
     # is generated; host trust is sourced from the other VM, not ssh-keyscan.
     client.succeed("install -d -m 0700 /var/lib/aginctus/ssh/identities/1 /var/lib/aginctus/ssh/trust /var/lib/aginctus/ssh/machines")
-    client.succeed("ssh-keygen -q -t ed25519 -N \\"\\" -f /var/lib/aginctus/ssh/identities/1/id_ed25519")
+    client.succeed("ssh-keygen -q -t ed25519 -N \"\" -f /var/lib/aginctus/ssh/identities/1/id_ed25519")
     client.succeed("chmod 600 /var/lib/aginctus/ssh/identities/1/id_ed25519")
     public_key = client.succeed("cat /var/lib/aginctus/ssh/identities/1/id_ed25519.pub").strip()
     machine.succeed("install -d -o agent -m 0700 /home/agent/.ssh")
