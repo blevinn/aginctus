@@ -44,6 +44,34 @@ operations retain v0.1 behavior. The separately confirmed start/stop
 transitions below are the only opt-in scoped workload mutations; they do not
 migrate the pilot or enable project-scoped orchestration.
 
+## Review an existing scoped workload apply (read-only)
+
+To generate a machine-readable instance-only preview for a workload that
+already exists inside the exact configured owned **local** Incus project:
+
+```sh
+aginctus workload apply --project aginctus dev --render
+```
+
+This command verifies the selected project ownership/features and the
+existing instance's exact workload identity before outputting JSON. It
+requires a verified running or stopped instance; absent, colliding or
+unverified state is an error, not authorization to create a guest.
+The report includes `"writeAuthorized": false` and a nested orchestration
+plan with **one workload instance step**, an explicit Incus project and
+required existing-resource ownership markers. It **does not include** the
+host-managed management-bridge step from legacy workload apply.
+
+The enclosing `ScopedWorkloadApplyPreview` report is deliberately **not**
+a directly executable orchestration document. Do not extract its nested
+plan and pass it to `aginctus apply --from`; doing so bypasses the
+operator's intended confirmation and mutation-time checks. The preview
+does not execute `incus-apply`, confirm drift, prove driver-local transport,
+guarantee a no-create operation, or establish controller/write authority.
+Only `--render` is supported: `--dry-run`, `--force` and bare scoped
+`apply` are explicitly rejected until those properties are validated
+(#200/#201/#437/#441). No existing v0.1 apply semantics change.
+
 ## Transition one existing scoped workload (explicit mutation)
 
 On an **approved disposable local Incus environment only**, after verifying

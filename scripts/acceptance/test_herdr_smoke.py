@@ -69,7 +69,7 @@ class SmokeCleanupReadbackTests(unittest.TestCase):
             "AGINCTUS_ACCEPTANCE_HERDR_SMOKE_ROOT":
                 "/home/agent/aginctus-acceptance",
         }
-        for fail_on in ("close", "cleanup"):
+        for fail_on in ("close", "cleanup", "inspect-absent"):
             with self.subTest(fail_on=fail_on):
                 phases = []
                 messages = []
@@ -104,10 +104,56 @@ class SmokeCleanupReadbackTests(unittest.TestCase):
                     smoke.main()
                 self.assertIn("close", phases)
                 self.assertIn("cleanup", phases)
+                self.assertIn("inspect-absent", phases)
                 self.assertFalse(any(
                     message.startswith("PASS: remote Herdr workspace")
                     for message in messages
                 ))
+
+    def test_postcleanup_inspector_is_bundled_not_operator_cleanup_hook(self):
+        with tempfile.TemporaryDirectory() as directory:
+            custom = Path(directory) / "custom-cleanup.py"
+            custom.write_text("pass\n")
+            env = {
+                "AGINCTUS_ACCEPTANCE_HERDR_SMOKE": "I_UNDERSTAND",
+                "AGINCTUS_ACCEPTANCE_HERDR_MACHINE": "aginctus-dev",
+                "AGINCTUS_ACCEPTANCE_HERDR_SMOKE_ROOT":
+                    "/home/agent/aginctus-acceptance",
+                "AGINCTUS_ACCEPTANCE_HERDR_CLEANUP": str(custom),
+            }
+            calls = []
+
+            def remote(*args):
+                if "machine" in args and "list" in args:
+                    return json.dumps([{"label": "aginctus-dev", "enabled": True}])
+                return json.dumps({"result": {"type": "workspace_get"}})
+
+            def runner(args, **_kwargs):
+                calls.append(args)
+                action = args[2] if len(args) > 2 else ""
+                if action == "open":
+                    workspace = Path(args[3])
+                    (workspace.parent / ".herdr-owned.json").write_text(
+                        json.dumps({"workspace_id": "ws-test", "agent_name": "acc_test"})
+                    )
+                return subprocess.CompletedProcess(args, 0, "", "")
+
+            with (
+                patch.dict(os.environ, env),
+                patch.object(smoke, "call", side_effect=remote),
+                patch.object(smoke.subprocess, "run", side_effect=runner),
+                patch("builtins.print"),
+            ):
+                smoke.main()
+            cleanup_calls = [args for args in calls if args[2] == "cleanup"]
+            probes = [args for args in calls if args[2] == "inspect-absent"]
+            self.assertEqual(len(cleanup_calls), 2)
+            self.assertEqual(len(probes), 2)
+            self.assertTrue(all(args[1] == str(custom) for args in cleanup_calls))
+            self.assertTrue(all(
+                Path(args[1]).name == "guest-owned.py" for args in probes
+            ))
+            self.assertNotEqual(cleanup_calls[0][1], probes[0][1])
 
 
 class SmokeFinallyTests(unittest.TestCase):

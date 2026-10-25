@@ -63,7 +63,10 @@ func TestScopedInstanceStatusCommands(t *testing.T) {
 		}
 		return []byte("[" + scopedStatusWorkload + "," + scopedStatusHerdr + "]"), nil
 	}
-	for _, tc := range []struct{ args []string; want string }{
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
 		{[]string{"workload", "status", "--project", "aginctus", "dev"}, `workload "dev": Running`},
 		{[]string{"workload", "status", "--project=aginctus"}, `workload "dev": Running`},
 		{[]string{"workload", "ls", "--project", "aginctus"}, "dev"},
@@ -110,8 +113,8 @@ func TestScopedInstanceStatusFailsClosed(t *testing.T) {
 	}
 	cases := []struct {
 		name, projects, instances string
-		readErr bool
-		expectReads int
+		readErr                   bool
+		expectReads               int
 	}{
 		{"wrong requested project", scopedStatusOwnedProject, data, false, 0},
 		{"foreign project", strings.Replace(scopedStatusOwnedProject, "deployment-project", "not-owned", 1), data, false, 0},
