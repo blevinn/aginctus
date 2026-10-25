@@ -135,7 +135,7 @@ func Run(
 		}
 		return runOperatorPreflight(ctx, commandArgs[1:], stdout, stderr)
 	case "images":
-		return runImages(ctx, commandArgs[1:], stdout, stderr)
+		return runConfiguredImages(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "config":
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
 	case "network":
