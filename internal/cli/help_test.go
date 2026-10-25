@@ -73,6 +73,18 @@ func TestHelpOfflineInventory(t *testing.T) {
 	}
 }
 
+func TestHelpScopedOwnedImportUsage(t *testing.T) {
+	for _, args := range [][]string{{"help"}, {"help", "images"}, {"images", "--help"}} {
+		var out, errOut bytes.Buffer
+		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
+			t.Fatalf("%q: code=%d, stderr=%q", args, code, errOut.String())
+		}
+		if !strings.Contains(out.String(), "images import-owned --project NAME --owner system|user ALIAS PATH --confirm-create") {
+			t.Fatalf("claimed-owner image import missing from help %q", args)
+		}
+	}
+}
+
 func TestHelpImageOwnerAuditUsage(t *testing.T) {
 	for _, args := range [][]string{{"help"}, {"help", "images"}, {"images", "--help"}} {
 		var out, errOut bytes.Buffer
