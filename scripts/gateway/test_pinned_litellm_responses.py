@@ -1,5 +1,6 @@
 """Pure offline tests for stock LiteLLM native Responses audit harness."""
 import importlib.util
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -14,6 +15,19 @@ POLICY = {"model_list": [], "litellm_settings": {
 
 
 class PinnedResponsesProbeTests(unittest.TestCase):
+    def test_podman_signature_policy_is_exactly_one_tag_and_default_deny(self):
+        policy_path = Path(__file__).resolve().parents[2] / (
+            "deploy/litellm-go/podman-probe-policy.json")
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+        self.assertEqual(policy, {
+            "default": [{"type": "reject"}],
+            "transports": {"docker": {
+                "ghcr.io/berriai/litellm:v1.103.0-stable": [
+                    {"type": "insecureAcceptAnything"},
+                ],
+            }},
+        })
+
     def test_model_group_scope_must_be_exact(self):
         probe.verify_policy(POLICY)
         for groups in (["*"], [probe.OTHER], [probe.ALIAS, probe.OTHER]):
