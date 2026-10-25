@@ -35,8 +35,7 @@ func TestScopedImageInventoryArguments(t *testing.T) {
 		{"list", "--project", "aginctus", "--force"},
 		{"list", "--force-local"}, {"list", "--project", "default", "extra"},
 	} {
-		name, err := parseScopedImageListArgs(args)
-		if err == nil && name != "" {
+		if _, err := parseScopedImageListArgs(args); err == nil {
 			t.Errorf("accepted malformed list args: %q", args)
 		}
 	}
@@ -145,6 +144,31 @@ func TestScopedImageInventoryRejectsImplicitOrMismatchedProject(t *testing.T) {
 		if code := runConfiguredImages(context.Background(), args, &out, &errOut, cfg); code != 2 || out.Len() != 0 {
 			t.Fatalf("args=%q code=%d stdout=%q stderr=%q", args, code, out.String(), errOut.String())
 		}
+	}
+}
+
+func TestScopedImageInventoryUsesCLIDispatch(t *testing.T) {
+	previousProjects, previousImages, previousLegacy := inspectLocalProjects, inspectScopedImages, runIncusImage
+	t.Cleanup(func() { inspectLocalProjects, inspectScopedImages, runIncusImage = previousProjects, previousImages, previousLegacy })
+	inspectLocalProjects = func(context.Context) ([]byte, error) {
+		return []byte(`[{"name":"aginctus","config":{"user.aginctus.managed":"true","user.aginctus.resource":"deployment-project","user.aginctus.deployment":"aginctus","features.images":"true","features.profiles":"true","features.storage.volumes":"true","features.networks":"false"}}]`), nil
+	}
+	imageCalls := 0
+	inspectScopedImages = func(_ context.Context, scope incusscope.ProjectScope) ([]byte, error) {
+		imageCalls++
+		if scope.Name != "aginctus" {
+			t.Fatalf("wrong image read scope: %q", scope.Name)
+		}
+		return []byte(`[{"fingerprint":"hash","aliases":[{"name":"example"}]}]`), nil
+	}
+	runIncusImage = func(_ context.Context, args ...string) ([]byte, error) {
+		t.Fatalf("ambient image command reached: %q", args)
+		return nil, nil
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{"images", "list", "--project=aginctus"}, &stdout, &stderr, nil, &config.Loader{Environment: nil})
+	if code != 0 || imageCalls != 1 || stdout.String() != "example\thash\n" {
+		t.Fatalf("CLI returned %d, image reads %d, stdout=%q stderr=%q", code, imageCalls, stdout.String(), stderr.String())
 	}
 }
 
