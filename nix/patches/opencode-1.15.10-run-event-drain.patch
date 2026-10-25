@@ -8,7 +8,7 @@ diff --git a/packages/opencode/src/cli/cmd/run.ts b/packages/opencode/src/cli/cm
 -          let error: string | undefined
 +          let error: string | undefined
 +          let idle = false
- 
+
            for await (const event of events.stream) {
              if (
 @@ -728,9 +729,10 @@
