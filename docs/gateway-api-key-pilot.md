@@ -322,7 +322,9 @@ or paid model request are involved.
 
 The probe reads and verifies the exact `model-group-forwarding.yaml` policy.
 It creates synthetic *different* proxy and upstream bearer keys; verifies
-unauthenticated requests are denied; issues multiple streaming native
+a **truly anonymous** request (no Authorization, x-api-key or other
+credential-bearing header) receives HTTP 401/403 and makes **zero** provider
+calls; issues multiple streaming native
 `/v1/responses` requests using repeated and distinct synthetic session IDs;
 checks the provider-bound session values are byte-for-byte identical, ensures
 the unrelated model group has no forwarded Go session, checks provider auth
