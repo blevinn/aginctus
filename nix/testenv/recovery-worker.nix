@@ -2,7 +2,12 @@
 # worker with no pilot credentials/daemon access. This module does NOT
 # initialize Incus, create a storage pool or change any Incus projects.
 { self }:
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 let
   cfg = config.services.aginctusTestenvRecovery;
   types = lib.types;
@@ -13,7 +18,7 @@ in
 
     package = lib.mkOption {
       type = types.package;
-      default = self.packages.${pkgs.system}.testenv-sweep;
+      default = self.packages.${pkgs.stdenv.hostPlatform.system}.testenv-sweep;
       description = "Store-pinned one-shot testenv Incus reconciliation binary.";
     };
 

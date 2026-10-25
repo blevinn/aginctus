@@ -39,6 +39,7 @@ read-only `aginctus testenv vm policy` contract:
         ({ ... }: {
           system.stateVersion = "26.05";
           virtualisation.incus.enable = true;
+          networking.nftables.enable = true;
           services.aginctusTestenvRecovery.enable = true;
         })
       ];
