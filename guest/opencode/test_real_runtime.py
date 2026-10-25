@@ -113,7 +113,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
 def verify_tool_workspace(root, nonce, response_steps, continuations, stdout):
     """Inspect run-owned files, never infer execution from model text alone."""
     if "synthetic-tools-complete:" + nonce not in stdout or response_steps != 3:
-        raise AssertionError("synthetic tool protocol did not reach terminal state")
+        raise AssertionError(
+            "synthetic tool protocol did not reach terminal state: "
+            f"steps={response_steps} "
+            f"completion_marker={'synthetic-tools-complete:' + nonce in stdout} "
+            f"continuation_count={sum(map(len, continuations))}"
+        )
     observed = {call_id for group in continuations for call_id in group}
     expected = {"call_" + nonce + "_" + str(i) for i in range(3)}
     if observed != expected:
