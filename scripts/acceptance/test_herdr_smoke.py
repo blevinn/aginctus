@@ -110,11 +110,10 @@ class SmokeCleanupReadbackTests(unittest.TestCase):
                     for message in messages
                 ))
 
-
     def test_postcleanup_inspector_is_bundled_not_operator_cleanup_hook(self):
         with tempfile.TemporaryDirectory() as directory:
             custom = Path(directory) / "custom-cleanup.py"
-            custom.write_text("pass\\n")
+            custom.write_text("pass\n")
             env = {
                 "AGINCTUS_ACCEPTANCE_HERDR_SMOKE": "I_UNDERSTAND",
                 "AGINCTUS_ACCEPTANCE_HERDR_MACHINE": "aginctus-dev",
