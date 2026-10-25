@@ -238,15 +238,14 @@
                       PermitTunnel = false;
                       PermitUserRC = false;
                     };
-                    # The remote Herdr CLI resolves its API socket from
-                    # HERDR_SOCKET_PATH; declare it once via sshd's SetEnv so
-                    # every SSH session (including Herdr's `herdr --machine
-                    # <label> workspace list`) reaches the systemd-managed
-                    # server socket without a per-call wrapper, shell export
-                    # or user-writable symlink. The path mirrors the systemd
-                    # service's XDG_CONFIG_HOME (see below).
+                    # Herdr's remote API bridge invokes '--session default'.
+                    # Explicit sessions resolve their socket from config_dir()
+                    # before consulting HERDR_SOCKET_PATH. Non-login SSH exec
+                    # does not inherit the systemd daemon's XDG variables, so
+                    # pin XDG_CONFIG_HOME to the daemon's directory as well.
+                    # No user-writable symlinks, per-call overrides or relaxed SSH.
                     extraConfig = ''
-                      SetEnv HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock
+                      SetEnv HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock XDG_CONFIG_HOME=/var/lib/herdr/config
                     '';
                   };
 
