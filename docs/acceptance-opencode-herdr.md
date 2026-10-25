@@ -14,8 +14,7 @@ A private `.herdr-owned.json` file records the Herdr-returned workspace/pane IDs
 
 ### Independent Herdr workspace close readback
 
-The owned `close` phase now queries `herdr --machine <reviewed-machine>
-workspace list` **before** issuing `workspace close <owned-ID>`. The returned
+The owned `close` phase now queries `herdr --machine <reviewed-machine> workspace list` **before** issuing `workspace close <owned-ID>`. The returned
 JSON must contain a bounded `result.type=workspace_list` inventory with
 unique valid workspace IDs; the exact ID in the private ownership record
 must be present and carry the matching run-label. It refuses to close an
@@ -49,8 +48,6 @@ the runner's existing `stop`/`close` command statuses do not automatically
 become independently verified remote cleanup in the private result or
 aggregate coverage. Keep `cleanup: not_verified` until the trusted runner
 itself integrates an independently checked full owned-resource inventory.
-
-
 
 The script is used as a **phase implementation**. Install small audited executable wrapper scripts named `open`, `start`, `prompt`, `wait`, `stop`, `close` in the hook directory. Each wrapper invokes `python3 /absolute/repo/scripts/acceptance/herdr-lifecycle.py <phase> "$@"` as a normal command (not `eval`). `preflight`, `credential-check`, and `gateway-evidence` must be implemented separately, and must fail closed rather than emit synthetic markers. The existing dispatcher refuses incomplete directories.
 
