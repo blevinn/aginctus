@@ -1,7 +1,12 @@
 # Real Incus Compose gateway and packaged Herdr/OpenCode deployment.
 # This is explicitly heavyweight and may need OCI registry access for
 # image caching; it never registers or calls an external model provider.
-{ self, nixpkgs, system, synthetic ? false }:
+{
+  self,
+  nixpkgs,
+  system,
+  synthetic ? false,
+}:
 let
   pkgs = import nixpkgs { inherit system; };
   lib = nixpkgs.lib;
@@ -10,7 +15,11 @@ let
   '';
 in
 pkgs.testers.runNixOSTest {
-  name = if synthetic then "aginctus-vm-harness-synthetic-gateway" else "aginctus-vm-harness-gateway-topology";
+  name =
+    if synthetic then
+      "aginctus-vm-harness-synthetic-gateway"
+    else
+      "aginctus-vm-harness-gateway-topology";
   nodes.machine =
     { lib, ... }:
     {
@@ -18,9 +27,32 @@ pkgs.testers.runNixOSTest {
       virtualisation.memorySize = lib.mkForce 8192;
       virtualisation.diskSize = lib.mkForce 32768;
       environment.systemPackages = lib.optionals synthetic [ syntheticProbe ];
-      # The synthetic upstream binds only to the guest's inner egress bridge.
-      networking.firewall.interfaces."aginctus-egress".allowedTCPPorts =
-        lib.optionals synthetic [ 9080 ];
+      # Compose needs OCI network gateway controls absent from the default LTS daemon.
+      virtualisation.incus.package = pkgs.incus;
+      networking.dhcpcd.allowInterfaces = [ "eth0" ];
+      services.aginctus.settings.incus.management.network.ipv4.address = "10.77.0.1/24";
+      # Keep same-bridge database traffic at L2; Incus still rejects routed management traffic.
+      boot.kernel.sysctl = {
+        "net.bridge.bridge-nf-call-iptables" = 0;
+        "net.bridge.bridge-nf-call-ip6tables" = 0;
+      };
+      # OCI guests obtain addresses and bridge-local names from Incus dnsmasq.
+      networking.firewall.interfaces = {
+        aginctus-mgmt = {
+          allowedUDPPorts = [
+            53
+            67
+          ];
+          allowedTCPPorts = [ 53 ];
+        };
+        aginctus-egress = {
+          allowedUDPPorts = [
+            53
+            67
+          ];
+          allowedTCPPorts = [ 53 ] ++ lib.optionals synthetic [ 9080 ];
+        };
+      };
       services.aginctus.images.opencodeWorkload = {
         enable = lib.mkForce true;
         source = self.packages.${system}.opencode-workload;
@@ -53,13 +85,13 @@ pkgs.testers.runNixOSTest {
 
     # Real Incus OCI containers must start and respond, not merely exist.
     machine.wait_until_succeeds(
-      "incus exec --project aginctus-gateway postgres-1 -- pg_isready -U litellm -d litellm",
+      "timeout 15 incus exec --disable-stdin --project aginctus-gateway postgres-1 -- pg_isready -U litellm -d litellm </dev/null",
       timeout=180,
     )
     machine.wait_until_succeeds(
-      "incus exec --project aginctus-gateway litellm-1 -- python -c "
+      "timeout 15 incus exec --disable-stdin --project aginctus-gateway litellm-1 -- python -c "
       "\"import urllib.request; assert urllib.request.urlopen("
-      "'http://127.0.0.1:4000/health/liveliness', timeout=5).status == 200\"",
+      "'http://127.0.0.1:4000/health/liveliness', timeout=5).status == 200\" </dev/null",
       timeout=180,
     )
     machine.succeed(f"{cli} gateway status")
@@ -78,7 +110,8 @@ pkgs.testers.runNixOSTest {
     )
     # Never register a model here: application health is not synthetic
     # Responses inference, and no real provider should be contacted.
-  '' + lib.optionalString synthetic ''
+  ''
+  + lib.optionalString synthetic ''
     # Unlike topology-only acceptance, this calls real LiteLLM APIs and
     # proves scoped-key routing to the private, test-only Responses server.
     machine.succeed("aginctus-vm-synthetic-probe")

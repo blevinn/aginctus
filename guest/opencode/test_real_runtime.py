@@ -16,6 +16,7 @@ from typing import ClassVar
 
 LAUNCHER = Path(__file__).with_name("launch.py")
 EXPECTED = "AGINCTUS_MOCK_RESPONSE_OK"
+MODEL = "aginctus-go-pilot"
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -42,7 +43,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         response = {
             "id": "resp_mock", "object": "response", "created_at": 1730000000,
-            "model": "test-model", "status": "completed", "parallel_tool_calls": False,
+            "model": MODEL, "status": "completed", "parallel_tool_calls": False,
             "output": [{"id": "msg_mock", "type": "message", "status": "completed",
                         "role": "assistant", "content": [{"type": "output_text",
                         "text": EXPECTED, "annotations": []}]}],
@@ -93,7 +94,7 @@ def main(binary):
         try:
             (state / "gateway.json").write_text(json.dumps({
                 "endpoint": f"http://127.0.0.1:{server.server_port}/v1",
-                "model": "test-model", "protocol": "responses",
+                "model": MODEL, "protocol": "responses",
             }))
             env = dict(os.environ, AGINCTUS_OPENCODE_DIR=str(state),
                        HOME=str(root), XDG_CONFIG_HOME=str(root / "config"),
@@ -101,16 +102,16 @@ def main(binary):
                        XDG_STATE_HOME=str(root / "state"),
                        OPENCODE_DISABLE_AUTOUPDATE="true")
             result = subprocess.run(
-                [sys.executable, str(LAUNCHER), binary, "run", "--model", "aginctus/test-model",
+                [sys.executable, str(LAUNCHER), binary, "run", "--model", "aginctus/" + MODEL,
                  EXPECTED + " (repeat this marker verbatim)"],
                 cwd=root, env=env, capture_output=True, text=True, timeout=90, check=False)
             assert Handler.calls, "real OpenCode did not reach the mock gateway"
             assert all(p == "/v1/responses" and auth == "Bearer integration-only-key"
-                       and model == "test-model" for p, auth, model, _, _ in Handler.calls), (
+                       and model == MODEL for p, auth, model, _, _ in Handler.calls), (
                            "unexpected endpoint, authentication or model selection")
-            # A valid test must use a genuine OpenCode session, not an
-            # Aginctus-invented per-request marker. Support native header names
-            # across OpenCode versions; neither is printed in test output.
+            # The custom provider needs its narrow plugin to relay the genuine
+            # OpenCode sessionID. This must be observed on the real pinned
+            # client, not inferred from launcher config or invented by Aginctus.
             sessions = [session for _, _, _, session, _ in Handler.calls]
             assert all(sessions), "pinned OpenCode did not emit a native session header"
             assert len(set(sessions)) == 1, "OpenCode changed session identity during one run"

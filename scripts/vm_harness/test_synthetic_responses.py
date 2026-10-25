@@ -9,6 +9,7 @@ from scripts.vm_harness.synthetic_responses import (
     TOKEN,
     SyntheticServer,
     parse_request,
+    private_ipv4,
     sse,
 )
 
@@ -17,6 +18,13 @@ OPENER = build_opener(ProxyHandler({}))
 
 
 class SyntheticResponsesTests(unittest.TestCase):
+    def test_listener_rejects_wildcard_and_nonprivate_bindings(self):
+        for address in ("0.0.0.0", "::", "::1", "169.254.1.1", "192.0.2.1", "8.8.8.8"):
+            with self.subTest(address=address), self.assertRaises(ValueError):
+                SyntheticServer((address, 0))
+        for address in ("127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.0.1"):
+            self.assertEqual(private_ipv4(address), address)
+
     def test_requires_synthetic_key_model_and_nonce(self):
         body = json.dumps({"model": "synthetic-test", "input": "test nonce=" + NONCE}).encode()
         self.assertEqual(parse_request(body, "Bearer " + TOKEN), (NONCE, False))

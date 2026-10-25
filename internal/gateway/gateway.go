@@ -280,6 +280,14 @@ func (s Spec) ClientHeaderForwardingIndentedYAML() (string, error) {
 	return "      " + strings.ReplaceAll(strings.TrimSuffix(content, "\n"), "\n", "\n      "), nil
 }
 
+func (s Spec) ManagementDNSIPv4() string {
+	prefix, err := netip.ParsePrefix(s.NetworkIPv4Address)
+	if err != nil || !prefix.Addr().Is4() {
+		return ""
+	}
+	return prefix.Addr().String()
+}
+
 var composeTemplate = template.Must(template.New("gateway-compose").Parse(`name: {{.Project}}
 services:
   postgres:
@@ -295,7 +303,9 @@ services:
 
   litellm:
     image: {{.LiteLLMImage}}
-    depends_on:
+{{if .ManagementDNSIPv4}}    dns:
+      - {{.ManagementDNSIPv4}}
+{{end}}    depends_on:
       - postgres
     environment:
       DATABASE_URL: postgresql://litellm:${AGINCTUS_GATEWAY_POSTGRES_PASSWORD}@postgres-1:5432/litellm
@@ -373,6 +383,7 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 			"egressDHCPDisabled":   s.EgressDHCPDisabled,
 			"egressDHCPRanges":     s.EgressDHCPRanges,
 			"project":              s.Project,
+			"managementDNSIPv4":    s.ManagementDNSIPv4(),
 			"network": map[string]any{
 				"name":        s.Network,
 				"ipv4Address": s.NetworkIPv4Address,

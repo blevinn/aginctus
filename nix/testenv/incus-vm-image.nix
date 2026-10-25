@@ -29,7 +29,10 @@ let
           systemd.network.enable = lib.mkForce false;
           services.openssh.enable = lib.mkForce false;
 
-          environment.systemPackages = [ pkgs.git pkgs.util-linux ];
+          environment.systemPackages = [
+            pkgs.git
+            pkgs.util-linux
+          ];
         }
       )
     ];

@@ -19,6 +19,14 @@ TOKEN = "synthetic-fixture-only"
 NONCE = re.compile(r"\bnonce=([a-zA-Z0-9_-]{8,64})\b")
 
 
+def private_ipv4(value: str) -> str:
+    address = ipaddress.ip_address(value)
+    networks = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8")
+    if address.version != 4 or not any(address in ipaddress.ip_network(n) for n in networks):
+        raise ValueError("synthetic listener requires RFC1918 or loopback IPv4")
+    return str(address)
+
+
 def parse_request(raw: bytes, authorization: str) -> tuple[str, bool]:
     if authorization != "Bearer " + TOKEN:
         raise PermissionError("synthetic upstream authentication denied")
@@ -82,6 +90,7 @@ class SyntheticServer(ThreadingHTTPServer):
     allow_reuse_address = True
 
     def __init__(self, address):
+        private_ipv4(address[0])
         super().__init__(address, Handler)
         self._lock = threading.Lock()
         self._observed: dict[str, int] = {}
@@ -151,9 +160,10 @@ def main():
     parser.add_argument("--bind", required=True)
     parser.add_argument("--port", type=int, default=9080)
     args = parser.parse_args()
-    address = ipaddress.ip_address(args.bind)
-    if address.version != 4 or not (address.is_private or address.is_loopback):
-        parser.error("synthetic listener must bind only to private IPv4")
+    try:
+        address = private_ipv4(args.bind)
+    except ValueError as exc:
+        parser.error(str(exc))
     if not 1024 <= args.port <= 65535:
         parser.error("invalid synthetic port")
     server = SyntheticServer((str(address), args.port))
