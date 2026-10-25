@@ -3,7 +3,7 @@ import importlib.util
 import json
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 path = Path(__file__).with_name("probe_pinned_litellm_responses.py")
 spec = importlib.util.spec_from_file_location("pinned_responses_probe", path)
@@ -51,6 +51,33 @@ class PinnedResponsesProbeTests(unittest.TestCase):
                 ],
             }},
         })
+
+    def test_anonymous_control_has_no_alternative_auth_headers(self):
+        response = MagicMock()
+        response.status = 403
+        response.read.return_value = b""
+        response.__enter__.return_value = response
+        for authenticated in (False, True):
+            with self.subTest(authenticated=authenticated):
+                with patch.object(probe.OPENER, "open", return_value=response) as op:
+                    status, _ = probe.send(12345, probe.ALIAS, probe.SESSION_A,
+                                           authenticated=authenticated)
+                self.assertEqual(status, 403)
+                request = op.call_args.args[0]
+                headers = {k.lower(): v for k, v in request.header_items()}
+                self.assertEqual("authorization" in headers, authenticated)
+                self.assertEqual("x-api-key" in headers, authenticated)
+                self.assertEqual("x-unapproved-probe" in headers, authenticated)
+
+    def test_anonymous_auth_gate_demands_401_403_and_no_upstream(self):
+        for code in (401, 403):
+            probe.require_unauthenticated_rejection(code, 0)
+        for code, upstream in ((200, 1), (200, 0), (400, 0), (404, 0),
+                               (500, 0), (401, 1), (403, 1)):
+            with self.subTest(code=code, upstream=upstream):
+                with self.assertRaisesRegex(RuntimeError,
+                                            "http_status=.*upstream_calls="):
+                    probe.require_unauthenticated_rejection(code, upstream)
 
     def test_model_group_scope_must_be_exact(self):
         probe.verify_policy(POLICY)
