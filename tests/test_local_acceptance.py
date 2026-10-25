@@ -145,18 +145,20 @@ class LocalAcceptanceViewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root, _ = self.make(directory)
             out = io.StringIO()
-            with patch.dict(os.environ, {"AGINCTUS_ACCEPTANCE_REPORT_ROOT": str(root)}):
-                with contextlib.redirect_stdout(out):
-                    code = local_acceptance.main([RUN_ID, "--format", "json"])
+            with patch.dict(
+                os.environ, {"AGINCTUS_ACCEPTANCE_REPORT_ROOT": str(root)}
+            ), contextlib.redirect_stdout(out):
+                code = local_acceptance.main([RUN_ID, "--format", "json"])
             self.assertEqual(code, 1)
             parsed = json.loads(out.getvalue())
             self.assertEqual(parsed["status"], "incomplete")
             self.assertFalse(parsed["complete_acceptance"])
             self.assertNotIn(str(root), out.getvalue())
             out = io.StringIO()
-            with patch.dict(os.environ, {"AGINCTUS_ACCEPTANCE_REPORT_ROOT": ""}):
-                with contextlib.redirect_stdout(out):
-                    code = local_acceptance.main([RUN_ID, "--format", "json"])
+            with patch.dict(
+                os.environ, {"AGINCTUS_ACCEPTANCE_REPORT_ROOT": ""}
+            ), contextlib.redirect_stdout(out):
+                code = local_acceptance.main([RUN_ID, "--format", "json"])
             self.assertEqual(code, 1)
             self.assertEqual(json.loads(out.getvalue())["status"], "error")
             self.assertNotIn(str(directory), out.getvalue())
