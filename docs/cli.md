@@ -56,6 +56,37 @@ move v0.1 images, activate systemd services, or authorize Home Manager
 reconciliation. Existing `images update NAME PATH` still uses the legacy
 ambient project. See [configuration](configuration.md) for migration limits.
 
+## Image ownership-claim audit (read-only)
+
+```sh
+aginctus images owner-audit --project aginctus --owner system my-image
+```
+
+This read-only command requires the selected `incus.project`, verifies
+ownership of the local Incus project, and checks the requested alias
+against image `properties`. The provisional ownership-claim contract
+requires `user.aginctus.managed=true`,
+`user.aginctus.resource=image`, `user.aginctus.deployment=PROJECT`,
+`user.aginctus.alias=ALIAS`, and
+`user.aginctus.owner=system|user` with the selected owner value.
+It also requires one exclusive alias and an unambiguous full image
+fingerprint.
+
+The JSON report distinguishes `claimed`, `absent`, `unmarked`,
+`foreign-or-incomplete`, `shared`, `ambiguous` and `unverified`.
+A result other than `claimed` exits nonzero. Access and parsing errors
+fail closed without displaying raw Incus output. **Even `claimed`
+is not write permission or an authenticated attestation**: these
+properties can be edited by an actor with appropriate Incus access,
+and the audit does not prove which lifecycle controller is currently
+active. The current create-only image import does **not** add these
+markers, so its images remain unmarked pending a separate provenance
+creation contract. Do not mark or adopt existing images as a workaround.
+
+No existing alias is modified by this command. Alias replacement
+still requires controller exclusion, provenance evidence and
+transaction-safe, explicitly project-scoped rollback.
+
 ## Commands that change state
 
 | Surface | Side effect or prerequisite |
