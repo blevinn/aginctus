@@ -18,6 +18,33 @@ Some gateway egress `plan`, `preflight`, `audit`, `model render` and `credential
 
 The older `workload <name> ensure|teardown` forms remain supported for compatibility; prefer `workload apply|remove [name]` in new examples.
 
+## Scoped Herdr and workload status (read-only)
+
+The v0.2 opt-in instance inspection commands explicitly select the
+declared, owned **local** Incus project:
+
+```sh
+aginctus herdr client status --project aginctus
+aginctus workload status --project aginctus dev
+aginctus workload ls --project aginctus
+```
+
+The project must match the effective `incus.project` configuration
+and have the exact Aginctus project ownership and feature policy.
+The commands use `incus --force-local --project NAME list --format json`,
+refuse invalid or duplicated instance identities, and inspect exact
+Herdr/workload ownership markers. Foreign or ambiguous instances cause
+an error, never a silent `absent` result. A multi-workload status or
+listing emits no partial output if a later instance is foreign.
+Unavailable/denied daemon state fails closed without printing raw
+external diagnostics.
+
+The existing no-`--project` status and all start/stop/apply/remove
+operations retain v0.1 behavior. This does **not** activate new
+project-scoped instance writes or migrate the pilot; those require
+independent mutation-time project and instance verification, controlled
+cross-role reconciliation and real Incus acceptance.
+
 ## Explicit local Incus image inventory (read-only)
 
 ```sh
