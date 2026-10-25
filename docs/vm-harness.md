@@ -171,6 +171,31 @@ OpenCode tool execution are separate required acceptance layers. Neither
 the fixture's `response.completed` nor its nonce count proves gateway-side
 billing/provenance or a coding-agent run. Never use its static key on a pilot.
 
+## Next synthetic tool-protocol acceptance gate
+
+Issue #531 now has an **opt-in loopback OpenCode tool probe** in
+`guest/opencode/test_real_runtime.py`, with two modes that use the
+real pinned OpenCode executable and the production Aginctus launcher:
+
+- `--inspect-tools` observes only genuine bounded Responses tool
+  declaration names/schema SHA-256 digests and native session headers;
+  it **does not cause or verify tool execution**.
+- `--execute-tools` replaces the local text-only mock with the
+  explicitly selected `ToolSequence` fixture. The synthetic model
+  requests `read`, `edit`, and `bash` (`go test ./...`) in order.
+  The test fails without all three real tool continuations, an actual
+  corrected `calc.go`, an independently observed tool-created test
+  marker, and a fresh passing Go test in the isolated temporary workspace.
+
+Neither mode uses Herdr, Incus, LiteLLM or real providers. The pinned
+client must prove its actual tool-name/schema and continuation behavior
+before this optional protocol can be admitted to the NixOS full-stack
+scenario; the synthetic sequence deliberately rejects anything it does
+not recognize. A redacted tool continuation does not itself attest
+execution. Even a successful standalone client probe is **not** a
+full VM/Herdr/gateway audit or network-isolation result. Existing
+`synthetic-gateway` remains text-only and unchanged.
+
 ## Machine-readable run evidence
 
 Every `runner.py test <scenario>` invocation writes an independent,
