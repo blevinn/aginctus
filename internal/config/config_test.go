@@ -430,4 +430,3 @@ func TestIncusProjectScopeRejectsInvalidValuesBeforeUse(t *testing.T) {
 		t.Fatal("accepted environment-selected default Incus project")
 	}
 }
-
