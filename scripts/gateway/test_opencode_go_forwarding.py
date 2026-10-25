@@ -86,7 +86,15 @@ class ForwardingTests(unittest.TestCase):
             self.assertEqual(before, original)
 
     def test_callback_implements_pinned_async_hook_contract(self):
-        # Only replace LiteLLM's base class; the forwarding policy is real.
+        # Only replace LiteLLM/FastAPI dependencies; forwarding policy is real.
+        class FakeHTTPException(Exception):
+            def __init__(self, status_code, detail):
+                super().__init__(detail)
+                self.status_code = status_code
+                self.detail = detail
+
+        fastapi = types.ModuleType("fastapi")
+        fastapi.HTTPException = FakeHTTPException
         logger = types.ModuleType("litellm.integrations.custom_logger")
         logger.CustomLogger = type("CustomLogger", (), {})
         root = types.ModuleType("litellm")
@@ -95,7 +103,8 @@ class ForwardingTests(unittest.TestCase):
         integrations.__path__ = []
         with mock.patch.dict(sys.modules, {"litellm": root, "litellm.integrations": integrations,
                                       "litellm.integrations.custom_logger": logger,
-                                      "opencode_go_forwarding": mod}):
+                                      "opencode_go_forwarding": mod,
+                                      "fastapi": fastapi}):
             adapter = importlib.util.spec_from_file_location(
                 "litellm_opencode_go_hook", Path(__file__).with_name("litellm_opencode_go_hook.py"))
             hook = importlib.util.module_from_spec(adapter)
@@ -106,6 +115,30 @@ class ForwardingTests(unittest.TestCase):
                 None, None, data, "aresponses"))
             self.assertEqual(response["headers"], {"x-opencode-session": SESSION_A,
                                                     "User-Agent": "opencode/1.0.0"})
+
+            # The pinned proxy maps HTTPException to client 4xx; bare ValueError
+            # surfaced as HTTP 500 in the operator's actual pinned OCI run.
+            for changes in (
+                {"x-opencode-session-id": "fake"},
+                {"User-Agent": "python-httpx/0.28"},
+                {"x-opencode-session-id": "ses_abcdefgh\r\nAuthorization: secret"},
+            ):
+                with self.subTest(changes=tuple(changes)), self.assertRaises(
+                    FakeHTTPException
+                ) as rejected:
+                    asyncio.run(hook.proxy_handler_instance.async_pre_call_hook(
+                        None, None, sample(**changes), "aresponses"))
+                self.assertEqual(rejected.exception.status_code, 400)
+                self.assertEqual(
+                    rejected.exception.detail, "Invalid OpenCode Go session metadata"
+                )
+                self.assertNotIn("secret", str(rejected.exception))
+
+            unrelated = sample()
+            unrelated["model"] = "other-model"
+            result = asyncio.run(hook.proxy_handler_instance.async_pre_call_hook(
+                None, None, unrelated, "aresponses"))
+            self.assertIs(result, unrelated)
 
 
 if __name__ == "__main__":
