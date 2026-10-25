@@ -11,6 +11,7 @@ import json
 import os
 import re
 import stat
+import sys
 from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,6 +30,19 @@ def _directory(fd: int) -> None:
         or meta.st_mode & 0o077
     ):
         raise ValueError("unsafe evidence directory")
+
+
+def validate_root(output_root: Path) -> None:
+    """Require an already provisioned private directory outside the checkout."""
+    if not output_root.is_absolute() or output_root.is_symlink():
+        raise ValueError("invalid evidence root")
+    if output_root.resolve().is_relative_to(SOURCE_ROOT):
+        raise ValueError("checkout is not an evidence root")
+    fd = os.open(output_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        _directory(fd)
+    finally:
+        os.close(fd)
 
 
 def record(
@@ -56,11 +70,7 @@ def record(
         or any(value not in STATES for value in (fixture, tests, stop, close))
     ):
         raise ValueError("invalid runner observation")
-    if not output_root.is_absolute() or output_root.is_symlink():
-        raise ValueError("invalid evidence root")
-    # Never put result files into the checkout, which can be agent-writable.
-    if output_root.resolve().is_relative_to(SOURCE_ROOT):
-        raise ValueError("checkout is not an evidence root")
+    validate_root(output_root)
 
     record_status = "fail" if exit_code != 0 else "incomplete"
     # A contradictory zero exit must never produce a success-like outcome.
@@ -119,6 +129,16 @@ def record(
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    # This pure preflight runs before an optionally billable live acceptance.
+    if len(argv) == 2 and argv[0] == "--check-root":
+        try:
+            validate_root(Path(argv[1]))
+        except (OSError, ValueError, RuntimeError):
+            print("ERROR: unsafe acceptance evidence root")
+            return 1
+        return 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--run-id", required=True)
