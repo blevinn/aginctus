@@ -84,15 +84,15 @@ func TestScopedImageImportRefusesConflictsAndUncertainState(t *testing.T) {
 	mismatch := `[{"fingerprint":"unexpected-fingerprint","aliases":[{"name":"my-image"}]}]`
 	const sensitive = "sensitive external subprocess text"
 	cases := []struct {
-		name string
-		projectReads []string
-		images []string
-		projectErr error
-		imageErr error
-		importErr error
-		wantCode int
-		wantImports int
-		wantProjects int
+		name           string
+		projectReads   []string
+		images         []string
+		projectErr     error
+		imageErr       error
+		importErr      error
+		wantCode       int
+		wantImports    int
+		wantProjects   int
 		wantImageReads int
 	}{
 		{"created and verified", []string{owned, owned, owned}, []string{absent, absent, created}, nil, nil, nil, 0, 1, 3, 3},
@@ -112,7 +112,7 @@ func TestScopedImageImportRefusesConflictsAndUncertainState(t *testing.T) {
 		{"image read denied", []string{owned}, []string{absent}, nil, errors.New(sensitive), nil, 1, 0, 1, 1},
 		{"duplicate alias rejected", []string{owned}, []string{`[{"fingerprint":"a","aliases":[{"name":"my-image"}]},{"fingerprint":"b","aliases":[{"name":"my-image"}]}]`}, nil, nil, nil, 1, 0, 1, 1},
 	}
-	cfg, err := (&config.Loader{Environment:nil}).Load(config.Options{})
+	cfg, err := (&config.Loader{Environment: nil}).Load(config.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestScopedImageImportInvalidArgsNeverContactIncus(t *testing.T) {
 }
 
 func TestScopedImageImportTopLevelDispatch(t *testing.T) {
-	cfg, err := (&config.Loader{Environment:nil}).Load(config.Options{})
+	cfg, err := (&config.Loader{Environment: nil}).Load(config.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestScopedImageImportTopLevelDispatch(t *testing.T) {
 		return nil, nil
 	}
 	var out, errOut bytes.Buffer
-	if code := Run(context.Background(), []string{"images","import","--project=aginctus","my-image",dir,"--confirm-create"}, &out, &errOut, nil, &fakeConfigLoader{cfg: cfg}); code != 0 {
+	if code := Run(context.Background(), []string{"images", "import", "--project=aginctus", "my-image", dir, "--confirm-create"}, &out, &errOut, nil, &fakeConfigLoader{cfg: cfg}); code != 0 {
 		t.Fatalf("top-level import returned %d: %q", code, errOut.String())
 	}
 	if images != 3 || !strings.Contains(out.String(), "created in project") {
