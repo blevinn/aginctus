@@ -4,6 +4,7 @@ Run inside the pinned OCI image with --network none and an explicit opt-in.
 No provider credentials, external network, database or live gateway.
 """
 import argparse
+import hashlib
 import http.server
 import importlib
 import importlib.metadata
@@ -69,6 +70,59 @@ def render_config(policy, upstream_port, *, selective_hook=False):
         ),
         "general_settings": {"master_key": PROXY_KEY},
     }
+
+
+def load_packaged_hook(bundle):
+    """Verify exported bytes and callback-only policy before importing anything."""
+    bundle = Path(bundle).resolve(strict=True)
+    names = {"config.yaml", "litellm_opencode_go_hook.py", "opencode_go_forwarding.py"}
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict) or set(manifest) != names:
+        raise RuntimeError("packaged hook manifest must name exactly three assets")
+    for name in sorted(names):
+        if hashlib.sha256((bundle / name).read_bytes()).hexdigest() != manifest[name]:
+            raise RuntimeError("packaged hook digest mismatch: " + name)
+    import yaml
+
+    policy = yaml.safe_load((bundle / "config.yaml").read_text(encoding="utf-8"))
+    verify_packaged_policy(policy)
+    sys.path.insert(0, str(bundle))
+    for name in ("opencode_go_forwarding", "litellm_opencode_go_hook"):
+        module = importlib.import_module(name)
+        if Path(module.__file__).resolve() != bundle / (name + ".py"):
+            raise RuntimeError("callback imported outside packaged bundle")
+    verify_selective_hook_import()
+    return policy
+
+
+def verify_packaged_policy(policy):
+    if policy != {"litellm_settings": {
+        "callbacks": ["litellm_opencode_go_hook.proxy_handler_instance"],
+    }}:
+        raise RuntimeError("packaged hook policy must be callback-only")
+
+
+def verify_packaged_startup_failures(bundle, config_content):
+    """Exercise missing deliveries with the actual pinned proxy executable."""
+    bundle = Path(bundle)
+    for missing in ("config.yaml", "litellm_opencode_go_hook.py", "opencode_go_forwarding.py"):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("config.yaml", "litellm_opencode_go_hook.py", "opencode_go_forwarding.py"):
+                if name != missing:
+                    (Path(tmp) / name).write_bytes(
+                        config_content if name == "config.yaml" else (bundle / name).read_bytes())
+            try:
+                result = subprocess.run([
+                    "/app/.venv/bin/litellm", "--config", str(Path(tmp) / "config.yaml"),
+                    "--host", "127.0.0.1", "--port", str(free_port()),
+                ], env={**os.environ, "PYTHONPATH": tmp}, cwd=tmp,
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, timeout=30, check=False)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError("missing packaged asset did not stop startup: " + missing) from None
+            if result.returncode == 0:
+                raise RuntimeError("missing packaged asset exited successfully: " + missing)
+    print("PASS: actual pinned proxy fails startup for missing config or either callback module")
 
 
 def free_port():
@@ -155,9 +209,10 @@ def send(port, alias, session, authenticated=True, *, user_agent="opencode/1.15.
     headers = {
         "Content-Type": "application/json",
         "User-Agent": user_agent,
-        "x-opencode-session": session,
         **(SENTINELS if authenticated else {}),
     }
+    if session is not None:
+        headers["x-opencode-session"] = session
     # x-api-key is an alternative authentication mechanism in pinned LiteLLM.
     # An anonymous negative control must NOT include a second auth header;
     # the authenticated cases separately audit the unapproved x-api-key value.
@@ -263,8 +318,10 @@ def check_rejected_without_upstream(port, session, *, user_agent):
         )
 
 
-def run(fixture, require_safe, *, selective_hook=False):
+def run(fixture, require_safe, *, selective_hook=False, packaged_hook=None):
     verify_isolation()
+    packaged_policy = load_packaged_hook(packaged_hook) if packaged_hook else None
+    selective_hook = selective_hook or packaged_hook is not None
     if selective_hook:
         verify_selective_hook_import()
     import yaml  # pinned image dependency; deliberately optional in dev-shell tests
@@ -278,15 +335,22 @@ def run(fixture, require_safe, *, selective_hook=False):
     try:
         with tempfile.TemporaryDirectory() as tmp:
             config = Path(tmp) / "test-only.yaml"
-            config.write_text(yaml.safe_dump(render_config(
-                policy, fake.server_port, selective_hook=selective_hook)),
-                encoding="utf-8")
+            rendered = render_config(policy, fake.server_port, selective_hook=selective_hook)
+            if packaged_policy is not None:
+                rendered["litellm_settings"] = packaged_policy["litellm_settings"]
+            config.write_text(yaml.safe_dump(rendered), encoding="utf-8")
+            if packaged_hook:
+                verify_packaged_startup_failures(packaged_hook, config.read_bytes())
             port = free_port()
             proxy = subprocess.Popen([
                 "/app/.venv/bin/litellm", "--config", str(config),
                 "--host", "127.0.0.1", "--port", str(port),
             ], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL)
+                stderr=subprocess.DEVNULL, env={
+                    **os.environ,
+                    **({"PYTHONPATH": str(Path(packaged_hook).resolve())}
+                       if packaged_hook else {}),
+                })
             wait_ready(port, proxy)
             status, _ = send(port, ALIAS, SESSION_A, authenticated=False)
             require_unauthenticated_rejection(status, len(MockGo.calls))
@@ -301,8 +365,10 @@ def run(fixture, require_safe, *, selective_hook=False):
                 check_rejected_without_upstream(
                     port, "invalid-session", user_agent="opencode/1.15.11")
                 check_rejected_without_upstream(
+                    port, None, user_agent="opencode/1.15.11")
+                check_rejected_without_upstream(
                     port, SESSION_A, user_agent="python-httpx/0.28")
-                print("PASS: selective hook rejects invalid session and spoofed User-Agent")
+                print("PASS: selective hook rejects malformed/missing session and spoofed User-Agent")
             if not safe and require_safe:
                 raise RuntimeError("stock policy does not satisfy strict upstream isolation")
             print("DECISION: " + ("strict policy passes" if safe else
@@ -323,13 +389,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("fixture")
     parser.add_argument("--require-safe", action="store_true")
-    parser.add_argument("--selective-hook", action="store_true",
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--selective-hook", action="store_true",
                         help="enable installed #470 callback instead of broad group forwarding")
+    mode.add_argument("--packaged-hook", metavar="BUNDLE_DIR",
+                      help="verify and use exported Go bundle policy and modules")
     args = parser.parse_args()
     try:
-        run(args.fixture, args.require_safe or args.selective_hook,
-            selective_hook=args.selective_hook)
-    except (RuntimeError, OSError, ValueError, KeyError) as error:
+        run(args.fixture, args.require_safe or args.selective_hook or bool(args.packaged_hook),
+            selective_hook=args.selective_hook, packaged_hook=args.packaged_hook)
+    except (RuntimeError, OSError, ValueError, KeyError, ImportError) as error:
         print("FAIL: " + str(error), file=sys.stderr)
         return 1
     return 0
