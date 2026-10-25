@@ -337,10 +337,20 @@ stricter `--require-safe` option exits nonzero for those risks. Such a
 failure is evidence to evaluate the existing selective #470 callback, *not*
 permission to enable global forwarding or relax the isolation policy.
 
-Execute from the repository root with Docker and the stock OCI image:
+Execute from the repository root. On NixOS, use **rootless Podman from Nix**:
+no Docker daemon and no system-level Podman installation is required.
+Rootless Podman still requires the host's preexisting user-namespace/subuid
+configuration and setuid `newuidmap`/`newgidmap` helpers; if these are absent,
+do not modify the host for this test. Use the existing disposable test VM/
+host-agent environment or report the prerequisite blocker. Neither Podman
+nor the image download is allowed to make provider requests; **only the
+isolated test container** is network-disabled.
+
+The command below temporarily obtains Podman from Nix and runs the stock
+LiteLLM image with exactly the same network and filesystem restrictions:
 
 ```sh
-docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
+nix shell nixpkgs#podman --command podman run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
   -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 \
   -e PYTHONDONTWRITEBYTECODE=1 \
   --mount type=bind,src="$PWD/deploy/litellm-go/model-group-forwarding.yaml",dst=/run/aginctus-policy.yaml,readonly \
@@ -349,6 +359,11 @@ docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
   ghcr.io/berriai/litellm:v1.103.0-stable \
   /run/aginctus-probe.py /run/aginctus-policy.yaml
 ```
+
+For a host where Podman is already installed, use `podman run` instead
+of the `nix shell ... --command podman run` prefix. A Docker daemon is
+also compatible but **not required**; substituting `docker run` preserves
+the sandbox flags.
 
 Then deliberately rerun the same invocation with `--require-safe` appended.
 Do not confuse the expected policy rejection with native Responses transport
