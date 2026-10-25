@@ -116,8 +116,13 @@ def main():
 
     rc, output = run_remote(CLIENT, [
         "ssh", "-o", "BatchMode=yes", WORKLOAD, "printenv", "XDG_CONFIG_HOME"])
-    results.append(expect(rc == 0 and output.strip() == EXPECTED_CONFIG_HOME,
-                          "managed SSH delivers Herdr explicit-session config directory"))
+    ssh_xdg_ok = expect(rc == 0 and output.strip() == EXPECTED_CONFIG_HOME,
+                        "managed SSH delivers Herdr explicit-session config directory")
+    results.append(ssh_xdg_ok)
+    if not ssh_xdg_ok:
+        print("BLOCKED: remote Herdr explicit-session config mismatch; "
+              "no workspace probe attempted", file=sys.stderr)
+        return 1
 
     rc, output = run_remote(CLIENT, ["herdr", "machine", "status", WORKLOAD, "--json"])
     status = parse_json(output)
