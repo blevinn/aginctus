@@ -17,9 +17,11 @@ A private `.herdr-owned.json` file records the Herdr-returned workspace/pane IDs
 The owned `close` phase now queries `herdr --machine <reviewed-machine> workspace list` **before** issuing `workspace close <owned-ID>`. The returned
 JSON must contain a bounded `result.type=workspace_list` inventory with
 unique valid workspace IDs; the exact ID in the private ownership record
-must be present and carry the matching run-label. It refuses to close an
-absent ID, an ID bearing another run label, or an ambiguous/malformed list.
-Other workspaces may have no labels; they are never targeted.
+must be present and be the **only** workspace with that run label. It
+refuses to close an absent ID, a mismatched label, a second same-run-label
+workspace, or an ambiguous/malformed inventory. Other workspaces may have
+no labels; they are never targeted. After closing, no workspace with that
+run label may remain.
 
 After the close command returns successfully, the phase repeats this
 read-only query **against the same managed machine**. Only when that exact
