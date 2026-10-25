@@ -3,6 +3,11 @@
 Requires pinned LiteLLM v1.103.0 and must be explicitly configured on its
 runtime; merely shipping this file does not activate request forwarding.
 """
+from importlib.metadata import version
+
+if version("litellm") != "1.103.0":
+    raise RuntimeError("Aginctus selective Go forwarding requires LiteLLM 1.103.0")
+
 from litellm.integrations.custom_logger import CustomLogger
 from opencode_go_forwarding import sanitize_go_headers
 

@@ -2,15 +2,174 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
+	gatewayassets "github.com/blevinn/aginctus/scripts/gateway"
 	composeproject "github.com/lxc/incus-compose/project"
 	"sigs.k8s.io/yaml"
 )
+
+func TestSelectiveGoRenderAndPinnedLoader(t *testing.T) {
+	for _, stock := range []string{"false", "[]"} {
+		effective, err := (&config.Loader{}).Load(config.Options{Overrides: []string{
+			"gateway.litellm.selectiveGoForwarding=true",
+			"gateway.litellm.forwardClientHeaders=" + stock,
+			"gateway.images.litellm=ghcr.io/berriai/litellm:v1.103.0@sha256:" + strings.Repeat("a", 64),
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		spec, err := FromConfig(effective)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, compose := assertRenderedGatewayComposeMatchesDeploymentModel(t, spec)
+		services := compose["services"].(map[string]any)
+		if _, exists := services["postgres"].(map[string]any)["configs"]; exists {
+			t.Fatal("bundle attached to PostgreSQL")
+		}
+		env := services["litellm"].(map[string]any)["environment"].(map[string]any)
+		if env["PYTHONPATH"] != gatewayassets.PythonPath || env["CONFIG_FILE_PATH"] != gatewayassets.ConfigPath {
+			t.Fatal("incorrect callback environment")
+		}
+		policy := parseForwardingPolicy(t, gatewayassets.Files()["config.yaml"])
+		wantPolicy := map[string]any{"litellm_settings": map[string]any{"callbacks": []any{"litellm_opencode_go_hook.proxy_handler_instance"}}}
+		if !reflect.DeepEqual(policy, wantPolicy) {
+			t.Fatalf("unexpected callback policy: %#v", policy)
+		}
+		rendered, err := spec.RenderCompose()
+		if err != nil {
+			t.Fatal(err)
+		}
+		jsonnet, err := json.Marshal(compose)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, document := range []string{rendered, string(jsonnet)} {
+			file := filepath.Join(t.TempDir(), "compose.yaml")
+			if err := os.WriteFile(file, []byte(document), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			for _, key := range []string{"AGINCTUS_GATEWAY_MASTER_KEY", "AGINCTUS_GATEWAY_SALT_KEY", "AGINCTUS_GATEWAY_POSTGRES_PASSWORD"} {
+				t.Setenv(key, "synthetic-only")
+			}
+			project, err := composeproject.New().Load(context.Background(), composeproject.LoadFiles([]string{file}), composeproject.LoadName(spec.Project), composeproject.LoadOsEnv())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(project.Configs) != 3 || len(project.Services["litellm"].Configs) != 3 || len(project.Services["postgres"].Configs) != 0 {
+				t.Fatal("incorrect loaded bundle attachments")
+			}
+			for name, raw := range gatewayassets.Files() {
+				if got := project.Configs["aginctus-go-"+name].Content; got != raw {
+					t.Fatalf("loader changed %s source bytes", name)
+				}
+				found := false
+				for _, attachment := range project.Services["litellm"].Configs {
+					if attachment.Source == "aginctus-go-"+name && attachment.Target == gatewayassets.PythonPath+"/"+name {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("missing attachment for %s", name)
+				}
+			}
+		}
+	}
+}
+
+func TestSelectiveGoDollarInterpolation(t *testing.T) {
+	// Exercise future Python regex anchors and literal interpolation syntax even
+	// when the current embedded sources happen not to contain dollar characters.
+	const raw = "pattern = r'^session$'\nvalue = '$SESSION ${SESSION} $$ ${SESSION:-fallback}'\n"
+	t.Setenv("SESSION", "must-not-enter-source")
+	document, err := yaml.Marshal(map[string]any{
+		"services": map[string]any{"litellm": map[string]any{
+			"image":   "ghcr.io/berriai/litellm:v1.103.0",
+			"configs": []map[string]string{{"source": "source", "target": "/app/example.py"}},
+		}},
+		"configs": map[string]any{"source": map[string]string{"content": composeLiteralContent(raw)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "compose.yaml")
+	if err := os.WriteFile(file, document, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	project, err := composeproject.New().Load(context.Background(), composeproject.LoadFiles([]string{file}), composeproject.LoadName("literal-source"), composeproject.LoadOsEnv())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := project.Configs["source"].Content; got != raw {
+		t.Fatalf("loader interpolated literal source: %q", got)
+	}
+}
+
+func TestSelectiveGoValidation(t *testing.T) {
+	base, err := forwardingSpec(t, "false")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base.SelectiveGoForwarding || base.LiteLLMImage != "ghcr.io/berriai/litellm:v1.103.0" {
+		t.Fatal("default mode or image changed")
+	}
+	base.SelectiveGoForwarding = true
+	valid := "ghcr.io/berriai/litellm@sha256:" + strings.Repeat("a", 64)
+	for _, image := range []string{valid, strings.Replace(valid, "@", ":v1.103.0@", 1)} {
+		base.LiteLLMImage = image
+		if err := base.Validate(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, image := range []string{"ghcr.io/berriai/litellm:v1.103.0", valid + "a", valid[:len(valid)-1], strings.ToUpper(valid), strings.Replace(valid, "berriai", "other", 1), strings.Replace(valid, "litellm@", "litellm-extra@", 1), valid + "\n", strings.Replace(valid, "@", ":@", 1)} {
+		base.LiteLLMImage = image
+		if _, err := base.RenderCompose(); err == nil {
+			t.Fatalf("render accepted image %q", image)
+		}
+		if _, err := base.OrchestrationPlan(); err == nil {
+			t.Fatalf("plan accepted image %q", image)
+		}
+	}
+	base.LiteLLMImage = valid
+	for _, stock := range []Spec{{ForwardClientHeaders: true}, {ForwardClientHeaderModels: []string{"other-model"}}, {ForwardClientHeaderModels: []string{"aginctus-go-pilot"}}} {
+		base.ForwardClientHeaders, base.ForwardClientHeaderModels = stock.ForwardClientHeaders, stock.ForwardClientHeaderModels
+		if _, err := base.RenderCompose(); err == nil {
+			t.Fatal("render accepted conflicting stock forwarding")
+		}
+		if _, err := base.OrchestrationPlan(); err == nil {
+			t.Fatal("plan accepted conflicting stock forwarding")
+		}
+	}
+	for _, value := range []string{`"true"`, "1", "null", "[]", "{}"} {
+		effective, err := (&config.Loader{}).Load(config.Options{Overrides: []string{"gateway.litellm.selectiveGoForwarding=" + value}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := FromConfig(effective); err == nil {
+			t.Fatalf("accepted nonboolean selective mode %s", value)
+		}
+	}
+	for _, stock := range []string{"true", `["other-model"]`, `["aginctus-go-pilot"]`} {
+		effective, err := (&config.Loader{}).Load(config.Options{Overrides: []string{
+			"gateway.litellm.selectiveGoForwarding=true",
+			"gateway.images.litellm=" + valid,
+			"gateway.litellm.forwardClientHeaders=" + stock,
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := FromConfig(effective); err == nil {
+			t.Fatalf("config accepted conflicting forwarding %s", stock)
+		}
+	}
+}
 
 func forwardingSpec(t *testing.T, value string) (Spec, error) {
 	t.Helper()
@@ -79,6 +238,9 @@ func TestClientHeaderForwardingRenderAndPinnedParser(t *testing.T) {
 				}
 				if _, exists := environment["CONFIG_FILE_PATH"]; exists {
 					t.Fatal("disabled forwarding overrides LiteLLM config")
+				}
+				if _, exists := environment["PYTHONPATH"]; exists {
+					t.Fatal("disabled forwarding overrides Python path")
 				}
 			} else {
 				if environment["CONFIG_FILE_PATH"] != clientHeadersConfigPath {

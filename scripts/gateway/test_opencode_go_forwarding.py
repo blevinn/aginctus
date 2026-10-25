@@ -35,6 +35,21 @@ def sample(session=SESSION_A, **extra):
 
 
 class ForwardingTests(unittest.TestCase):
+    def test_callback_rejects_wrong_or_missing_runtime_at_import(self):
+        import importlib.metadata
+
+        for value in ("1.102.0", "1.103.0.post1", "1.103.00", "1.104.0", None):
+            with self.subTest(version=value):
+                adapter = importlib.util.spec_from_file_location(
+                    "litellm_opencode_go_hook", Path(__file__).with_name("litellm_opencode_go_hook.py"))
+                hook = importlib.util.module_from_spec(adapter)
+                kwargs = ({"return_value": value} if value is not None else
+                          {"side_effect": importlib.metadata.PackageNotFoundError("litellm")})
+                with mock.patch("importlib.metadata.version", **kwargs) as version:
+                    with self.assertRaises((RuntimeError, importlib.metadata.PackageNotFoundError)):
+                        adapter.loader.exec_module(hook)
+                    version.assert_called_once_with("litellm")
+
     def test_one_session_remains_stable_and_isolated_from_another(self):
         outbound = [mod.sanitize_go_headers(sample(s), "aresponses")["headers"]
                     for s in (SESSION_A, SESSION_A, SESSION_B)]
@@ -101,7 +116,7 @@ class ForwardingTests(unittest.TestCase):
         root.__path__ = []
         integrations = types.ModuleType("litellm.integrations")
         integrations.__path__ = []
-        with mock.patch.dict(sys.modules, {"litellm": root, "litellm.integrations": integrations,
+        with mock.patch("importlib.metadata.version", return_value="1.103.0"), mock.patch.dict(sys.modules, {"litellm": root, "litellm.integrations": integrations,
                                       "litellm.integrations.custom_logger": logger,
                                       "opencode_go_forwarding": mod,
                                       "fastapi": fastapi}):
