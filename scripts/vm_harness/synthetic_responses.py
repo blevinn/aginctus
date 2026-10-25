@@ -14,6 +14,13 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+if __package__:
+    from .tool_sequence import SequenceError, ToolSequence
+    from .tool_sequence import stream as tool_stream
+else:
+    from tool_sequence import SequenceError, ToolSequence
+    from tool_sequence import stream as tool_stream
+
 MAX_BODY = 16384
 TOKEN = "synthetic-fixture-only"
 NONCE = re.compile(r"\bnonce=([a-zA-Z0-9_-]{8,64})\b")
@@ -89,9 +96,11 @@ class SyntheticServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, address):
+    def __init__(self, address, *, tool_mode=False):
         private_ipv4(address[0])
         super().__init__(address, Handler)
+        # Test-operator-only startup setting, never selected by a client.
+        self.tool_sequence = ToolSequence() if tool_mode else None
         self._lock = threading.Lock()
         self._observed: dict[str, int] = {}
 
@@ -142,9 +151,19 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(400, b"{}")
         if size <= 0 or size > MAX_BODY:
             return self._send(413, b"{}")
+        raw = self.rfile.read(size)
+        if self.server.tool_sequence is not None:
+            if self.headers.get("Authorization") != "Bearer " + TOKEN:
+                return self._send(403, b"{}")
+            try:
+                nonce, result = self.server.tool_sequence.next(json.loads(raw))
+            except (SequenceError, ValueError, TypeError):
+                return self._send(400, b"{}")
+            self.server.record(nonce)
+            return self._send(200, tool_stream(result), "text/event-stream")
         try:
             nonce, streaming = parse_request(
-                self.rfile.read(size), self.headers.get("Authorization", ""))
+                raw, self.headers.get("Authorization", ""))
         except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
             return self._send(400, b"{}")
         except PermissionError:
@@ -159,6 +178,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--bind", required=True)
     parser.add_argument("--port", type=int, default=9080)
+    parser.add_argument("--tool-sequence", action="store_true",
+                        help="opt-in deterministic Responses tool protocol only")
     args = parser.parse_args()
     try:
         address = private_ipv4(args.bind)
@@ -166,7 +187,7 @@ def main():
         parser.error(str(exc))
     if not 1024 <= args.port <= 65535:
         parser.error("invalid synthetic port")
-    server = SyntheticServer((str(address), args.port))
+    server = SyntheticServer((str(address), args.port), tool_mode=args.tool_sequence)
     try:
         server.serve_forever()
     finally:
