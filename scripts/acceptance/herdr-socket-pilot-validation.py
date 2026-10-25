@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 EXPECTED_SOCKET_PATH = "/var/lib/herdr/config/herdr/herdr.sock"
+EXPECTED_CONFIG_HOME = "/var/lib/herdr/config"
 CLIENT = "aginctus-herdr"
 WORKLOAD = "aginctus-dev"
 
@@ -62,10 +63,11 @@ def main():
     rc, output = run_remote(WORKLOAD, ["sshd", "-T"])
     sshd = {key.lower(): value for line in output.splitlines() if " " in line
             for key, value in [line.split(" ", 1)]}
+    sshd_setenv = shlex.split(sshd.get("setenv", ""))
     results.append(expect(rc == 0 and
-                          "HERDR_SOCKET_PATH=" + EXPECTED_SOCKET_PATH
-                          in shlex.split(sshd.get("setenv", "")),
-                          "workload sshd socket environment"))
+                          "HERDR_SOCKET_PATH=" + EXPECTED_SOCKET_PATH in sshd_setenv
+                          and "XDG_CONFIG_HOME=" + EXPECTED_CONFIG_HOME in sshd_setenv,
+                          "workload sshd explicit-session socket environment"))
     results.append(expect(rc == 0 and all(
         sshd.get(key) == value for key, value in {
             "passwordauthentication": "no", "kbdinteractiveauthentication": "no",
@@ -111,6 +113,11 @@ def main():
         print("BLOCKED: managed machine registration required; no reconciliation attempted",
               file=sys.stderr)
         return 1
+
+    rc, output = run_remote(CLIENT, [
+        "ssh", "-o", "BatchMode=yes", WORKLOAD, "printenv", "XDG_CONFIG_HOME"])
+    results.append(expect(rc == 0 and output.strip() == EXPECTED_CONFIG_HOME,
+                          "managed SSH delivers Herdr explicit-session config directory"))
 
     rc, output = run_remote(CLIENT, ["herdr", "machine", "status", WORKLOAD, "--json"])
     status = parse_json(output)
