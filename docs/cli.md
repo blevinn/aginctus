@@ -40,36 +40,40 @@ Unavailable/denied daemon state fails closed without printing raw
 external diagnostics.
 
 The existing no-`--project` status and unflagged start/stop/apply/remove
-operations retain v0.1 behavior. The separate confirmed start below is the
-only opt-in scoped workload mutation; it does not migrate the pilot or
-enable project-scoped orchestration.
+operations retain v0.1 behavior. The separately confirmed start/stop
+transitions below are the only opt-in scoped workload mutations; they do not
+migrate the pilot or enable project-scoped orchestration.
 
-## Start one existing scoped workload (explicit mutation)
+## Transition one existing scoped workload (explicit mutation)
 
 On an **approved disposable local Incus environment only**, after verifying
-the workload is an Aginctus-owned, stopped instance:
+the workload's ownership and current state:
 
 ```sh
 aginctus workload status --project aginctus dev
 aginctus workload start --project aginctus dev --confirm-start
+aginctus workload stop --project aginctus dev --confirm-stop
 ```
 
-Unlike the status command, this **starts a guest** and can run its workload.
-The explicit project must match effective `incus.project`; no default or
-ambient remote fallback is permitted. It will not create an absent instance,
-start all configured workloads, stop another guest, reconfigure volumes or
-profiles, or run top-level `apply`. A running owned instance is a no-op.
+Unlike the status command, **start boots a guest and can run its workload;
+stop shuts down a running guest and can interrupt its work**. Both require
+the explicit project matching effective `incus.project`, a single configured
+workload ID, and their own exact confirmation flag. Neither falls back to
+an ambient remote or the default project, creates or removes an instance,
+starts/stops all workloads, changes its volumes/profiles, or runs top-level
+`apply`. Start requires a verified stopped instance; stop requires a verified
+running instance. An already-completed transition is an idempotent no-op.
 
-The start requires exact local project policy and workload ownership
-markers, and checks that **all four known Aginctus lifecycle units** are
-absent in both the host system manager and the invoking user's manager.
-Installed, active, failed, inaccessible or unknown unit state blocks the
-operation. It then repeats controller, project and instance-state checks
-immediately before running one `incus --force-local --project NAME start`
-request. The same cooperative project lease used by scoped image imports
-protects this command against participating importers. A failed post-start
-inventory never reports success; it requires manual inspection rather than
-an automatic rollback that could stop a newly running guest.
+Both transitions require exact local project policy and workload ownership
+markers, and check that **all four known Aginctus lifecycle units** are absent
+in both the host system manager and the invoking user's manager. Installed,
+active, failed, inaccessible or unknown unit state blocks the operation. The
+command repeats controller, project and instance-state checks immediately
+before exactly one `incus --force-local --project NAME start|stop INSTANCE`
+request. Both use the same cooperative project lease as scoped image imports.
+A failed post-transition inventory never reports success; the operator must
+inspect the guest instead of relying on automatic rollback (which could
+restart a deliberately stopped workload or stop a newly running one).
 
 **Security limit:** systemd inspection cannot find every other user's
 manager, renamed controllers or manual Incus writers. The cooperative lease
