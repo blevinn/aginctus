@@ -118,6 +118,38 @@ Incus environment during validation, not on the v0.1 pilot. Keep
 unchanged until separate owner arbitration and atomic update/rollback
 work is complete.
 
+## Proposed scoped image replacement (read-only)
+
+```sh
+aginctus images replace-plan --project aginctus --owner system my-image /path/to/nix-image
+```
+
+This command **does not replace an image or authorize doing so**. It
+requires the declared, exactly owned local Incus project; reads image
+metadata in that project; fingerprints the proposed Nix image artifacts;
+and checks that the current alias has an exclusive, complete image
+owner **claim**. Existing image content under any other alias cannot
+be adopted as a replacement target.
+
+For a changed image, it also surveys the four known image/reconciler
+systemd units in the **system manager and current user's manager**.
+Installed/active units under the other owner block the plan; missing
+or unreadable manager state is also a blocker. These checks cannot
+see all users, manually invoked Incus commands, or a competing writer
+that starts afterward. Consequently, **every JSON report contains
+`"writeAuthorized": false`**, including a
+`candidate-requires-authorization` result. Only an exact matching,
+claimed image returns `up-to-date`. For an eligible candidate, the
+command exits successfully as a *read-only plan*, not as an approval
+to run a replacement.
+
+A replacement cannot become active until separately designed host
+and lifecycle authority, concurrency control, mutation-time project
+and alias rechecks, and project-scoped rollback have passed review
+and disposable Incus acceptance. The existing v0.1 `images update`
+and new create-only image commands remain unchanged. Do not use
+this plan's JSON as a machine authorization token.
+
 ## Commands that change state
 
 | Surface | Side effect or prerequisite |

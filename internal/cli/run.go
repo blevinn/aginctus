@@ -1181,6 +1181,7 @@ Commands:
   images import --project NAME ALIAS PATH --confirm-create  Create a new alias only in a verified owned local project (mutation)
   images owner-audit --project NAME --owner system|user ALIAS  Inspect image ownership claim (read-only; NOT write authorization)
   images import-owned --project NAME --owner system|user ALIAS PATH --confirm-create  Create new image with claimed owner (mutation)
+  images replace-plan --project NAME --owner system|user ALIAS PATH  Inspect candidate image replacement (read-only; never authorization)
   images update NAME PATH   Import an image from a Nix result directory (mutation)
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
