@@ -191,6 +191,40 @@ func TestScopedImageImportLeaseContentionFailsBeforeIncus(t *testing.T) {
 	}
 }
 
+func TestScopedImageWriterLeaseReleasedOnInspectionFailure(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("abstract Unix sockets require Linux")
+	}
+	cfg, err := (&config.Loader{Environment: nil}).Load(config.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope, _ := cfg.IncusProjectScope()
+	previousProjects := inspectLocalProjects
+	t.Cleanup(func() { inspectLocalProjects = previousProjects })
+	inspectLocalProjects = func(context.Context) ([]byte, error) {
+		if release, err := acquireScopedImageMutationLease(scope); err == nil {
+			release()
+			t.Fatal("project inspection did not hold the lease")
+		}
+		return []byte("[]"), nil
+	}
+	for _, args := range [][]string{
+		{"import", "--project", scope.Name, "test-lease", "/nonexistent", "--confirm-create"},
+		{"import-owned", "--project", scope.Name, "--owner", "system", "test-lease", "/nonexistent", "--confirm-create"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if got := runConfiguredImages(context.Background(), args, &stdout, &stderr, cfg); got != 1 || stdout.Len() != 0 {
+			t.Fatalf("expected fail-closed project rejection, got %d: %q", got, stdout.String())
+		}
+		release, err := acquireScopedImageMutationLease(scope)
+		if err != nil {
+			t.Fatalf("failed import retained project lease: %v", err)
+		}
+		release()
+	}
+}
+
 func TestScopedImageWriterLeaseHeldThroughPostcondition(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("abstract Unix sockets require Linux")
