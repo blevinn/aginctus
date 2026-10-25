@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -95,14 +94,14 @@ func TestScopedOwnedImportSafetyAndPostconditions(t *testing.T) {
 	wrongFingerprint := ownedImageFixture(strings.Repeat("c", 64), []string{"my-image"}, claim)
 
 	tests := []struct {
-		name            string
-		projects        []string
-		inventories     [][]byte
-		importError     error
-		wantCode        int
-		wantWrites      int
+		name             string
+		projects         []string
+		inventories      [][]byte
+		importError      error
+		wantCode         int
+		wantWrites       int
 		wantProjectReads int
-		wantImageReads  int
+		wantImageReads   int
 	}{
 		{name: "creates and verifies", projects: []string{owned, owned, owned}, inventories: [][]byte{unrelated, unrelated, verified}, wantProjectReads: 3, wantImageReads: 3, wantWrites: 1},
 		{name: "foreign project", projects: []string{foreign}, wantCode: 1, wantProjectReads: 1},
@@ -214,5 +213,4 @@ func TestScopedOwnedImportCLIRejectsWrongProjectWithoutIncus(t *testing.T) {
 			t.Fatalf("invalid input %q: code=%d stdout=%q stderr=%q", args, code, out.String(), errOut.String())
 		}
 	}
-	_ = fmt.Sprintf
 }
