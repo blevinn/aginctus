@@ -78,7 +78,7 @@ func TestOperatorPackageAuditPair(t *testing.T) {
 		if code != wantCode || !strings.Contains(out.String()+errOut.String(), want) {
 			t.Fatalf("owner=%s code=%d stdout=%q stderr=%q", owner, code, out.String(), errOut.String())
 		}
-		all := out.String()+errOut.String()
+		all := out.String() + errOut.String()
 		if strings.Contains(all, fixturePackageA) || strings.Contains(all, fixturePackageB) ||
 			strings.Contains(all, dir) || strings.Contains(all, "secrets.json") {
 			t.Fatalf("audit printed raw manifest contents or paths: %q", all)

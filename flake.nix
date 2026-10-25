@@ -363,9 +363,10 @@
           # explicitly selected; not a run-nixos-vm QEMU batch launcher.
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          testenv-incus-vm-image = (import ./nix/testenv/incus-vm-image.nix {
-            inherit self nixpkgs system;
-          }).image;
+          testenv-incus-vm-image =
+            (import ./nix/testenv/incus-vm-image.nix {
+              inherit self nixpkgs system;
+            }).image;
         }
         # Keep VM integration tests explicitly buildable, outside the default
         # flake checks, so routine validation does not execute heavyweight VMs.
@@ -417,23 +418,27 @@
         };
       });
 
-      checks = forAllSystems (system: {
-        nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
-        home-manager-module = import ./nix/home-manager-module-check.nix { inherit self nixpkgs system; };
-        gateway-config-parity = import ./nix/gateway-config-parity-check.nix {
-          inherit self nixpkgs system;
-        };
-        opencode-workload-socket-alignment = import ./nix/opencode-workload-check.nix {
-          inherit self nixpkgs system;
-        };
-      } // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-        testenv-incus-vm-image-config = import ./nix/testenv/incus-vm-image-check.nix {
-          inherit self nixpkgs system;
-        };
-        testenv-recovery-worker-policy = import ./nix/testenv/recovery-worker-check.nix {
-          inherit self nixpkgs system;
-        };
-      });
+      checks = forAllSystems (
+        system:
+        {
+          nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
+          home-manager-module = import ./nix/home-manager-module-check.nix { inherit self nixpkgs system; };
+          gateway-config-parity = import ./nix/gateway-config-parity-check.nix {
+            inherit self nixpkgs system;
+          };
+          opencode-workload-socket-alignment = import ./nix/opencode-workload-check.nix {
+            inherit self nixpkgs system;
+          };
+        }
+        // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          testenv-incus-vm-image-config = import ./nix/testenv/incus-vm-image-check.nix {
+            inherit self nixpkgs system;
+          };
+          testenv-recovery-worker-policy = import ./nix/testenv/recovery-worker-check.nix {
+            inherit self nixpkgs system;
+          };
+        }
+      );
 
       devShells = forAllSystems (
         system:
