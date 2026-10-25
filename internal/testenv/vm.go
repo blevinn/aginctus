@@ -25,6 +25,7 @@ var vmScenarios = []Scenario{
 	{Name: "runtime-lifecycle", Target: "vm-harness-runtime-lifecycle", Description: "Real Herdr/OpenCode provisioning and reconciliation"},
 	{Name: "gateway-topology", Target: "vm-harness-gateway-topology", Description: "Real guest-local LiteLLM/Postgres and Herdr/OpenCode topology (OCI pulls required; no inference)"},
 	{Name: "synthetic-gateway", Target: "vm-harness-synthetic-gateway", Description: "Real guest LiteLLM/Postgres with scoped-key synthetic Responses upstream (no agent tool proof)"},
+	{Name: "synthetic-tool-gateway", Target: "vm-harness-synthetic-tool-gateway", Description: "Four fake-result Responses tool turns through real LiteLLM (no tool execution)"},
 	{Name: "opencode-tool-loopback", Target: "vm-harness-opencode-tool-loopback", Description: "Guest-isolated pinned OpenCode executing scripted read/edit/Go test tools (no Herdr/gateway)"},
 	{Name: "ownership-recovery", Target: "vm-harness-ownership-recovery", Description: "Foreign resource denial and guest daemon recovery"},
 }
