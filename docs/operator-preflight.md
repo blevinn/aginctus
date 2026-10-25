@@ -37,3 +37,59 @@ routine troubleshooting step.
 For full Home Manager operator setup see [Home Manager](home-manager.md).
 #437 also tracks future project-aware authorization integration, read-only
 identity classification beyond visibility, and consumer unit guards.
+
+
+## Dedicated project policy planning (#200)
+
+To inspect the proposed v0.2 single-deployment project policy without
+creating or changing Incus objects, run:
+
+```sh
+aginctus operator project-plan --project aginctus
+```
+
+`operator project-plan` accepts only an explicit valid **non-`default`**
+project identity. It issues exactly `incus project list --format json`
+with a bounded timeout and produces one machine-readable JSON object:
+
+```json
+{
+  "project": "aginctus",
+  "status": "compatible",
+  "desiredConfig": {
+    "user.aginctus.managed": "true",
+    "user.aginctus.resource": "deployment-project",
+    "user.aginctus.deployment": "aginctus",
+    "features.images": "true",
+    "features.profiles": "true",
+    "features.storage.volumes": "true",
+    "features.networks": "false"
+  }
+}
+```
+
+The status may be `compatible`, `foreign`, `policy-drift`, or
+`not-visible`. Only `compatible` exits successfully. An existing
+same-name project whose ownership markers do not match is `foreign`
+even when its feature policy matches. Missing required feature flags or
+changed values are `policy-drift`. Because project enumeration can be
+restricted, `not-visible` **never proves a project is absent** or safe
+to create. Enumeration failures, malformed responses, and duplicate
+identities fail without claiming a valid plan.
+
+This policy selects project-local images, profiles and custom volumes;
+it intentionally keeps `features.networks=false`: the existing
+Btrfs/Incus-managed Linux bridge stays a **host-level** resource and is
+not adopted by an operator-owned project. The storage pool itself
+remains host-managed; project-local volume names do not imply isolated
+pool allocation. Do not assume an inherited `default` profile or
+introduce OVN automatically.
+
+**Deployment compatibility:** This first slice is a read-only planning
+API, **not** the active v0.2 project selector. Existing v0.1 CLI
+apply/remove/status, guest instances and the LiteLLM Compose project
+retain their current behavior. #200 still needs carefully gated project
+provisioning and explicit project identity threaded through every API
+and subprocess. #201 co-locates the gateway and workloads and #202
+owns verified migration with backups and rollback. Do not run these
+operations on the live pilot merely because this diagnostic passes.

@@ -36,6 +36,39 @@ Use a separately provisioned pilot **only with read-only permissions** and the r
 
 A private `http://<IPv4>:4000/v1` syntax check, or `/health/liveliness` returning HTTP 200, does not prove that the LiteLLM address is owned by the managed gateway, that an OpenCode request is authorized, or that Responses/provider inference succeeded. A failed preflight is a hold, not permission to fix the host firewall, inspect secrets or reissue credentials.
 
+### Concise, machine-readable stage 2 preflights
+
+The following are **operator-initiated**, read-only alternatives to the
+individual stage 2 preflight scripts. They use the same underlying checks,
+discard subprocess output by default, and report exactly one pass/fail/error
+result in the same general envelope as the hermetic and VM reporters:
+
+```sh
+nix develop -c just check preflight-report pilot-topology
+nix develop -c just check preflight-report opencode-runtime
+nix develop -c just check preflight-report-json pilot-topology
+nix develop -c just check preflight-report-json opencode-runtime
+```
+
+These commands **contact the configured pilot's Incus daemon** to inspect
+read-only resource and guest metadata. Use them only after explicitly
+selecting the target pilot and reviewing the access available to
+`aginctus` and `incus`. They are **not** run by `just check ci`,
+a bare `just check`, or any VM test. The runtime preflight uses
+`AGINCTUS_ACCEPTANCE_WORKLOAD` if supplied (otherwise `aginctus-dev`),
+and records only a syntactically valid workload identifier. Inherited
+integration, live and Herdr smoke opt-ins are disabled for both checks.
+
+JSON contains a `pilot_preflight` profile, selected check ID, observed
+exit status, bounded duration and explicit
+`upstream_inference: not_verified`, `gateway_authorization: not_verified`,
+and `egress_policy: not_verified` statements. Launcher/timeout failures
+become `error`; failed checks exit nonzero. Neither result establishes
+pilot gateway reachability, model authorization, actual upstream inference,
+live-provider acceptance or host/network isolation. No logs, secrets,
+endpoint values or exception messages are copied into shared JSON; to diagnose
+a failure, deliberately rerun the native script on an authorized pilot.
+
 ## 3. Opt-in real Herdr lifecycle, not yet the full agent task
 
 Read the [owned Herdr lifecycle runbook](acceptance-opencode-herdr.md) and validate the **saved machine profile within the managed Herdr client**, run-owned guest directory, guest staging helper and scoped cleanup before invoking its smoke. The baseline `AGINCTUS_ACCEPTANCE_HERDR_SMOKE=I_UNDERSTAND` creates, inspects and closes two owned remote workspaces. It does not start an agent or infer.

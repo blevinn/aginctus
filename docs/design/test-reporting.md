@@ -135,15 +135,45 @@ acceptance or cryptographic approval/attestation still require separate
 work. Only the known VM harness synthetic evidence format is supported;
 there is no generic free-form log importer.
 
+## Explicit read-only pilot preflight presentation (phase D2)
+
+An operator can intentionally invoke either of the existing stage-2
+read-only pilot scripts with `just check preflight-report <check>` or
+`just check preflight-report-json <check>`. The explicit check selector
+must be `pilot-topology` or `opencode-runtime`; no custom executable
+or free-form shell command is accepted. There is no default selector.
+The commands never run through `just check ci`, start a VM, run
+Herdr agents, authorize a live response or trigger a billable provider.
+
+Unlike the VM evidence viewer, this command runs the **chosen preflight**
+on the caller's explicitly selected and accessible pilot. It may read
+Incus network/instance metadata or guest key-file **metadata**, not key
+contents, using existing read-only scripts. It suppresses child output,
+clears inherited live/Incus/Herdr smoke opt-ins, imposes a timeout and
+never includes raw errors in the report. A missing launcher, timeout, or
+invalid runtime workload identifier is an `error`, not a pass.
+
+The report contains the conceptual v1 `status`, `summary`, and
+`results` shape with `profile: pilot_preflight` and
+`verification_tier: read_only_pilot_preflight`. It records only bounded
+local elapsed time, the known check name, the validated target name (or
+`configured_pilot`) and the child exit code. `upstream_inference`,
+`gateway_authorization` and `egress_policy` always remain
+`not_verified`, irrespective of the preflight result. These reports
+are **not** independent gateway/egress evidence and are not release
+acceptance attestations. No unapproved live acceptance format is
+imported or inferred.
+
 ## Migration and extension
 
 - Extend bounded structured failure detail to shell/Nix only when a trustworthy
   structured event source exists, without scraping arbitrary diagnostic text.
 - Represent `skipped` / `not-run` when future selectors or early aborts are
   introduced. Never count unexecuted checks as passes.
-- Map existing VM harness synthetic `result.json` records and explicit live
-  acceptance results into a common **presentation** model without changing their
-  independently secured evidence stores, or quietly invoking those tests.
+- Keep operator-authorized live acceptance and upstream inference evidence
+  outside the routine reporters. Consider a separately secured, versioned
+  receipt format only after the live gate defines trustworthy provenance,
+  sign-off and credential-redaction requirements.
 - Evolve `schema_version` for incompatible changes, and use stable suite IDs.
 
 VM evidence semantics remain unchanged. Future schema adapters must not

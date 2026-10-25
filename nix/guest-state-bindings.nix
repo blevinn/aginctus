@@ -17,7 +17,7 @@ let
     assert validSegment b.subdir;
     assert lib.hasPrefix "/" b.target && b.target != "/" && !(lib.hasSuffix "/" b.target);
     true;
-  mountUnit = target: (lib.removePrefix "/" (lib.replaceStrings [ "/" ] [ "-" ] target)) + ".mount";
+  mountUnit = target: (lib.replaceStrings [ "/" ] [ "-" ] (lib.removePrefix "/" target)) + ".mount";
   mounts = map (
     b:
     assert validBinding b;
@@ -29,6 +29,11 @@ let
       wantedBy = [ "multi-user.target" ];
       requires = [ "aginctus-state-prepare.service" ];
       after = [ "aginctus-state-prepare.service" ];
+      # Preparation is a normal service, so these are late bind mounts rather
+      # than local-fs prerequisites (which would cycle through basic.target).
+      unitConfig.DefaultDependencies = false;
+      before = [ "umount.target" ];
+      conflicts = [ "umount.target" ];
     }
   ) bindings;
   prepared = lib.concatMapStringsSep "\n" (b: ''
