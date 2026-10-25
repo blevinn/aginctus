@@ -5,6 +5,7 @@ launch the test-only upstream on the guest's private egress bridge, register
 a synthetic-only model with the real LiteLLM and require a scoped virtual key.
 All admin/provider tokens stay in process memory; stdout has fixed safe labels.
 """
+
 from __future__ import annotations
 
 import ipaddress
@@ -40,8 +41,9 @@ OPENER.add_handler(NoRedirect())
 
 
 def incus(*argv):
-    result = subprocess.run(["incus", *argv], check=False, capture_output=True,
-                            timeout=20, text=True)
+    result = subprocess.run(
+        ["incus", *argv], check=False, capture_output=True, timeout=20, text=True
+    )
     if result.returncode:
         raise Failure("guest Incus topology unavailable")
     return result.stdout.strip()
@@ -52,14 +54,18 @@ def network_ipv4(name):
         address = ipaddress.IPv4Interface(incus("network", "get", name, "ipv4.address"))
     except (ValueError, ipaddress.AddressValueError) as exc:
         raise Failure("guest Incus network has invalid IPv4") from exc
-    if not address.ip.is_private or address.ip.is_loopback:
+    if not any(
+        address.network.subnet_of(ipaddress.IPv4Network(n))
+        for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+    ):
         raise Failure("guest Incus network is not private")
     return address
 
 
 def lite_ipv4(management):
-    state = json.loads(incus("query", "--project", "aginctus-gateway",
-                            "/1.0/instances/litellm-1/state"))
+    state = json.loads(
+        incus("query", "/1.0/instances/litellm-1/state?project=aginctus-gateway")
+    )
     networks = state.get("network")
     if not isinstance(networks, dict):
         raise Failure("real LiteLLM instance has no observed guest NICs")
@@ -85,8 +91,12 @@ def request(base, path, token=None, body=None):
         headers["Authorization"] = "Bearer " + token
     if body is not None:
         headers["Content-Type"] = "application/json"
-    req = Request(base + path, data=json.dumps(body).encode() if body is not None else None,
-                  headers=headers, method="POST" if body is not None else "GET")
+    req = Request(
+        base + path,
+        data=json.dumps(body).encode() if body is not None else None,
+        headers=headers,
+        method="POST" if body is not None else "GET",
+    )
     try:
         with OPENER.open(req, timeout=12) as response:
             raw = response.read(MAX_RESULT + 1)
@@ -134,21 +144,25 @@ def verify_stream(raw, nonce):
             continue
         events = [x[6:].strip() for x in block.splitlines() if x.startswith("event:")]
         fields = [x[5:].strip() for x in block.splitlines() if x.startswith("data:")]
-        if len(events) != 1 or len(fields) != 1 or done or completed:
+        if len(events) > 1 or len(fields) != 1 or done or completed:
             raise Failure("synthetic Responses SSE framing invalid")
         try:
             body = json.loads(fields[0])
         except ValueError:
             raise Failure("synthetic Responses JSON invalid") from None
-        if not isinstance(body, dict) or body.get("type") != events[0]:
+        if not isinstance(body, dict) or not isinstance(body.get("type"), str):
+            raise Failure("synthetic Responses event missing type")
+        event = body["type"]
+        if events and event != events[0]:
             raise Failure("synthetic Responses event mismatch")
-        if events[0] == "response.completed":
+        if event == "error" or event in ("response.failed", "response.incomplete"):
+            raise Failure("synthetic Responses reported failure")
+        if event == "response.completed":
             if body.get("response", {}).get("status") != "completed":
                 raise Failure("synthetic Responses incomplete")
             completed = True
-        if "synthetic-confirmed:" + nonce in fields[0]:
-            witnessed = True
-    if not completed or not done or not witnessed:
+            witnessed = "synthetic-confirmed:" + nonce in fields[0]
+    if not completed or not witnessed:
         raise Failure("synthetic Responses completion/nonce not observed")
 
 
@@ -161,15 +175,28 @@ def run(server_script):
         raise Failure("synthetic egress and management bridge overlap")
 
     # All data and identities in this test are guest-only and synthetic.
-    subprocess.run([
-        "systemd-run", "--quiet", "--unit=aginctus-vm-synthetic-upstream",
-        "--property=NoNewPrivileges=yes", "--property=PrivateTmp=yes",
-        "--property=ProtectSystem=strict", "--property=ProtectHome=yes",
-        "--property=IPAddressDeny=any",
-        "--property=IPAddressAllow=" + str(egress.network),
-        sys.executable, str(server_script), "--bind", str(egress.ip),
-        "--port", "9080",
-    ], check=True, capture_output=True, timeout=15)
+    subprocess.run(
+        [
+            "systemd-run",
+            "--quiet",
+            "--unit=aginctus-vm-synthetic-upstream",
+            "--property=NoNewPrivileges=yes",
+            "--property=PrivateTmp=yes",
+            "--property=ProtectSystem=strict",
+            "--property=ProtectHome=yes",
+            "--property=IPAddressDeny=any",
+            "--property=IPAddressAllow=" + str(egress.network),
+            sys.executable,
+            str(server_script),
+            "--bind",
+            str(egress.ip),
+            "--port",
+            "9080",
+        ],
+        check=True,
+        capture_output=True,
+        timeout=15,
+    )
     upstream = "http://" + str(egress.ip) + ":9080"
     for _ in range(30):
         try:
@@ -191,15 +218,20 @@ def run(server_script):
     base = "http://" + lite_ipv4(management) + ":4000"
     if ALIAS in model_ids(request(base, "/v1/models", master)):
         raise Failure("synthetic alias already present; refuse adoption")
-    request(base, "/model/new", master, {
-        "model_name": ALIAS,
-        "litellm_params": {
-            "model": "openai/synthetic-test",
-            "api_base": upstream + "/v1",
-            "api_key": TOKEN,
+    request(
+        base,
+        "/model/new",
+        master,
+        {
+            "model_name": ALIAS,
+            "litellm_params": {
+                "model": "openai/synthetic-test",
+                "api_base": upstream + "/v1",
+                "api_key": TOKEN,
+            },
+            "model_info": {"mode": "responses"},
         },
-        "model_info": {"mode": "responses"},
-    })
+    )
     for _ in range(30):
         if ALIAS in model_ids(request(base, "/v1/models", master)):
             break
@@ -207,9 +239,19 @@ def run(server_script):
     else:
         raise Failure("synthetic alias registration not confirmed")
 
-    token_doc = json.loads(request(base, "/key/generate", master, {
-        "models": [ALIAS], "duration": "15m", "max_budget": 1, "rpm_limit": 10,
-    }))
+    token_doc = json.loads(
+        request(
+            base,
+            "/key/generate",
+            master,
+            {
+                "models": [ALIAS],
+                "duration": "15m",
+                "max_budget": 1,
+                "rpm_limit": 10,
+            },
+        )
+    )
     scoped = token_doc.get("key")
     if not isinstance(scoped, str) or not scoped or scoped == master:
         raise Failure("scoped synthetic workload key was not issued")
@@ -228,11 +270,16 @@ def run(server_script):
             raise Failure("scoped workload cannot see synthetic alias")
 
         nonce = secrets.token_hex(12)
-        raw = request(base, "/v1/responses", scoped, {
-            "model": ALIAS,
-            "input": "Return this deterministic fixture marker: nonce=" + nonce,
-            "stream": True,
-        })
+        raw = request(
+            base,
+            "/v1/responses",
+            scoped,
+            {
+                "model": ALIAS,
+                "input": "Return this deterministic fixture marker: nonce=" + nonce,
+                "stream": True,
+            },
+        )
         verify_stream(raw, nonce)
         observed = json.loads(request(upstream, "/_observed/" + nonce, TOKEN))
         if observed.get("count") != 1:
@@ -249,7 +296,9 @@ def run(server_script):
             raise
     else:
         raise Failure("revoked synthetic workload token still accepted")
-    print("PASS: real LiteLLM scoped-key synthetic Responses and revocation (no live provider)")
+    print(
+        "PASS: real LiteLLM scoped-key synthetic Responses and revocation (no live provider)"
+    )
     print("NOTE: Herdr/OpenCode tool execution, gateway audit and cleanup not verified")
 
 
@@ -258,8 +307,13 @@ def main():
         if len(sys.argv) != 2:
             raise Failure("fixture invocation requires one pinned script")
         run(Path(sys.argv[1]))
-    except (Failure, ValueError, json.JSONDecodeError, subprocess.SubprocessError):
-        print("FAIL: synthetic gateway acceptance (details suppressed)", file=sys.stderr)
+    except Failure as exc:
+        print("FAIL: synthetic gateway acceptance: " + str(exc), file=sys.stderr)
+        return 1
+    except (ValueError, json.JSONDecodeError, subprocess.SubprocessError):
+        print(
+            "FAIL: synthetic gateway acceptance (details suppressed)", file=sys.stderr
+        )
         return 1
     return 0
 

@@ -1,4 +1,5 @@
 """Pure smoke contract regression tests: no Incus daemon or LiteLLM."""
+
 import json
 import unittest
 from unittest.mock import patch
@@ -16,27 +17,45 @@ class SyntheticGatewayProbeTests(unittest.TestCase):
         with patch.object(probe, "incus", return_value="10.234.1.1/24"):
             mgmt = probe.network_ipv4("aginctus-mgmt")
         self.assertEqual(str(mgmt.ip), "10.234.1.1")
-        with patch.object(probe, "incus", return_value="0.0.0.0/0"):
-            with self.assertRaises(probe.Failure):
-                probe.network_ipv4("aginctus-egress")
-        info = {"network": {
-            "eth0": {"addresses": [
-                {"family": "inet", "address": "10.234.1.5"},
-                {"family": "inet6", "address": "fe80::1"},
-            ]},
-            "lo": {"addresses": [{"family": "inet", "address": "127.0.0.1"}]},
-        }}
-        with patch.object(probe, "incus", return_value=json.dumps(info)):
+        with (
+            patch.object(probe, "incus", return_value="0.0.0.0/0"),
+            self.assertRaises(probe.Failure),
+        ):
+            probe.network_ipv4("aginctus-egress")
+        info = {
+            "network": {
+                "eth0": {
+                    "addresses": [
+                        {"family": "inet", "address": "10.234.1.5"},
+                        {"family": "inet6", "address": "fe80::1"},
+                    ]
+                },
+                "lo": {"addresses": [{"family": "inet", "address": "127.0.0.1"}]},
+            }
+        }
+        with patch.object(probe, "incus", return_value=json.dumps(info)) as incus:
             self.assertEqual(probe.lite_ipv4(mgmt), "10.234.1.5")
+            incus.assert_called_once_with(
+                "query", "/1.0/instances/litellm-1/state?project=aginctus-gateway"
+            )
         info["network"]["eth1"] = {
-            "addresses": [{"family": "inet", "address": "10.234.1.10"}]}
-        with patch.object(probe, "incus", return_value=json.dumps(info)):
-            with self.assertRaises(probe.Failure):
-                probe.lite_ipv4(mgmt)
+            "addresses": [{"family": "inet", "address": "10.234.1.10"}]
+        }
+        with (
+            patch.object(probe, "incus", return_value=json.dumps(info)),
+            self.assertRaises(probe.Failure),
+        ):
+            probe.lite_ipv4(mgmt)
 
     def test_stream_requires_real_terminal_and_unique_nonce(self):
         nonce = "vmfixture_123456789abc"
         probe.verify_stream(upstream.sse(nonce), nonce)
+        data_only = b"\n".join(
+            line
+            for line in upstream.sse(nonce).split(b"\n")
+            if not line.startswith(b"event:") and line != b"data: [DONE]"
+        )
+        probe.verify_stream(data_only, nonce)
         for broken in (
             upstream.sse(nonce).replace(b"completed", b"incomplete"),
             upstream.sse(nonce).replace(b"data: [DONE]", b"data: []"),

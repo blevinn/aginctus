@@ -70,6 +70,12 @@ class RunnerTests(unittest.TestCase):
             "INCUS_SOCKET", runner.clean_environment({"INCUS_SOCKET": "pilot"})
         )
 
+    def test_synthetic_gateway_uses_networked_batch_driver(self):
+        self.assertEqual(
+            runner.build_arguments("synthetic-gateway", False)[-1],
+            ".#vm-harness-synthetic-gateway.driver",
+        )
+
     def test_ownership_recovery_is_an_explicit_target(self):
         self.assertEqual(
             runner.build_arguments("ownership-recovery", False)[-1],
