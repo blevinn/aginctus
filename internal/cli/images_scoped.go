@@ -24,14 +24,19 @@ func scopedImageListArgs(scope incusscope.ProjectScope) []string {
 }
 
 func parseScopedImageListArgs(args []string) (string, error) {
+	var name string
 	switch {
 	case len(args) == 3 && args[1] == "--project":
-		return args[2], nil
+		name = args[2]
 	case len(args) == 2 && strings.HasPrefix(args[1], "--project="):
-		return strings.TrimPrefix(args[1], "--project="), nil
+		name = strings.TrimPrefix(args[1], "--project=")
 	default:
 		return "", fmt.Errorf("explicit --project NAME is required")
 	}
+	if _, err := incusscope.NewProjectScope(name); err != nil {
+		return "", err
+	}
+	return name, nil
 }
 
 // runConfiguredImages leaves the v0.1 ambient-project commands unchanged.
