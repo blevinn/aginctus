@@ -104,7 +104,14 @@ def request(base, path, token=None, body=None):
 def model_ids(raw):
     try:
         body = json.loads(raw)
-        return {row["id"] for row in body["data"]}
+        if not isinstance(body, dict) or not isinstance(body.get("data"), list):
+            raise ValueError("invalid model listing")
+        result = set()
+        for row in body["data"]:
+            if not isinstance(row, dict) or not isinstance(row.get("id"), str):
+                raise ValueError("invalid model entry")
+            result.add(row["id"])
+        return result
     except (KeyError, TypeError, ValueError):
         raise Failure("synthetic gateway models listing invalid") from None
 
