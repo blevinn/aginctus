@@ -514,8 +514,11 @@ zero additional upstream calls. Export and run from the repository root:
 mkdir -p /tmp/opencode/456-bundle
 nix --quiet develop -c env AGINCTUS_EXPORT_GO_BUNDLE=/tmp/opencode/456-bundle \
   go test ./scripts/gateway -count=1 -v
+policy=$(mktemp)
+trap 'rm -f "$policy"' EXIT
+printf '%s\n' '{"default":[{"type":"reject"}],"transports":{"docker":{"ghcr.io/berriai/litellm:v1.103.0":[{"type":"insecureAcceptAnything"}]}}}' >"$policy"
 nix --quiet shell nixpkgs#podman -c podman run \
-  --signature-policy "$PWD/deploy/litellm-go/podman-probe-policy.json" \
+  --signature-policy "$policy" \
   --pull=never --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
   -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 -e PYTHONDONTWRITEBYTECODE=1 \
   --mount type=bind,src=/tmp/opencode/456-bundle,dst=/app/aginctus-go,readonly \
