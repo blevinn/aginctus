@@ -53,6 +53,42 @@ def record(base, state):
     with os.fdopen(fd, "w") as stream:
         json.dump(state, stream)
 
+def workspace_inventory(machine):
+    """Query the selected Herdr machine, rejecting ambiguous or malformed lists.
+
+    This is an independent *readback* of Herdr workspace state, not an
+    assertion supplied by the agent or acceptance phase exit status.
+    """
+    raw = invoke(machine, "workspace", "list")
+    if not isinstance(raw, str) or len(raw) > 65536:
+        raise RuntimeError("bounded Herdr workspace inventory required")
+    try:
+        envelope = json.loads(raw)
+    except ValueError:
+        raise RuntimeError("invalid Herdr workspace inventory") from None
+    result = envelope.get("result") if isinstance(envelope, dict) else None
+    if (
+        not isinstance(result, dict)
+        or result.get("type") != "workspace_list"
+        or not isinstance(result.get("workspaces"), list)
+    ):
+        raise RuntimeError("invalid Herdr workspace inventory")
+    inventory = {}
+    for workspace in result["workspaces"]:
+        if not isinstance(workspace, dict):
+            raise RuntimeError("invalid Herdr workspace entry")
+        wid = workspace.get("workspace_id")
+        label = workspace.get("label")
+        if (
+            not isinstance(wid, str) or not wid
+            or not isinstance(label, str)
+            or wid in inventory
+        ):
+            raise RuntimeError("ambiguous Herdr workspace inventory")
+        inventory[wid] = label
+    return inventory
+
+
 def phase(action, workspace, identity, prompt=None):
     base = owned(workspace, identity)
     machine = os.environ.get("AGINCTUS_ACCEPTANCE_HERDR_MACHINE", "")
@@ -98,7 +134,18 @@ def phase(action, workspace, identity, prompt=None):
         # Run close separately so a partial stop is still cleaned up.
         invoke(machine, "agent", "send-keys", state["pane_id"], "ctrl+c")
     elif action == "close":
-        invoke(machine, "workspace", "close", state["workspace_id"])
+        wid = state["workspace_id"]
+        # Positive control: do not close a stale/reused ID, an unrelated
+        # workspace, or anything absent from the independently read inventory.
+        before = workspace_inventory(machine)
+        if before.get(wid) != identity:
+            raise RuntimeError("owned Herdr workspace not confirmed before close")
+        invoke(machine, "workspace", "close", wid)
+        # A zero exit from 'close' alone is not evidence the remote workspace
+        # disappeared. Query the SAME saved machine again before acknowledging.
+        if wid in workspace_inventory(machine):
+            raise RuntimeError("owned Herdr workspace remains after close")
+        # Retain ownership metadata on any failure so the operator can inspect.
         state_path(base).unlink()
     else:
         raise RuntimeError("unsupported phase")
