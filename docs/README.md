@@ -105,6 +105,8 @@ currently supported configuration or a release acceptance claim.
 
 - [Incus testenv VM image](testenv-incus-vm-image.md) — opt-in NixOS VM
   artifact for a dedicated, isolated test worker; not agent-executable yet.
+- [Incus testenv recovery worker](testenv-worker.md) — opt-in dedicated
+  non-login worker unit, private signing credential, and independent TTL timer.
 - [Disposable NixOS VM harness](vm-harness.md) — experimental
   opt-in Aginctus/Incus VM tests and agent-debugging security limits.
 - [Start here: OpenCode acceptance decision path](acceptance-opencode.md) —
