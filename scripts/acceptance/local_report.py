@@ -55,6 +55,7 @@ def record(
     tests: str,
     stop: str,
     close: str,
+    local_workspace_removed: str = "not_run",
 ) -> Path:
     """Record bounded, fixed-schema results outside the agent's workspace.
 
@@ -67,7 +68,11 @@ def record(
         or mode not in ("mock", "live")
         or type(exit_code) is not int
         or not 0 <= exit_code <= 255
-        or any(value not in STATES for value in (fixture, tests, stop, close))
+        or any(
+            value not in STATES
+            for value in (fixture, tests, stop, close, local_workspace_removed)
+        )
+        or (exit_code == 0 and local_workspace_removed == "fail")
     ):
         raise ValueError("invalid runner observation")
     validate_root(output_root)
@@ -97,6 +102,8 @@ def record(
         "results": observations,
         # The exit status of stop/close is NOT proof that owned resources are gone.
         "cleanup_commands": {"stop": stop, "close": close},
+        # Host-side path disappearance is distinct from remote resource cleanup.
+        "local_workspace_removed": local_workspace_removed,
         "upstream_inference": "not_verified",
         "credential_egress": "not_verified",
         "cleanup": "not_verified",
@@ -146,12 +153,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--exit-code", type=int, required=True)
     for field in ("fixture", "tests", "stop", "close"):
         parser.add_argument(f"--{field}", choices=STATES, required=True)
+    parser.add_argument(
+        "--local-workspace-removed", choices=STATES, default="not_run"
+    )
     args = parser.parse_args(argv)
     try:
         result = record(
             args.output_root, run_id=args.run_id, mode=args.mode,
             exit_code=args.exit_code, fixture=args.fixture, tests=args.tests,
             stop=args.stop, close=args.close,
+            local_workspace_removed=args.local_workspace_removed,
         )
     except (OSError, ValueError, RuntimeError):
         # No untrusted path, exception, child output or environment values.

@@ -16,7 +16,8 @@
       "postgres": "docker.io/library/postgres:17-alpine"
     },
     "litellm": {
-      "forwardClientHeaders": false
+      "forwardClientHeaders": false,
+      "selectiveGoForwarding": false
     }
   },
   "incus": {

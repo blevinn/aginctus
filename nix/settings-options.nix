@@ -40,6 +40,16 @@ in
         default = "docker.io/library/postgres:17-alpine";
       };
     };
+    litellm.selectiveGoForwarding = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Install the callback-only bundle for the fixed OpenCode Go Responses
+        alias. Requires an immutable ghcr.io/berriai/litellm SHA-256 image
+        reference and no stock client-header forwarding. The callback rejects
+        any runtime other than LiteLLM 1.103.0 at import.
+      '';
+    };
     litellm.forwardClientHeaders = mkOption {
       type = types.either types.bool (types.listOf types.str);
       default = false;
