@@ -1031,6 +1031,9 @@ func runWorkload(
 	if len(args) > 1 && args[0] == "gateway" && args[1] == "provision" {
 		return runWorkloadGatewayProvision(ctx, args[2:], stdout, stderr, effective)
 	}
+	if len(args) > 1 && args[0] == "start" && (args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
+		return runScopedWorkloadStart(ctx, args[1:], stdout, stderr, effective)
+	}
 	if len(args) > 0 && args[0] == "status" {
 		if len(args) > 1 && (args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
 			return runScopedWorkloadStatus(ctx, args[1:], stdout, stderr, effective, false)
@@ -1161,6 +1164,7 @@ func printWorkloadUsage(w io.Writer) {
 	fmt.Fprintln(w, "       aginctus [global options] workload apply [name] [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] workload remove [name] [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] workload start [name]")
+	fmt.Fprintln(w, "       aginctus [global options] workload start --project NAME WORKLOAD-ID --confirm-start  (existing stopped instance only; mutates)")
 	fmt.Fprintln(w, "       aginctus [global options] workload stop [name]")
 	fmt.Fprintln(w, "       aginctus [global options] workload status [name]")
 	fmt.Fprintln(w, "       aginctus [global options] workload status --project NAME [name]  (read-only; verified local project)")
@@ -1193,6 +1197,7 @@ Commands:
   herdr client status --project NAME  Inspect verified owned local-project Herdr client (read-only)
   workload status --project NAME [name]  Inspect verified owned local-project workloads (read-only)
   workload ls --project NAME  List running owned local-project workloads (read-only)
+  workload start --project NAME WORKLOAD-ID --confirm-start  Start one verified stopped local-project workload (mutation)
   images import --project NAME ALIAS PATH --confirm-create  Create a new alias only in a verified owned local project (mutation)
   images owner-audit --project NAME --owner system|user ALIAS  Inspect image ownership claim (read-only; NOT write authorization)
   images import-owned --project NAME --owner system|user ALIAS PATH --confirm-create  Create new image with claimed owner (mutation)

@@ -39,11 +39,48 @@ listing emits no partial output if a later instance is foreign.
 Unavailable/denied daemon state fails closed without printing raw
 external diagnostics.
 
-The existing no-`--project` status and all start/stop/apply/remove
-operations retain v0.1 behavior. This does **not** activate new
-project-scoped instance writes or migrate the pilot; those require
-independent mutation-time project and instance verification, controlled
-cross-role reconciliation and real Incus acceptance.
+The existing no-`--project` status and unflagged start/stop/apply/remove
+operations retain v0.1 behavior. The separate confirmed start below is the
+only opt-in scoped workload mutation; it does not migrate the pilot or
+enable project-scoped orchestration.
+
+## Start one existing scoped workload (explicit mutation)
+
+On an **approved disposable local Incus environment only**, after verifying
+the workload is an Aginctus-owned, stopped instance:
+
+```sh
+aginctus workload status --project aginctus dev
+aginctus workload start --project aginctus dev --confirm-start
+```
+
+Unlike the status command, this **starts a guest** and can run its workload.
+The explicit project must match effective `incus.project`; no default or
+ambient remote fallback is permitted. It will not create an absent instance,
+start all configured workloads, stop another guest, reconfigure volumes or
+profiles, or run top-level `apply`. A running owned instance is a no-op.
+
+The start requires exact local project policy and workload ownership
+markers, and checks that **all four known Aginctus lifecycle units** are
+absent in both the host system manager and the invoking user's manager.
+Installed, active, failed, inaccessible or unknown unit state blocks the
+operation. It then repeats controller, project and instance-state checks
+immediately before running one `incus --force-local --project NAME start`
+request. The same cooperative project lease used by scoped image imports
+protects this command against participating importers. A failed post-start
+inventory never reports success; it requires manual inspection rather than
+an automatic rollback that could stop a newly running guest.
+
+**Security limit:** systemd inspection cannot find every other user's
+manager, renamed controllers or manual Incus writers. The cooperative lease
+does not fence legacy v0.1 reconcilers, uncooperative Incus clients or
+separate network namespaces. Ownership markers are self-declared rather
+than authenticated controller authority; actual Incus access is still
+enforced by the daemon. These safeguards narrow an explicitly approved
+operator action but **do not establish authority for unattended Home Manager
+reconciliation or system-to-user handoff** (#437/#441). Keep the pilot
+unchanged pending disposable-Incus acceptance and a separately approved
+migration (#443/#202).
 
 ## Explicit local Incus image inventory (read-only)
 
