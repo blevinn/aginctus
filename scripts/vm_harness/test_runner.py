@@ -76,6 +76,16 @@ class RunnerTests(unittest.TestCase):
             ".#vm-harness-synthetic-gateway.driver",
         )
 
+    def test_opencode_tool_loopback_is_an_isolated_fixed_target(self):
+        self.assertEqual(
+            runner.build_arguments("opencode-tool-loopback", False)[-1],
+            ".#vm-harness-opencode-tool-loopback",
+        )
+        self.assertNotIn(
+            "AGINCTUS_TESTENV_TOOL_WORKER",
+            runner.clean_environment({"AGINCTUS_TESTENV_TOOL_WORKER": "DISPOSABLE_VM_ONLY"}),
+        )
+
     def test_ownership_recovery_is_an_explicit_target(self):
         self.assertEqual(
             runner.build_arguments("ownership-recovery", False)[-1],
