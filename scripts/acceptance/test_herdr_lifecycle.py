@@ -127,7 +127,7 @@ class LifecycleTests(unittest.TestCase):
             '{"result":{"type":"workspace_list","workspaces":null}}',
             '{"result":{"type":"other","workspaces":[]}}',
             '{"result":{"type":"workspace_list","workspaces":[{}]}}',
-            '{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"w99"}]}}',
+            '{"result":{"type":"workspace_list","workspaces":[{"workspace_id":23,"label":"x"}]}}',
             '{"result":{"type":"workspace_list","workspaces":[42]}}',
             '{"result":{"type":"workspace_list","workspaces":[{"workspace_id":"w99","label":"a"},{"workspace_id":"w99","label":"b"}]}}',
             "{not JSON",
