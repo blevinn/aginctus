@@ -57,7 +57,7 @@ def tool_definitions(body):
         raise SequenceError("required OpenCode read/edit/bash tools were not declared")
 
 
-def tool_arguments(step, workdir):
+def tool_arguments(step, workdir, nonce):
     if step == 0:
         return {"filePath": workdir + "/calc.go"}
     if step == 1:
@@ -67,7 +67,8 @@ def tool_arguments(step, workdir):
             "newString": "return a + b",
         }
     if step == 2:
-        return {"command": "go test ./...", "workdir": workdir,
+        return {"command": "go test ./... && printf '%s' '" + nonce + "' > .aginctus-tool-test-ok",
+                "workdir": workdir,
                 "description": "Verify disposable Go fixture"}
     raise SequenceError("invalid synthetic tool step")
 
@@ -82,7 +83,7 @@ def fixture_response(nonce, step, workdir):
             "status": "completed",
             "call_id": "call_" + nonce + "_" + str(step),
             "name": name,
-            "arguments": json.dumps(tool_arguments(step, workdir), separators=(",", ":")),
+            "arguments": json.dumps(tool_arguments(step, workdir, nonce), separators=(",", ":")),
         }]
     else:
         output = [{
