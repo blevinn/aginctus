@@ -39,11 +39,13 @@ func parseScopedImageListArgs(args []string) (string, error) {
 	return name, nil
 }
 
-// runConfiguredImages leaves the v0.1 ambient-project commands unchanged.
-// Only the opt-in list/ls --project command reads the v0.2 project.
-// The active image update/rollback algorithm must be scoped and guarded
-// separately before user-owned mutations are enabled.
+// runConfiguredImages keeps existing v0.1 image list/update untouched.
+// Opt-in project inventory is read-only; the separate explicitly confirmed
+// scoped import is create-only and cannot replace existing image aliases.
 func runConfiguredImages(ctx context.Context, args []string, stdout, stderr io.Writer, cfg *config.Config) int {
+	if len(args) > 0 && args[0] == "import" {
+		return runScopedImageImport(ctx, args, stdout, stderr, cfg)
+	}
 	if len(args) < 2 || (args[0] != "list" && args[0] != "ls") {
 		return runImages(ctx, args, stdout, stderr)
 	}
