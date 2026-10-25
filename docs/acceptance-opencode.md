@@ -177,3 +177,55 @@ removal. Those remain `not_verified`, and
 `complete_acceptance` stays `false`. An untrusted agent's ability to
 write the operator's report directory would invalidate this trust boundary;
 keep the directory restricted to a separate trusted operator principal.
+
+### Operator-only gateway spend-log correlation probe (preparatory #521)
+
+`scripts/gateway/inspect_responses_spend.py` can inspect **one previously
+generated** LiteLLM spend-log record through the private gateway's
+administrative read-only `GET /spend/logs?request_id=` endpoint. The command
+does not submit a prompt, launch an agent, create a key or cause a new model
+request. It is **not** part of the default acceptance harness or CI.
+
+The operator must independently obtain the exact request ID, native OpenCode
+session ID, expected acceptance run ID, model alias and already-provisioned
+workload-key file. The tool requires a protected gateway administrative key
+in the existing `XDG_STATE_HOME/aginctus/gateway/<gateway-id>/secrets.json`
+state file and a reviewed private IPv4 gateway endpoint. Supply all selectors
+explicitly; no gateway traffic occurs unless `--inspect` is present:
+
+```sh
+# Set exact values after inspecting the reviewed pilot; no defaults inferred.
+# Dry run first: reads no secret files and makes no HTTP request.
+nix develop -c python3 scripts/gateway/inspect_responses_spend.py \
+  --endpoint "$GATEWAY_PRIVATE_ENDPOINT" --gateway-id "$GATEWAY_ID" \
+  --request-id "$GATEWAY_REQUEST_ID" \
+  --run-id "$ACCEPTANCE_RUN_ID" \
+  --session-id "$NATIVE_OPENCODE_SESSION_ID" \
+  --model-alias "$GATEWAY_MODEL_ALIAS" \
+  --workload-key-file "$PRIVATE_WORKLOAD_KEY_FILE"
+
+# Append --inspect ONLY for a separately operator-approved, read-only query.
+```
+
+The inspector requires **exactly one** bounded spend-log entry matching
+request ID, `session_id`, `end_user` (the acceptance run ID),
+`model_group`, the SHA-256 of the selected workload key, and the native
+`aresponses` call type. Missing columns, wrong identity, ambiguous rows,
+malformed JSON, unsafe keys or unavailable administrative logging fail closed.
+This deliberately requires gateway-side values rather than trusting a
+`gateway-observed:<run-id>` string from the agent or adapter. It does **not**
+infer success from an unvalidated `status` field.
+
+**Important prerequisite:** the current acceptance harness does not yet
+guarantee that its native OpenCode traffic emits all of these fields in
+the pinned LiteLLM spend-log schema. The probe may therefore return
+`error` for legitimate but insufficiently instrumented runs. Review actual
+pinned-version fields with an authorized pilot before integrating it as
+automated evidence. Even a fully matching entry proves only that the gateway
+logged a correlatable request. It does **not** independently establish
+Responses terminal completion, upstream/provider success, agent tool
+execution, network isolation or cleanup. Output is limited to fixed labels
+(`gateway_log_correlated`, `upstream_inference: not_verified` and related
+unverified claims); no response body, prompts, tokens, headers, file paths,
+raw logs or exception text are printed. The main acceptance report and all
+four `live/*` coverage rows remain unverified/not-run.
