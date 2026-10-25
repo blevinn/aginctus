@@ -146,14 +146,33 @@ NixOS/Home Manager options validate the same name constraints during
 module evaluation. For example, `AGINCTUS_INCUS_PROJECT` selects
 this setting through the regular environment override mechanism.
 
-**Important transition boundary:** This setting is **declarative only**
-in the present implementation. Existing v0.1 `apply`, `remove`,
-`status`, `images update`, gateway Compose and other Incus callers
-have **not** yet been redirected to the selected project. In particular,
-`config get incus.project` does **not** prove that any running instance,
-alias, volume or gateway currently belongs to that project. Do not
-use the setting to initiate a live pilot migration or grant additional
+**Important transition boundary:** This setting is a **declared target**,
+not a migration trigger. The opt-in, read-only `images list|ls --project
+NAME` command consumes it after verifying the exact ownership and
+feature policy of the **local** Incus project. Existing v0.1 `apply`,
+`remove`, `status`, `images update`, gateway Compose and other Incus
+callers have **not** yet been redirected to the selected project.
+In particular, `config get incus.project` does **not** prove that a
+running instance, alias, volume or gateway belongs to that project.
+Do not use the setting to initiate live migration or grant additional
 operator privileges.
+
+For example, on an authorized local operator account:
+
+```sh
+aginctus images list --project aginctus
+aginctus images ls --project=aginctus
+```
+
+These calls verify that `incus.project` equals the explicit flag, then
+inspect the local project policy and list its image aliases through
+`incus --force-local --project NAME image list --format json`. Foreign,
+drifted, inaccessible or not-visible project state fails closed. The
+legacy `images list` (no flag) and `images update NAME PATH` remain
+ambient-project v0.1 operations. **No image import, alias write,
+rollback or existing systemd unit is moved by this change.** Explicitly
+scoped image mutations require independent alias ownership and
+mutation-time rechecks before rollout.
 
 The earlier `operator project-plan --project NAME` is read-only;
 `operator project-ensure --project NAME --confirm-create` may create a
