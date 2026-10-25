@@ -107,6 +107,17 @@ vm-report run_id:
 vm-report-json run_id:
     @python3 scripts/checks/vm_evidence.py --format json {{quote(run_id)}}
 
+# Read one previously recorded operator-owned local acceptance result.
+# Does not invoke the acceptance harness, Herdr, Incus or any provider.
+# Requires AGINCTUS_ACCEPTANCE_REPORT_ROOT to name the existing private root.
+[no-cd]
+acceptance-report run_id:
+    @python3 -m scripts.checks.local_acceptance --format text {{quote(run_id)}}
+
+[no-cd]
+acceptance-report-json run_id:
+    @python3 -m scripts.checks.local_acceptance --format json {{quote(run_id)}}
+
 # Operator-only, explicit read-only inspection of the configured pilot.
 # Not a dependency of ci/all; never runs a live acceptance or model request.
 [no-cd]

@@ -158,7 +158,9 @@ class VMEvidenceTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("vm-report run_id:", recipe)
         self.assertIn("vm-report-json run_id:", recipe)
-        self.assertEqual(recipe.count("{{quote(run_id)}}"), 2)
+        self.assertIn("acceptance-report run_id:", recipe)
+        self.assertIn("acceptance-report-json run_id:", recipe)
+        self.assertEqual(recipe.count("{{quote(run_id)}}"), 4)
 
 
 if __name__ == "__main__":
