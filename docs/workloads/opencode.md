@@ -63,6 +63,19 @@ The image invokes an Aginctus OpenCode launcher from Herdr and interactive shell
 
 `gateway.json` may be world-readable (no secrets); `workload-key` must remain a private regular file. The runtime exports the workload key only in the child OpenCode process environment and uses OpenCode's `{env:...}` API-key interpolation. No secret is serialized into `OPENCODE_CONFIG_CONTENT`, a rendered Nix derivation, a command-line argument or OpenCode's configured provider JSON. The launcher defaults to the OpenAI Responses adapter (`@ai-sdk/openai`). Specify `"protocol":"chat-completions"` only for an explicitly validated LiteLLM model which requires `@ai-sdk/openai-compatible`.
 
+For the opt-in Go pilot alias `aginctus-go-pilot` on Responses, the
+launcher registers a *local, Nix-packaged* OpenCode plugin via a `file://` URL
+in `OPENCODE_CONFIG_CONTENT`. The pinned OpenCode v1.15.11 custom provider
+otherwise emits `x-session-affinity` but not the Go-required
+`x-opencode-session`. Its supported `chat.headers` hook gives this plugin
+the actual `sessionID` of each request. The plugin forwards that identifier
+unchanged only when provider `aginctus` and model `aginctus-go-pilot`
+match; absent/malformed session IDs fail closed. It never fabricates an ID,
+overrides the user agent, or reads credentials. Other model aliases do not
+load the plugin. This completes only the **client-to-gateway** session-header
+leg; #456 still requires native pinned LiteLLM Responses forwarding, upstream
+header exposure assessment, and operator-approved live provider validation.
+
 If the endpoint, model or key is absent/invalid, OpenCode does **not** launch. An incorrect DNS name or an unreachable gateway fails requests without making direct upstream network connectivity available. The management network stays unrouted and without NAT.
 
 ## Isolated validation (does not require Incus or LiteLLM)
@@ -81,7 +94,7 @@ OPENCODE_PATH="$(nix build .#opencode-runtime --no-link --print-out-paths)/bin/o
 nix shell nixpkgs#python3 --command python3 guest/opencode/test_real_runtime.py "$OPENCODE_PATH"
 ```
 
-The separate integration test runs the actual pinned CLI via the launcher in an isolated temporary HOME, with a disposable loopback mock. It asserts an authenticated `POST /v1/responses`, the configured model, an identifying `User-Agent`, a native OpenCode session header (`x-opencode-session` or `x-opencode-session-id`), continuity across requests in that run, and terminal streamed text consumption; no external model or gateway is needed. It never prints session identifiers or bearer keys. This is an **operator validation step**, not a claim that it passed. If the pinned OpenCode binary lacks those headers, the offline test fails rather than having Aginctus silently fabricate a session. A run with one request verifies header presence only; repeatability across a multi-request conversation and upstream forwarding remain separate acceptance gates.
+The separate integration test runs the actual pinned CLI through the Go-alias session plugin and launcher in an isolated temporary HOME, with a disposable loopback mock. It asserts an authenticated `POST /v1/responses`, the configured Go pilot alias, an identifying `User-Agent`, a real OpenCode session header (`x-opencode-session` or `x-opencode-session-id`), continuity across requests in that run, and terminal streamed text consumption; no external model or gateway is needed. It never prints session identifiers or bearer keys. This is an **operator validation step**, not a claim that it passed. If the pinned OpenCode binary lacks those headers, the offline test fails rather than having Aginctus silently fabricate a session. A run with one request verifies header presence only; repeatability across a multi-request conversation and upstream forwarding remain separate acceptance gates.
 
 This test does **not** establish LiteLLM forwarding or model-driven filesystem tools (see #172). In pinned LiteLLM v1.103.0, client `x-*` forwarding is disabled by default and the model-scoped forwarding setting admits all eligible `x-*` headers, not solely the OpenCode session header. Do not enable global header forwarding or relay client credentials in order to satisfy the Go provider. Selective header forwarding and upstream `User-Agent` preservation require a separate, verified implementation before another paid OpenCode Go pilot request.
 
