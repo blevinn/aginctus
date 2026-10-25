@@ -88,5 +88,15 @@ assert cleanup_failure[0]["results"][0]["status"] == "pass"
 assert cleanup_failure[0]["results"][1]["status"] == "pass"
 assert cleanup_failure[0]["cleanup"] == "not_verified"
 PY
-unset ACCEPTANCE_TEST_CLEANUP_FAIL AGINCTUS_ACCEPTANCE_REPORT_ROOT
+unset ACCEPTANCE_TEST_CLEANUP_FAIL
+rm "$tmp/events/"*
+mkdir -m 755 "$tmp/unsafe-results"
+chmod 755 "$tmp/unsafe-results"
+export AGINCTUS_ACCEPTANCE_REPORT_ROOT="$tmp/unsafe-results"
+if bash scripts/acceptance/opencode.sh mock; then
+  echo "unsafe evidence root unexpectedly accepted" >&2; exit 1
+fi
+test ! -e "$tmp/events/stop"
+test ! -e "$tmp/events/close"
+unset AGINCTUS_ACCEPTANCE_REPORT_ROOT
 echo "PASS: deterministic acceptance orchestration and cleanup"
