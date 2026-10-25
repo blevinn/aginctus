@@ -9,6 +9,10 @@ let
   cfg = guest.config;
 in
 assert cfg.virtualisation.incus.enable;
+assert cfg.services.aginctus.enable;
+assert !cfg.services.aginctus.firewall.enable;
+assert !cfg.services.aginctus.reconcile.enable;
+assert cfg.services.aginctus.images.herdrClient.enable;
 assert cfg.networking.nftables.enable;
 assert cfg.virtualisation.incus.agent.enable;
 assert !cfg.services.openssh.enable;
