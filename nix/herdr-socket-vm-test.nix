@@ -50,12 +50,11 @@ let
             PermitTunnel = false;
             PermitUserRC = false;
           };
-          # Mirrors the production sshd SetEnv from flake.nix: the
-          # SSH CLI's HERDR_SOCKET_PATH must agree with the systemd
-          # service's, so `herdr --machine ... workspace list` reaches
-          # the managed server without any per-call wrapper or symlink.
+          # The explicit '--session default' remote API bridge ignores
+          # HERDR_SOCKET_PATH and derives its socket from XDG_CONFIG_HOME.
+          # Both settings must match the daemon's canonical config directory.
           extraConfig = ''
-            SetEnv HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock
+            SetEnv HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock XDG_CONFIG_HOME=/var/lib/herdr/config
           '';
         };
 
@@ -113,7 +112,11 @@ pkgs.testers.runNixOSTest {
     system.stateVersion = "26.05";
     environment.systemPackages = [
       (import ./herdr-client-command.nix { inherit pkgs herdrPackage; })
+      pkgs.openssh
     ];
+    programs.ssh.extraConfig = ''
+      Include /var/lib/aginctus/ssh/machines/*.conf
+    '';
     # Disposable stand-in for an Incus-attached filesystem, never pilot storage.
     systemd.mounts = [
       {
@@ -127,6 +130,7 @@ pkgs.testers.runNixOSTest {
 
   testScript = ''
     import json
+    import shlex
 
     start_all()
     client.wait_for_unit("var-lib-herdr.mount")
@@ -138,14 +142,14 @@ pkgs.testers.runNixOSTest {
     # exec has no XDG environment; the shipped command must still read/write
     # the daemon's persistent catalog, ignoring ambient rootfs XDG paths.
     catalog = {"version": 1, "ssh": [{
-        "id": "0123456789abcdef0123456789abcdef", "label": "aginctus-dev",
-        "target": "aginctus-dev", "session": "default", "enabled": True,
+        "id": "0123456789abcdef0123456789abcdef", "label": "fixture-only",
+        "target": "fixture-only", "session": "default", "enabled": True,
     }]}
     client.succeed("mkdir -p /var/lib/herdr/herdr/client")
     client.succeed("printf '%s' '" + json.dumps(catalog) + "' > /var/lib/herdr/herdr/client/endpoints.json")
     bare_cli = "env -i PATH=/run/current-system/sw/bin HOME=/root herdr "
     rows = json.loads(client.succeed(bare_cli + "machine list --json"))
-    assert len(rows) == 1 and rows[0]["enabled"] and rows[0]["label"] == "aginctus-dev", rows
+    assert len(rows) == 1 and rows[0]["enabled"] and rows[0]["label"] == "fixture-only", rows
     client.succeed(bare_cli + "machine disable " + catalog["ssh"][0]["id"])
     saved = json.loads(client.succeed("cat /var/lib/aginctus/state/system/herdr/herdr/client/endpoints.json"))
     assert saved["ssh"][0]["enabled"] is False, saved
@@ -178,22 +182,20 @@ pkgs.testers.runNixOSTest {
     sshd_env = machine.succeed(
         "sshd -T 2>/dev/null"
     ).strip()
-    setenv_line = ""
-    for line in sshd_env.splitlines():
-        # sshd -T emits `setenv` settings as `setenv NAME=VALUE`
-        # (no space between NAME and =). Match that exact shape.
-        if line.lower().startswith("setenv "):
-            name_value = line[len("setenv "):]
-            if name_value.startswith("HERDR_SOCKET_PATH="):
-                setenv_line = name_value
-                break
+    setenv = {
+        setting
+        for line in sshd_env.splitlines()
+        if line.lower().startswith("setenv ")
+        for setting in line.split()[1:]
+    }
     # NixOS's systemd `Environment` field can quote values containing
     # '=' characters; match either form.
     assert (
         "HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock" in service_env
         or 'HERDR_SOCKET_PATH="/var/lib/herdr/config/herdr/herdr.sock"' in service_env
     ), service_env
-    assert setenv_line.endswith("/var/lib/herdr/config/herdr/herdr.sock"), repr(setenv_line)
+    assert "HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock" in setenv, setenv
+    assert "XDG_CONFIG_HOME=/var/lib/herdr/config" in setenv, setenv
 
     # The systemd service writes the socket under StateDirectory, which
     # NixOS mounts at /var/lib/herdr. Confirm the socket appears after
@@ -244,6 +246,51 @@ pkgs.testers.runNixOSTest {
     parsed_restart = json.loads(post_restart)
     assert isinstance(parsed_restart, list), post_restart
 
+    # Real two-node managed-SSH API forwarding, not local machine-list/cache.
+    # Test-only keys live in the disposable VM. No production SSH identity
+    # is generated; host trust is sourced from the other VM, not ssh-keyscan.
+    client.succeed("install -d -m 0700 /var/lib/aginctus/ssh/identities/1 /var/lib/aginctus/ssh/trust /var/lib/aginctus/ssh/machines")
+    client.succeed("ssh-keygen -q -t ed25519 -N '' -f /var/lib/aginctus/ssh/identities/1/id_ed25519")
+    client.succeed("chmod 600 /var/lib/aginctus/ssh/identities/1/id_ed25519")
+    public_key = client.succeed("cat /var/lib/aginctus/ssh/identities/1/id_ed25519.pub").strip()
+    machine.succeed("install -d -o agent -m 0700 /home/agent/.ssh")
+    machine.succeed("printf '%s\\n' " + shlex.quote(public_key)
+                    + " > /home/agent/.ssh/authorized_keys && chown agent /home/agent/.ssh/authorized_keys"
+                    + " && chmod 0600 /home/agent/.ssh/authorized_keys")
+    host_key = machine.succeed("cat /etc/ssh/ssh_host_ed25519_key.pub").split()
+    assert host_key[0] == "ssh-ed25519"
+    client.succeed("printf '%s\\n' " + shlex.quote("aginctus-dev " + " ".join(host_key[:2]))
+                   + " > /var/lib/aginctus/ssh/trust/known_hosts && chmod 0600 /var/lib/aginctus/ssh/trust/known_hosts")
+    ssh_config = """Host aginctus-dev
+    HostName machine
+    User agent
+    IdentityFile /var/lib/aginctus/ssh/identities/1/id_ed25519
+    IdentitiesOnly yes
+    IdentityAgent none
+    BatchMode yes
+    StrictHostKeyChecking yes
+    UpdateHostKeys no
+    UserKnownHostsFile /var/lib/aginctus/ssh/trust/known_hosts
+    GlobalKnownHostsFile /dev/null
+    HostKeyAlias aginctus-dev
+    HostKeyAlgorithms ssh-ed25519
+    ConnectTimeout 5
+"""
+    client.succeed("printf '%s\\n' " + shlex.quote(ssh_config)
+                   + " > /var/lib/aginctus/ssh/machines/aginctus-dev.conf")
+    assert client.succeed("ssh -o BatchMode=yes aginctus-dev id -un").strip() == "agent"
+    assert client.succeed("ssh -o BatchMode=yes aginctus-dev printenv XDG_CONFIG_HOME").strip() == "/var/lib/herdr/config"
+    client.succeed(bare_cli + "machine add aginctus-dev --label aginctus-dev --remote-session default")
+    def remote_workspaces():
+        output = client.succeed(bare_cli + "--machine aginctus-dev workspace list")
+        envelope = json.loads(output)
+        assert envelope["result"]["type"] == "workspace_list", envelope
+        assert isinstance(envelope["result"]["workspaces"], list), envelope
+    remote_workspaces()
+    machine.succeed("systemctl restart herdr.service")
+    machine.wait_for_file("/var/lib/herdr/config/herdr/herdr.sock")
+    remote_workspaces()
+    client.succeed("test ! -e /root/.local/state/herdr/client/endpoints.json")
     # Strict SSH posture must not be weakened by the socket alignment.
     # The merged configuration pins every security-sensitive option off
     # and the test confirms they remain so on a running VM.
