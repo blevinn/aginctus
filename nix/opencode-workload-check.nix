@@ -60,7 +60,7 @@ let
             PermitUserRC = false;
           };
           extraConfig = ''
-            SetEnv HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock
+            SetEnv HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock XDG_CONFIG_HOME=/var/lib/herdr/config
           '';
         };
 
@@ -97,6 +97,7 @@ let
 in
 assert lib.hasInfix "SetEnv HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock"
   sshdExtraConfig;
+assert lib.hasInfix "XDG_CONFIG_HOME=/var/lib/herdr/config" sshdExtraConfig;
 assert lib.elem "HERDR_SOCKET_PATH=/var/lib/herdr/config/herdr/herdr.sock" serviceEnv;
 assert lib.elem "XDG_CONFIG_HOME=/var/lib/herdr/config" serviceEnv;
 assert herdrServiceConfig.User == "agent";
