@@ -1176,7 +1176,8 @@ Commands:
   operator package-audit --owner system|user  Compare declared NixOS/HM CLI package identity (no writes)
   operator project-plan --project NAME  Inspect owned Incus project policy (no writes)
   operator project-ensure --project NAME --confirm-create  Create only an owned local Incus project (explicit mutation)
-  images list|ls    List local Incus images and aliases (read-only)
+  images list|ls    List local Incus images and aliases (read-only; legacy ambient project)
+  images list|ls --project NAME  List verified owned local-project images (read-only)
   images update NAME PATH   Import an image from a Nix result directory (mutation)
   config show       Print the effective merged configuration
   config get PATH   Print one effective configuration value
