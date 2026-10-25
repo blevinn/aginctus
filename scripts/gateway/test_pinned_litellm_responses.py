@@ -78,6 +78,13 @@ class PinnedResponsesProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "non-Go"):
             probe.evaluate(calls)
 
+    def test_reject_unrelated_model_client_metadata_leak(self):
+        calls = self.sample_calls()
+        calls[3]["headers"]["x-unapproved-probe"] = (
+            probe.SENTINELS["x-unapproved-probe"])
+        with self.assertRaisesRegex(RuntimeError, "non-Go model forwarded"):
+            probe.evaluate(calls)
+
     def test_streaming_response_terminal_and_synthetic_only(self):
         events = probe.response_events()
         self.assertIn(b"event: response.completed", events)
