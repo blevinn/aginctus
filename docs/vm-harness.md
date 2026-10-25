@@ -145,6 +145,18 @@ is configured.
 Subsequent slices add registered synthetic Responses traffic, real
 Herdr/OpenCode tool execution, packet-level negative network assertions,
 fault injection, and independently verified resource/evidence cleanup.
+## Synthetic Responses fixture (protocol layer)
+
+`scripts/vm_harness/synthetic_responses.py` implements a small, local-only
+OpenAI Responses-style upstream with a hardcoded **synthetic-only** key and
+model, validated nonce, bounded request bodies, SSE terminal completion and
+per-nonce request counts. It makes no external requests and suppresses
+request/header logging. Hostless tests exercise its negative authentication
+checks and streaming protocol. It is intentionally **not LiteLLM**: routing
+through the real gateway, registered aliases/scoped virtual keys and genuine
+OpenCode tool execution are separate required acceptance layers. Neither
+the fixture's `response.completed` nor its nonce count proves gateway-side
+billing/provenance or a coding-agent run. Never use its static key on a pilot.
 
 ## Machine-readable run evidence
 
