@@ -76,18 +76,17 @@ class LocalReportTests(unittest.TestCase):
             (7, "pass", "fail", "fail"),
             (0, "not_run", "pass", "error"),
         ):
-            with self.subTest(code=code, fixture=fixture, tests=tests):
-                with tempfile.TemporaryDirectory() as parent:
-                    path = self.write(
-                        self.setup_root(parent), exit_code=code,
-                        fixture=fixture, tests=tests,
-                        stop="fail", close="not_run",
-                    )
-                    report = json.loads(path.read_text())
-                    self.assertEqual(report["status"], expected)
-                    self.assertEqual(report["cleanup_commands"]["stop"], "fail")
-                    self.assertEqual(report["cleanup"], "not_verified")
-                    self.assertFalse(report["complete_acceptance"])
+            with self.subTest(code=code, fixture=fixture, tests=tests), tempfile.TemporaryDirectory() as parent:
+                path = self.write(
+                    self.setup_root(parent), exit_code=code,
+                    fixture=fixture, tests=tests,
+                    stop="fail", close="not_run",
+                )
+                report = json.loads(path.read_text())
+                self.assertEqual(report["status"], expected)
+                self.assertEqual(report["cleanup_commands"]["stop"], "fail")
+                self.assertEqual(report["cleanup"], "not_verified")
+                self.assertFalse(report["complete_acceptance"])
 
     def test_input_rejection_before_file_creation(self):
         with tempfile.TemporaryDirectory() as parent:
@@ -116,6 +115,7 @@ class LocalReportTests(unittest.TestCase):
             alias.symlink_to(root, target_is_directory=True)
             bad = Path(parent) / "bad"
             bad.mkdir(mode=0o755)
+            bad.chmod(0o755)
             for candidate in (alias, bad, Path(parent) / "missing"):
                 with self.subTest(candidate=candidate), self.assertRaises(
                     (OSError, ValueError)
@@ -151,14 +151,15 @@ class LocalReportTests(unittest.TestCase):
                 ])
             self.assertEqual(result, 0)
             self.assertNotIn(str(root), output.getvalue())
-            self.assertNotIn("verified", output.getvalue().lower())
+            self.assertIn("not verified", output.getvalue().lower())
 
     def test_checkout_root_and_wrong_owner_fail_closed(self):
         with tempfile.TemporaryDirectory() as parent:
             root = self.setup_root(parent)
-            with patch.object(local_report, "SOURCE_ROOT", root.parent):
-                with self.assertRaises(ValueError):
-                    self.write(root)
+            with patch.object(local_report, "SOURCE_ROOT", root.parent), self.assertRaises(
+                ValueError
+            ):
+                self.write(root)
             original_uid = os.getuid()
             original_fstat = local_report.os.fstat
 
