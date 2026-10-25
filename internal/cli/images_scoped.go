@@ -43,6 +43,9 @@ func parseScopedImageListArgs(args []string) (string, error) {
 // Opt-in project inventory is read-only; the separate explicitly confirmed
 // scoped import is create-only and cannot replace existing image aliases.
 func runConfiguredImages(ctx context.Context, args []string, stdout, stderr io.Writer, cfg *config.Config) int {
+	if len(args) > 0 && args[0] == "import-owned" {
+		return runScopedOwnedImageImport(ctx, args, stdout, stderr, cfg)
+	}
 	if len(args) > 0 && args[0] == "owner-audit" {
 		return runImageOwnerAudit(ctx, args, stdout, stderr, cfg)
 	}
