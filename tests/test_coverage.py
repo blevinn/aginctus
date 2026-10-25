@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.checks import ci_summary, coverage, preflight_report, vm_evidence
+from scripts.checks import ci_summary, coverage, preflight_report
 from scripts.vm_harness import runner
 
 
