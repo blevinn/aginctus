@@ -238,6 +238,21 @@ def run(host, alias, workload_key, master_key, opener=None, marker=None):
     return marker, count
 
 
+def authorization_report(status):
+    # This is a non-inference host-to-gateway authorization observation.
+    # No claim about guest credential exposure or network egress is possible.
+    return {
+        "schema_version": 1,
+        "profile": "gateway_authorization",
+        "status": status,
+        "gateway_authorization": status,
+        "upstream_inference": "not_verified",
+        "agent_tools": "not_verified",
+        "credential_egress": "not_verified",
+        "complete_acceptance": False,
+    }
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--endpoint", required=True)
@@ -270,13 +285,7 @@ def main(argv=None):
         workload_key = secret_file(args.workload_key_file)
         if args.auth_only:
             run_authorization(host, args.alias, workload_key, master)
-            print(json.dumps({
-                "gateway_authorization": "pass",
-                "upstream_inference": "not_verified",
-                "agent_tools": "not_verified",
-                "credential_egress": "not_verified",
-                "complete_acceptance": False,
-            }, separators=(",", ":")))
+            print(json.dumps(authorization_report("pass"), separators=(",", ":")))
             return 0
         marker, event_count = run(host, args.alias, workload_key, master)
         print(f"PASS: authenticated LiteLLM Responses stream completed with requested output; "
@@ -284,7 +293,12 @@ def main(argv=None):
               "provider provenance and egress require separate gateway-side evidence")
         return 0
     except SmokeError as exc:
-        print("FAIL: " + str(exc), file=sys.stderr)
+        if args.auth_only:
+            # Structured, bounded failure. Never reflect provider text,
+            # exception messages, selected file paths or bearer keys.
+            print(json.dumps(authorization_report("error"), separators=(",", ":")))
+        else:
+            print("FAIL: " + str(exc), file=sys.stderr)
         return 1
 
 
