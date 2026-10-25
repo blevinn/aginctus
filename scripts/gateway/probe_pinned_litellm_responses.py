@@ -17,7 +17,7 @@ import tempfile
 import threading
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 ALIAS = "aginctus-go-pilot"
 OTHER = "aginctus-unrelated"
@@ -26,6 +26,7 @@ UPSTREAM_KEY = "sk-synthetic-upstream-only"
 SESSION_A = "ses_0123456789abcdefghijklmno"
 SESSION_B = "ses_0123456789abcdefghijklmnp"
 MARKER = "AGINCTUS_SYNTHETIC_RESPONSES_OK"
+OPENER = build_opener(ProxyHandler({}))  # Never inherit host proxy settings.
 SENTINELS = {
     "x-unapproved-probe": "synthetic-unapproved",
     "x-litellm-probe": "synthetic-litellm",
@@ -164,7 +165,7 @@ def send(port, alias, session, authenticated=True):
         headers=headers,
     )
     try:
-        with urlopen(req, timeout=30) as res:
+        with OPENER.open(req, timeout=30) as res:
             body = res.read(262145)
             if len(body) > 262144:
                 raise RuntimeError("proxy response exceeded byte bound")
@@ -180,7 +181,7 @@ def wait_ready(port, process):
         if process.poll() is not None:
             raise RuntimeError("isolated LiteLLM startup failed")
         try:
-            with urlopen(url, timeout=1) as response:
+            with OPENER.open(url, timeout=1) as response:
                 if response.status == 200:
                     return
         except (URLError, HTTPError, TimeoutError):
@@ -198,8 +199,11 @@ def evaluate(calls):
     upstream_sessions = [c["headers"].get("x-opencode-session") for c in calls]
     if upstream_sessions[:3] != [SESSION_A, SESSION_A, SESSION_B]:
         raise RuntimeError("Go session missing, rewritten, or cross-contaminated")
-    if upstream_sessions[3] in (SESSION_A, SESSION_B):
-        raise RuntimeError("non-Go model received client's Go session")
+    if upstream_sessions[3] is not None:
+        raise RuntimeError("non-Go model received client Go session")
+    if any(calls[3]["headers"].get(header) == marker
+           for header, marker in SENTINELS.items()):
+        raise RuntimeError("non-Go model forwarded client metadata")
     print("PASS: actual pinned proxy sent native Responses to local fake upstream")
     print("PASS: session unchanged for repeat and distinct between conversations")
     print("PASS: non-Go model did not receive the client Go session")
