@@ -7,6 +7,7 @@ and consumes a complete SSE text response. Never needs a live LiteLLM gateway.
 import http.server
 import json
 import os
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     calls: ClassVar[list] = []
     tools: ClassVar[list] = []
     continuations: ClassVar[list] = []
+    sequence = None
+    sequence_stream = None
 
     def do_POST(self):
         payload = self.rfile.read(int(self.headers.get("Content-Length", "0")))
@@ -52,6 +55,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         type(self).continuations.append(continuation_ids)
         if self.path != "/v1/responses" or self.headers.get("Authorization") != "Bearer integration-only-key":
             self.send_error(403)
+            return
+        if type(self).sequence is not None:
+            try:
+                _, document = type(self).sequence.next(body)
+            except ValueError:
+                self.send_error(400)
+                return
+            wire = type(self).sequence_stream(document)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(wire)
+            self.wfile.flush()
             return
         response = {
             "id": "resp_mock", "object": "response", "created_at": 1730000000,
@@ -92,7 +109,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def main(binary, inspect_tools=False):
+def main(binary, inspect_tools=False, execute_tools=False):
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         state = root / "gateway"
@@ -102,6 +119,29 @@ def main(binary, inspect_tools=False):
         Handler.calls = []
         Handler.tools = []
         Handler.continuations = []
+        Handler.sequence = None
+        Handler.sequence_stream = None
+        nonce = secrets.token_hex(12)
+        if execute_tools:
+            # Import only a repository-pinned fixture from this source tree.
+            # The interpreter runs the actual pinned OpenCode launcher separately.
+            sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+            from scripts.vm_harness.tool_sequence import ToolSequence, stream
+            Handler.sequence = ToolSequence(str(root), model=MODEL)
+            Handler.sequence_stream = stream
+            (root / "go.mod").write_text(
+                "module example.invalid/aginctus-tool-fixture\ngo 1.22\n")
+            (root / "calc.go").write_text(
+                "package calc\nfunc Add(a, b int) int { return a - b }\n")
+            (root / "calc_test.go").write_text(
+                "package calc\nimport \"testing\"\n"
+                "func TestAdd(t *testing.T) {\n"
+                " if Add(2, 3) != 5 { t.Fatal(\"bad addition\") }\n}\n")
+            initial = subprocess.run(
+                ["go", "test", "./..."], cwd=root, capture_output=True,
+                timeout=60, check=False, env=dict(os.environ, GOPROXY="off"),
+            )
+            assert initial.returncode != 0, "broken Go fixture unexpectedly passed"
         if inspect_tools:
             (root / "calc.go").write_text("package calc\\nfunc Add(a,b int) int { return a-b }\\n")
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -119,8 +159,11 @@ def main(binary, inspect_tools=False):
                        OPENCODE_DISABLE_AUTOUPDATE="true")
             result = subprocess.run(
                 [sys.executable, str(LAUNCHER), binary, "run", "--model", "aginctus/" + MODEL,
+                 ("Inspect calc.go and calc_test.go, fix Add using the real read/edit "
+                  "tools, run go test ./... with the bash tool. nonce=" + nonce)
+                 if execute_tools else
                  ("Read calc.go and identify the error, then respond with " + EXPECTED)
-                if inspect_tools else EXPECTED + " (repeat this marker verbatim)"],
+                 if inspect_tools else EXPECTED + " (repeat this marker verbatim)"],
                 cwd=root, env=env, capture_output=True, text=True, timeout=90, check=False)
             assert Handler.calls, "real OpenCode did not reach the mock gateway"
             assert all(p == "/v1/responses" and auth == "Bearer integration-only-key"
@@ -136,7 +179,26 @@ def main(binary, inspect_tools=False):
                 "pinned OpenCode did not identify itself in User-Agent")
             assert result.returncode == 0, (
                 "OpenCode exited unsuccessfully (stdout/stderr suppressed to avoid credential leaks)")
-            assert EXPECTED in result.stdout, "OpenCode did not consume the SSE response"
+            if execute_tools:
+                assert "synthetic-tools-complete:" + nonce in result.stdout, (
+                    "real client did not consume terminal scripted tool response")
+                assert Handler.sequence._steps.get(nonce) == 3, (
+                    "real client did not complete read/edit/bash tool results")
+                assert "return a + b" in (root / "calc.go").read_text(), (
+                    "agent did not actually edit calc.go")
+                marker = root / ".aginctus-tool-test-ok"
+                assert marker.is_file() and marker.read_text() == nonce, (
+                    "agent bash command did not produce the independent test marker")
+                final = subprocess.run(
+                    ["go", "test", "./..."], cwd=root, capture_output=True,
+                    timeout=60, check=False, env=dict(os.environ, GOPROXY="off"),
+                )
+                assert final.returncode == 0, (
+                    "host verification of edited disposable fixture failed")
+                print("PASS: real pinned OpenCode executed read/edit/bash and fixed Go fixture")
+                print("NOTE: Herdr, gateway-side audit, VM egress and teardown not verified")
+            else:
+                assert EXPECTED in result.stdout, "OpenCode did not consume the SSE response"
             if inspect_tools:
                 # Deliberately observe declarations, NOT successful tool use.
                 # Subsequent PRs must exercise actual call/result round trips.
@@ -157,6 +219,9 @@ def main(binary, inspect_tools=False):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) not in (2, 3) or (len(sys.argv) == 3 and sys.argv[2] != "--inspect-tools"):
-        sys.exit("Usage: test_real_runtime.py /absolute/path/to/pinned/opencode [--inspect-tools]")
-    main(sys.argv[1], inspect_tools=len(sys.argv) == 3)
+    if len(sys.argv) not in (2, 3) or (
+        len(sys.argv) == 3 and sys.argv[2] not in ("--inspect-tools", "--execute-tools")
+    ):
+        sys.exit("Usage: test_real_runtime.py PINNED_OPENCODE [--inspect-tools|--execute-tools]")
+    main(sys.argv[1], inspect_tools=sys.argv[-1] == "--inspect-tools",
+         execute_tools=sys.argv[-1] == "--execute-tools")
