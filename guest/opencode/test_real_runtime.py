@@ -60,7 +60,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 _, document = type(self).sequence.next(body)
             except ValueError as exc:
-                print("Synthetic tool sequence rejected the request:", exc, file=sys.stderr)
+                raw_tools = body.get("tools")
+                tool_names = [
+                    item.get("name") for item in raw_tools
+                    if isinstance(item, dict) and isinstance(item.get("name"), str)
+                ][:16] if isinstance(raw_tools, list) else []
+                raw_input = body.get("input")
+                input_items = [
+                    item.get("type") for item in raw_input
+                    if isinstance(item, dict) and isinstance(item.get("type"), str)
+                ][:16] if isinstance(raw_input, list) else []
+                print(
+                    "Synthetic tool sequence rejected request:", exc,
+                    f"tools={tool_names} previous={isinstance(body.get('previous_response_id'), str)}",
+                    f"input_type={type(raw_input).__name__} input_items={input_items}",
+                    file=sys.stderr,
+                )
                 self.send_error(400)
                 return
             wire = type(self).sequence_stream(document)
