@@ -41,17 +41,19 @@ class LocalAcceptanceViewTests(unittest.TestCase):
             )
             self.assertEqual(parsed["status"], "incomplete")
             self.assertEqual(parsed["summary"], {
-                "passed": 4, "failed": 0, "errors": 0, "not_run": 0
+                "passed": 4, "failed": 0, "errors": 0, "not_run": 1
             })
             self.assertEqual([item["id"] for item in parsed["results"]], [
                 "acceptance/fixture_change", "acceptance/workspace_tests",
                 "acceptance/stop_command", "acceptance/close_command",
+                "acceptance/local_workspace_removed",
             ])
             self.assertEqual(parsed["source"]["run_id"], RUN_ID)
             self.assertEqual(parsed["verification_tier"], "mock_orchestration")
             for name in ("agent_tools", "upstream_inference", "credential_egress", "cleanup"):
                 self.assertEqual(parsed[name], "not_verified")
             self.assertFalse(parsed["complete_acceptance"])
+            self.assertEqual(parsed["results"][-1]["status"], "not_run")
             self.assertLess(path.stat().st_size, local_report.MAX_BYTES)
 
     def test_failures_do_not_become_passes(self):
@@ -68,6 +70,31 @@ class LocalAcceptanceViewTests(unittest.TestCase):
             self.assertEqual(parsed["summary"]["failed"], 2)
             self.assertEqual(parsed["upstream_inference"], "not_verified")
 
+    def test_legacy_record_without_local_removal_remains_unverified(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, path = self.make(directory)
+            record = json.loads(path.read_text())
+            del record["local_workspace_removed"]
+            path.write_text(json.dumps(record))
+            parsed = local_acceptance.normalize(
+                local_acceptance.read_private_result(root, RUN_ID), RUN_ID
+            )
+            self.assertEqual(parsed["results"][-1]["status"], "not_run")
+            self.assertEqual(parsed["cleanup"], "not_verified")
+
+    def test_local_workspace_removed_is_independent_from_remote_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _ = self.make(directory, local_workspace_removed="pass")
+            parsed = local_acceptance.normalize(
+                local_acceptance.read_private_result(root, RUN_ID), RUN_ID
+            )
+            self.assertEqual(parsed["summary"]["passed"], 5)
+            self.assertEqual(parsed["results"][-1], {
+                "id": "acceptance/local_workspace_removed", "status": "pass"
+            })
+            self.assertEqual(parsed["cleanup"], "not_verified")
+            self.assertFalse(parsed["complete_acceptance"])
+
     def test_mutated_claims_and_contradictions_fail_closed(self):
         changes = (
             {"status": "pass"},
@@ -81,6 +108,8 @@ class LocalAcceptanceViewTests(unittest.TestCase):
             {"upstream_inference": "verified"},
             {"credential_egress": "verified"},
             {"complete_acceptance": True},
+            {"local_workspace_removed": "verified"},
+            {"local_workspace_removed": "fail"},
             {"created_utc": "tomorrow"},
             {"created_utc": "2026-10-25T12:00:00-07:00"},
             {"cleanup_commands": {"stop": "verified", "close": "pass"}},

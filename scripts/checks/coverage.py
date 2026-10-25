@@ -13,7 +13,7 @@ import re
 import stat
 from pathlib import Path
 
-from scripts.checks import ci_summary, vm_evidence
+from scripts.checks import ci_summary, local_acceptance, vm_evidence
 
 MAX_INPUT_BYTES = 65536
 TARGET = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\Z")
@@ -22,6 +22,7 @@ SOURCES = (
     ("vm", "vm_run_id"),
     ("preflight/pilot-topology", "pilot_topology_json"),
     ("preflight/opencode-runtime", "opencode_runtime_json"),
+    ("acceptance/local_checks", "local_acceptance_run_id"),
 )
 LIVE_CHECKS = (
     "live/agent_tools",
@@ -106,6 +107,8 @@ def normalize_sources(
     *, hermetic_json: Path | None = None, vm_run_id: str | None = None,
     pilot_topology_json: Path | None = None,
     opencode_runtime_json: Path | None = None,
+    local_acceptance_run_id: str | None = None,
+    local_root: Path | None = None,
     vm_root: Path = vm_evidence.ROOT,
 ) -> dict:
     """Read only named evidence. Missing sources are unexecuted, not passed."""
@@ -114,6 +117,7 @@ def normalize_sources(
         "vm": vm_run_id,
         "preflight/pilot-topology": pilot_topology_json,
         "preflight/opencode-runtime": opencode_runtime_json,
+        "acceptance/local_checks": local_acceptance_run_id,
     }
     results: list[dict] = []
     for name, _ in SOURCES:
@@ -134,16 +138,33 @@ def normalize_sources(
                 )
                 status = parsed["status"]
                 row = observed(name, status, detail=parsed["results"][0]["id"])
+            elif name == "acceptance/local_checks":
+                # This is ONLY fixture tests and stop/close *command* status.
+                # Never infer agent/tool, provider, egress or actual cleanup.
+                root = local_root
+                if root is None:
+                    root = Path(os.environ["AGINCTUS_ACCEPTANCE_REPORT_ROOT"])
+                parsed = local_acceptance.normalize(
+                    local_acceptance.read_private_result(root, selected), selected
+                )
+                status = {
+                    "incomplete": "pass", "fail": "fail", "error": "error"
+                }[parsed["status"]]
+                row = observed(
+                    name, status,
+                    detail="mock" if parsed["source"]["mode"] == "mock" else "live_partial",
+                )
             else:
                 check = name.removeprefix("preflight/")
                 status = validate_preflight(read_input(selected), check)
                 row = observed(name, status)
-        except (OSError, UnicodeError, ValueError, TypeError):
+        except (KeyError, OSError, UnicodeError, ValueError, TypeError):
             row = {"id": name, "status": "error", "evidence": "invalid"}
         results.append(row)
 
-    # No currently trusted live evidence importer exists. A passing local
-    # file or synthetic acceptance marker MUST NEVER fill one of these rows.
+    # The selected local acceptance source only reports fixture tests and
+    # cleanup COMMAND results. It does not establish live acceptance.
+    # No trusted independently observed live evidence importer exists yet.
     for check in LIVE_CHECKS:
         results.append({"id": check, "status": "not_run", "evidence": "none"})
 
@@ -180,12 +201,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--vm-run-id")
     parser.add_argument("--pilot-topology-json", type=Path)
     parser.add_argument("--opencode-runtime-json", type=Path)
+    parser.add_argument("--local-acceptance-run-id")
     args = parser.parse_args(argv)
     result = normalize_sources(
         hermetic_json=args.hermetic_json,
         vm_run_id=args.vm_run_id,
         pilot_topology_json=args.pilot_topology_json,
         opencode_runtime_json=args.opencode_runtime_json,
+        local_acceptance_run_id=args.local_acceptance_run_id,
     )
     if args.format == "json":
         print(json.dumps(result, separators=(",", ":")))

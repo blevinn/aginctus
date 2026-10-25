@@ -35,6 +35,33 @@ def sample(session=SESSION_A, **extra):
 
 
 class ForwardingTests(unittest.TestCase):
+    def test_real_sdk_user_agent_is_preserved_without_allowing_arbitrary_suffixes(self):
+        agent = "opencode/1.15.10 ai-sdk/provider-utils/4.0.19 runtime/bun/1.3.11"
+        data = mod.sanitize_go_headers(sample(**{"User-Agent": agent}), "aresponses")
+        self.assertEqual(data["headers"], {"x-opencode-session": SESSION_A, "User-Agent": agent})
+        for invalid in (agent + " extra/1.0", agent + "\r\nX-Api-Key: secret",
+                        agent.replace("runtime/bun", "runtime/python"),
+                        agent.replace("4.0.19", "a" * 61),
+                        agent.replace("opencode/1.15.10", "python/3.13"),
+                        "opencode/1.15.10 ai-sdk/provider-utils/4.0.19"):
+            with self.subTest(agent=invalid), self.assertRaises(ValueError):
+                mod.sanitize_go_headers(sample(**{"User-Agent": invalid}), "aresponses")
+
+    def test_callback_rejects_wrong_or_missing_runtime_at_import(self):
+        import importlib.metadata
+
+        for value in ("1.102.0", "1.103.0.post1", "1.103.00", "1.104.0", None):
+            with self.subTest(version=value):
+                adapter = importlib.util.spec_from_file_location(
+                    "litellm_opencode_go_hook", Path(__file__).with_name("litellm_opencode_go_hook.py"))
+                hook = importlib.util.module_from_spec(adapter)
+                kwargs = ({"return_value": value} if value is not None else
+                          {"side_effect": importlib.metadata.PackageNotFoundError("litellm")})
+                with mock.patch("importlib.metadata.version", **kwargs) as version:
+                    with self.assertRaises((RuntimeError, importlib.metadata.PackageNotFoundError)):
+                        adapter.loader.exec_module(hook)
+                    version.assert_called_once_with("litellm")
+
     def test_one_session_remains_stable_and_isolated_from_another(self):
         outbound = [mod.sanitize_go_headers(sample(s), "aresponses")["headers"]
                     for s in (SESSION_A, SESSION_A, SESSION_B)]
@@ -76,11 +103,21 @@ class ForwardingTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 mod.sanitize_go_headers({"model": mod.GO_ALIAS, **invalid}, "aresponses")
 
-    def test_unrelated_model_and_nonresponses_are_unmodified(self):
-        for call_type, model in (("acompletion", mod.GO_ALIAS),
-                                 ("aresponses", "other-model")):
+    def test_approved_alias_rejects_every_nonresponses_type_before_mutation(self):
+        for call_type in ("acompletion", "completion", "atext_completion", "embedding", "", None):
+            for original in (sample(), {"model": mod.GO_ALIAS}):
+                before = copy.deepcopy(original)
+                with self.subTest(call_type=call_type), self.assertRaisesRegex(
+                    ValueError, "requires native Responses"
+                ):
+                    mod.sanitize_go_headers(original, call_type)
+                self.assertEqual(before, original)
+
+    def test_unrelated_model_is_unmodified_for_all_call_types(self):
+        for call_type in ("aresponses", "acompletion", "completion", "atext_completion",
+                          "embedding", "", None):
             original = sample()
-            original["model"] = model
+            original["model"] = "other-model"
             before = copy.deepcopy(original)
             self.assertIs(mod.sanitize_go_headers(original, call_type), original)
             self.assertEqual(before, original)
@@ -101,7 +138,7 @@ class ForwardingTests(unittest.TestCase):
         root.__path__ = []
         integrations = types.ModuleType("litellm.integrations")
         integrations.__path__ = []
-        with mock.patch.dict(sys.modules, {"litellm": root, "litellm.integrations": integrations,
+        with mock.patch("importlib.metadata.version", return_value="1.103.0"), mock.patch.dict(sys.modules, {"litellm": root, "litellm.integrations": integrations,
                                       "litellm.integrations.custom_logger": logger,
                                       "opencode_go_forwarding": mod,
                                       "fastapi": fastapi}):
@@ -133,6 +170,12 @@ class ForwardingTests(unittest.TestCase):
                     rejected.exception.detail, "Invalid OpenCode Go session metadata"
                 )
                 self.assertNotIn("secret", str(rejected.exception))
+
+            with self.assertRaises(FakeHTTPException) as rejected:
+                asyncio.run(hook.proxy_handler_instance.async_pre_call_hook(
+                    None, None, sample(), "acompletion"))
+            self.assertEqual(rejected.exception.status_code, 400)
+            self.assertEqual(rejected.exception.detail, "Invalid OpenCode Go session metadata")
 
             unrelated = sample()
             unrelated["model"] = "other-model"

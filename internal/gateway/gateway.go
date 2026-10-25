@@ -24,6 +24,7 @@ import (
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
+	gatewayassets "github.com/blevinn/aginctus/scripts/gateway"
 )
 
 type Spec struct {
@@ -42,6 +43,7 @@ type Spec struct {
 	LiteLLMImage              string
 	PostgresImage             string
 	ForwardClientHeaders      bool
+	SelectiveGoForwarding     bool
 	ForwardClientHeaderModels []string
 }
 
@@ -128,6 +130,10 @@ func FromConfig(effective *config.Config) (Spec, error) {
 	if _, present := effective.Get("gateway.litellm.opencodeGoForwarding"); present {
 		return Spec{}, fmt.Errorf("use gateway.litellm.forwardClientHeaders instead of gateway.litellm.opencodeGoForwarding")
 	}
+	spec.SelectiveGoForwarding, err = effective.Bool("gateway.litellm.selectiveGoForwarding")
+	if err != nil {
+		return Spec{}, err
+	}
 	value, _ := effective.Get("gateway.litellm.forwardClientHeaders")
 	switch value := value.(type) {
 	case bool:
@@ -169,8 +175,17 @@ func rejectDottedEgressDHCPInput(effective *config.Config) error {
 }
 
 var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+var selectiveGoImagePattern = regexp.MustCompile(`^ghcr\.io/berriai/litellm(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}$`)
 
 func (s Spec) Validate() error {
+	if s.SelectiveGoForwarding {
+		if s.HasClientHeaderForwarding() {
+			return fmt.Errorf("gateway.litellm.selectiveGoForwarding conflicts with all stock forwardClientHeaders modes")
+		}
+		if !selectiveGoImagePattern.MatchString(s.LiteLLMImage) {
+			return fmt.Errorf("gateway.litellm.selectiveGoForwarding requires gateway.images.litellm to reference ghcr.io/berriai/litellm with an immutable lowercase SHA-256 digest")
+		}
+	}
 	if s.ForwardClientHeaders && len(s.ForwardClientHeaderModels) != 0 {
 		return fmt.Errorf("global and model-group client header forwarding cannot be combined")
 	}
@@ -288,7 +303,35 @@ func (s Spec) ManagementDNSIPv4() string {
 	return prefix.Addr().String()
 }
 
-var composeTemplate = template.Must(template.New("gateway-compose").Parse(`name: {{.Project}}
+// Escape dollars once at the Compose boundary; the loader restores source bytes.
+func (s Spec) SelectiveGoConfigs() map[string]map[string]string {
+	configs := map[string]map[string]string{}
+	if s.SelectiveGoForwarding {
+		for name, content := range gatewayassets.Files() {
+			configs["aginctus-go-"+name] = map[string]string{"content": composeLiteralContent(content)}
+		}
+	}
+	return configs
+}
+
+func composeLiteralContent(content string) string {
+	return strings.ReplaceAll(content, "$", "$$")
+}
+
+func (s Spec) SelectiveGoAttachments() []map[string]string {
+	var attachments []map[string]string
+	for _, name := range []string{"config.yaml", "litellm_opencode_go_hook.py", "opencode_go_forwarding.py"} {
+		attachments = append(attachments, map[string]string{"source": "aginctus-go-" + name, "target": gatewayassets.PythonPath + "/" + name})
+	}
+	return attachments
+}
+
+func composeJSON(value any) (string, error) {
+	data, err := json.Marshal(value)
+	return string(data), err
+}
+
+var composeTemplate = template.Must(template.New("gateway-compose").Funcs(template.FuncMap{"json": composeJSON}).Parse(`name: {{.Project}}
 services:
   postgres:
     image: {{.PostgresImage}}
@@ -312,7 +355,10 @@ services:
       LITELLM_MASTER_KEY: ${AGINCTUS_GATEWAY_MASTER_KEY}
       LITELLM_SALT_KEY: ${AGINCTUS_GATEWAY_SALT_KEY}
       STORE_MODEL_IN_DB: "True"
-{{if .HasClientHeaderForwarding}}      CONFIG_FILE_PATH: /app/aginctus-client-headers.yaml
+{{if .SelectiveGoForwarding}}      CONFIG_FILE_PATH: /app/aginctus-go/config.yaml
+      PYTHONPATH: /app/aginctus-go
+    configs: {{json .SelectiveGoAttachments}}
+{{end}}{{if .HasClientHeaderForwarding}}      CONFIG_FILE_PATH: /app/aginctus-client-headers.yaml
     configs:
       - source: aginctus-client-headers
         target: /app/aginctus-client-headers.yaml
@@ -324,7 +370,8 @@ services:
         ipv4_address: {{.EgressIPv4Address}}{{else}} {}{{end}}
 {{else}}      - management
 {{end}}
-{{if .HasClientHeaderForwarding}}configs:
+{{if .SelectiveGoForwarding}}configs: {{json .SelectiveGoConfigs}}
+{{end}}{{if .HasClientHeaderForwarding}}configs:
   aginctus-client-headers:
     content: |
 {{.ClientHeaderForwardingIndentedYAML}}
@@ -395,6 +442,11 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 			"postgresImage":                 s.PostgresImage,
 			"forwardClientHeaders":          s.HasClientHeaderForwarding(),
 			"clientHeaderForwardingContent": content,
+			"selectiveGoForwarding":         s.SelectiveGoForwarding,
+			"selectiveGoConfigs":            s.SelectiveGoConfigs(),
+			"selectiveGoAttachments":        s.SelectiveGoAttachments(),
+			"selectiveGoConfigPath":         gatewayassets.ConfigPath,
+			"selectiveGoPythonPath":         gatewayassets.PythonPath,
 		},
 	)
 }

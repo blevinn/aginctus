@@ -52,6 +52,7 @@ class LocalReportTests(unittest.TestCase):
             ))
             self.assertEqual(document["upstream_inference"], "not_verified")
             self.assertEqual(document["cleanup"], "not_verified")
+            self.assertEqual(document["local_workspace_removed"], "not_run")
             self.assertFalse(document["complete_acceptance"])
             self.assertEqual(document["cleanup_commands"], {
                 "stop": "pass", "close": "pass"
@@ -87,6 +88,23 @@ class LocalReportTests(unittest.TestCase):
                 self.assertEqual(report["cleanup"], "not_verified")
                 self.assertFalse(report["complete_acceptance"])
 
+    def test_local_removal_observation_never_proves_remote_cleanup(self):
+        for removal, code, expected in (
+            ("pass", 0, "incomplete"),
+            ("fail", 1, "fail"),
+            ("not_run", 1, "fail"),
+        ):
+            with self.subTest(removal=removal), tempfile.TemporaryDirectory() as parent:
+                path = self.write(
+                    self.setup_root(parent),
+                    local_workspace_removed=removal, exit_code=code,
+                )
+                document = json.loads(path.read_text())
+                self.assertEqual(document["local_workspace_removed"], removal)
+                self.assertEqual(document["status"], expected)
+                self.assertEqual(document["cleanup"], "not_verified")
+                self.assertFalse(document["complete_acceptance"])
+
     def test_input_rejection_before_file_creation(self):
         with tempfile.TemporaryDirectory() as parent:
             root = self.setup_root(parent)
@@ -101,6 +119,8 @@ class LocalReportTests(unittest.TestCase):
                 {"tests": "upstream-inference-confirmed"},
                 {"stop": "verified"},
                 {"close": "success"},
+                {"local_workspace_removed": "upstream-inference-confirmed"},
+                {"local_workspace_removed": "fail", "exit_code": 0},
             )
             for change in changes:
                 with self.subTest(change=change), self.assertRaises(ValueError):
