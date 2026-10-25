@@ -8,6 +8,8 @@ from pathlib import Path
 from gateway_endpoint import validate_endpoint, validate_model
 
 DEFAULT_DIR = "/var/lib/aginctus/opencode"
+GO_ALIAS = "aginctus-go-pilot"
+SESSION_PLUGIN = Path(__file__).with_name("go_session_plugin.js")
 
 
 def load(directory):
@@ -46,11 +48,20 @@ def main():
     }
     environment = os.environ.copy()
     environment["AGINCTUS_LITELLM_KEY"] = key
-    environment["OPENCODE_CONFIG_CONTENT"] = json.dumps({
+    config = {
         "$schema": "https://opencode.ai/config.json",
         "model": "aginctus/" + model,
         "provider": {"aginctus": provider},
-    })
+    }
+    if protocol == "responses" and model == GO_ALIAS:
+        # The custom provider does not get OpenCode's native
+        # x-opencode-session header automatically. Load a local,
+        # Nix-packaged hook that receives OpenCode's own sessionID.
+        # Never fabricate a synthetic identifier or embed a key in config.
+        if not SESSION_PLUGIN.is_file():
+            raise ValueError("OpenCode Go session plugin unavailable")
+        config["plugin"] = [SESSION_PLUGIN.resolve().as_uri()]
+    environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(config)
     os.execve(sys.argv[1], sys.argv[1:], environment)
 
 
