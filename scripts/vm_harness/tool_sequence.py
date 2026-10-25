@@ -133,11 +133,11 @@ def stream(response):
         ("response.completed", {"response": response}),
     ])
     return ("".join(
-        "event: " + kind + "\\ndata: " + json.dumps(
+        "event: " + kind + "\ndata: " + json.dumps(
             {"type": kind, "sequence_number": n, **payload}, separators=(",", ":")
-        ) + "\\n\\n"
+        ) + "\n\n"
         for n, (kind, payload) in enumerate(events, 1)
-    ) + "data: [DONE]\\n\\n").encode()
+    ) + "data: [DONE]\n\n").encode()
 
 class ToolSequence:
     def __init__(self, workdir="/workspace"):
