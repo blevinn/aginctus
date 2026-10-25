@@ -126,6 +126,20 @@ def verify_tool_workspace(root, nonce, response_steps, continuations, stdout):
 
 
 def main(binary, inspect_tools=False, execute_tools=False):
+    if execute_tools:
+        # This opt-in path asks a real coding agent to execute OS commands.
+        # The flag/acknowledgement are NOT a security sandbox. Enforce an
+        # immutable Nix-packaged test inside a non-root disposable VM user;
+        # it must never be enabled on a pilot or developer host checkout.
+        source = Path(__file__).resolve()
+        executable = Path(binary).resolve(strict=True)
+        if (
+            os.geteuid() == 0
+            or os.environ.get("AGINCTUS_TESTENV_TOOL_WORKER") != "DISPOSABLE_VM_ONLY"
+            or not source.is_relative_to(Path("/nix/store"))
+            or not executable.is_relative_to(Path("/nix/store"))
+        ):
+            raise RuntimeError("tool execution requires packaged disposable non-root VM")
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         state = root / "gateway"
