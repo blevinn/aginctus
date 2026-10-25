@@ -256,7 +256,7 @@ def check_rejected_without_upstream(port, session, *, user_agent):
     status, _ = send(port, ALIAS, session, user_agent=user_agent)
     after = len(MockGo.calls)
     # Do not infer rejection from a transport failure or a normal 200.
-    if status < 400 or after != before:
+    if status not in (400, 401, 403, 422) or after != before:
         raise RuntimeError(
             "selective hook failed closed negative case "
             f"(http_status={status}, upstream_delta={after - before})"
