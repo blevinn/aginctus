@@ -62,20 +62,20 @@ func TestScopedWorkloadApplyRenderOnlyOneProjectBoundInstance(t *testing.T) {
 			t.Fatalf("render %q: code=%d stdout=%q stderr=%q", args, code, output, stderr)
 		}
 		var report struct {
-			Kind string `json:"kind"`
-			Project string `json:"project"`
-			WorkloadID string `json:"workloadId"`
-			ObservedState string `json:"observedState"`
-			WriteAuthorized bool `json:"writeAuthorized"`
-			Plan struct {
+			Kind            string `json:"kind"`
+			Project         string `json:"project"`
+			WorkloadID      string `json:"workloadId"`
+			ObservedState   string `json:"observedState"`
+			WriteAuthorized bool   `json:"writeAuthorized"`
+			Plan            struct {
 				Steps []struct {
-					ID string `json:"id"`
-					Driver string `json:"driver"`
+					ID            string `json:"id"`
+					Driver        string `json:"driver"`
 					Configuration struct {
-						Project string `json:"project"`
-						Operation string `json:"operation"`
+						Project               string            `json:"project"`
+						Operation             string            `json:"operation"`
 						RequireExistingConfig map[string]string `json:"requireExistingConfig"`
-						Documents []struct {
+						Documents             []struct {
 							Kind string `json:"kind"`
 							Name string `json:"name"`
 						} `json:"documents"`
