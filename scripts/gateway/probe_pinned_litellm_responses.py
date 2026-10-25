@@ -153,8 +153,11 @@ def send(port, alias, session, authenticated=True):
         "Content-Type": "application/json",
         "User-Agent": "opencode/1.15.11",
         "x-opencode-session": session,
-        **SENTINELS,
+        **(SENTINELS if authenticated else {}),
     }
+    # x-api-key is an alternative authentication mechanism in pinned LiteLLM.
+    # An anonymous negative control must NOT include a second auth header;
+    # the authenticated cases separately audit the unapproved x-api-key value.
     if authenticated:
         headers["Authorization"] = "Bearer " + PROXY_KEY
     req = Request(
@@ -225,6 +228,16 @@ def evaluate(calls, *, report=True):
     return not risk and ua
 
 
+def require_unauthenticated_rejection(status, upstream_calls):
+    # A 400/404/500 must not be misreported as proof of authentication.
+    # Only an actual 401/403 and zero upstream calls establish this gate.
+    if status not in (401, 403) or upstream_calls != 0:
+        raise RuntimeError(
+            "anonymous request authentication gate failed "
+            f"(http_status={status}, upstream_calls={upstream_calls})"
+        )
+
+
 def run(fixture, require_safe):
     verify_isolation()
     import yaml  # pinned image dependency; deliberately optional in dev-shell tests
@@ -248,8 +261,8 @@ def run(fixture, require_safe):
                 stderr=subprocess.DEVNULL)
             wait_ready(port, proxy)
             status, _ = send(port, ALIAS, SESSION_A, authenticated=False)
-            if status not in (401, 403) or MockGo.calls:
-                raise RuntimeError("unauthenticated request escaped proxy")
+            require_unauthenticated_rejection(status, len(MockGo.calls))
+            print("PASS: anonymous request rejected without contacting upstream")
             for alias, session in [(ALIAS, SESSION_A), (ALIAS, SESSION_A),
                                    (ALIAS, SESSION_B), (OTHER, SESSION_A)]:
                 status, body = send(port, alias, session)
