@@ -65,6 +65,11 @@ test-vm-storage-network:
 test-vm-runtime-lifecycle:
     python3 scripts/vm_harness/runner.py test runtime-lifecycle
 
+# Real LiteLLM/PostgreSQL OCI and Herdr/OpenCode topology (no model calls).
+# May need OCI registry access; use a disposable NixOS KVM worker only.
+test-vm-gateway-topology:
+    python3 scripts/vm_harness/runner.py test gateway-topology
+
 # Real Incus foreign-resource and daemon-outage recovery assertions.
 test-vm-ownership-recovery:
     python3 scripts/vm_harness/runner.py test ownership-recovery
