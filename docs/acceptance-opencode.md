@@ -194,14 +194,15 @@ state file and a reviewed private IPv4 gateway endpoint. Supply all selectors
 explicitly; no gateway traffic occurs unless `--inspect` is present:
 
 ```sh
-# Dry run first: checks no secret files and makes no HTTP request.
+# Set exact values after inspecting the reviewed pilot; no defaults inferred.
+# Dry run first: reads no secret files and makes no HTTP request.
 nix develop -c python3 scripts/gateway/inspect_responses_spend.py \
-  --endpoint http://10.42.40.1:4000 --gateway-id local \
-  --request-id 'resp_KNOWN_REQUEST_ID' \
-  --run-id 'aginctus-acceptance.ABCD1234' \
-  --session-id 'ses_KNOWN_NATIVE_SESSION' \
-  --model-alias aginctus-go-pilot \
-  --workload-key-file /absolute/private/workload-key
+  --endpoint "$GATEWAY_PRIVATE_ENDPOINT" --gateway-id "$GATEWAY_ID" \
+  --request-id "$GATEWAY_REQUEST_ID" \
+  --run-id "$ACCEPTANCE_RUN_ID" \
+  --session-id "$NATIVE_OPENCODE_SESSION_ID" \
+  --model-alias "$GATEWAY_MODEL_ALIAS" \
+  --workload-key-file "$PRIVATE_WORKLOAD_KEY_FILE"
 
 # Append --inspect ONLY for a separately operator-approved, read-only query.
 ```
