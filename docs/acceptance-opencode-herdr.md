@@ -133,6 +133,31 @@ Use the configured Herdr client instance name in place of `aginctus-herdr` if ov
 
 The smoke defaults to this helper for staging and cleanup. The helper requires `/bin/sh`, `stat`, `find`, `mkdir`, `chmod`, `rm`, and `rmdir` in the workload; check these and the `agent` home before opt-in. `AGINCTUS_ACCEPTANCE_WORKLOAD` can select an explicitly reviewed instance if the workload name differs. The helper is intended **only for the empty workspace smoke** and does not yet stage a coding fixture. Cleanup failures require manual investigation; do not forcibly remove unexpected content.
 
+### Separate guest-directory removal readback
+
+After the smoke's operator-selected guest cleanup helper runs, the trusted
+host invokes the repository's fixed `guest-owned.py inspect-absent` action
+as a **second, read-only Incus guest execution** against the selected workload.
+That action requires the expected guest parent directory to be a real,
+owner-controlled, non-world-writable directory, and then checks that this
+run's exact guest path is absent as both an existing entry and a dangling
+symlink. It does not create, remove, rename or walk other directories.
+
+The independent readback runs even when a custom
+`AGINCTUS_ACCEPTANCE_HERDR_CLEANUP` hook returned success or failed. A
+lingering directory, unsafe parent, missing guest readback capability or
+unreachable workload fails the smoke rather than producing a final PASS.
+The existing cleanup attempt is always made, and a primary phase error is
+preserved. The result proves only **guest-directory absence at the time of
+this read-only probe**, not the absence of agent processes, volumes, other
+Incus instances, provider sessions, or any end-to-end inference.
+
+No `inspect-absent` action is invoked by `just check ci` against a real
+workload: normal tests exercise the fixed shell program on a local temporary
+directory and use injected process doubles. Real readback only occurs
+inside a separately authorized Herdr smoke. This does not promote the
+main acceptance report's `cleanup` or `complete_acceptance` fields.
+
 Before mutating the pilot, perform read-only checks:
 
 ```sh
