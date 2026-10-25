@@ -95,3 +95,42 @@ For any stage, stop on nonzero results. The local harness creates and removes **
 Store any operator evidence in a separate, access-controlled, **redacted** record: run ID, UTC time, software versions, selected owned resource IDs, observed phase outcomes, independent tool/test traces, gateway-side request/response correlation and safe pass/fail statements for direct-egress and credential isolation. Do **not** collect raw request headers, provider replies, OAuth materials, keys or unredacted Incus/config dumps in logs or PR comments.
 
 Record real pilot evidence on the [#118 release checklist](https://github.com/blevinn/aginctus/issues/118) and its live gateway/egress gates (#122/#257). A closed documentation issue or a passing hermetic check does not authorize live deployment, billable inference or release sign-off.
+
+## Optional private, runner-owned acceptance report
+
+The existing `scripts/acceptance/opencode.sh` can now write a small **local**
+report if the operator explicitly supplies `AGINCTUS_ACCEPTANCE_REPORT_ROOT`.
+Create that directory beforehand, **outside the repository and any
+agent-writable workspace**, with the owner of the trusted runner and mode 0700:
+
+```sh
+install -d -m 0700 "$HOME/.local/state/aginctus/acceptance-results"
+export AGINCTUS_ACCEPTANCE_REPORT_ROOT="$HOME/.local/state/aginctus/acceptance-results"
+# Then invoke the EXISTING operator-reviewed mock or live acceptance workflow.
+# Example: with the already reviewed adapter and live opt-in selected:
+# bash scripts/acceptance/opencode.sh live
+```
+
+This opt-in **does not** launch acceptance on its own. Live execution still
+requires `AGINCTUS_ACCEPTANCE_LIVE=I_UNDERSTAND` and all existing reviewed
+adapter hooks and approvals; `just check ci` does not execute this path.
+An unsafe or absent evidence directory fails before any acceptance phase.
+
+Each run writes a new private
+`<report-root>/aginctus-acceptance.<run-identity>/result.json` (0700 run
+directory, 0600 record), with fixed IDs, run identity, UTC time and exact
+host-runner outcomes for the fixture edit and `go test`. The report also
+records whether the runner's **stop/close commands** returned successfully.
+A failing stop or close now makes the harness fail, even if the fixture
+test passed; command success is **not** independent proof of cleanup.
+
+Reports always label native agent/tool evidence, real gateway-side Responses
+completion, credential/egress enforcement, and owned-resource cleanup as
+`not_run` / `not_verified`. Thus a `mock` or even a `live` harness
+success results in an **incomplete** acceptance report, never
+`complete_acceptance: true`. A future, separately reviewed runner
+observation under [#521](https://github.com/blevinn/aginctus/issues/521)
+must provide genuine independent evidence for those dimensions before
+[#522](https://github.com/blevinn/aginctus/issues/522) may present them as
+verified. Do not ingest agent-written JSON or gateway nonce markers as proof.
+This local workflow requires no cryptographic signing service.

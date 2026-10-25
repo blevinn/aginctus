@@ -56,6 +56,68 @@ move v0.1 images, activate systemd services, or authorize Home Manager
 reconciliation. Existing `images update NAME PATH` still uses the legacy
 ambient project. See [configuration](configuration.md) for migration limits.
 
+## Image ownership-claim audit (read-only)
+
+```sh
+aginctus images owner-audit --project aginctus --owner system my-image
+```
+
+This read-only command requires the selected `incus.project`, verifies
+ownership of the local Incus project, and checks the requested alias
+against image `properties`. The provisional ownership-claim contract
+requires `user.aginctus.managed=true`,
+`user.aginctus.resource=image`, `user.aginctus.deployment=PROJECT`,
+`user.aginctus.alias=ALIAS`, and
+`user.aginctus.owner=system|user` with the selected owner value.
+It also requires one exclusive alias and an unambiguous full image
+fingerprint.
+
+The JSON report distinguishes `claimed`, `absent`, `unmarked`,
+`foreign-or-incomplete`, `shared`, `ambiguous` and `unverified`.
+A result other than `claimed` exits nonzero. Access and parsing errors
+fail closed without displaying raw Incus output. **Even `claimed`
+is not write permission or an authenticated attestation**: these
+properties can be edited by an actor with appropriate Incus access,
+and the audit does not prove which lifecycle controller is currently
+active. The current create-only image import does **not** add these
+markers, so its images remain unmarked pending a separate provenance
+creation contract. Do not mark or adopt existing images as a workaround.
+
+No existing alias is modified by this command. Alias replacement
+still requires controller exclusion, provenance evidence and
+transaction-safe, explicitly project-scoped rollback.
+
+## Create a newly claimed image (opt-in mutation)
+
+An authorized operator can create a *new*, project-scoped image whose
+descriptive properties declare the intended lifecycle owner:
+
+```sh
+aginctus images import-owned --project aginctus --owner system my-image /path/to/nix-image --confirm-create
+```
+
+This is a **write**, not an ownership handoff or an attestation. It uses
+one Incus image-import request with the five
+`user.aginctus.{managed,resource,deployment,alias,owner}` properties,
+matching the read-only `images owner-audit` contract. It refuses an
+existing alias **and** an already-present image fingerprint, including
+one with another alias, so it never attempts to rewrite or adopt
+existing image metadata. It repeats the project and inventory checks
+before importing without `--reuse`, then verifies exclusive alias,
+fingerprint and claims. A failed or uncertain import may have left an
+image in the store; the command never automatically deletes or
+restamps it. Incus's server-side duplicate-fingerprint guard provides
+the final protection against a concurrent import of identical content.
+
+The `--owner` argument **does not verify the caller's identity or
+which systemd/Home Manager process is in control**. The property claims
+are mutable descriptive metadata; they are not authoritative write
+permission. Use this command only in an explicitly approved disposable
+Incus environment during validation, not on the v0.1 pilot. Keep
+`images update`, `images import`, service units and migration paths
+unchanged until separate owner arbitration and atomic update/rollback
+work is complete.
+
 ## Commands that change state
 
 | Surface | Side effect or prerequisite |

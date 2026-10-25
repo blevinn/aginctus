@@ -65,10 +65,34 @@ func TestHelpOfflineInventory(t *testing.T) {
 		"network firewall policy", "network firewall reconcile", "herdr authorize", "herdr pin-host", "herdr register",
 		"network firewall egress reconcile|revoke",
 		"workload gateway provision", "--require-function-call", "network ensure", "herdr client ensure", "workload <name> ensure|teardown",
-		"operator state-audit --owner system|user", "operator units-audit --owner system|user", "operator package-audit --owner system|user", "operator project-plan --project NAME", "operator project-ensure --project NAME --confirm-create", "images list|ls --project NAME", "images import --project NAME ALIAS PATH --confirm-create",
+		"operator state-audit --owner system|user", "operator units-audit --owner system|user", "operator package-audit --owner system|user", "operator project-plan --project NAME", "operator project-ensure --project NAME --confirm-create", "images list|ls --project NAME", "images import --project NAME ALIAS PATH --confirm-create", "images owner-audit --project NAME --owner system|user ALIAS", "images import-owned --project NAME --owner system|user ALIAS PATH --confirm-create",
 	} {
 		if !strings.Contains(top.String(), want) {
 			t.Errorf("help missing %q", want)
+		}
+	}
+}
+
+func TestHelpScopedOwnedImportUsage(t *testing.T) {
+	for _, args := range [][]string{{"help"}, {"help", "images"}, {"images", "--help"}} {
+		var out, errOut bytes.Buffer
+		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
+			t.Fatalf("%q: code=%d, stderr=%q", args, code, errOut.String())
+		}
+		if !strings.Contains(out.String(), "images import-owned --project NAME --owner system|user ALIAS PATH --confirm-create") {
+			t.Fatalf("claimed-owner image import missing from help %q", args)
+		}
+	}
+}
+
+func TestHelpImageOwnerAuditUsage(t *testing.T) {
+	for _, args := range [][]string{{"help"}, {"help", "images"}, {"images", "--help"}} {
+		var out, errOut bytes.Buffer
+		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
+			t.Fatalf("%q: code=%d, stderr=%q", args, code, errOut.String())
+		}
+		if !strings.Contains(out.String(), "images owner-audit --project NAME --owner system|user ALIAS") {
+			t.Fatalf("read-only alias claim syntax missing from help %q", args)
 		}
 	}
 }
