@@ -139,7 +139,7 @@ After the smoke's operator-selected guest cleanup helper runs, the trusted
 host invokes the repository's fixed `guest-owned.py inspect-absent` action
 as a **second, read-only Incus guest execution** against the selected workload.
 That action requires the expected guest parent directory to be a real,
-owner-controlled, non-world-writable directory, and then checks that this
+owner-private directory (no group/other permissions), and then checks that this
 run's exact guest path is absent as both an existing entry and a dangling
 symlink. It does not create, remove, rename or walk other directories.
 
