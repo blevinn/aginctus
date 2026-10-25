@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -70,10 +69,9 @@ func TestImageOwnerClaimClassification(t *testing.T) {
 		{"missing alias", auditImageJSON([]string{"other-alias"}, copied()), "absent"},
 		{"no image", []byte("[]"), "absent"},
 		{"duplicate same image", auditImageJSON([]string{"test-image", "test-image"}, copied()), "ambiguous"},
-		{"duplicate across images", append(append([]byte("["),
-			bytes.TrimSuffix(auditImageJSON([]string{"test-image"}, copied()), []byte("]"))...),
-			append([]byte(","), append(bytes.TrimPrefix(auditImageJSON([]string{"test-image"}, copied()), []byte("[")), ']')...)...)...),
-			"ambiguous"},
+		{"duplicate across images", []byte("[" +
+			strings.Trim(string(auditImageJSON([]string{"test-image"}, copied())), "[]") + "," +
+			strings.Trim(string(auditImageJSON([]string{"test-image"}, copied())), "[]") + "]"), "ambiguous"},
 		{"malformed fingerprint", []byte(`[{"fingerprint":"not-a-hash","aliases":[{"name":"test-image"}],"properties":{"user.aginctus.managed":"true"}}]`), "unverified"},
 	}
 	for _, tc := range cases {
@@ -211,5 +209,4 @@ func TestImageOwnerAuditOtherLifecycleOwnerNotClaimed(t *testing.T) {
 	if status := classifyImageOwnerClaim(images, scope, "test-image", "user"); status != "foreign-or-incomplete" {
 		t.Fatalf("user audit may not claim a system-owned image: %q", status)
 	}
-	_ = fmt.Sprintf
 }
