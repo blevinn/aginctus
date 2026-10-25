@@ -70,6 +70,18 @@ class LocalAcceptanceViewTests(unittest.TestCase):
             self.assertEqual(parsed["summary"]["failed"], 2)
             self.assertEqual(parsed["upstream_inference"], "not_verified")
 
+    def test_legacy_record_without_local_removal_remains_unverified(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, path = self.make(directory)
+            record = json.loads(path.read_text())
+            del record["local_workspace_removed"]
+            path.write_text(json.dumps(record))
+            parsed = local_acceptance.normalize(
+                local_acceptance.read_private_result(root, RUN_ID), RUN_ID
+            )
+            self.assertEqual(parsed["results"][-1]["status"], "not_run")
+            self.assertEqual(parsed["cleanup"], "not_verified")
+
     def test_local_workspace_removed_is_independent_from_remote_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
             root, _ = self.make(directory, local_workspace_removed="pass")
