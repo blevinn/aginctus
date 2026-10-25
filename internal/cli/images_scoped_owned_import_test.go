@@ -188,7 +188,9 @@ func TestScopedOwnedImportCLIRejectsWrongProjectWithoutIncus(t *testing.T) {
 		t.Fatal(err)
 	}
 	oldProjects, oldImages, oldImport := inspectLocalProjects, inspectScopedImages, importOwnedScopedImage
-	t.Cleanup(func() { inspectLocalProjects, inspectScopedImages, importOwnedScopedImage = oldProjects, oldImages, oldImport })
+	t.Cleanup(func() {
+		inspectLocalProjects, inspectScopedImages, importOwnedScopedImage = oldProjects, oldImages, oldImport
+	})
 	inspectLocalProjects = func(context.Context) ([]byte, error) {
 		t.Fatal("queried Incus for invalid input")
 		return nil, nil
