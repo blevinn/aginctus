@@ -103,7 +103,7 @@ def main(binary, inspect_tools=False):
         Handler.tools = []
         Handler.continuations = []
         if inspect_tools:
-            (root / "calc.go").write_text("package calc\\nfunc Add(a,b int) int { return a-b }\\n")
+            (root / "calc.go").write_text("package calc\nfunc Add(a,b int) int { return a-b }\n")
         server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
