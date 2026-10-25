@@ -61,9 +61,12 @@ def main():
     results = []
 
     rc, output = run_remote(WORKLOAD, ["sshd", "-T"])
-    sshd = {key.lower(): value for line in output.splitlines() if " " in line
-            for key, value in [line.split(" ", 1)]}
-    sshd_setenv = shlex.split(sshd.get("setenv", ""))
+    sshd_fields = [(key.lower(), value) for line in output.splitlines() if " " in line
+                   for key, value in [line.split(" ", 1)]]
+    sshd = dict(sshd_fields)
+    # OpenSSH can emit each SetEnv assignment on a separate line.
+    sshd_setenv = [setting for key, value in sshd_fields if key == "setenv"
+                   for setting in shlex.split(value)]
     results.append(expect(rc == 0 and
                           "HERDR_SOCKET_PATH=" + EXPECTED_SOCKET_PATH in sshd_setenv
                           and "XDG_CONFIG_HOME=" + EXPECTED_CONFIG_HOME in sshd_setenv,
