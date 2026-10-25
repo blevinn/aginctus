@@ -75,10 +75,10 @@ class PinnedResponsesProbeTests(unittest.TestCase):
             probe.require_unauthenticated_rejection(code, 0)
         for code, upstream in ((200, 1), (200, 0), (400, 0), (404, 0),
                                (500, 0), (401, 1), (403, 1)):
-            with self.subTest(code=code, upstream=upstream):
-                with self.assertRaisesRegex(RuntimeError,
-                                            "http_status=.*upstream_calls="):
-                    probe.require_unauthenticated_rejection(code, upstream)
+            with self.subTest(code=code, upstream=upstream), self.assertRaisesRegex(
+                RuntimeError, "http_status=.*upstream_calls="
+            ):
+                probe.require_unauthenticated_rejection(code, upstream)
 
     def test_model_group_scope_must_be_exact(self):
         probe.verify_policy(POLICY)
@@ -102,14 +102,16 @@ class PinnedResponsesProbeTests(unittest.TestCase):
         self.assertNotEqual(probe.PROXY_KEY, probe.UPSTREAM_KEY)
 
     def test_isolation_requires_opt_in_and_no_network_interface(self):
-        with patch.dict(probe.os.environ, {}, clear=True):
-            with self.assertRaisesRegex(RuntimeError, "opt-in absent"):
-                probe.verify_isolation()
+        with patch.dict(probe.os.environ, {}, clear=True), self.assertRaisesRegex(
+            RuntimeError, "opt-in absent"
+        ):
+            probe.verify_isolation()
         with patch.dict(probe.os.environ, {
             "AGINCTUS_ISOLATED_LITELLM_PROBE": "1"
-        }, clear=True), patch.object(probe.os, "listdir", return_value=["lo", "eth0"]):
-            with self.assertRaisesRegex(RuntimeError, "network isolation absent"):
-                probe.verify_isolation()
+        }, clear=True), patch.object(
+            probe.os, "listdir", return_value=["lo", "eth0"]
+        ), self.assertRaisesRegex(RuntimeError, "network isolation absent"):
+            probe.verify_isolation()
 
     def sample_calls(self, *, ua="opencode/1.15.11", copied=False):
         result = []

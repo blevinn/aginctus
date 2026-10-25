@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Disposable real LiteLLM v1.103.0 Responses -> local mock-Go transport audit.
 
 Run inside the pinned OCI image with --network none and an explicit opt-in.
