@@ -4,7 +4,7 @@
   ],
   "transports": {
     "docker": {
-      "ghcr.io/berriai/litellm:v1.103.0-stable": [
+      "ghcr.io/berriai/litellm:v1.103.0": [
         {"type": "insecureAcceptAnything"}
       ]
     }
