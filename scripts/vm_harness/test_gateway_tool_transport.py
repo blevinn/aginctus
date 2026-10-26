@@ -35,7 +35,7 @@ class TransportTests(unittest.TestCase):
         invalid = (
             raw.replace(b"response.completed", b"response.incomplete"),
             raw.replace(f"call_{NONCE}_0".encode(), b"call_spoofed_0"),
-            raw.replace(f"resp_{NONCE}_0".encode(), b"resp_unrelated_0"),
+            raw.replace(f"resp_{NONCE}_0".encode(), b"bad-response-id"),
             raw.replace(b'"name":"read"', b'"name":"bash"'),
             raw.replace(b'data: [DONE]', b'data: {}\n\ndata: [DONE]'),
             raw + b"data: {}\n\n",
@@ -46,7 +46,7 @@ class TransportTests(unittest.TestCase):
         with self.assertRaises(TransportFailure):
             completed_item(raw, NONCE, 3)
 
-    def test_four_turns_forward_exact_previous_identity(self):
+    def test_four_turns_forward_opaque_previous_identity_unchanged(self):
         sequence = ToolSequence()
         turns = []
         def request(_gateway, path, token, body=None):
@@ -60,16 +60,20 @@ class TransportTests(unittest.TestCase):
                 self.assertEqual(len(body["tools"]), 3)
             else:
                 self.assertEqual(body["previous_response_id"],
-                                 f"resp_{NONCE}_{len(turns)-1}")
+                                 f"resp_gatewayOpaque_{len(turns)-1}")
                 self.assertEqual(body["input"][0]["call_id"],
                                  f"call_{NONCE}_{len(turns)-1}")
                 self.assertIn("no tool executed", body["input"][0]["output"])
             upstream_body = copy.deepcopy(body)
             upstream_body["model"] = "synthetic-test"
+            if turns:
+                upstream_body["previous_response_id"] = f"resp_{NONCE}_{len(turns)-1}"
             nonce, response = sequence.next(upstream_body)
             self.assertEqual(nonce, NONCE)
             turns.append(response)
-            return stream(response)
+            gateway_response = copy.deepcopy(response)
+            gateway_response["id"] = f"resp_gatewayOpaque_{len(turns)-1}"
+            return stream(gateway_response)
         result = probe_gateway_tool_transport(
             request, "http://gateway", "scoped", "http://upstream",
             "dummy", "synthetic-alias", NONCE,

@@ -9,6 +9,7 @@ import json
 import re
 
 NONCE = re.compile(r"[a-zA-Z0-9_-]{8,64}\Z")
+RESPONSE_ID = re.compile(r"resp_[A-Za-z0-9_-]{8,256}\Z")
 STEP_TOOLS = ("read", "edit", "bash")
 TOOL_DEFINITIONS = [
     {"type": "function", "name": "read",
@@ -72,11 +73,9 @@ def completed_item(raw: bytes, nonce: str, step: int):
             terminal = payload.get("response")
     if not isinstance(terminal, dict) or terminal.get("status") != "completed":
         raise TransportFailure("synthetic Responses missing completion")
-    expected_id = f"resp_{nonce}_{step}"
     response_id = terminal.get("id")
-    if response_id != expected_id:
-        shown_id = response_id.replace(nonce, "[NONCE]")[:96] if isinstance(response_id, str) else "<missing>"
-        raise TransportFailure("synthetic Responses identity changed: " + shown_id)
+    if not isinstance(response_id, str) or not RESPONSE_ID.fullmatch(response_id):
+        raise TransportFailure("synthetic Responses identity malformed")
     output = terminal.get("output")
     if not isinstance(output, list) or len(output) != 1 or not isinstance(output[0], dict):
         raise TransportFailure("synthetic Responses output count changed")
