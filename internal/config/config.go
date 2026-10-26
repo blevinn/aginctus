@@ -232,6 +232,9 @@ var defaults = map[string]any{
 					"address": "auto",
 					"nat":     false,
 					"routing": false,
+					"dhcp": map[string]any{
+						"gateway": "none",
+					},
 				},
 				"ipv6": map[string]any{
 					"address": "none",

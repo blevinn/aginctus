@@ -40,7 +40,19 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus network show aginctus-mgmt")
     assert machine.succeed("incus network get aginctus-mgmt ipv4.nat").strip() == "false"
     assert machine.succeed("incus network get aginctus-mgmt ipv4.routing").strip() == "false"
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.dhcp.gateway").strip() == "none"
     assert machine.succeed("incus network get aginctus-mgmt ipv6.address").strip() == "none"
+
+    # Legacy DHCP policy is immutable drift, not an implicit live migration.
+    machine.succeed("incus network unset aginctus-mgmt ipv4.dhcp.gateway")
+    machine.fail(f"{cli} network ensure")
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.dhcp.gateway").strip() == ""
+    legacy_gateway = machine.succeed("incus network get aginctus-mgmt ipv4.address").strip().split("/")[0]
+    machine.succeed(f"incus network set aginctus-mgmt ipv4.dhcp.gateway={legacy_gateway}")
+    machine.fail(f"{cli} network ensure")
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.dhcp.gateway").strip() == legacy_gateway
+    machine.succeed("incus network set aginctus-mgmt ipv4.dhcp.gateway=none")
+    machine.succeed(f"{cli} network ensure")
 
     # Removing an Aginctus-owned bridge must not remove an unrelated network.
     machine.succeed("incus network create vm-foreign ipv4.address=none ipv6.address=none")

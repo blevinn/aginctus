@@ -43,7 +43,11 @@ ag.orchestration(cfg.id,
           volumes: [
             'gateway-postgres:/var/lib/postgresql/data',
           ],
-          networks: ['management'],
+          networks: {
+            management: {
+              'x-incus-compose': { internal: true },
+            },
+          },
         },
         litellm: {
           image: cfg.litellmImage,
@@ -59,12 +63,13 @@ ag.orchestration(cfg.id,
             CONFIG_FILE_PATH: cfg.selectiveGoConfigPath,
             PYTHONPATH: cfg.selectiveGoPythonPath,
           } else {}),
-          networks: if cfg.egressNetwork == '' then ['management'] else {
+          networks: {
             management: {
               'x-incus-compose': { internal: true },
             },
+          } + (if cfg.egressNetwork == '' then {} else {
             egress: if cfg.egressIPv4Address == '' then {} else { ipv4_address: cfg.egressIPv4Address },
-          },
+          }),
         } + (if std.get(cfg, 'managementDNSIPv4', '') != '' then {
           dns: [cfg.managementDNSIPv4],
         } else {}) + (if cfg.forwardClientHeaders then {

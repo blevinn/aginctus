@@ -10,11 +10,12 @@ import (
 )
 
 type Spec struct {
-	Name        string
-	IPv4Address string
-	IPv4NAT     bool
-	IPv4Routing bool
-	IPv6Address string
+	Name            string
+	IPv4Address     string
+	IPv4NAT         bool
+	IPv4Routing     bool
+	IPv4DHCPGateway string
+	IPv6Address     string
 }
 
 type Options struct {
@@ -44,15 +45,20 @@ func FromConfig(effective *config.Config) (Spec, error) {
 	if err != nil {
 		return Spec{}, err
 	}
+	ipv4DHCPGateway, err := effective.String("incus.management.network.ipv4.dhcp.gateway")
+	if err != nil {
+		return Spec{}, err
+	}
 	if name == "" {
 		return Spec{}, fmt.Errorf("configuration key %q must not be empty", "incus.management.network.name")
 	}
 	return Spec{
-		Name:        name,
-		IPv4Address: ipv4Address,
-		IPv4NAT:     ipv4NAT,
-		IPv4Routing: ipv4Routing,
-		IPv6Address: ipv6Address,
+		Name:            name,
+		IPv4Address:     ipv4Address,
+		IPv4NAT:         ipv4NAT,
+		IPv4Routing:     ipv4Routing,
+		IPv4DHCPGateway: ipv4DHCPGateway,
+		IPv6Address:     ipv6Address,
 	}, nil
 }
 
@@ -67,13 +73,14 @@ func (s Spec) Plan(operation string, force bool) (orchestration.Plan, error) {
 	return generator.Evaluate(
 		"local ag = import 'aginctus/orchestration.libsonnet'; local network = import 'aginctus/management-network.jsonnet'; ag.orchestration('management-network', [network(std.extVar('config'))])",
 		map[string]any{
-			"name":        s.Name,
-			"ipv4Address": s.IPv4Address,
-			"ipv4Nat":     s.IPv4NAT,
-			"ipv4Routing": s.IPv4Routing,
-			"ipv6Address": s.IPv6Address,
-			"operation":   operation,
-			"force":       force,
+			"name":            s.Name,
+			"ipv4Address":     s.IPv4Address,
+			"ipv4Nat":         s.IPv4NAT,
+			"ipv4Routing":     s.IPv4Routing,
+			"ipv4DHCPGateway": s.IPv4DHCPGateway,
+			"ipv6Address":     s.IPv6Address,
+			"operation":       operation,
+			"force":           force,
 		},
 	)
 }

@@ -11,8 +11,64 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/herdrclient"
+	"github.com/blevinn/aginctus/internal/managementnetwork"
 	"github.com/blevinn/aginctus/internal/orchestration"
+	"github.com/blevinn/aginctus/internal/workload"
 )
+
+func TestManagementNetworkPlanParity(t *testing.T) {
+	for _, overrides := range [][]string{
+		nil,
+		{"incus.management.network.name=custom-mgmt", "incus.management.network.ipv4.address=10.88.0.1/24", "incus.management.network.ipv4.dhcp.gateway=10.88.0.1"},
+	} {
+		effective, err := (&config.Loader{}).Load(config.Options{Overrides: overrides})
+		if err != nil {
+			t.Fatal(err)
+		}
+		gateway, err := FromConfig(effective)
+		if err != nil {
+			t.Fatal(err)
+		}
+		network, err := managementnetwork.FromConfig(effective)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gatewayPlan, err := gateway.OrchestrationPlan()
+		if err != nil {
+			t.Fatal(err)
+		}
+		networkPlan, err := network.Plan("upsert", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(gatewayPlan.Steps[0].Configuration) != string(networkPlan.Steps[0].Configuration) {
+			t.Fatalf("gateway and network ensure management plans differ:\n%s\n%s", gatewayPlan.Steps[0].Configuration, networkPlan.Steps[0].Configuration)
+		}
+		herdr, err := herdrclient.FromConfig(effective)
+		if err != nil {
+			t.Fatal(err)
+		}
+		herdrPlan, err := herdr.Plan("upsert", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		workloadSpec, err := workload.FromConfig(effective, "dev")
+		if err != nil {
+			t.Fatal(err)
+		}
+		workloadPlan, err := workloadSpec.Plan("upsert", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, plan := range map[string]orchestration.Plan{"herdr": herdrPlan, "workload": workloadPlan} {
+			if string(plan.Steps[0].Configuration) != string(networkPlan.Steps[0].Configuration) {
+				t.Fatalf("%s and network ensure management plans differ", name)
+			}
+		}
+	}
+}
 
 func TestRenderCompose(t *testing.T) {
 	spec := Spec{
