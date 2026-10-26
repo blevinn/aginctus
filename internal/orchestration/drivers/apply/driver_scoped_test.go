@@ -60,12 +60,12 @@ func TestPlanScopedInstanceRejectsUnsafeShapeBeforeClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string]func(map[string]any){
-		"default project": func(m map[string]any) { m["project"] = "default" },
-		"missing project": func(m map[string]any) { delete(m, "project") },
-		"wrong operation": func(m map[string]any) { m["operation"] = "delete" },
+		"default project":   func(m map[string]any) { m["project"] = "default" },
+		"missing project":   func(m map[string]any) { delete(m, "project") },
+		"wrong operation":   func(m map[string]any) { m["operation"] = "delete" },
 		"missing operation": func(m map[string]any) { delete(m, "operation") },
 		"no running policy": func(m map[string]any) { m["ensureRunning"] = false },
-		"no drift guard": func(m map[string]any) { m["rejectUnsupportedChanges"] = false },
+		"no drift guard":    func(m map[string]any) { m["rejectUnsupportedChanges"] = false },
 		"no identity": func(m map[string]any) {
 			delete(m["requireExistingConfig"].(map[string]any), "user.aginctus.workload")
 		},
@@ -74,10 +74,10 @@ func TestPlanScopedInstanceRejectsUnsafeShapeBeforeClient(t *testing.T) {
 		},
 		"two documents": func(m map[string]any) {
 			m["documents"] = append(m["documents"].([]any),
-				map[string]any{"kind":"network", "name":"aginctus-mgmt"})
+				map[string]any{"kind": "network", "name": "aginctus-mgmt"})
 		},
 		"network resource": func(m map[string]any) {
-			m["documents"] = []any{map[string]any{"kind":"network","name":"aginctus-mgmt"}}
+			m["documents"] = []any{map[string]any{"kind": "network", "name": "aginctus-mgmt"}}
 		},
 		"remote prefix": func(m map[string]any) {
 			m["documents"].([]any)[0].(map[string]any)["name"] = "remote:aginctus-dev"
