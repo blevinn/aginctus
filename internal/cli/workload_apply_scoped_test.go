@@ -114,7 +114,6 @@ func TestScopedWorkloadApplyRenderRefusesMutatingSyntax(t *testing.T) {
 	loader, projects, reads := scopedApplyRenderFixture(t)
 	for _, args := range [][]string{
 		{"workload", "apply", "--project", "aginctus", "dev"},
-		{"workload", "apply", "--project", "aginctus", "dev", "--dry-run"},
 		{"workload", "apply", "--project", "aginctus", "dev", "--force"},
 		{"workload", "apply", "--project", "aginctus", "dev", "--confirm-apply"},
 		{"workload", "apply", "--project", "aginctus", "--render"},

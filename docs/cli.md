@@ -65,12 +65,37 @@ host-managed management-bridge step from legacy workload apply.
 The enclosing `ScopedWorkloadApplyPreview` report is deliberately **not**
 a directly executable orchestration document. Do not extract its nested
 plan and pass it to `aginctus apply --from`; doing so bypasses the
-operator's intended confirmation and mutation-time checks. The preview
-does not execute `incus-apply`, confirm drift, prove driver-local transport,
-guarantee a no-create operation, or establish controller/write authority.
-Only `--render` is supported: `--dry-run`, `--force` and bare scoped
-`apply` are explicitly rejected until those properties are validated
-(#200/#201/#437/#441). No existing v0.1 apply semantics change.
+operator's intended confirmation and mutation-time checks. The `--render`
+form does not query the native reconciliation planner or authorize writes.
+
+To check the **live proposed drift** without applying changes, use:
+
+```sh
+aginctus workload apply --project aginctus dev --dry-run
+```
+
+The `--dry-run` form uses the pinned `incus-apply` **native** backend,
+which connects through the local Incus Unix socket and selects the exact
+project through the API. After verifying the existing owned workload, it
+asks the native planner to compute a read-only diff, then checks ownership
+and observed state again. A proposed **create**, replace, delete, ambiguous
+or unknown action fails closed, not a green light to create or replace.
+The machine-readable `ScopedWorkloadApplyDiff` report contains only
+`action` (`unchanged` or `would-update`), `changeCount`, the selected
+project and workload identity, and **`writeAuthorized: false`**. It
+deliberately excludes raw diff values, resource notes and native daemon
+diagnostics, which may contain sensitive configuration.
+
+Neither preview grants the authority to execute a scoped write. The native
+planner's observation can become stale immediately; `incus-apply` still
+supports creating absent resources during ordinary upsert, and project
+selection alone cannot fence other Incus clients. The pinned native backend
+is local-only, but its `ForceLocal` option is relevant to the *command*
+backend and is not an additional native-mode safeguard. Bare scoped
+`apply`, `--force` and other mutating forms remain rejected pending
+existing-only server-side enforcement, controller authorization and
+disposable-Incus acceptance (#200/#201/#437/#441/#443). No v0.1 apply
+semantics or pilot host state is changed.
 
 ## Transition one existing scoped workload (explicit mutation)
 
