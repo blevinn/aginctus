@@ -46,7 +46,7 @@ def resource(kind, name):
         raise RuntimeError("invalid Incus resource response")
     return result
 
-ROUTE_HEX = re.compile(r"[0-9A-Fa-f]{8}\\Z")
+ROUTE_HEX = re.compile(r"[0-9A-Fa-f]{8}\Z")
 
 
 def verify_ipv4_routes(data):
@@ -70,7 +70,8 @@ def verify_ipv4_routes(data):
         fields = line.split()
         if len(fields) != 11 or fields[0] not in ("lo", "eth0"):
             raise RuntimeError("unexpected workload IPv4 route")
-        if any(not ROUTE_HEX.fullmatch(fields[i]) for i in (1, 2, 3, 7)):
+        if (any(not ROUTE_HEX.fullmatch(fields[i]) for i in (1, 2, 7))
+                or not re.fullmatch(r"[0-9A-Fa-f]{1,8}", fields[3])):
             raise RuntimeError("malformed workload IPv4 route")
         if any(not number.isdecimal() for number in (
             fields[4], fields[5], fields[6], fields[8], fields[9], fields[10]
