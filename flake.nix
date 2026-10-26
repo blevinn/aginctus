@@ -203,6 +203,11 @@
           gatewayProvisionHelper = pkgs.writeShellScriptBin "aginctus-opencode-gateway-provision" ''
             exec ${pkgs.python3}/bin/python3 ${opencodeGuestScripts}/provision.py
           '';
+          # Root-owned, pinned source and interpreter; operator-only host
+          # invocation remains separate from the guest's network capability.
+          opencodeEgressProbe = pkgs.writeShellScriptBin "aginctus-egress-probe" ''
+            exec ${pkgs.python3}/bin/python3 -I -B ${./guest/opencode/egress_probe.py} "$@"
+          '';
 
           opencodeWorkloadSystem = nixpkgs.lib.nixosSystem {
             inherit system;
@@ -224,6 +229,7 @@
                     pkgs.git
                     aginctusOpenCode
                     gatewayProvisionHelper
+                    opencodeEgressProbe
                     pkgs.openssh
                     sshAuthorizeHelper
                   ];
