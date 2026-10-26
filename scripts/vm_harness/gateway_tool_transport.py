@@ -76,8 +76,7 @@ def completed_item(raw: bytes, nonce: str, step: int):
     if (
         not isinstance(response_id, str)
         or not response_id.startswith("resp_")
-        or not 8 <= len(response_id) <= 256
-        or not response_id.isascii()
+        or not 8 <= len(response_id) <= 4096
         or any(char.isspace() or ord(char) < 0x20 or ord(char) == 0x7F for char in response_id)
     ):
         shown_id = response_id[:96] if isinstance(response_id, str) else "<missing>"
