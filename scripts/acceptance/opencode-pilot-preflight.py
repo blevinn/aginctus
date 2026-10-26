@@ -1,5 +1,6 @@
 """Read-only pilot infrastructure preflight for #124; no Herdr or inference claims."""
 import json
+import re
 import subprocess
 import sys
 from urllib.parse import quote
@@ -45,6 +46,68 @@ def resource(kind, name):
         raise RuntimeError("invalid Incus resource response")
     return result
 
+ROUTE_HEX = re.compile(r"[0-9A-Fa-f]{8}\\Z")
+
+
+def verify_ipv4_routes(data):
+    """Read-only kernel route-table check; cannot prove packet filtering.
+
+    Accept an on-link eth0 route, but never accept default routes, unknown
+    interfaces or corrupt output as a successful isolation preflight.
+    """
+    if not isinstance(data, str) or len(data) > 65536:
+        raise RuntimeError("invalid workload IPv4 route table")
+    lines = data.splitlines()
+    if not lines or lines[0].split() != [
+        "Iface", "Destination", "Gateway", "Flags", "RefCnt",
+        "Use", "Metric", "Mask", "MTU", "Window", "IRTT",
+    ]:
+        raise RuntimeError("invalid workload IPv4 route table")
+    if len(lines) > 1024:
+        raise RuntimeError("unbounded workload IPv4 route table")
+    on_link = False
+    for line in lines[1:]:
+        fields = line.split()
+        if len(fields) != 11 or fields[0] not in ("lo", "eth0"):
+            raise RuntimeError("unexpected workload IPv4 route")
+        if any(not ROUTE_HEX.fullmatch(fields[i]) for i in (1, 2, 3, 7)):
+            raise RuntimeError("malformed workload IPv4 route")
+        if any(not number.isdecimal() for number in (
+            fields[4], fields[5], fields[6], fields[8], fields[9], fields[10]
+        )):
+            raise RuntimeError("malformed workload IPv4 route")
+        destination, gateway, mask = fields[1], fields[2], fields[7]
+        if destination == "00000000" and mask == "00000000":
+            raise RuntimeError("workload has an IPv4 default route")
+        if fields[0] == "eth0" and gateway == "00000000":
+            on_link = True
+    if not on_link:
+        raise RuntimeError("workload management route is not observed")
+
+
+def verify_managed_workload(record, network):
+    config = record.get("config")
+    devices = record.get("expanded_devices")
+    if not isinstance(config, dict) or any(config.get(k) != v for k, v in {
+        "user.aginctus.managed": "true",
+        "user.aginctus.resource": "workload",
+        "user.aginctus.role": "agent-workload",
+        "user.aginctus.workload": "dev",
+    }.items()):
+        raise RuntimeError("workload ownership not verified")
+    if not isinstance(devices, dict) or not devices:
+        raise RuntimeError("workload effective NIC inventory unavailable")
+    nics = [device for device in devices.values()
+            if isinstance(device, dict) and device.get("type") == "nic"]
+    if (len(nics) != 1 or nics[0].get("network") != network
+            or nics[0].get("name") != "eth0"):
+        raise RuntimeError("workload has an unexpected network attachment")
+    # A proxy device can expose an extra network path without a NIC.
+    if any(not isinstance(device, dict) or device.get("type") == "proxy"
+           for device in devices.values()):
+        raise RuntimeError("workload has an unsafe non-NIC attachment")
+
+
 def verify():
     network = config("incus.management.network.name")
     herdr = config("infrastructure.herdr.name")
@@ -63,8 +126,17 @@ def verify():
             raise RuntimeError("required managed instance is not running")
         if record.get("type") != "container":
             raise RuntimeError("required managed instance is not a container")
-    print("PASS: read-only Incus bridge isolation and instance readiness")
-    print("NOT VERIFIED: Herdr authentication, workspace mapping, DNS/DHCP, gateway inference, credential isolation, and egress policy")
+        if instance == workload:
+            # Do not execute even a read-only guest command until ownership,
+            # effective NIC inventory and exact expected bridge are checked.
+            verify_managed_workload(record, network)
+    route_table = run(
+        "incus", "--project", "default", "exec", workload, "--",
+        "cat", "/proc/net/route",
+    )
+    verify_ipv4_routes(route_table)
+    print("PASS: read-only Incus bridge, managed workload NIC and IPv4 route preflight")
+    print("NOT VERIFIED: actual packet denial, IPv6/tunnels, gateway inference, guest credential isolation or provider egress")
 
 if __name__ == "__main__":
     if len(sys.argv) != 1:
