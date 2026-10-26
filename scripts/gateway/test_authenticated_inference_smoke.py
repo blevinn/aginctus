@@ -129,12 +129,14 @@ class SmokeTests(unittest.TestCase):
                     (200, b"unexpected") if unexpected == 0 else (401, b""),
                     (200, b"unexpected") if unexpected == 1 else (401, b""),
                 ]
-                with patch.object(mod, "request", side_effect=responses) as probe:
-                    with self.assertRaisesRegex(mod.SmokeError, "missing/invalid key"):
-                        mod.run_authorization(
-                            "http://10.0.0.9:4000", "coding", "good-workload", "master",
-                            opener=object(),
-                        )
+                with (
+                    patch.object(mod, "request", side_effect=responses) as probe,
+                    self.assertRaisesRegex(mod.SmokeError, "missing/invalid key"),
+                ):
+                    mod.run_authorization(
+                        "http://10.0.0.9:4000", "coding", "good-workload", "master",
+                        opener=object(),
+                    )
                 self.assertLessEqual(probe.call_count, 3)
                 self.assertNotIn("/v1/responses", " ".join(
                     call.args[2] for call in probe.call_args_list
