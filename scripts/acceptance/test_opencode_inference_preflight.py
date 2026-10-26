@@ -1,7 +1,9 @@
 """Hermetic #124 regressions: no Incus daemon, credentials or provider required."""
 import importlib.util
 import json
+import shlex
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -114,6 +116,41 @@ class ReadinessTests(unittest.TestCase):
         self.assertIn("! -name gateway.json", mod.CHECK_DIR)
         self.assertIn("! -name workload-key", mod.CHECK_DIR)
 
+    def test_fixed_directory_inventory_shell_checks_actual_files(self):
+        # Execute the fixed guest shell against an isolated test-only root,
+        # never a real NixOS workload or production credential directory.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "opencode"
+            root.mkdir(mode=0o700)
+            root.chmod(0o700)
+            script = mod.CHECK_DIR.replace(
+                "root=/var/lib/aginctus/opencode",
+                "root=" + shlex.quote(str(root)),
+            )
+
+            def check():
+                return subprocess.run(
+                    ["/bin/sh", "-c", script],
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True, timeout=5, check=False,
+                ).returncode
+
+            for name in ("gateway.json", "workload-key"):
+                (root / name).write_text("not a credential", encoding="utf-8")
+            self.assertEqual(check(), 0)
+            extra = root / "accidental-provider-key"
+            extra.write_text("NOT A REAL SECRET", encoding="utf-8")
+            self.assertNotEqual(check(), 0)
+            extra.unlink()
+            (root / "gateway.json").unlink()
+            (root / "gateway.json").symlink_to("missing-target")
+            self.assertNotEqual(check(), 0)
+            (root / "gateway.json").unlink()
+            (root / "gateway.json").write_text("not a credential")
+            (root / "workload-key").unlink()
+            (root / "workload-key").symlink_to("gateway.json")
+            self.assertNotEqual(check(), 0)
+
     def test_rejects_unreadable_key(self):
         def fake(*args):
             if "test" in args:
@@ -126,11 +163,11 @@ class ReadinessTests(unittest.TestCase):
 
     def test_rejects_bad_config_metadata(self):
         def fake(*args):
-            if args[:3] == ("stat", "-c", "%F"):
-                return "symbolic link\n"
+            if args == ("stat", "-c", "%a %U %F", "--", mod.CONFIG):
+                return "777 root symbolic link\n"
             return self.fake(*args)
         with patch.object(mod, "guest", side_effect=fake), self.assertRaisesRegex(
-                RuntimeError, "regular gateway configuration"):
+                RuntimeError, "unsafe gateway configuration metadata"):
             mod.check()
 
     def test_rejects_wrong_protocol_and_model(self):
