@@ -12,9 +12,11 @@ import io
 import ipaddress
 import json
 import os
+import selectors
 import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 GUEST_PROGRAM = "/run/current-system/sw/bin/aginctus-egress-probe"
@@ -56,17 +58,42 @@ def target(mode, value):
 
 
 def execute(argv):
-    """Suppress all guest/Incus stderr, strictly bound stdout and time."""
+    """Bound actual subprocess stdout allocation, elapsed time and output."""
     try:
-        result = subprocess.run(
-            argv, stdin=subprocess.DEVNULL, capture_output=True, timeout=20,
-            text=True, check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
+        with subprocess.Popen(
+            argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, shell=False,
+        ) as process:
+            try:
+                limit = 4096
+                deadline = time.monotonic() + 20
+                output = bytearray()
+                with selectors.DefaultSelector() as selector:
+                    selector.register(process.stdout, selectors.EVENT_READ)
+                    while True:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0 or not selector.select(remaining):
+                            raise ProbeError("guest observation timed out")
+                        chunk = os.read(
+                            process.stdout.fileno(), min(4096, limit + 1 - len(output))
+                        )
+                        output.extend(chunk)
+                        if len(output) > limit:
+                            raise ProbeError("oversized guest observation")
+                        if not chunk:
+                            break
+                code = process.wait(timeout=max(0.001, deadline - time.monotonic()))
+                if code not in (0, 1):
+                    raise ProbeError("invalid guest observation exit")
+                return subprocess.CompletedProcess(
+                    argv, code, output.decode("utf-8"), "",
+                )
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.wait()
+    except (OSError, UnicodeDecodeError, subprocess.SubprocessError):
         raise ProbeError("read-only guest execution unavailable") from None
-    if len(result.stdout) > 4096 or result.returncode not in (0, 1):
-        raise ProbeError("invalid guest observation result")
-    return result
 
 
 def guest_args(workload, *tail):
