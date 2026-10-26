@@ -41,15 +41,15 @@ class GuestNetworkProbeTests(unittest.TestCase):
     def test_public_no_route_is_the_only_passing_negative_error(self):
         for code in (errno.ECONNREFUSED, errno.ETIMEDOUT, errno.EHOSTUNREACH):
             with self.subTest(errno=code):
-                def fail(_address, _timeout, errno_=code):
+                def fail(_address, timeout, errno_=code):
                     raise OSError(errno_, "sensitive network diagnostic")
                 self.assertEqual(probe.observe("direct", "1.1.1.1", fail), "error")
 
-        def no_route(_address, _timeout):
+        def no_route(_address, timeout):
             raise OSError(errno.ENETUNREACH, "sensitive")
         self.assertEqual(probe.observe("direct", "1.1.1.1", no_route), "pass")
         self.assertEqual(
-            probe.observe("direct", "1.1.1.1", lambda *_: SocketCase()), "fail"
+            probe.observe("direct", "1.1.1.1", lambda *_args, **_kwargs: SocketCase()), "fail"
         )
 
     def test_target_allowlist_rejects_non_ip_and_private_direct(self):
