@@ -43,26 +43,30 @@ def continuation(previous_step):
 
 
 def inline_continuation(previous_step):
-    call_id = f"call_{NONCE}_{previous_step}"
-    return {
-        "model": "synthetic-test", "stream": True, "tools": TOOLS,
-        "input": [
-            {"type": "message", "role": "user", "content": [
-                {"type": "input_text", "text": "Fix the Go fixture: nonce=" + NONCE}
-            ]},
+    inputs = [
+        {"type": "message", "role": "user", "content": [
+            {"type": "input_text", "text": "Fix the Go fixture: nonce=" + NONCE}
+        ]}
+    ]
+    for step in range(previous_step + 1):
+        call_id = f"call_{NONCE}_{step}"
+        inputs.extend([
             {
-                "type": "function_call", "id": f"fc_{NONCE}_{previous_step}",
+                "type": "function_call", "id": f"fc_{NONCE}_{step}",
                 "call_id": call_id,
-                "name": ("read", "edit", "bash")[previous_step],
+                "name": ("read", "edit", "bash")[step],
                 "arguments": json.dumps(
-                    tool_arguments(previous_step, "/workspace", NONCE), separators=(",", ":")
+                    tool_arguments(step, "/workspace", NONCE), separators=(",", ":")
                 ),
             },
             {
                 "type": "function_call_output", "call_id": call_id,
                 "output": "synthetic tool result, not independently verified",
             },
-        ],
+        ])
+    return {
+        "model": "synthetic-test", "stream": True, "tools": TOOLS,
+        "input": inputs,
     }
 
 class ToolSequenceTests(unittest.TestCase):
@@ -94,6 +98,15 @@ class ToolSequenceTests(unittest.TestCase):
             self.assertEqual(nonce, NONCE)
             self.assertEqual(response["id"], f"resp_{NONCE}_{previous_step + 1}")
         self.assertEqual(seq._steps[NONCE], 3)
+
+    def test_inline_continuation_accepts_missing_optional_item_id(self):
+        seq = ToolSequence()
+        seq.next(initial())
+        request = inline_continuation(0)
+        del request["input"][1]["id"]
+        nonce, response = seq.next(request)
+        self.assertEqual(nonce, NONCE)
+        self.assertEqual(response["id"], f"resp_{NONCE}_1")
 
     def test_rejected_toolless_probe_does_not_reserve_nonce(self):
         seq = ToolSequence()

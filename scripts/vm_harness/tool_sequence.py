@@ -78,24 +78,27 @@ def validate_inline_continuation(body, nonce, step, workdir):
     inputs = body.get("input")
     if not isinstance(inputs, list):
         raise SequenceError("missing actual tool continuation")
-    expected_call = "call_" + nonce + "_" + str(step)
-    expected_item = "fc_" + nonce + "_" + str(step)
     calls = [item for item in inputs if isinstance(item, dict) and item.get("type") == "function_call"]
     outputs = [item for item in inputs if isinstance(item, dict) and item.get("type") == "function_call_output"]
-    if len(calls) != 1 or len(outputs) != 1:
-        raise SequenceError("expected one explicit function call and result")
-    name = STEP_NAMES[step]
-    if (
-        calls[0].get("id") != expected_item
-        or calls[0].get("call_id") != expected_call
-        or calls[0].get("name") != name
-        or calls[0].get("arguments") != json.dumps(
-            tool_arguments(step, workdir, nonce), separators=(",", ":")
-        )
-        or outputs[0].get("call_id") != expected_call
-        or not isinstance(outputs[0].get("output"), str)
-    ):
-        raise SequenceError("forged or mismatched function call/result pair")
+    if len(calls) != step + 1 or len(outputs) != step + 1:
+        raise SequenceError("expected ordered function call/result history")
+    for index, (call, output) in enumerate(zip(calls, outputs, strict=True)):
+        expected_call = "call_" + nonce + "_" + str(index)
+        expected_item = "fc_" + nonce + "_" + str(index)
+        item_id = call.get("id")
+        if item_id is not None and item_id != expected_item:
+            shown_id = item_id.replace(nonce, "[NONCE]")[:80] if isinstance(item_id, str) else "<missing>"
+            raise SequenceError("function call item ID mismatch: " + shown_id)
+        if call.get("call_id") != expected_call or output.get("call_id") != expected_call:
+            raise SequenceError("function call/result ID mismatch")
+        if call.get("name") != STEP_NAMES[index]:
+            raise SequenceError("function call name mismatch")
+        if call.get("arguments") != json.dumps(
+            tool_arguments(index, workdir, nonce), separators=(",", ":")
+        ):
+            raise SequenceError("function call arguments mismatch")
+        if not isinstance(output.get("output"), str):
+            raise SequenceError("function result is malformed")
 
 def fixture_response(nonce, step, workdir, model):
     output = []

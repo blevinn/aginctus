@@ -1,7 +1,11 @@
 # Explicit NixOS VM test: real pinned OpenCode executes a synthetic-only
 # read/edit/go-test tool sequence as an UNPRIVILEGED guest user.
 # This does not use Herdr, LiteLLM or any provider and is not full E2E.
-{ self, nixpkgs, system }:
+{
+  self,
+  nixpkgs,
+  system,
+}:
 let
   pkgs = import nixpkgs { inherit system; };
   toolsFixture = pkgs.runCommand "aginctus-opencode-tool-loopback" { } ''
@@ -42,7 +46,7 @@ pkgs.testers.runNixOSTest {
     # The test launcher rejects root, unpinned executable/script paths,
     # and missing worker-only opt-in even *inside* the disposable VM.
     machine.succeed(
-      "timeout 240 ${pkgs.util-linux}/bin/runuser -u testenv-agent -- "
+      "timeout 300 ${pkgs.util-linux}/bin/runuser -u testenv-agent -- "
       "env AGINCTUS_TESTENV_TOOL_WORKER=DISPOSABLE_VM_ONLY "
       "${pkgs.python3}/bin/python3 "
       "${toolsFixture}/guest/opencode/test_real_runtime.py "

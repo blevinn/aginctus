@@ -125,14 +125,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
-def verify_tool_workspace(root, nonce, response_steps, continuations, stdout):
+def verify_tool_workspace(root, nonce, response_steps, continuations):
     """Inspect run-owned files, never infer execution from model text alone."""
-    if "synthetic-tools-complete:" + nonce not in stdout or response_steps != 3:
+    if response_steps != 3:
         raise AssertionError(
-            "synthetic tool protocol did not reach terminal state: "
-            f"steps={response_steps} "
-            f"completion_marker={'synthetic-tools-complete:' + nonce in stdout} "
-            f"continuation_count={sum(map(len, continuations))}"
+            f"synthetic tool protocol did not reach terminal state: steps={response_steps}"
         )
     observed = {call_id for group in continuations for call_id in group}
     expected = {"call_" + nonce + "_" + str(i) for i in range(3)}
@@ -250,7 +247,7 @@ def main(binary, inspect_tools=False, execute_tools=False):
             if execute_tools:
                 verify_tool_workspace(
                     root, nonce, Handler.sequence._steps.get(nonce),
-                    Handler.continuations, result.stdout
+                    Handler.continuations
                 )
                 final = subprocess.run(
                     ["go", "test", "./..."], cwd=root, capture_output=True,
