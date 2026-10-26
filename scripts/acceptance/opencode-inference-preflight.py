@@ -69,9 +69,9 @@ def check():
     stage("credential accessibility",
           lambda: guest("runuser", "-u", "agent", "--", "test", "-r", KEY))
     cfg_meta = stage("gateway configuration metadata",
-                     lambda: guest("stat", "-c", "%F", "--", CONFIG)).strip()
-    if cfg_meta != "regular file":
-        raise RuntimeError("missing regular gateway configuration")
+                     lambda: guest("stat", "-c", "%a %U %F", "--", CONFIG)).strip()
+    if cfg_meta != "600 agent regular file":
+        raise RuntimeError("unsafe gateway configuration metadata")
     cfg = stage("gateway configuration readability",
                 lambda: json.loads(guest("runuser", "-u", "agent", "--", "cat", CONFIG)))
     if not isinstance(cfg, dict) or set(cfg) != {"endpoint", "model", "protocol"}:
