@@ -86,7 +86,7 @@ def validate_inline_continuation(body, nonce, step, workdir):
         raise SequenceError("expected one explicit function call and result")
     name = STEP_NAMES[step]
     item_id = calls[0].get("id")
-    if item_id != expected_item:
+    if item_id is not None and item_id != expected_item:
         shown_id = item_id.replace(nonce, "[NONCE]")[:80] if isinstance(item_id, str) else "<missing>"
         raise SequenceError("function call item ID mismatch: " + shown_id)
     if calls[0].get("call_id") != expected_call or outputs[0].get("call_id") != expected_call:

@@ -95,6 +95,15 @@ class ToolSequenceTests(unittest.TestCase):
             self.assertEqual(response["id"], f"resp_{NONCE}_{previous_step + 1}")
         self.assertEqual(seq._steps[NONCE], 3)
 
+    def test_inline_continuation_accepts_missing_optional_item_id(self):
+        seq = ToolSequence()
+        seq.next(initial())
+        request = inline_continuation(0)
+        del request["input"][1]["id"]
+        nonce, response = seq.next(request)
+        self.assertEqual(nonce, NONCE)
+        self.assertEqual(response["id"], f"resp_{NONCE}_1")
+
     def test_rejected_toolless_probe_does_not_reserve_nonce(self):
         seq = ToolSequence()
         with self.assertRaises(SequenceError):
