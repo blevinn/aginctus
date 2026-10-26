@@ -1,0 +1,153 @@
+diff --git a/packages/opencode/src/cli/cmd/run.ts b/packages/opencode/src/cli/cmd/run.ts
+--- a/packages/opencode/src/cli/cmd/run.ts
++++ b/packages/opencode/src/cli/cmd/run.ts
+@@ -636,7 +636,8 @@
+         // created, and replies issued from inside the loop must use that client.
+         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
+           const toggles = new Map<string, boolean>()
+-          let error: string | undefined
++          let error: string | undefined
++          let idle = false
+
+           for await (const event of events.stream) {
+             if (
+@@ -728,9 +729,10 @@
+             if (
+               event.type === "session.status" &&
+               event.properties.sessionID === sessionID &&
+-              event.properties.status.type === "idle"
+-            ) {
+-              break
++              event.properties.status.type === "idle"
++            ) {
++              idle = true
++              break
+             }
+
+             if (event.type === "permission.asked") {
+@@ -755,7 +757,8 @@
+               }
+             }
+           }
+-          return error
++          if (!idle) throw new Error("OpenCode event stream ended before session idle")
++          return error
+         }
+         const cwd = args.attach ? (directory ?? sess.directory ?? (await current(sdk))) : (directory ?? root)
+         const client = args.attach ? attachSDK(cwd) : sdk
+@@ -765,43 +768,78 @@
+
+         await share(client, sessionID)
+
+-        if (!args.interactive) {
+-          const events = await client.event.subscribe()
+-          loop(client, events).catch((e) => {
+-            console.error(e)
+-            process.exit(1)
+-          })
+-
+-          if (args.command) {
+-            const result = await client.session.command({
+-              sessionID,
+-              agent,
+-              model: args.model,
+-              command: args.command,
+-              arguments: message,
+-              variant: args.variant,
+-            })
+-            if (result.error) {
+-              if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+-              process.exitCode = 1
+-            }
+-            return
+-          }
+-
+-          const model = pick(args.model)
+-          const result = await client.session.prompt({
+-            sessionID,
+-            agent,
+-            model,
+-            variant: args.variant,
+-            parts: [...files, { type: "text", text: message }],
+-          })
+-          if (result.error) {
+-            if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+-            process.exitCode = 1
+-          }
+-          return
+-        }
++        if (!args.interactive) {
++          // The SSE stream is lazy. Prompt completion is not an output-drain
++          // barrier: wait for the matching session's idle event before exit.
++          const controller = new AbortController()
++          const events = await client.event.subscribe(undefined, { signal: controller.signal })
++          const consuming = loop(client, events)
++          // A prompt may fail before we join; prevent an unhandled rejection.
++          void consuming.catch(() => {})
++
++          async function drain() {
++            let timer: ReturnType<typeof setTimeout> | undefined
++            try {
++              const error = await Promise.race([
++                consuming,
++                new Promise<never>((_, reject) => {
++                  timer = setTimeout(
++                    () => reject(new Error("Timed out draining OpenCode session events")),
++                    30_000,
++                  )
++                }),
++              ])
++              if (error) {
++                if (!emit("error", { error })) UI.error(error)
++                process.exitCode = 1
++              }
++            } catch (error) {
++              if (!emit("error", { error: formatRunError(error) })) UI.error(formatRunError(error))
++              process.exitCode = 1
++            } finally {
++              if (timer !== undefined) clearTimeout(timer)
++            }
++          }
++
++          try {
++            if (args.command) {
++              const result = await client.session.command({
++                sessionID,
++                agent,
++                model: args.model,
++                command: args.command,
++                arguments: message,
++                variant: args.variant,
++              })
++              if (result.error) {
++                if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
++                process.exitCode = 1
++                return
++              }
++              await drain()
++              return
++            }
++
++            const model = pick(args.model)
++            const result = await client.session.prompt({
++              sessionID,
++              agent,
++              model,
++              variant: args.variant,
++              parts: [...files, { type: "text", text: message }],
++            })
++            if (result.error) {
++              if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
++              process.exitCode = 1
++              return
++            }
++            await drain()
++            return
++          } finally {
++            // All termination paths release the pending event-stream read.
++            controller.abort()
++          }
++        }
+
+         const model = pick(args.model)
+         const { runInteractiveMode } = await runtimeTask

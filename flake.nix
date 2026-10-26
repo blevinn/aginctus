@@ -191,10 +191,13 @@
             cp ${./guest/opencode/go_session_plugin.js} $out/go_session_plugin.js
           '';
 
+          # Scoped source patch for the flake-pinned CLI event-consumer join.
+          aginctusPinnedOpenCode = import ./nix/patched-opencode.nix { inherit pkgs; };
+
           # Runtime-only gateway configuration: no endpoint, model or key is
           # materialized into the Nix store. Herdr's PATH resolves this wrapper.
           aginctusOpenCode = pkgs.writeShellScriptBin "opencode" ''
-            exec ${pkgs.python3}/bin/python3 ${opencodeGuestScripts}/launch.py ${pkgs.opencode}/bin/opencode "$@"
+            exec ${pkgs.python3}/bin/python3 ${opencodeGuestScripts}/launch.py ${aginctusPinnedOpenCode}/bin/opencode "$@"
           '';
 
           gatewayProvisionHelper = pkgs.writeShellScriptBin "aginctus-opencode-gateway-provision" ''
@@ -341,7 +344,7 @@
           aginctus = aginctusCli;
           default = aginctusCli;
           # Expose exactly the runtime used by the workload image for contract tests.
-          opencode-runtime = pkgs.opencode;
+          opencode-runtime = aginctusPinnedOpenCode;
 
           oauth-gateway = pkgs.runCommand "aginctus-oauth-gateway-image" { } ''
             mkdir -p "$out"
