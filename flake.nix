@@ -404,6 +404,9 @@
             inherit self nixpkgs system;
             synthetic = true;
           };
+          vm-harness-opencode-tool-loopback = import ./nix/vm-harness/opencode-tool-loopback.nix {
+            inherit self nixpkgs system;
+          };
           vm-harness-ownership-recovery = import ./nix/vm-harness/ownership-recovery.nix {
             inherit self nixpkgs system;
           };
