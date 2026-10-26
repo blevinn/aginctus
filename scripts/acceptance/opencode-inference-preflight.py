@@ -9,8 +9,18 @@ from urllib.parse import urlsplit
 
 INSTANCE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\Z")
 ALIAS = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\Z")
-CONFIG = "/var/lib/aginctus/opencode/gateway.json"
-KEY = "/var/lib/aginctus/opencode/workload-key"
+ROOT = "/var/lib/aginctus/opencode"
+CONFIG = ROOT + "/gateway.json"
+KEY = ROOT + "/workload-key"
+# This fixed source is interpreted on the owned guest, not derived from a
+# selected path or guest-controlled value. No filenames or values are emitted.
+CHECK_DIR = r'''
+set -eu
+root=/var/lib/aginctus/opencode
+[ -d "$root" ] && [ ! -L "$root" ] || exit 1
+[ ! -L "$root/gateway.json" ] && [ ! -L "$root/workload-key" ] || exit 1
+[ -z "$(find "$root" -mindepth 1 -maxdepth 1 ! -name gateway.json ! -name workload-key -print -quit)" ] || exit 1
+'''
 PRIVATE = tuple(ipaddress.IPv4Network(prefix) for prefix in
                 ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
 
@@ -39,6 +49,18 @@ def check():
     if not INSTANCE.fullmatch(workload):
         raise RuntimeError("invalid managed workload name")
 
+    # Scope only the provisioner's known runtime directory, not all possible
+    # secret mounts/process environments. Never open the key or emit filenames.
+    directory = stage(
+        "credential directory metadata",
+        lambda: guest("stat", "-c", "%a %U %F", "--", ROOT),
+    ).strip()
+    if directory != "700 agent directory":
+        raise RuntimeError("unsafe credential runtime directory")
+    stage(
+        "credential directory contents",
+        lambda: guest("runuser", "-u", "agent", "--", "/bin/sh", "-c", CHECK_DIR),
+    )
     # Metadata as root; the workload key itself is never opened or printed.
     metadata = stage("credential metadata",
                      lambda: guest("stat", "-c", "%a %U %F", "--", KEY)).strip()
@@ -47,9 +69,9 @@ def check():
     stage("credential accessibility",
           lambda: guest("runuser", "-u", "agent", "--", "test", "-r", KEY))
     cfg_meta = stage("gateway configuration metadata",
-                     lambda: guest("stat", "-c", "%F", "--", CONFIG)).strip()
-    if cfg_meta != "regular file":
-        raise RuntimeError("missing regular gateway configuration")
+                     lambda: guest("stat", "-c", "%a %U %F", "--", CONFIG)).strip()
+    if cfg_meta != "600 agent regular file":
+        raise RuntimeError("unsafe gateway configuration metadata")
     cfg = stage("gateway configuration readability",
                 lambda: json.loads(guest("runuser", "-u", "agent", "--", "cat", CONFIG)))
     if not isinstance(cfg, dict) or set(cfg) != {"endpoint", "model", "protocol"}:
@@ -82,8 +104,9 @@ def check():
     if not any(address in network for network in PRIVATE):
         raise RuntimeError("invalid private gateway endpoint")
 
-    # A configured private address does not prove ownership, routing, key
-    # authorization, reachability or real upstream inference.
+    # A closed, private runtime directory does not rule out credentials in
+    # other mount points, process environments or user homes. The endpoint
+    # does not prove gateway ownership, routing or real inference.
     return cfg["model"]
 
 
@@ -91,10 +114,11 @@ if __name__ == "__main__":
     try:
         check()
         print("PASS: OpenCode Responses runtime metadata and private endpoint syntax ready")
-        print("NOT VERIFIED: gateway ownership/reachability, key authorization, upstream inference, agent prompt, and egress policy")
+        print("NOT VERIFIED: other guest credentials/process environments, gateway ownership, key authorization, upstream inference and egress policy")
     except (RuntimeError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
         message = str(exc)
-        known = ("credential metadata", "credential accessibility",
+        known = ("credential directory metadata", "credential directory contents",
+                 "credential metadata", "credential accessibility",
                  "gateway configuration metadata", "gateway configuration readability")
         label = next((name for name in known
                       if message == "readiness phase failed: " + name),

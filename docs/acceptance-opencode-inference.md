@@ -32,13 +32,29 @@ nix develop -c python3 scripts/acceptance/opencode-inference-preflight.py
 
 The script runs `incus --project default exec` against the managed
 `aginctus-dev` guest (override only with a reviewed
-`AGINCTUS_ACCEPTANCE_WORKLOAD` name). It checks that the workload
-credential is an agent-owned regular 0600 file readable by `agent`,
-**without opening or emitting the key**. It reads only the nonsecret
-`gateway.json` as `agent`, validating the Responses protocol, model
-alias syntax, and managed private IPv4 endpoint shape. Command failures
-have static redacted labels; subprocess output and runtime values are not
-included in reports.
+`AGINCTUS_ACCEPTANCE_WORKLOAD` name). As a narrow #521 credential
+inventory check, it requires the provisioned
+`/var/lib/aginctus/opencode` runtime directory to be a real, owner-private
+`0700 agent` directory. A fixed shell program executed as `agent`
+requires exactly the two expected entries (`gateway.json` and
+`workload-key`) and rejects unexpected names or symlinks. The checks
+emit **no directory contents or filenames**. The two provisioned files must
+be agent-owned regular `0600` files; the script checks readability of
+the workload key by `agent` **without opening or emitting the key**.
+It reads only the nonsecret `gateway.json` as `agent`, validating the
+Responses protocol, model alias syntax, and managed private IPv4 endpoint
+shape. Command failures have static redacted labels; subprocess output
+and runtime values are not included in reports.
+
+This is a **point-in-time allowlist of the managed runtime directory only**,
+not a scan of all guest mounts, user homes, agent process environments or
+provider API keys. It cannot establish the absence of upstream credentials
+elsewhere, nor prevent changes after inspection. A newly deployed guest does
+not require an image change for these checks: they use standard existing
+`stat`, `find`, `runuser` and POSIX shell commands from the trusted host.
+The operator must run the separate [managed-workload ownership and NIC
+preflight](acceptance-opencode-preflight.md) first. This read-only runtime
+metadata check alone does not revalidate Incus ownership.
 
 **Not verified:** managed gateway ownership, network isolation, key
 authorization, actual LiteLLM reachability, streaming Responses tool

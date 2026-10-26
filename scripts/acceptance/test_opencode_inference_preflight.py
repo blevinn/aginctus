@@ -1,7 +1,9 @@
 """Hermetic #124 regressions: no Incus daemon, credentials or provider required."""
 import importlib.util
 import json
+import shlex
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -17,6 +19,8 @@ CONFIG = {"endpoint": "http://10.42.40.4:4000/v1",
 
 class ReadinessTests(unittest.TestCase):
     def fake(self, *args):
+        if args == ("stat", "-c", "%a %U %F", "--", mod.ROOT):
+            return "700 agent directory\n"
         if args[:3] == ("stat", "-c", "%a %U %F"):
             return "600 agent regular file\n"
         if args[:2] == ("stat", "-c"):
@@ -42,6 +46,10 @@ class ReadinessTests(unittest.TestCase):
             self.assertFalse(any("cat" in call.args and mod.KEY in call.args
                                  for call in guest.call_args_list))
             self.assertFalse(any("getent" in call.args for call in guest.call_args_list))
+            self.assertIn(
+                ("runuser", "-u", "agent", "--", "/bin/sh", "-c", mod.CHECK_DIR),
+                [call.args for call in guest.call_args_list],
+            )
 
     def test_guest_command_project_and_redaction(self):
         success = subprocess.CompletedProcess([], 0, stdout="ok\n")
@@ -65,13 +73,83 @@ class ReadinessTests(unittest.TestCase):
 
     def test_rejects_unsafe_key_before_config_read(self):
         def fake(*args):
-            if args[:3] == ("stat", "-c", "%a %U %F"):
+            if args == ("stat", "-c", "%a %U %F", "--", mod.KEY):
                 return "644 root regular file\n"
             return self.fake(*args)
         with patch.object(mod, "guest", side_effect=fake) as guest, self.assertRaisesRegex(
                 RuntimeError, "credential"):
             mod.check()
-        self.assertEqual(guest.call_count, 1)
+        self.assertEqual(guest.call_count, 3)
+        self.assertEqual(guest.call_args.args, ("stat", "-c", "%a %U %F", "--", mod.KEY))
+
+    def test_rejects_wrong_dir_ownership_mode_or_symlink_before_listing(self):
+        for metadata in ("755 agent directory", "700 root directory",
+                         "700 agent symbolic link", "missing", ""):
+            with self.subTest(metadata=metadata):
+                def fake(*args):
+                    if args == ("stat", "-c", "%a %U %F", "--", mod.ROOT):
+                        return metadata
+                    raise AssertionError("must reject before listing")
+                with (
+                    patch.object(mod, "guest", side_effect=fake) as guest,
+                    self.assertRaisesRegex(RuntimeError, "credential runtime directory"),
+                ):
+                    mod.check()
+                guest.assert_called_once()
+
+    def test_unexpected_runtime_entry_or_link_blocks_config_read(self):
+        # Guest helper suppresses filenames; a failed directory inventory
+        # must prevent all subsequent key/config checks.
+        with patch.object(mod, "guest") as guest:
+            def fake(*args):
+                if args == ("runuser", "-u", "agent", "--", "/bin/sh", "-c", mod.CHECK_DIR):
+                    raise RuntimeError("SECRET_FILENAME_OR_PATH")
+                return self.fake(*args)
+            guest.side_effect = fake
+            with self.assertRaisesRegex(
+                RuntimeError, "readiness phase failed: credential directory contents"
+            ) as caught:
+                mod.check()
+        self.assertNotIn("SECRET", str(caught.exception))
+        self.assertEqual(guest.call_count, 2)
+        self.assertIn("find", mod.CHECK_DIR)
+        self.assertIn("! -name gateway.json", mod.CHECK_DIR)
+        self.assertIn("! -name workload-key", mod.CHECK_DIR)
+
+    def test_fixed_directory_inventory_shell_checks_actual_files(self):
+        # Execute the fixed guest shell against an isolated test-only root,
+        # never a real NixOS workload or production credential directory.
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "opencode"
+            root.mkdir(mode=0o700)
+            root.chmod(0o700)
+            script = mod.CHECK_DIR.replace(
+                "root=/var/lib/aginctus/opencode",
+                "root=" + shlex.quote(str(root)),
+            )
+
+            def check():
+                return subprocess.run(
+                    ["/bin/sh", "-c", script],
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True, timeout=5, check=False,
+                ).returncode
+
+            for name in ("gateway.json", "workload-key"):
+                (root / name).write_text("not a credential", encoding="utf-8")
+            self.assertEqual(check(), 0)
+            extra = root / "accidental-provider-key"
+            extra.write_text("NOT A REAL SECRET", encoding="utf-8")
+            self.assertNotEqual(check(), 0)
+            extra.unlink()
+            (root / "gateway.json").unlink()
+            (root / "gateway.json").symlink_to("missing-target")
+            self.assertNotEqual(check(), 0)
+            (root / "gateway.json").unlink()
+            (root / "gateway.json").write_text("not a credential")
+            (root / "workload-key").unlink()
+            (root / "workload-key").symlink_to("gateway.json")
+            self.assertNotEqual(check(), 0)
 
     def test_rejects_unreadable_key(self):
         def fake(*args):
@@ -85,11 +163,11 @@ class ReadinessTests(unittest.TestCase):
 
     def test_rejects_bad_config_metadata(self):
         def fake(*args):
-            if args[:3] == ("stat", "-c", "%F"):
-                return "symbolic link\n"
+            if args == ("stat", "-c", "%a %U %F", "--", mod.CONFIG):
+                return "777 root symbolic link\n"
             return self.fake(*args)
         with patch.object(mod, "guest", side_effect=fake), self.assertRaisesRegex(
-                RuntimeError, "regular gateway configuration"):
+                RuntimeError, "unsafe gateway configuration metadata"):
             mod.check()
 
     def test_rejects_wrong_protocol_and_model(self):
