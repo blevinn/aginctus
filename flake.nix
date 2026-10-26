@@ -404,6 +404,11 @@
             inherit self nixpkgs system;
             synthetic = true;
           };
+          vm-harness-synthetic-tool-gateway = import ./nix/vm-harness/gateway-topology.nix {
+            inherit self nixpkgs system;
+            synthetic = true;
+            toolTransport = true;
+          };
           vm-harness-opencode-tool-loopback = import ./nix/vm-harness/opencode-tool-loopback.nix {
             inherit self nixpkgs system;
           };

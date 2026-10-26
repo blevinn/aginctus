@@ -104,6 +104,7 @@ nix develop -c just test-vm-storage-network
 nix develop -c just test-vm-runtime-lifecycle
 nix develop -c just test-vm-gateway-topology
 nix develop -c just test-vm-synthetic-gateway
+nix develop -c just test-vm-synthetic-tool-gateway
 nix develop -c just test-vm-ownership-recovery
 nix develop -c just vm-debug
 ```
@@ -230,9 +231,15 @@ but no public client can remotely enable tool mode.
 `function_call_output` bodies are explicit synthetic acknowledgements,
 not legitimate agent receipts. This increment only isolates potential
 LiteLLM Responses translation problems before real Herdr/OpenCode
-integration under #558. It cannot satisfy #531/#431 by itself. The
-separate operator-only NixOS VM scenario and packaged Python source
-dependencies follow in the next stack increment.
+integration under #558. It cannot satisfy #531/#431 by itself. The opt-in `synthetic-tool-gateway` NixOS scenario packages the synthetic
+provider, state machine, gateway probe and transport verifier in the same
+immutable Nix source directory. It runs real Incus/LiteLLM/PostgreSQL and
+issues a short-lived scoped virtual key, then verifies four function-call
+HTTP turns and key revocation. It cannot validate real guest tool actions
+because the function results are **explicitly fake**. The text-only
+`synthetic-gateway` scenario remains unchanged. This networked scenario
+is heavyweight, is not part of check-all, and requires a disposable KVM
+worker and OCI provisioning. Actual Herdr+OpenCode E2E remains #558.
 
 ## Machine-readable run evidence
 

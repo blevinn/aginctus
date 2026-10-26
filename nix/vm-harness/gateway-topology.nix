@@ -6,18 +6,37 @@
   nixpkgs,
   system,
   synthetic ? false,
+  toolTransport ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
   lib = nixpkgs.lib;
+  # Bundle relative imports in one immutable derivation. The synthetic
+  # upstream imports tool_sequence.py even in default text-only mode.
+  # Keep script files side-by-side; they are not chosen from a checkout.
+  syntheticSources = pkgs.runCommand "aginctus-vm-synthetic-sources" { } ''
+    mkdir -p "$out"
+    cp ${../../scripts/vm_harness/synthetic_responses.py} "$out/synthetic_responses.py"
+    cp ${../../scripts/vm_harness/synthetic_gateway_probe.py} "$out/synthetic_gateway_probe.py"
+    cp ${../../scripts/vm_harness/tool_sequence.py} "$out/tool_sequence.py"
+    cp ${../../scripts/vm_harness/gateway_tool_transport.py} "$out/gateway_tool_transport.py"
+  '';
   syntheticProbe = pkgs.writeShellScriptBin "aginctus-vm-synthetic-probe" ''
-    exec ${pkgs.python3}/bin/python3 ${../../scripts/vm_harness/synthetic_gateway_probe.py} ${../../scripts/vm_harness/synthetic_responses.py}
+    exec ${pkgs.python3}/bin/python3 ${syntheticSources}/synthetic_gateway_probe.py ${syntheticSources}/synthetic_responses.py${
+      if toolTransport then " --tool-sequence" else ""
+    }
   '';
 in
+assert (!toolTransport || synthetic);
 pkgs.testers.runNixOSTest {
   name =
     if synthetic then
-      "aginctus-vm-harness-synthetic-gateway"
+      (
+        if toolTransport then
+          "aginctus-vm-harness-synthetic-tool-gateway"
+        else
+          "aginctus-vm-harness-synthetic-gateway"
+      )
     else
       "aginctus-vm-harness-gateway-topology";
   nodes.machine =

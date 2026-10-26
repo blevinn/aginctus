@@ -71,6 +71,10 @@ test-vm-gateway-topology:
     python3 scripts/vm_harness/runner.py test gateway-topology
 test-vm-synthetic-gateway:
     python3 scripts/vm_harness/runner.py test synthetic-gateway
+# Real LiteLLM function-call continuation transport with FAKE tool outputs.
+# Operator-only KVM, no Herdr/OpenCode tool execution or live inference.
+test-vm-synthetic-tool-gateway:
+    python3 scripts/vm_harness/runner.py test synthetic-tool-gateway
 # Genuine pinned OpenCode tool execution INSIDE a disposable no-egress VM.
 # Still a loopback synthetic model: not Herdr/LiteLLM acceptance.
 test-vm-opencode-tool-loopback:

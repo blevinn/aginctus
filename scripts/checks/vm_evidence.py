@@ -22,6 +22,7 @@ SCENARIOS = (
     "runtime-lifecycle",
     "gateway-topology",
     "synthetic-gateway",
+    "synthetic-tool-gateway",
     "opencode-tool-loopback",
     "ownership-recovery",
 )

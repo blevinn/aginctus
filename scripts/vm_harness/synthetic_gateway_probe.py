@@ -19,9 +19,9 @@ from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 if __package__:
-    from .gateway_tool_transport import probe_gateway_tool_transport
+    from .gateway_tool_transport import TransportFailure, probe_gateway_tool_transport
 else:
-    from gateway_tool_transport import probe_gateway_tool_transport
+    from gateway_tool_transport import TransportFailure, probe_gateway_tool_transport
 
 # Both scripts are pinned separately into the guest Nix store. Validate
 # consistency with the synthetic upstream in hostless protocol tests.
@@ -323,7 +323,7 @@ def main():
         ):
             raise Failure("fixture invocation requires an approved pinned mode")
         run(Path(sys.argv[1]), tool_mode=len(sys.argv) == 3)
-    except Failure as exc:
+    except (Failure, TransportFailure) as exc:
         print("FAIL: synthetic gateway acceptance: " + str(exc), file=sys.stderr)
         return 1
     except (ValueError, json.JSONDecodeError, subprocess.SubprocessError):
