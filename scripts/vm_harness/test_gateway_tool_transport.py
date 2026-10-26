@@ -4,7 +4,9 @@ import json
 import unittest
 
 from scripts.vm_harness.gateway_tool_transport import (
-    TransportFailure, completed_item, probe_gateway_tool_transport,
+    TransportFailure,
+    completed_item,
+    probe_gateway_tool_transport,
 )
 from scripts.vm_harness.tool_sequence import ToolSequence, stream
 
