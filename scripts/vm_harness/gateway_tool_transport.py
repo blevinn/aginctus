@@ -75,7 +75,8 @@ def completed_item(raw: bytes, nonce: str, step: int):
         raise TransportFailure("synthetic Responses missing completion")
     response_id = terminal.get("id")
     if not isinstance(response_id, str) or not RESPONSE_ID.fullmatch(response_id):
-        raise TransportFailure("synthetic Responses identity malformed")
+        shown_id = response_id[:96] if isinstance(response_id, str) else "<missing>"
+        raise TransportFailure("synthetic Responses identity malformed: " + shown_id)
     output = terminal.get("output")
     if not isinstance(output, list) or len(output) != 1 or not isinstance(output[0], dict):
         raise TransportFailure("synthetic Responses output count changed")
