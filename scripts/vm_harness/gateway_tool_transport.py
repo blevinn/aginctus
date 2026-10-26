@@ -72,8 +72,11 @@ def completed_item(raw: bytes, nonce: str, step: int):
             terminal = payload.get("response")
     if not isinstance(terminal, dict) or terminal.get("status") != "completed":
         raise TransportFailure("synthetic Responses missing completion")
-    if terminal.get("id") != f"resp_{nonce}_{step}":
-        raise TransportFailure("synthetic Responses identity changed")
+    expected_id = f"resp_{nonce}_{step}"
+    response_id = terminal.get("id")
+    if response_id != expected_id:
+        shown_id = response_id.replace(nonce, "[NONCE]")[:96] if isinstance(response_id, str) else "<missing>"
+        raise TransportFailure("synthetic Responses identity changed: " + shown_id)
     output = terminal.get("output")
     if not isinstance(output, list) or len(output) != 1 or not isinstance(output[0], dict):
         raise TransportFailure("synthetic Responses output count changed")
