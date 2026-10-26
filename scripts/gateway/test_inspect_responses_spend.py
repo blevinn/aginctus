@@ -81,6 +81,113 @@ class SpendEvidenceTests(unittest.TestCase):
         self.assertEqual(timeout, 15)
         self.assertNotIn("SECRET", json.dumps(result))
 
+    def test_diagnostic_reports_only_field_statuses_and_never_promotes(self):
+        row = self.row(
+            session_id=None, end_user="another-run", model_group="",
+            status="success", proxy_server_request={
+                "headers": {"Authorization": "Bearer PRIVATE_PROVIDER_KEY"},
+            },
+        )
+        output, opener = self.inspect_diagnostic([row])
+        self.assertEqual(output["profile"], "gateway_spend_diagnostic")
+        self.assertEqual(output["status"], "incomplete")
+        self.assertEqual(output["gateway_log_correlated"], "not_verified")
+        self.assertEqual(output["spend_log_status"], "success_label")
+        self.assertFalse(output["complete_acceptance"])
+        self.assertEqual(output["upstream_inference"], "not_verified")
+        self.assertEqual(output["agent_tool_execution"], "not_verified")
+        self.assertEqual(output["fields"], [
+            {"id": "request_id", "status": "match"},
+            {"id": "session_id", "status": "missing"},
+            {"id": "end_user", "status": "mismatch"},
+            {"id": "model_group", "status": "missing"},
+            {"id": "api_key", "status": "match"},
+            {"id": "call_type", "status": "match"},
+        ])
+        self.assertEqual(len(opener.requests), 1)
+        for sensitive in ("PRIVATE_PROVIDER_KEY", "another-run", REQUEST, SESSION, KEY):
+            self.assertNotIn(sensitive, json.dumps(output))
+
+    def inspect_diagnostic(self, response):
+        opener = FakeOpener(response)
+        result = mod.inspect(
+            host="http://10.0.0.9:4000", gateway_id="local",
+            request_id=REQUEST, run_id=RUN, session_id=SESSION,
+            model_alias=MODEL, key_file=str(self.key_file),
+            opener=opener, diagnose=True,
+        )
+        return result, opener
+
+    def test_diagnostics_equal_fields_still_cannot_prove_upstream(self):
+        for observed in ("success", "failure", "unknown", None):
+            with self.subTest(status=observed):
+                result, _ = self.inspect_diagnostic([self.row(status=observed)])
+                self.assertEqual({x["status"] for x in result["fields"]}, {"match"})
+                self.assertEqual(result["gateway_log_correlated"], "not_verified")
+                self.assertEqual(result["upstream_inference"], "not_verified")
+                self.assertEqual(result["status"], "incomplete")
+                self.assertFalse(result["complete_acceptance"])
+                expected = {
+                    "success": "success_label", "failure": "failure_label",
+                }.get(observed, "unrecognized")
+                self.assertEqual(result["spend_log_status"], expected)
+
+    def test_diagnostics_still_reject_ambiguous_malformed_and_missing_rows(self):
+        for rows in ([], [self.row(), self.row()], {}, b"not-json",
+                     b'[{"request_id":"a","request_id":"b"}]', b"[" + b"x" * 65537):
+            with self.subTest(response=str(rows)[:28]), self.assertRaises(mod.ProbeError):
+                self.inspect_diagnostic(rows)
+
+    def test_diagnostic_cli_uses_exactly_one_read_only_get_and_redacts_failures(self):
+        args = ["--endpoint", "http://10.0.0.9:4000", "--gateway-id", "local",
+                "--request-id", REQUEST, "--run-id", RUN, "--session-id", SESSION,
+                "--model-alias", MODEL, "--workload-key-file", str(self.key_file)]
+        diagnostic = io.StringIO()
+        fake = FakeOpener([self.row(session_id=None, status="failure")])
+        with (
+            patch.object(mod, "build_opener", return_value=fake),
+            contextlib.redirect_stdout(diagnostic),
+        ):
+            self.assertEqual(mod.main([*args, "--diagnose"]), 0)
+        out = json.loads(diagnostic.getvalue())
+        self.assertEqual(out["status"], "incomplete")
+        self.assertEqual(out["gateway_log_correlated"], "not_verified")
+        self.assertEqual(out["spend_log_status"], "failure_label")
+        self.assertEqual(len(fake.requests), 1)
+        self.assertEqual(fake.requests[0][0].get_method(), "GET")
+        self.assertNotIn(MASTER, diagnostic.getvalue())
+        self.assertNotIn(KEY, diagnostic.getvalue())
+        self.assertNotIn(SESSION, diagnostic.getvalue())
+
+        bad = io.StringIO()
+        with (
+            patch.object(mod, "fetch_row", side_effect=mod.ProbeError("PROVIDER_SECRET")),
+            contextlib.redirect_stdout(bad),
+        ):
+            self.assertEqual(mod.main([*args, "--diagnose"]), 1)
+        failed = json.loads(bad.getvalue())
+        self.assertEqual(failed, mod.diagnostic_error())
+        self.assertEqual({row["status"] for row in failed["fields"]}, {"not_run"})
+        self.assertNotIn("PROVIDER_SECRET", bad.getvalue())
+
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            mod.main([*args, "--inspect", "--diagnose"])
+
+    def test_bad_diagnostic_selectors_never_read_keys_or_contact_gateway(self):
+        with (
+            patch.object(mod, "_private_file") as secret,
+            patch.object(mod, "fetch_row") as fetch,
+            self.assertRaises(mod.ProbeError),
+        ):
+            mod.inspect(
+                host="http://10.0.0.9:4000", gateway_id="local",
+                request_id="../../unsafe", run_id=RUN, session_id=SESSION,
+                model_alias=MODEL, key_file=str(self.key_file),
+                diagnose=True,
+            )
+        secret.assert_not_called()
+        fetch.assert_not_called()
+
     def test_wrong_or_missing_session_model_key_run_or_call_type_never_passes(self):
         for changes in ({"session_id": "ses_other"}, {"session_id": None},
                         {"end_user": "other"}, {"model_group": "different"},

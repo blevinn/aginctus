@@ -130,24 +130,86 @@ def fetch_row(url, admin_key, request_id, opener=None):
     return rows[0]
 
 
-def check_row(row, *, request_id, run_id, session_id, model_alias, key_sha256):
-    """Require correlation to all operator-selected dimensions, no defaults.
+def expected_fields(*, request_id, run_id, session_id, model_alias, key_sha256):
+    # Fixed field names only. In pinned LiteLLM 1.103.0 session_id may be
+    # a trace-id fallback and end_user may come from key/customer metadata;
+    # values alone cannot attest native OpenCode session/run provenance.
+    return (
+        ("request_id", request_id),
+        ("session_id", session_id),
+        ("end_user", run_id),
+        ("model_group", model_alias),
+        ("api_key", key_sha256),
+        ("call_type", "aresponses"),
+    )
 
-    A logged request is one witness, *not* Responses terminal completion or
-    proof of provider success, even if its status field claims success.
-    """
-    if (
-        row.get("request_id") != request_id
-        or row.get("session_id") != session_id
-        or row.get("end_user") != run_id
-        or row.get("model_group") != model_alias
-        or row.get("api_key") != key_sha256
-        or row.get("call_type") != "aresponses"
-    ):
+
+def check_row(row, *, request_id, run_id, session_id, model_alias, key_sha256):
+    """Require exact logged fields; do not infer upstream completion."""
+    expected = expected_fields(
+        request_id=request_id, run_id=run_id, session_id=session_id,
+        model_alias=model_alias, key_sha256=key_sha256,
+    )
+    if any(row.get(field) != wanted for field, wanted in expected):
         raise ProbeError("gateway spend log correlation incomplete")
 
 
-def inspect(*, host, gateway_id, request_id, run_id, session_id, model_alias, key_file, opener=None):
+def diagnose_row(row, *, request_id, run_id, session_id, model_alias, key_sha256):
+    """Bounded field-level diagnostic; NEVER prints values or grants a pass."""
+    expected = expected_fields(
+        request_id=request_id, run_id=run_id, session_id=session_id,
+        model_alias=model_alias, key_sha256=key_sha256,
+    )
+    fields = []
+    for name, wanted in expected:
+        actual = row.get(name)
+        status = (
+            "missing" if actual is None or actual == "" else
+            "match" if actual == wanted else "mismatch"
+        )
+        fields.append({"id": name, "status": status})
+    status = row.get("status")
+    # In LiteLLM the spend-log status is derived from callback metadata.
+    # A "success" label is NOT an independent provider completion receipt.
+    label = (
+        "success_label" if status == "success" else
+        "failure_label" if status == "failure" else "unrecognized"
+    )
+    return {
+        "schema_version": 1,
+        "profile": "gateway_spend_diagnostic",
+        "status": "incomplete",
+        "gateway_log_correlated": "not_verified",
+        "fields": fields,
+        "spend_log_status": label,
+        "upstream_inference": "not_verified",
+        "agent_tool_execution": "not_verified",
+        "complete_acceptance": False,
+    }
+
+
+def diagnostic_error():
+    return {
+        "schema_version": 1,
+        "profile": "gateway_spend_diagnostic",
+        "status": "error",
+        "gateway_log_correlated": "not_verified",
+        "fields": [
+            {"id": field, "status": "not_run"}
+            for field in (
+                "request_id", "session_id", "end_user", "model_group",
+                "api_key", "call_type",
+            )
+        ],
+        "spend_log_status": "unrecognized",
+        "upstream_inference": "not_verified",
+        "agent_tool_execution": "not_verified",
+        "complete_acceptance": False,
+    }
+
+
+def inspect(*, host, gateway_id, request_id, run_id, session_id, model_alias,
+            key_file, opener=None, diagnose=False):
     if (not IDENTIFIER.fullmatch(gateway_id) or not REQUEST.fullmatch(request_id)
             or not RUN_ID.fullmatch(run_id) or not SESSION.fullmatch(session_id)
             or not IDENTIFIER.fullmatch(model_alias)):
@@ -157,8 +219,16 @@ def inspect(*, host, gateway_id, request_id, run_id, session_id, model_alias, ke
     expected_hash = hashlib.sha256(_key(_private_file(Path(key_file))).encode("ascii")).hexdigest()
     master = _master(gateway_id)
     row = fetch_row(host, master, request_id, opener)
-    check_row(row, request_id=request_id, run_id=run_id, session_id=session_id,
-              model_alias=model_alias, key_sha256=expected_hash)
+    selectors = {
+        "request_id": request_id, "run_id": run_id,
+        "session_id": session_id, "model_alias": model_alias,
+        "key_sha256": expected_hash,
+    }
+    if diagnose:
+        # Never use a diagnostics result as proof of logged request identity,
+        # actual provider completion or acceptance. Its fields are hints only.
+        return diagnose_row(row, **selectors)
+    check_row(row, **selectors)
     return {"gateway_log_correlated": "pass", "upstream_inference": "not_verified",
             "agent_tool_execution": "not_verified", "complete_acceptance": False}
 
@@ -168,9 +238,14 @@ def main(argv=None):
     for option in ("endpoint", "gateway-id", "request-id", "run-id", "session-id",
                    "model-alias", "workload-key-file"):
         p.add_argument("--" + option, required=True)
-    p.add_argument("--inspect", action="store_true", help="Opt into a read-only private gateway query")
+    actions = p.add_mutually_exclusive_group()
+    actions.add_argument("--inspect", action="store_true", help="Require exact gateway log correlation")
+    actions.add_argument(
+        "--diagnose", action="store_true",
+        help="Read one gateway log and report only fixed missing/mismatched field labels",
+    )
     args = p.parse_args(argv)
-    if not args.inspect:
+    if not (args.inspect or args.diagnose):
         print(json.dumps({"gateway_log_correlated": "not_run", "upstream_inference": "not_verified",
                           "agent_tool_execution": "not_verified", "complete_acceptance": False}))
         return 0
@@ -179,12 +254,18 @@ def main(argv=None):
             host=args.endpoint, gateway_id=args.gateway_id,
             request_id=args.request_id, run_id=args.run_id,
             session_id=args.session_id, model_alias=args.model_alias,
-            key_file=args.workload_key_file,
+            key_file=args.workload_key_file, diagnose=args.diagnose,
         )
     except (ProbeError, OSError, TypeError, ValueError):
-        report = {"gateway_log_correlated": "error", "upstream_inference": "not_verified",
-                  "agent_tool_execution": "not_verified", "complete_acceptance": False}
+        if args.diagnose:
+            report = diagnostic_error()
+        else:
+            report = {"gateway_log_correlated": "error", "upstream_inference": "not_verified",
+                      "agent_tool_execution": "not_verified", "complete_acceptance": False}
     print(json.dumps(report, separators=(",", ":")))
+    if args.diagnose:
+        # A successful diagnostic query is not evidence of correlation.
+        return 0 if report["status"] == "incomplete" else 1
     return 0 if report["gateway_log_correlated"] == "pass" else 1
 
 
