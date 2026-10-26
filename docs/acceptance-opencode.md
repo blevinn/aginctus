@@ -238,7 +238,8 @@ session ID, expected acceptance run ID, model alias and already-provisioned
 workload-key file. The tool requires a protected gateway administrative key
 in the existing `XDG_STATE_HOME/aginctus/gateway/<gateway-id>/secrets.json`
 state file and a reviewed private IPv4 gateway endpoint. Supply all selectors
-explicitly; no gateway traffic occurs unless `--inspect` is present:
+explicitly; no gateway traffic occurs unless `--inspect` or
+`--diagnose` is present:
 
 ```sh
 # Set exact values after inspecting the reviewed pilot; no defaults inferred.
@@ -251,8 +252,42 @@ nix develop -c python3 scripts/gateway/inspect_responses_spend.py \
   --model-alias "$GATEWAY_MODEL_ALIAS" \
   --workload-key-file "$PRIVATE_WORKLOAD_KEY_FILE"
 
-# Append --inspect ONLY for a separately operator-approved, read-only query.
+# Append --diagnose ONLY for an operator-approved redacted field check.
+# Append --inspect ONLY when exact correlation is expected.
+# The two options are mutually exclusive.
 ```
+
+#### Diagnosing missing spend-log correlation (no acceptance promotion)
+
+The `--diagnose` option performs the same read-only, administrator-authenticated
+single-request lookup as `--inspect`, but **never issues a correlated-pass
+verdict**. Its fixed `gateway_spend_diagnostic` JSON labels each of six
+expected database columns as `match`, `missing` or `mismatch`:
+
+`request_id`, `session_id`, `end_user`, `model_group`,
+`api_key` (checked against the selected workload-key hash), and
+`call_type`. A missing/ambiguous record, malformed response, unsafe key
+or transport failure yields bounded `error` with all checks `not_run`.
+The output never contains a request value, session ID, run ID, key hash,
+key path, response body, prompt, provider header or raw exception.
+
+The separate `spend_log_status` may report `success_label`,
+`failure_label` or `unrecognized`, derived from the log's own
+status column. **Neither status label is independent proof** of provider
+terminal completion. Even when every column matches, the diagnostic
+remains `status: incomplete`, `gateway_log_correlated: not_verified`,
+`upstream_inference: not_verified`, `agent_tool_execution: not_verified`
+and `complete_acceptance: false`.
+
+Source review of pinned LiteLLM v1.103.0 establishes that its
+`LiteLLM_SpendLogs.session_id` may come from a trace-ID fallback rather
+than the native OpenCode session, and `end_user` can be attributed from
+key/customer metadata. The acceptance prompt's run nonce alone is **not**
+a demonstrated mechanism for populating those columns. These field-level
+hints help identify the missing instrumentation but do not authenticate
+the native OpenCode session or bind a request to the acceptance run.
+Normal CI calls only mocked HTTP transports; the operator alone chooses
+whether to query the deployed private gateway.
 
 The inspector requires **exactly one** bounded spend-log entry matching
 request ID, `session_id`, `end_user` (the acceptance run ID),
