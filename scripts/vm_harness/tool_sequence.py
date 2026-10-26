@@ -73,6 +73,33 @@ def tool_arguments(step, workdir, nonce):
     raise SequenceError("invalid synthetic tool step")
 
 
+def validate_inline_continuation(body, nonce, step, workdir):
+    """Validate the pinned client's explicit function-call/result input pair."""
+    inputs = body.get("input")
+    if not isinstance(inputs, list):
+        raise SequenceError("missing actual tool continuation")
+    calls = [item for item in inputs if isinstance(item, dict) and item.get("type") == "function_call"]
+    outputs = [item for item in inputs if isinstance(item, dict) and item.get("type") == "function_call_output"]
+    if len(calls) != step + 1 or len(outputs) != step + 1:
+        raise SequenceError("expected ordered function call/result history")
+    for index, (call, output) in enumerate(zip(calls, outputs, strict=True)):
+        expected_call = "call_" + nonce + "_" + str(index)
+        expected_item = "fc_" + nonce + "_" + str(index)
+        item_id = call.get("id")
+        if item_id is not None and item_id != expected_item:
+            shown_id = item_id.replace(nonce, "[NONCE]")[:80] if isinstance(item_id, str) else "<missing>"
+            raise SequenceError("function call item ID mismatch: " + shown_id)
+        if call.get("call_id") != expected_call or output.get("call_id") != expected_call:
+            raise SequenceError("function call/result ID mismatch")
+        if call.get("name") != STEP_NAMES[index]:
+            raise SequenceError("function call name mismatch")
+        if call.get("arguments") != json.dumps(
+            tool_arguments(index, workdir, nonce), separators=(",", ":")
+        ):
+            raise SequenceError("function call arguments mismatch")
+        if not isinstance(output.get("output"), str):
+            raise SequenceError("function result is malformed")
+
 def fixture_response(nonce, step, workdir, model):
     output = []
     if step < 3:
@@ -171,8 +198,16 @@ class ToolSequence:
                 if match is None:
                     raise SequenceError("initial tool task is missing nonce")
                 nonce = match.group(1)
-                if not NONCE.fullmatch(nonce) or nonce in self._steps or len(self._steps) >= MAX_SESSIONS:
-                    raise SequenceError("duplicate or over-capacity tool session")
+                if not NONCE.fullmatch(nonce) or len(self._steps) >= MAX_SESSIONS:
+                    raise SequenceError("invalid or over-capacity tool session")
+                if nonce in self._steps:
+                    step = self._steps[nonce]
+                    if step >= 3:
+                        raise SequenceError("tool session is already complete")
+                    tool_definitions(body)
+                    validate_inline_continuation(body, nonce, step, self.workdir)
+                    self._steps[nonce] = step + 1
+                    return nonce, fixture_response(nonce, step + 1, self.workdir, self.model)
                 tool_definitions(body)
                 step = 0
                 self._steps[nonce] = 0
