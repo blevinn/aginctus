@@ -17,6 +17,19 @@ POLICY = {"model_list": [], "litellm_settings": {
 
 
 class PinnedResponsesProbeTests(unittest.TestCase):
+    def test_buffered_and_incremental_sse_are_byte_identical(self):
+        # Protocol schema cannot be watered down to make the fast path pass.
+        expected = probe.response_events()
+        buffered = probe.sse_chunks("buffered")
+        incremental = probe.sse_chunks("incremental")
+        self.assertEqual(buffered, [expected])
+        self.assertGreater(len(incremental), 2)
+        self.assertEqual(b"".join(incremental), expected)
+        self.assertIn(b"event: response.completed", expected)
+        self.assertTrue(expected.endswith(b"data: [DONE]\n\n"))
+        with self.assertRaises(ValueError):
+            probe.sse_chunks("unsupported")
+
     def test_real_completion_requires_native_identity_terminal_stop_and_text(self):
         session = "ses_test_generated_identity"
         events = [

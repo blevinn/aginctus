@@ -180,8 +180,19 @@ def response_events():
     ).encode() + b"data: [DONE]\n\n"
 
 
+def sse_chunks(delivery):
+    """Same final response_events() bytes; only network write boundaries differ."""
+    payload = response_events()
+    if delivery == "buffered":
+        return [payload]
+    if delivery == "incremental":
+        return [part + b"\n\n" for part in payload.split(b"\n\n") if part]
+    raise ValueError("unsupported SSE delivery mode")
+
+
 class MockGo(http.server.BaseHTTPRequestHandler):
     calls: ClassVar[list] = []
+    delivery: ClassVar[str] = "incremental"
     lock: ClassVar[threading.Lock] = threading.Lock()
 
     def do_POST(self):
@@ -207,12 +218,11 @@ class MockGo(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
-        # Incremental delivery exercises streaming instead of a single buffered
-        # response, which can outrun the CLI's event subscription at startup.
-        for event in response_events().split(b"\n\n"):
-            if event:
-                self.wfile.write(event + b"\n\n")
-                self.wfile.flush()
+        # Buffered delivery performs ONE write/flush without sleeps.
+        for chunk in sse_chunks(type(self).delivery):
+            self.wfile.write(chunk)
+            self.wfile.flush()
+            if type(self).delivery == "incremental":
                 time.sleep(0.02)
 
     def log_message(self, *_args):
@@ -465,9 +475,10 @@ def completed_native_session(output, session=None):
     return native
 
 
-def run_production(bundle, launcher, binary, postgres_bin):
+def run_production(bundle, launcher, binary, postgres_bin, *, delivery="incremental"):
     """Extend the pinned probe with the production launcher and DB registry."""
     verify_isolation()
+    MockGo.delivery = "incremental"  # Calibrate UA on the proven control only.
     load_packaged_hook(bundle)
     bundle = Path(bundle).resolve()
     deployment = json.loads((bundle / "deployment.json").read_text(encoding="utf-8"))
@@ -501,6 +512,7 @@ def run_production(bundle, launcher, binary, postgres_bin):
             if not user_agent or not user_agent.startswith("opencode/" + version.stdout.strip() + " "):
                 raise RuntimeError("real OpenCode User-Agent does not identify pinned runtime")
             MockGo.calls = []
+            MockGo.delivery = delivery  # Actual OpenCode requests use chosen mode.
             database = stack.enter_context(disposable_postgres(postgres_bin, root))
             # Keep delivered policy bytes unchanged. Only namespace-local paths,
             # DB address and synthetic runtime credentials replace deployment values.
@@ -618,6 +630,26 @@ def run_production(bundle, launcher, binary, postgres_bin):
     finally:
         fake.shutdown()
         fake.server_close()
+        MockGo.delivery = "incremental"
+
+
+def run_direct(launcher, binary, *, delivery):
+    """Require actual native terminal text and stop without LiteLLM or DB."""
+    verify_isolation()
+    MockGo.calls = []
+    MockGo.delivery = delivery
+    fake = http.server.ThreadingHTTPServer(("127.0.0.1", 0), MockGo)
+    threading.Thread(target=fake.serve_forever, daemon=True).start()
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            real_opencode(launcher, binary, Path(tmp), fake.server_port, UPSTREAM_KEY)
+            if not MockGo.calls:
+                raise RuntimeError("real OpenCode never reached mock upstream")
+        print("PASS: real OpenCode direct terminal text/stop (" + delivery + ")")
+    finally:
+        fake.shutdown()
+        fake.server_close()
+        MockGo.delivery = "incremental"
 
 
 def run(fixture, require_safe, *, selective_hook=False, packaged_hook=None):
@@ -700,14 +732,24 @@ def main():
                         help="run production launch.py with DB-backed rendered deployment")
     parser.add_argument("--opencode", type=Path, help="flake-pinned real OpenCode executable")
     parser.add_argument("--postgres-bin", type=Path, help="cached Nix PostgreSQL bin directory")
+    parser.add_argument("--delivery-mode", choices=("incremental", "buffered"),
+                        default="incremental", help="SSE wire delivery, identical response schema")
+    parser.add_argument("--direct-only", action="store_true",
+                        help="real pinned OpenCode directly to mock upstream, without proxy")
     args = parser.parse_args()
     try:
-        if args.production_launcher:
+        if args.direct_only:
+            if not all((args.production_launcher, args.opencode)) or args.packaged_hook:
+                raise RuntimeError("direct-only requires launcher and OpenCode, no bundle")
+            run_direct(args.production_launcher, args.opencode, delivery=args.delivery_mode)
+        elif args.production_launcher:
             if not all((args.packaged_hook, args.opencode, args.postgres_bin)):
                 raise RuntimeError("production mode requires packaged deployment, OpenCode and PostgreSQL")
             run_production(args.packaged_hook, args.production_launcher,
-                           args.opencode, args.postgres_bin)
+                           args.opencode, args.postgres_bin, delivery=args.delivery_mode)
         else:
+            if args.delivery_mode != "incremental":
+                raise RuntimeError("buffered delivery requires direct/production OpenCode")
             run(args.fixture, args.require_safe or args.selective_hook or bool(args.packaged_hook),
                 selective_hook=args.selective_hook, packaged_hook=args.packaged_hook)
     except (RuntimeError, OSError, ValueError, KeyError, ImportError) as error:
