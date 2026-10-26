@@ -22,17 +22,21 @@ let
     cp ${../../scripts/vm_harness/gateway_tool_transport.py} "$out/gateway_tool_transport.py"
   '';
   syntheticProbe = pkgs.writeShellScriptBin "aginctus-vm-synthetic-probe" ''
-    exec ${pkgs.python3}/bin/python3 ${syntheticSources}/synthetic_gateway_probe.py ${syntheticSources}/synthetic_responses.py${if toolTransport then " --tool-sequence" else ""}
+    exec ${pkgs.python3}/bin/python3 ${syntheticSources}/synthetic_gateway_probe.py ${syntheticSources}/synthetic_responses.py${
+      if toolTransport then " --tool-sequence" else ""
+    }
   '';
 in
 assert (!toolTransport || synthetic);
 pkgs.testers.runNixOSTest {
   name =
     if synthetic then
-      (if toolTransport then
-        "aginctus-vm-harness-synthetic-tool-gateway"
-      else
-        "aginctus-vm-harness-synthetic-gateway")
+      (
+        if toolTransport then
+          "aginctus-vm-harness-synthetic-tool-gateway"
+        else
+          "aginctus-vm-harness-synthetic-gateway"
+      )
     else
       "aginctus-vm-harness-gateway-topology";
   nodes.machine =
