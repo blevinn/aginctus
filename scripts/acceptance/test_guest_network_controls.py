@@ -119,10 +119,12 @@ class ControlsTests(unittest.TestCase):
             subprocess.CompletedProcess(["incus"], 0, "{not-json}", "secret"),
             subprocess.CompletedProcess(["incus"], 0, '{"status":"pass","status":"fail"}', ""),
         ):
-            with self.subTest(payload=payload.stdout[:35]):
-                with patch.object(mod, "execute", return_value=payload):
-                    with self.assertRaises(mod.ProbeError):
-                        mod.guest_probe("aginctus-dev", "direct", "1.1.1.1")
+            with (
+                self.subTest(payload=payload.stdout[:35]),
+                patch.object(mod, "execute", return_value=payload),
+                self.assertRaises(mod.ProbeError),
+            ):
+                mod.guest_probe("aginctus-dev", "direct", "1.1.1.1")
 
     def test_bad_config_blocks_guest_network_probe(self):
         bad = subprocess.CompletedProcess(
