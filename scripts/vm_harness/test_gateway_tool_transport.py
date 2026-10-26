@@ -30,6 +30,17 @@ class TransportTests(unittest.TestCase):
             )
             self.assertEqual(completed_item(data_only, NONCE, step)[0], identity)
 
+    def test_litellm_opaque_response_ids_are_preserved(self):
+        raw = fixture_stream().replace(
+            f"resp_{NONCE}_0".encode(), b"resp_gateway/opaque.v1+id"
+        )
+        self.assertEqual(
+            completed_item(raw, NONCE, 0)[0], "resp_gateway/opaque.v1+id"
+        )
+        for invalid in (b"bad-response-id", b"resp_ab", b"resp_bad id"):
+            with self.subTest(invalid=invalid), self.assertRaises(TransportFailure):
+                completed_item(raw.replace(b"resp_gateway/opaque.v1+id", invalid), NONCE, 0)
+
     def test_missing_completion_wrong_identity_and_forgery_rejected(self):
         raw = fixture_stream()
         invalid = (
