@@ -203,9 +203,10 @@ def verify_sse(data, expected_marker):
     return event_count
 
 
-def run(host, alias, workload_key, master_key, opener=None, marker=None):
+def run_authorization(host, alias, workload_key, master_key, opener=None):
+    """Read-only private gateway credential controls, never a model request."""
     if workload_key == master_key:
-        raise SmokeError("workload key equals gateway master; refusing inference")
+        raise SmokeError("workload key equals gateway master; refusing authorization probe")
     opener = opener or build_opener(ProxyHandler({}), NoRedirect())
     if request(opener, host, "/health/liveliness")[0] != 200:
         raise SmokeError("LiteLLM application health is not ready")
@@ -214,8 +215,15 @@ def run(host, alias, workload_key, master_key, opener=None, marker=None):
         if status not in (401, 403):
             raise SmokeError("LiteLLM model listing did not reject missing/invalid key")
     status, models = request(opener, host, "/v1/models", workload_key)
-    if status != 200 or alias not in model_ids(models):
-        raise SmokeError("workload credential does not authorize selected alias")
+    if status != 200 or model_ids(models) != {alias}:
+        raise SmokeError("workload credential does not have exact one-alias scope")
+    # Positive and negative authorization checks do not establish upstream
+    # Responses, agent tool execution, isolation or guest network egress.
+    return opener
+
+
+def run(host, alias, workload_key, master_key, opener=None, marker=None):
+    opener = run_authorization(host, alias, workload_key, master_key, opener)
     marker = marker or "AGINCTUS_OK_" + secrets.token_hex(12)
     status, data = request(opener, host, "/v1/responses", workload_key, {
         "model": alias,
@@ -230,20 +238,40 @@ def run(host, alias, workload_key, master_key, opener=None, marker=None):
     return marker, count
 
 
+def authorization_report(status):
+    # This is a non-inference host-to-gateway authorization observation.
+    # No claim about guest credential exposure or network egress is possible.
+    return {
+        "schema_version": 1,
+        "profile": "gateway_authorization",
+        "status": status,
+        "gateway_authorization": status,
+        "upstream_inference": "not_verified",
+        "agent_tools": "not_verified",
+        "credential_egress": "not_verified",
+        "complete_acceptance": False,
+    }
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--endpoint", required=True)
     p.add_argument("--alias", required=True)
     p.add_argument("--workload-key-file", required=True)
     p.add_argument("--gateway-id", default="local")
-    p.add_argument("--run", action="store_true", help="Opt in to a paid real inference request")
+    action = p.add_mutually_exclusive_group()
+    action.add_argument("--run", action="store_true", help="Opt in to a paid real inference request")
+    action.add_argument(
+        "--auth-only", action="store_true",
+        help="Opt in to private gateway key-scope checks without any inference",
+    )
     args = p.parse_args(argv)
     try:
         host = endpoint(args.endpoint)
         if not ALIAS.fullmatch(args.alias) or not ALIAS.fullmatch(args.gateway_id):
             raise SmokeError("invalid selected model alias or gateway ID")
-        if not args.run:
-            print("DRY RUN: no secrets read, no network requests; --run is required for live inference")
+        if not (args.run or args.auth_only):
+            print("DRY RUN: no secrets read or network requests; select --auth-only or --run")
             return 0
         state_home = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state")))
         raw = Path(state_home / "aginctus/gateway" / args.gateway_id / "secrets.json")
@@ -255,13 +283,22 @@ def main(argv=None):
         if not isinstance(master, str) or not master:
             raise SmokeError("protected gateway state has no master key")
         workload_key = secret_file(args.workload_key_file)
+        if args.auth_only:
+            run_authorization(host, args.alias, workload_key, master)
+            print(json.dumps(authorization_report("pass"), separators=(",", ":")))
+            return 0
         marker, event_count = run(host, args.alias, workload_key, master)
         print(f"PASS: authenticated LiteLLM Responses stream completed with requested output; "
               f"{event_count} events; gateway correlation identifier {marker}; "
               "provider provenance and egress require separate gateway-side evidence")
         return 0
     except SmokeError as exc:
-        print("FAIL: " + str(exc), file=sys.stderr)
+        if args.auth_only:
+            # Structured, bounded failure. Never reflect provider text,
+            # exception messages, selected file paths or bearer keys.
+            print(json.dumps(authorization_report("error"), separators=(",", ":")))
+        else:
+            print("FAIL: " + str(exc), file=sys.stderr)
         return 1
 
 
