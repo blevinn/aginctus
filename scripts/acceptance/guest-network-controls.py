@@ -76,12 +76,21 @@ def guest_args(workload, *tail):
     ]
 
 
+def unique_object(pairs):
+    record = {}
+    for key, value in pairs:
+        if key in record:
+            raise ValueError("duplicate guest JSON field")
+        record[key] = value
+    return record
+
+
 def configured_gateway(workload, gateway_ip):
     result = execute(guest_args(workload, "cat", GUEST_CONFIG))
     if result.returncode != 0:
         raise ProbeError("guest gateway configuration unavailable")
     try:
-        document = json.loads(result.stdout)
+        document = json.loads(result.stdout, object_pairs_hook=unique_object)
     except (ValueError, UnicodeError):
         raise ProbeError("invalid guest gateway configuration") from None
     if (
@@ -99,7 +108,7 @@ def guest_probe(workload, mode, ip):
     check = {"gateway": "gateway_tcp", "direct": "direct_public_no_route"}[mode]
     result = execute(guest_args(workload, GUEST_PROGRAM, mode, ip))
     try:
-        record = json.loads(result.stdout)
+        record = json.loads(result.stdout, object_pairs_hook=unique_object)
     except (ValueError, UnicodeError):
         raise ProbeError("invalid guest probe response") from None
     if (
