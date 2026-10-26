@@ -16,6 +16,18 @@ pkgs.testers.runNixOSTest {
       # Two real NixOS Incus workloads may run together.
       virtualisation.memorySize = lib.mkForce 6144;
       virtualisation.diskSize = lib.mkForce 24576;
+      networking.dhcpcd.allowInterfaces = [ "eth0" ];
+      networking.firewall.interfaces.aginctus-mgmt = {
+        allowedUDPPorts = [
+          53
+          67
+        ];
+        allowedTCPPorts = [ 53 ];
+      };
+      boot.kernel.sysctl = {
+        "net.bridge.bridge-nf-call-iptables" = 0;
+        "net.bridge.bridge-nf-call-ip6tables" = 0;
+      };
       services.aginctus.images.opencodeWorkload = {
         enable = lib.mkForce true;
         source = self.packages.${system}.opencode-workload;
@@ -41,6 +53,14 @@ pkgs.testers.runNixOSTest {
     machine.succeed(f"{cli} workload apply dev")
     machine.succeed("incus info aginctus-herdr")
     machine.succeed("incus info aginctus-dev")
+
+    import runpy
+    verify_routes = runpy.run_path("${../../scripts/acceptance/opencode-pilot-preflight.py}")["verify_ipv4_routes"]
+    for instance in ("aginctus-dev", "aginctus-herdr"):
+        machine.wait_until_succeeds(f"timeout 15 incus exec --disable-stdin {instance} -- ip -4 addr show dev eth0 | grep -q 'inet '", timeout=120)
+        verify_routes(machine.succeed(f"timeout 15 incus exec --disable-stdin {instance} -- cat /proc/net/route"))
+    # DNS and Herdr-to-workload TCP must survive the DHCP policy change.
+    machine.wait_until_succeeds("timeout 15 incus exec --disable-stdin aginctus-herdr -- ssh-keyscan -T 5 aginctus-dev.incus >/run/workload-host-key", timeout=120)
 
     # Repeat the exact same reconciliation against real Incus resources.
     machine.succeed(f"{cli} network ensure")

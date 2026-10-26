@@ -64,6 +64,8 @@ currently supported configuration or a release acceptance claim.
   provider registration, scoped keys, inference evidence and revocation.
 - [Gateway egress network](gateway-egress-network.md) — LiteLLM
   egress bridge, OCI NIC, and DHCP design.
+- [Management DHCP gateway policy](management-dhcp-gateway.md): default route
+  suppression, separately approved pilot migration, verification and rollback.
 - [Gateway API key pilot](gateway-api-key-pilot.md) — operator
   workflow for registering and rotating API-key providers.
 - [Selective OpenCode Go forwarding](selective-go-forwarding.md) — embedded

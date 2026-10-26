@@ -88,19 +88,23 @@ func TestNixOSGatewayConfigParity(t *testing.T) {
 			}
 			assertGatewayNetworkDocument(t, plan.Steps[0].Configuration, "aginctus-mgmt", map[string]string{
 				"ipv4.address": managementAddress, "ipv4.nat": "false", "ipv4.routing": "false", "ipv6.address": "none",
+				"ipv4.dhcp.gateway":     "none",
 				"user.aginctus.managed": "true", "user.aginctus.resource": "management-network",
 			})
 			services := compose["services"].(map[string]any)
 			postgres := services["postgres"].(map[string]any)
 			litellm := services["litellm"].(map[string]any)
-			if got := postgres["networks"]; !reflect.DeepEqual(got, []any{"management"}) {
+			managementAttachment := map[string]any{
+				"management": map[string]any{"x-incus-compose": map[string]any{"internal": true}},
+			}
+			if got := postgres["networks"]; !reflect.DeepEqual(got, managementAttachment) {
 				t.Fatalf("PostgreSQL attachments = %#v", got)
 			}
 			networks := compose["networks"].(map[string]any)
 			wantNetworks := map[string]any{
 				"management": map[string]any{"external": true, "name": "aginctus-mgmt"},
 			}
-			var wantAttachments any = []any{"management"}
+			var wantAttachments any = managementAttachment
 			if name != "disabled" {
 				bridge, nic := "auto", ""
 				if name == "ranges" || name == "static" {
@@ -157,9 +161,13 @@ func assertGatewayNetworkDocument(t *testing.T, raw []byte, name string, wantCon
 	if err := json.Unmarshal(raw, &step); err != nil {
 		t.Fatal(err)
 	}
-	if step.Operation != "upsert" || !step.RejectUnsupportedChanges || !reflect.DeepEqual(step.RequireExistingConfig, map[string]string{
+	wantGuards := map[string]string{
 		"user.aginctus.managed": "true", "user.aginctus.resource": wantConfig["user.aginctus.resource"],
-	}) {
+	}
+	if wantConfig["user.aginctus.resource"] == "management-network" {
+		wantGuards["ipv4.dhcp.gateway"] = wantConfig["ipv4.dhcp.gateway"]
+	}
+	if step.Operation != "upsert" || !step.RejectUnsupportedChanges || !reflect.DeepEqual(step.RequireExistingConfig, wantGuards) {
 		t.Fatalf("%s lost ownership/change guards: %s", name, raw)
 	}
 	if len(step.Documents) != 1 {

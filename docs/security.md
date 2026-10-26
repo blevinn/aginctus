@@ -10,6 +10,10 @@ security audit, or production-readiness claim.
   routing disabled and IPv6 disabled. Host DNS/DHCP exceptions derive from
   verified Incus ownership, bridge identity, and addressing, not a name prefix.
   See [host firewall policy and backend limitations](firewall-host-backends.md).
+  New management bridges explicitly suppress DHCP default gateway announcements
+  while retaining DHCP addressing and DNS. Existing bridges require the
+  [separately approved DHCP migration](management-dhcp-gateway.md); absence of a
+  guest default route is not proof of packet enforcement.
   LiteLLM has a separate egress attachment; PostgreSQL and workloads remain
   management-only in the intended topology. The
   [egress migration and acceptance procedure](litellm-oci-egress-pilot.md)

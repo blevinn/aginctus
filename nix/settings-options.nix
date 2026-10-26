@@ -114,6 +114,11 @@ in
         type = types.bool;
         default = false;
       };
+      dhcp.gateway = mkOption {
+        type = types.str;
+        default = "none";
+        description = "Incus management DHCP gateway announcement. 'none' retains DHCP addressing and DNS without advertising a default route.";
+      };
     };
     ipv6.address = mkOption {
       type = types.str;

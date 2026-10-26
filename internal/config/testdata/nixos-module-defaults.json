@@ -27,7 +27,8 @@
         "ipv4": {
           "address": "auto",
           "nat": false,
-          "routing": false
+          "routing": false,
+          "dhcp": {"gateway": "none"}
         },
         "ipv6": {
           "address": "none"

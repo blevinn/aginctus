@@ -66,8 +66,11 @@ func TestEgressGatewayTopologyAndRenderParity(t *testing.T) {
 	services := deployment.Compose["services"].(map[string]any)
 	postgres := services["postgres"].(map[string]any)
 	litellm := services["litellm"].(map[string]any)
-	if got := postgres["networks"]; !reflect.DeepEqual(got, []any{"management"}) {
-		t.Fatalf("Postgres exposed to egress: %#v", got)
+	wantPostgresNetworks := map[string]any{
+		"management": map[string]any{"x-incus-compose": map[string]any{"internal": true}},
+	}
+	if got := postgres["networks"]; !reflect.DeepEqual(got, wantPostgresNetworks) {
+		t.Fatalf("Postgres management-only gateway suppression mismatch: %#v", got)
 	}
 	wantLiteLLMNetworks := map[string]any{
 		"management": map[string]any{"x-incus-compose": map[string]any{"internal": true}},

@@ -100,6 +100,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus network show aginctus-egress")
     assert machine.succeed("incus network get aginctus-mgmt ipv4.nat").strip() == "false"
     assert machine.succeed("incus network get aginctus-mgmt ipv4.routing").strip() == "false"
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.dhcp.gateway").strip() == "none"
     assert machine.succeed("incus network get aginctus-mgmt ipv6.address").strip() == "none"
 
     # Real Incus OCI containers must start and respond, not merely exist.
@@ -107,12 +108,17 @@ pkgs.testers.runNixOSTest {
       "timeout 15 incus exec --disable-stdin --project aginctus-gateway postgres-1 -- pg_isready -U litellm -d litellm </dev/null",
       timeout=180,
     )
-    machine.wait_until_succeeds(
-      "timeout 15 incus exec --disable-stdin --project aginctus-gateway litellm-1 -- python -c "
-      "\"import urllib.request; assert urllib.request.urlopen("
-      "'http://127.0.0.1:4000/health/liveliness', timeout=5).status == 200\" </dev/null",
-      timeout=180,
-    )
+    try:
+        machine.wait_until_succeeds(
+          "timeout 15 incus exec --disable-stdin --project aginctus-gateway litellm-1 -- python -c "
+          "\"import urllib.request; assert urllib.request.urlopen("
+          "'http://127.0.0.1:4000/health/liveliness', timeout=5).status == 200\" </dev/null",
+          timeout=180,
+        )
+    except BaseException:
+        import sys
+        print(machine.execute("incus console --project aginctus-gateway litellm-1 --show-log")[1], file=sys.stderr)
+        raise
     machine.succeed(f"{cli} gateway status")
 
     # The other real Aginctus infrastructure must coexist with the gateway.
@@ -121,6 +127,29 @@ pkgs.testers.runNixOSTest {
     machine.succeed(f"{cli} workload apply dev")
     machine.succeed("incus info aginctus-herdr")
     machine.succeed("incus info aginctus-dev")
+
+    # Reuse the strict pilot route parser against the real DHCP guest.
+    # A route assertion is not packet-filter or provider-inference evidence.
+    import runpy
+    verify_routes = runpy.run_path("${../../scripts/acceptance/opencode-pilot-preflight.py}")["verify_ipv4_routes"]
+    verify_routes(machine.succeed("timeout 15 incus exec --disable-stdin --project aginctus-gateway postgres-1 -- cat /proc/net/route"))
+    for instance in ("aginctus-dev", "aginctus-herdr"):
+        machine.wait_until_succeeds(f"timeout 15 incus exec --disable-stdin {instance} -- ip -4 addr show dev eth0 | grep -q 'inet '", timeout=120)
+        verify_routes(machine.succeed(f"timeout 15 incus exec --disable-stdin {instance} -- cat /proc/net/route"))
+
+    # DNS and private TCP must work without a management default gateway.
+    machine.wait_until_succeeds("timeout 15 incus exec --disable-stdin aginctus-herdr -- ssh-keyscan -T 5 aginctus-dev.incus >/run/workload-host-key", timeout=120)
+    machine.succeed(
+      "timeout 15 incus exec --disable-stdin --project aginctus-gateway litellm-1 -- python -c "
+      "\"import socket; socket.create_connection(('postgres-1', 5432), timeout=5).close()\""
+    )
+    import json
+    gateway = json.loads(machine.succeed("incus list --project aginctus-gateway litellm-1 --format json"))[0]
+    addresses = [addr["address"] for nic in gateway["state"]["network"].values()
+                 for addr in nic.get("addresses", [])
+                 if addr["family"] == "inet" and addr["address"].startswith("10.77.0.")]
+    assert len(addresses) == 1, "expected one LiteLLM management IPv4 address"
+    machine.succeed(f"timeout 15 incus exec --disable-stdin aginctus-dev -- runuser -u agent -- aginctus-egress-probe gateway {addresses[0]}")
 
     # Verify management-only attachments on non-gateway workloads.
     machine.succeed(

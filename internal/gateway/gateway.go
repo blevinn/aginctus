@@ -39,6 +39,7 @@ type Spec struct {
 	NetworkIPv4Address        string
 	NetworkIPv4NAT            bool
 	NetworkIPv4Routing        bool
+	NetworkIPv4DHCPGateway    string
 	NetworkIPv6Address        string
 	LiteLLMImage              string
 	PostgresImage             string
@@ -58,6 +59,7 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		{"gateway.compose.project", &spec.Project},
 		{"incus.management.network.name", &spec.Network},
 		{"incus.management.network.ipv4.address", &spec.NetworkIPv4Address},
+		{"incus.management.network.ipv4.dhcp.gateway", &spec.NetworkIPv4DHCPGateway},
 		{"incus.management.network.ipv6.address", &spec.NetworkIPv6Address},
 		{"gateway.images.litellm", &spec.LiteLLMImage},
 		{"gateway.images.postgres", &spec.PostgresImage},
@@ -342,7 +344,9 @@ services:
     volumes:
       - gateway-postgres:/var/lib/postgresql/data
     networks:
-      - management
+      management:
+        x-incus-compose:
+          internal: true
 
   litellm:
     image: {{.LiteLLMImage}}
@@ -363,12 +367,11 @@ services:
       - source: aginctus-client-headers
         target: /app/aginctus-client-headers.yaml
 {{end}}    networks:
-{{if .EgressNetwork}}      management:
+      management:
         x-incus-compose:
           internal: true
-      egress:{{if .EgressIPv4Address}}
+{{if .EgressNetwork}}      egress:{{if .EgressIPv4Address}}
         ipv4_address: {{.EgressIPv4Address}}{{else}} {}{{end}}
-{{else}}      - management
 {{end}}
 {{if .SelectiveGoForwarding}}configs: {{json .SelectiveGoConfigs}}
 {{end}}{{if .HasClientHeaderForwarding}}configs:
@@ -432,11 +435,12 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 			"project":              s.Project,
 			"managementDNSIPv4":    s.ManagementDNSIPv4(),
 			"network": map[string]any{
-				"name":        s.Network,
-				"ipv4Address": s.NetworkIPv4Address,
-				"ipv4Nat":     s.NetworkIPv4NAT,
-				"ipv4Routing": s.NetworkIPv4Routing,
-				"ipv6Address": s.NetworkIPv6Address,
+				"name":            s.Network,
+				"ipv4Address":     s.NetworkIPv4Address,
+				"ipv4Nat":         s.NetworkIPv4NAT,
+				"ipv4Routing":     s.NetworkIPv4Routing,
+				"ipv4DHCPGateway": s.NetworkIPv4DHCPGateway,
+				"ipv6Address":     s.NetworkIPv6Address,
 			},
 			"litellmImage":                  s.LiteLLMImage,
 			"postgresImage":                 s.PostgresImage,
