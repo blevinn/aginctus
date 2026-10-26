@@ -6,6 +6,7 @@ import io
 import json
 import os
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -190,15 +191,18 @@ class ControlsTests(unittest.TestCase):
                           side_effect=OSError("PRIVATE SECRET")):
             self.assertEqual(mod.host_control("1.1.1.1"), "error")
 
-    def test_fixed_inc_us_command_output_is_bounded(self):
-        response = subprocess.CompletedProcess(["incus"], 0, "x" * 4097, "PRIVATE")
-        with patch.object(mod.subprocess, "run", return_value=response):
-            with self.assertRaises(mod.ProbeError):
-                mod.execute(["incus"])
-        with patch.object(mod.subprocess, "run",
-                          side_effect=subprocess.TimeoutExpired(["incus"], 1)):
-            with self.assertRaises(mod.ProbeError):
-                mod.execute(["incus"])
+    def test_actual_local_process_stdout_is_bounded_before_buffering(self):
+        result = mod.execute([sys.executable, "-I", "-c", "print('{}')"])
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.strip(), "{}")
+        with self.assertRaises(mod.ProbeError):
+            mod.execute([sys.executable, "-I", "-c", "print('x' * 4097)"])
+        with patch.object(
+            mod.subprocess, "Popen", side_effect=OSError("PRIVATE SECRET")
+        ) as process, self.assertRaises(mod.ProbeError):
+            mod.execute(["not-a-real-incus-command"])
+        self.assertEqual(process.call_args.kwargs["stderr"], subprocess.DEVNULL)
+        self.assertFalse(process.call_args.kwargs["shell"])
 
 
 if __name__ == "__main__":
