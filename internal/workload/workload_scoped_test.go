@@ -43,10 +43,10 @@ func TestScopedExistingWorkloadPlanIsInstanceOnlyAndExplicitlyProjectBound(t *te
 		t.Fatalf("unexpected scoped apply options: %#v", cfg)
 	}
 	for key, want := range map[string]string{
-		"user.aginctus.managed": "true",
+		"user.aginctus.managed":  "true",
 		"user.aginctus.resource": "workload",
 		"user.aginctus.workload": "dev",
-		"user.aginctus.role": "agent-workload",
+		"user.aginctus.role":     "agent-workload",
 	} {
 		if cfg.RequireExistingConfig[key] != want {
 			t.Fatalf("missing scoped ownership guard %s: %#v", key, cfg.RequireExistingConfig)
@@ -70,7 +70,9 @@ func TestScopedExistingWorkloadPlanIsInstanceOnlyAndExplicitlyProjectBound(t *te
 	if err != nil || len(legacy.Steps) != 2 {
 		t.Fatalf("legacy plan changed: %#v %v", legacy, err)
 	}
-	var legacyCfg struct{ Project string `json:"project"` }
+	var legacyCfg struct {
+		Project string `json:"project"`
+	}
 	if err := json.Unmarshal(legacy.Steps[1].Configuration, &legacyCfg); err != nil ||
 		legacyCfg.Project != "" {
 		t.Fatalf("legacy apply acquired implicit project: %q %v", legacyCfg.Project, err)
