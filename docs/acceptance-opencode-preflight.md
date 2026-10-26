@@ -46,3 +46,76 @@ just check
 ```
 
 This read-only topology inspection can run independently of any live-agent invocation. For a complete #118 sign-off, subsequent **separately authorized** Herdr launch/prompt/wait, actual agent tool traces, direct-egress denial and gateway-side successful upstream request correlation remain necessary. No synthetic marker, health check or test double counts as live inference evidence.
+
+## Separately opted-in guest TCP controls (#521)
+
+`scripts/acceptance/guest-network-controls.py` adds a **separate**, optional
+host-observed networking smoke. Unlike the structural preflight above, it
+actually attempts a TCP connection **from the guest**. This is never invoked
+by `just check ci`, by the default preflight, or by the OpenCode adapter.
+
+Build/deploy the updated `opencode-workload` image before using this mode:
+it installs `/run/current-system/sw/bin/aginctus-egress-probe`, a fixed
+root-owned Nix-packaged Python helper, callable as the unprivileged `agent`.
+The host requires the existing managed `dev` workload to pass the full
+read-only #569 NIC/route/ownership preflight before executing this helper.
+No shell interpolation, DNS, HTTP request, API credential, or provider call
+occurs. The guest only uses `socket.create_connection` against two explicitly
+approved canonical IPv4 addresses with fixed ports and a three-second
+socket timeout.
+
+The operator must select two destinations:
+
+1. `GATEWAY_PRIVATE_IPV4`: the reviewed, configured private management IP
+   of LiteLLM listening on TCP **4000**. The script checks the guest's
+   nonsecret `gateway.json` endpoint matches this exact IP and port.
+2. `PUBLIC_LISTENING_IPV4`: a reviewed globally routable IPv4 address
+   with a demonstrably listening TCP **443** service. Prefer a
+   test listener under the operator's control and make sure it is intended
+   to receive these harmless TCP handshakes. A host-side successful
+   connection to this same address/port is required as a positive control.
+   **Do not use a closed port** to claim blocked egress.
+
+```sh
+# No Incus or network access without BOTH --run and the opt-in environment.
+nix develop -c python3 scripts/acceptance/guest-network-controls.py \
+  --gateway-ip "$GATEWAY_PRIVATE_IPV4" \
+  --public-ip "$PUBLIC_LISTENING_IPV4"
+
+# Only after the #257 operator-approved network acceptance window:
+export AGINCTUS_ACCEPTANCE_EGRESS=I_UNDERSTAND
+nix develop -c python3 scripts/acceptance/guest-network-controls.py \
+  --gateway-ip "$GATEWAY_PRIVATE_IPV4" \
+  --public-ip "$PUBLIC_LISTENING_IPV4" \
+  --run
+```
+
+The checks are ordered and fail closed: validate managed topology and
+`/proc/net/route`, compare the configured gateway endpoint, open a
+guest→gateway TCP socket, independently establish that the selected public
+listener accepts TCP from the host, and finally attempt a guest→public
+TCP socket. The guest's public result is **pass only if Linux reports
+`ENETUNREACH`** for this IPv4 socket. A successful direct connection is
+`fail`; refusal, timeout, host unreachable and other errors are
+`error`/**inconclusive**, not evidence of a blocked path. No requests or
+payloads are sent over connected sockets.
+
+The output is a bounded, fixed-label `profile: guest_network_controls`
+JSON report with `pass/fail/error/not_run` observations. Even when all
+five checks pass, the overall report remains `status: incomplete`,
+`credential_egress: not_verified`, `upstream_inference: not_verified`
+and `complete_acceptance: false`. It proves only a successful private
+TCP connect and a public IPv4 **no-route result at the instant of inspection**.
+It does **not** establish negative firewall behavior under all network
+paths, absent IPv6/overlay/tunnels/proxies, credential isolation, HTTPS
+provider identity, actual OpenCode inference or full cleanup. Guest state
+can change between the preflight and connection attempts. Do not use
+the output to promote any `live/*` row in the aggregate report.
+
+Deterministic hostless validation (no image deployment needed):
+
+```sh
+nix develop -c python3 -m unittest discover -s guest/opencode -p 'test_egress_probe.py' -v
+nix develop -c python3 -m unittest discover -s scripts/acceptance -p 'test_guest_network_controls.py' -v
+nix develop -c ruff check guest/opencode/egress_probe.py guest/opencode/test_egress_probe.py scripts/acceptance/guest-network-controls.py scripts/acceptance/test_guest_network_controls.py
+```
