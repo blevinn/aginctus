@@ -10,7 +10,11 @@ Run on a provisioned NixOS pilot with `aginctus` and `incus` in PATH, from the r
 python3 scripts/acceptance/opencode-pilot-preflight.py
 ```
 
-The script retrieves effective resource names using `aginctus config get` and reads the default Incus project's network/instance resources using `incus query`. It asserts that the configured management bridge is a bridge with explicit `ipv4.nat=false`, `ipv4.routing=false` and `ipv6.address=none`; the configured Herdr client and `dev` OpenCode workload must be running containers. Query timeouts, missing resources, malformed configuration and unsafe settings fail closed. It does not print queried JSON or runtime secrets.
+The script retrieves effective resource names using `aginctus config get` and reads the default Incus project's network/instance resources using `incus query`. It asserts that the configured management bridge is a bridge with explicit `ipv4.nat=false`, `ipv4.routing=false` and `ipv6.address=none`; the configured Herdr client and `dev` OpenCode workload must be running containers.
+
+As an additional #521 read-only network-topology observation, it now checks the **effective** OpenCode workload devices (including profile-expanded devices) and requires exactly one NIC, named `eth0`, attached to the selected management bridge, with no Incus proxy devices. The workload must carry the expected Aginctus-managed ownership metadata before the host runs any guest command. It then reads `/proc/net/route` from that same owned guest via a fixed `incus --project default exec ... -- cat` invocation; malformed tables, unexpected interfaces, missing on-link `eth0` routes or any IPv4 default route fail closed. This query reads Linux kernel state, makes no network requests and does not mutate a network or a workload.
+
+Query timeouts, missing resources, malformed configuration, unexpected NICs/routes and unsafe settings fail closed. It never prints queried route tables, guest command output, secrets or raw errors.
 
 ### Diagnosing a failed read-only command
 
@@ -27,13 +31,14 @@ rm -rf -- "$tmp"
 
 If the Aginctus CLI is already installed, no build is necessary. The temporary binary is only a local development convenience. Do not print Incus query output or runtime credentials. The preflight now distinguishes a missing executable from a failing read-only config/query operation without exposing command stderr.
 
-This inspection does **not** prove that the containers are attached to the expected bridge, that no additional interfaces exist, that firewall policy permits DNS/DHCP, that upstream egress is denied or that Herdr has authenticated. These require deeper checks before live acceptance. In particular, do not adopt this script as the `preflight` hook unmodified: a full hook must also enforce the conditions in [live adapter requirements](acceptance-opencode-live.md).
+This inspection now checks the selected OpenCode guest's Incus **effective network-device inventory** and observed IPv4 route table, but it does **not** establish actual negative egress enforcement: a host can forward packets unexpectedly, explicit non-default routes and overlay/tunnel paths can exist, and the guest may use other address families or process-level proxies. It does not prove DNS/DHCP/host firewall enforcement, gateway reachability, upstream Responses completion or Herdr authentication. Guest-originated positive/negative egress probes and host firewall observations remain separately required before live acceptance. In particular, do not adopt this script as the `preflight` hook unmodified: a full hook must also enforce the conditions in [live adapter requirements](acceptance-opencode-live.md).
 
 Deterministic validation (no Incus required; run from `nix develop`):
 
 ```sh
 python3 -m unittest discover -s scripts/acceptance -p 'test_opencode_pilot_preflight.py' -v
 python3 -m py_compile scripts/acceptance/opencode-pilot-preflight.py
+# Hostless tests now also exercise effective NIC and malformed/default route cases.
 bash scripts/acceptance/opencode-live-adapter-test.sh
 bash scripts/acceptance/opencode-test.sh
 git diff --check origin/main...HEAD
