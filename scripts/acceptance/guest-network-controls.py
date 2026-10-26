@@ -125,7 +125,10 @@ def guest_probe(workload, mode, ip):
     return record["status"]
 
 
-def host_control(ip, connector=socket.create_connection):
+def host_control(ip, connector=None):
+    # Resolve only at call time, so hostless mocks cannot accidentally bypass
+    # the mocked socket and contact an external endpoint.
+    connector = connector or socket.create_connection
     # The operator-selected endpoint must be independently known to listen.
     # Host socket success is a necessary control, not a guarantee the remote
     # server also accepts connections from a distinct guest source address.
