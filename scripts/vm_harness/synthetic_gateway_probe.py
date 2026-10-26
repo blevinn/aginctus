@@ -18,6 +18,11 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
+if __package__:
+    from .gateway_tool_transport import probe_gateway_tool_transport
+else:
+    from gateway_tool_transport import probe_gateway_tool_transport
+
 # Both scripts are pinned separately into the guest Nix store. Validate
 # consistency with the synthetic upstream in hostless protocol tests.
 TOKEN = "synthetic-fixture-only"
@@ -166,7 +171,7 @@ def verify_stream(raw, nonce):
         raise Failure("synthetic Responses completion/nonce not observed")
 
 
-def run(server_script):
+def run(server_script, *, tool_mode=False):
     if not server_script.is_file() or not str(server_script).startswith("/nix/store/"):
         raise Failure("synthetic upstream must be the immutable packaged fixture")
     management = network_ipv4("aginctus-mgmt")
@@ -192,6 +197,7 @@ def run(server_script):
             str(egress.ip),
             "--port",
             "9080",
+            *(["--tool-sequence"] if tool_mode else []),
         ],
         check=True,
         capture_output=True,
@@ -270,20 +276,27 @@ def run(server_script):
             raise Failure("scoped workload cannot see synthetic alias")
 
         nonce = secrets.token_hex(12)
-        raw = request(
-            base,
-            "/v1/responses",
-            scoped,
-            {
-                "model": ALIAS,
-                "input": "Return this deterministic fixture marker: nonce=" + nonce,
-                "stream": True,
-            },
-        )
-        verify_stream(raw, nonce)
-        observed = json.loads(request(upstream, "/_observed/" + nonce, TOKEN))
-        if observed.get("count") != 1:
-            raise Failure("synthetic upstream did not independently observe request")
+        if tool_mode:
+            # This is an HTTP function-call transport probe ONLY: all tool
+            # results are synthetic acknowledgements, not agent execution.
+            probe_gateway_tool_transport(
+                request, base, scoped, upstream, TOKEN, ALIAS, nonce,
+            )
+        else:
+            raw = request(
+                base,
+                "/v1/responses",
+                scoped,
+                {
+                    "model": ALIAS,
+                    "input": "Return this deterministic fixture marker: nonce=" + nonce,
+                    "stream": True,
+                },
+            )
+            verify_stream(raw, nonce)
+            observed = json.loads(request(upstream, "/_observed/" + nonce, TOKEN))
+            if observed.get("count") != 1:
+                raise Failure("synthetic upstream did not independently observe request")
     finally:
         # This is a real LiteLLM virtual key despite its fake-only model
         # scope. Revoke it even if inference fails; uncertain revocation
@@ -296,17 +309,20 @@ def run(server_script):
             raise
     else:
         raise Failure("revoked synthetic workload token still accepted")
-    print(
-        "PASS: real LiteLLM scoped-key synthetic Responses and revocation (no live provider)"
-    )
-    print("NOTE: Herdr/OpenCode tool execution, gateway audit and cleanup not verified")
+    if tool_mode:
+        print("PASS: real LiteLLM synthetic function-call transport and key revocation")
+    else:
+        print("PASS: real LiteLLM scoped-key synthetic Responses and revocation (no live provider)")
+    print("NOTE: No guest tools executed; Herdr, gateway audit and cleanup not verified")
 
 
 def main():
     try:
-        if len(sys.argv) != 2:
-            raise Failure("fixture invocation requires one pinned script")
-        run(Path(sys.argv[1]))
+        if len(sys.argv) not in (2, 3) or (
+            len(sys.argv) == 3 and sys.argv[2] != "--tool-sequence"
+        ):
+            raise Failure("fixture invocation requires an approved pinned mode")
+        run(Path(sys.argv[1]), tool_mode=len(sys.argv) == 3)
     except Failure as exc:
         print("FAIL: synthetic gateway acceptance: " + str(exc), file=sys.stderr)
         return 1
