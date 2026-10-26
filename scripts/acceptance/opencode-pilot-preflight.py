@@ -103,8 +103,9 @@ def verify_managed_workload(record, network):
     if (len(nics) != 1 or nics[0].get("network") != network
             or nics[0].get("name") != "eth0"):
         raise RuntimeError("workload has an unexpected network attachment")
-    # A proxy device can expose an extra network path without a NIC.
-    if any(not isinstance(device, dict) or device.get("type") == "proxy"
+    # Reject proxy, physical and other devices capable of exposing
+    # alternate network paths; only disk and the reviewed NIC are expected.
+    if any(not isinstance(device, dict) or device.get("type") not in ("disk", "nic")
            for device in devices.values()):
         raise RuntimeError("workload has an unsafe non-NIC attachment")
 
