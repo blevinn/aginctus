@@ -22,6 +22,7 @@ test("native OpenCode session passes unchanged on the Go pilot only", async () =
   assert.deepEqual(one, {
     "x-opencode-session": first,
     "x-opencode-session-id": first,
+    "x-litellm-session-id": first,
   })
   assert.deepEqual(one, repeat)
   assert.notDeepEqual(one, independent)
@@ -33,8 +34,9 @@ test("native and spend-log session values are emitted together without fabricati
   await plugin["chat.headers"]({ sessionID: second, model }, output)
   assert.equal(output.headers["x-opencode-session"], second)
   assert.equal(output.headers["x-opencode-session-id"], second)
+  assert.equal(output.headers["x-litellm-session-id"], second)
   assert.equal(output.headers["x-provider-context"], "untouched")
-  assert.equal(Object.keys(output.headers).length, 3)
+  assert.equal(Object.keys(output.headers).length, 4)
 })
 
 test("unrelated models and providers never receive a Go session header", async () => {
@@ -70,5 +72,6 @@ test("unrelated preexisting request headers are preserved without additions", as
     "X-Expected": "value",
     "x-opencode-session": first,
     "x-opencode-session-id": first,
+    "x-litellm-session-id": first,
   })
 })
