@@ -19,9 +19,22 @@ test("native OpenCode session passes unchanged on the Go pilot only", async () =
   const one = await headersFor({ sessionID: first, model })
   const repeat = await headersFor({ sessionID: first, model })
   const independent = await headersFor({ sessionID: second, model })
-  assert.deepEqual(one, { "x-opencode-session": first })
+  assert.deepEqual(one, {
+    "x-opencode-session": first,
+    "x-opencode-session-id": first,
+  })
   assert.deepEqual(one, repeat)
   assert.notDeepEqual(one, independent)
+})
+
+test("native and spend-log session values are emitted together without fabrication", async () => {
+  const plugin = await AginctusGoSession()
+  const output = { headers: { "x-provider-context": "untouched" } }
+  await plugin["chat.headers"]({ sessionID: second, model }, output)
+  assert.equal(output.headers["x-opencode-session"], second)
+  assert.equal(output.headers["x-opencode-session-id"], second)
+  assert.equal(output.headers["x-provider-context"], "untouched")
+  assert.equal(Object.keys(output.headers).length, 3)
 })
 
 test("unrelated models and providers never receive a Go session header", async () => {
@@ -56,5 +69,6 @@ test("unrelated preexisting request headers are preserved without additions", as
   assert.deepEqual(output.headers, {
     "X-Expected": "value",
     "x-opencode-session": first,
+    "x-opencode-session-id": first,
   })
 })
