@@ -53,7 +53,7 @@
             ];
             # Recalculate after Go module graph changes. A stale hash can reuse
             # an incompatible vendor tree even when go.mod is newer.
-            vendorHash = "sha256-ao0Q95mYJ8xWhKWwhBQsBjtdF8bWMAXRG+c/kNOZkSQ=";
+            vendorHash = "sha256-nOdS1XPJCl/knG3nRUu8m+/AEpG9BmniQ3GT5/RXpP0=";
             subPackages = [ "./cmd/aginctus" ];
             nativeBuildInputs = [ pkgs.makeWrapper ];
             postInstall = ''
@@ -64,7 +64,7 @@
             pname = "aginctus-oauth-gateway";
             version = releaseVersion;
             src = ./.;
-            vendorHash = "sha256-ao0Q95mYJ8xWhKWwhBQsBjtdF8bWMAXRG+c/kNOZkSQ=";
+            vendorHash = "sha256-nOdS1XPJCl/knG3nRUu8m+/AEpG9BmniQ3GT5/RXpP0=";
             subPackages = [ "./cmd/aginctus-oauth-gateway" ];
           };
           sshClientIdentityHelper = pkgs.writeShellApplication {
@@ -344,7 +344,7 @@
             pname = "aginctus-testenv-sweep";
             version = releaseVersion;
             src = ./.;
-            vendorHash = "sha256-ao0Q95mYJ8xWhKWwhBQsBjtdF8bWMAXRG+c/kNOZkSQ=";
+            vendorHash = "sha256-nOdS1XPJCl/knG3nRUu8m+/AEpG9BmniQ3GT5/RXpP0=";
             subPackages = [ "./cmd/aginctus-testenv-sweep" ];
           };
           aginctus = aginctusCli;

@@ -14,6 +14,8 @@ github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM
 github.com/blang/semver/v4 v4.0.0/go.mod h1:IbckMUScFkM3pff0VJDNKRiT6TG/YpiHIM2yvyW5YoQ=
 github.com/blevinn/incus-apply v0.0.0-20261011000030-757f9e077734 h1:usw5zdx3ct5xwI114HNlq3NUCCkIFvWlobI34TPzCnQ=
 github.com/blevinn/incus-apply v0.0.0-20261011000030-757f9e077734/go.mod h1:ZtrFm07v9RAs8/BOh31CmfQwNE1zWc7yYzX51WDonIw=
+github.com/blevinn/incus-compose v1.3.5-0.20261027043607-ccc9b507e6c1 h1:9Yl7VpFDYn1TKGR1KWkfyKxUOo7WlPlIwS5NYjAsn5s=
+github.com/blevinn/incus-compose v1.3.5-0.20261027043607-ccc9b507e6c1/go.mod h1:OlsZwNR1oMTtxTnvoFcEnKPj2L5dfL60F9kLA+Db3zc=
 github.com/bmatcuk/doublestar/v4 v4.10.0 h1:zU9WiOla1YA122oLM6i4EXvGW62DvKZVxIe6TYWexEs=
 github.com/bmatcuk/doublestar/v4 v4.10.0/go.mod h1:xBQ8jztBU6kakFMg+8WGxn0c6z1fTSPVIjEY1Wr7jzc=
 github.com/bradleyjkemp/cupaloy/v2 v2.8.0 h1:any4BmKE+jGIaMpnU8YgH/I2LPiLBufr6oMMlVBbn9M=
@@ -105,8 +107,6 @@ github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
 github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
-github.com/lxc/incus-compose v1.3.4 h1:/hMok1Y5ho2k/U7RzAEhS8Q70malsajJPGhCykxbNTI=
-github.com/lxc/incus-compose v1.3.4/go.mod h1:OlsZwNR1oMTtxTnvoFcEnKPj2L5dfL60F9kLA+Db3zc=
 github.com/lxc/incus/v7 v7.3.0 h1:el791Bfg9u6HBmu8gJYypqJ5w66CDkvUbiOkOBOn8rw=
 github.com/lxc/incus/v7 v7.3.0/go.mod h1:jTXcffGBp+1HcGsduDWXG52Yk3wnJZxzGBUDXqCaMCc=
 github.com/mattn/go-colorable v0.1.1/go.mod h1:FuOcm+DKB9mbwrcAfNl7/TZVBZ6rcnceauSikq3lYCQ=

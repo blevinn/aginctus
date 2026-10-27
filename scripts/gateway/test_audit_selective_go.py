@@ -41,7 +41,7 @@ class AuditTest(unittest.TestCase):
                 "user.aginctus.resource": "compose-instance",
                 "user.aginctus.deployment": self.args.project,
                 "user.label.incus-compose.service": "litellm",
-                "user.image_alias": "ghcr.io/berriai/litellm@sha256:" + "a" * 64,
+                "user.image_alias": "ic-image-vviggpnjyqkklvoyynm7ojd5225xhng3h5n3g4654em6nkzngmsa",
                 "volatile.base_image": "b" * 64,
             },
             "expanded_config": {"environment." + k: v for k, v in audit.ENVIRONMENT.items()},
@@ -98,6 +98,18 @@ class AuditTest(unittest.TestCase):
         self.instance["config"]["user.image_alias"] += "extra"
         with patch.object(audit, "command_json", return_value=self.instance):
             self.assert_failure("FAIL_IMAGE", audit.audit, self.args)
+
+    def test_bounded_alias_matches_importer_golden_and_rejects_other_spellings(self):
+        image = "ghcr.io/berriai/litellm:v1.103.0@sha256:bd089afdcd35b894b14a93f9743cdc8b591f82da1a38dd43a010a7b0c9de5fd7"
+        self.assertEqual(audit.incus_image_alias(image),
+                         "ic-image-eb2dh5p4ong4xc43eddosshm2xl4nntvmxxub2ksgsmeqtjkyzwa")
+        self.assertLessEqual(len(audit.incus_image_alias(image)), 64)
+        for wrong in ("ghcr.io/berriai/litellm@sha256:" + "a" * 64,
+                      "ghcr.io/berriai/litellm:v1.103.0", "ic-image-" + "a" * 52):
+            self.instance["config"]["user.image_alias"] = wrong
+            with patch.object(audit, "command_json", return_value=self.instance) as run:
+                self.assert_failure("FAIL_IMAGE", audit.audit, self.args)
+                self.assertEqual(run.call_count, 1)
 
     def test_bundle_drift_symlinks_manifest_and_extra_entries(self):
         self.assertEqual(audit.bundle_hashes(self.bundle), self.hashes)
