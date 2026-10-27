@@ -311,3 +311,48 @@ execution, network isolation or cleanup. Output is limited to fixed labels
 unverified claims); no response body, prompts, tokens, headers, file paths,
 raw logs or exception text are printed. The main acceptance report and all
 four `live/*` coverage rows remain unverified/not-run.
+
+### Native OpenCode session attribution at the pinned gateway (#521)
+
+The Go pilot's Nix-packaged OpenCode `chat.headers` hook now copies the
+**same native `input.sessionID`** into three headers on the approved
+`aginctus-go-pilot` route only:
+
+- `x-opencode-session`: consumed by the existing strict gateway forwarding
+  policy and selectively passed upstream.
+- `x-opencode-session-id`: recognized by the pinned LiteLLM v1.103.0
+  vendor-session parser.
+- `x-litellm-session-id`: an explicit pinned LiteLLM v1.103.0
+  trace/session input, which takes precedence over generic session headers.
+
+The header hook creates **no** session ID. A missing/invalid native ID
+fails before sending. The gateway's selective Go callback still validates
+the native session headers and client User-Agent, rejects disagreements,
+and now rejects a conflicting `x-litellm-trace-id` or
+`x-litellm-session-id` that would override spend-log attribution.
+The existing upstream allowlist remains only `x-opencode-session` and
+`User-Agent`; LiteLLM session/trace headers are **not forwarded** to the
+provider. This requires deploying the refreshed NixOS OpenCode workload
+image *and* the callback-only pinned gateway policy.
+
+This change provides a **syntactically consistent, client-supplied
+session attribution path** through the pinned gateway. It does **not**
+authenticate that client as the live OpenCode agent or bind any traffic to
+the disposable acceptance `run_id`: that run identifier is currently
+included only in the task prompt, and must be mapped through an
+independently trusted host/gateway source before release acceptance.
+The pinned spend-log writer may still need `missing_session_id` policy
+review and real readback to establish whether `session_id` is correctly
+persisted for this specific route. The operator may use the previously
+introduced redacted `--diagnose` command on an *authorized, existing*
+request to inspect that field, without counting matching values or log
+success as provider completion evidence.
+
+No live deployment or provider request occurs during ordinary CI. The
+synthetic native-hook behavior can be validated locally, separately
+from the pinned Python policy tests:
+
+```sh
+nix shell nixpkgs#nodejs --command node --test guest/opencode/test_go_session_plugin.mjs
+nix develop -c python3 -m unittest discover -s scripts/gateway -p 'test_opencode_go_forwarding.py' -v
+```

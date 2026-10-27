@@ -11,7 +11,14 @@ export async function AginctusGoSession() {
       if (typeof id !== "string" || !/^ses_[A-Za-z0-9_-]{8,128}$/.test(id)) {
         throw new Error("Aginctus Go: missing or invalid native OpenCode session")
       }
+      // Native Go forwarding reads x-opencode-session. Pinned LiteLLM
+      // v1.103.0 reads x-litellm-session-id first (unless a conflicting
+      // x-litellm-trace-id is present), then generic x-*-session-id for
+      // spend-log session/trace attribution. No synthetic session is made.
+      // These are client-provided hints, NOT trusted acceptance attestation.
       output.headers["x-opencode-session"] = id
+      output.headers["x-opencode-session-id"] = id
+      output.headers["x-litellm-session-id"] = id
     },
   }
 }

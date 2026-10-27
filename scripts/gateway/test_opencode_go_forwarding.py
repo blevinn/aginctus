@@ -79,6 +79,32 @@ class ForwardingTests(unittest.TestCase):
         self.assertEqual(updated["proxy_server_request"]["headers"]["Authorization"],
                          "Bearer never-forward-me")
 
+    def test_pinned_gateway_session_headers_must_match_native_open_code(self):
+        # Explicit x-litellm-session-id has precedence over vendor-specific
+        # session headers in pinned LiteLLM v1.103.0 spend attribution.
+        good = sample(**{
+            "x-opencode-session": SESSION_A,
+            "x-litellm-session-id": SESSION_A,
+        })
+        output = mod.sanitize_go_headers(good, "aresponses")
+        self.assertEqual(output["headers"], {
+            "x-opencode-session": SESSION_A, "User-Agent": "opencode/1.0.0",
+        })
+        self.assertNotIn("x-litellm-session-id", output["headers"])
+        self.assertNotIn("extra_headers", output)
+
+        for header in ("x-litellm-session-id", "x-litellm-trace-id"):
+            with self.subTest(header=header):
+                original = sample(**{
+                    "x-opencode-session": SESSION_A,
+                    header: SESSION_B,
+                })
+                before = copy.deepcopy(original)
+                with self.assertRaisesRegex(ValueError, "conflicting gateway trace"):
+                    mod.sanitize_go_headers(original, "aresponses")
+                # Fail before mutating anything or reaching the provider.
+                self.assertEqual(original, before)
+
     def test_accepts_both_native_headers_only_when_equal(self):
         self.assertEqual(mod.sanitize_go_headers(sample(**{
             "x-opencode-session": SESSION_A}), "aresponses")["headers"]["x-opencode-session"], SESSION_A)
