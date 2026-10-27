@@ -47,6 +47,12 @@ def sanitize_go_headers(data, call_type):
         raise ValueError("OpenCode Go requires a valid native session")
     if len(set(sessions)) != 1:
         raise ValueError("OpenCode Go session headers disagree")
+    # Pinned LiteLLM parses explicit x-litellm-* trace/session headers ahead
+    # of x-opencode-session-id for spend-log attribution. An inconsistent
+    # higher-priority value would silently sever native-session correlation.
+    for name in ("x-litellm-trace-id", "x-litellm-session-id"):
+        if name in headers and headers[name] != sessions[0]:
+            raise ValueError("OpenCode Go conflicting gateway trace identity")
     agent = headers.get("user-agent")
     if not isinstance(agent, str) or not _USER_AGENT.fullmatch(agent):
         raise ValueError("OpenCode Go requires an identifying client User-Agent")
