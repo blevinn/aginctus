@@ -191,6 +191,15 @@ the approved OCI digest to the Incus base-image fingerprint using trusted image
 inventory; never copy the current instance fingerprint merely to make it match.
 Incus fingerprints and OCI manifest digests are different identifiers.
 
+The importer removes a tag when a digest is present and maps normalized image
+references longer than Incus's 64-character alias limit to `ic-image-` followed
+by the lowercase, unpadded Base32 encoding of the full SHA-256 of that reference.
+The registry pull still uses the complete immutable reference. Cache aliases are
+bounded independently with their platform included. The audit derives this exact
+mapping; a mutable tag or arbitrary short alias is not an acceptable substitute.
+The pinned incus-compose source is a minimal alias fix on its release base,
+without unrelated upstream development changes.
+
 ```sh
 nix --quiet develop --offline -c env AGINCTUS_EXPORT_GO_BUNDLE="$BUNDLE_DIR" \
   go test ./scripts/gateway -count=1

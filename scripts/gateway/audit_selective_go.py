@@ -7,6 +7,7 @@ no inference is requested, and no credentials or response bodies are inspected.
 """
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -116,6 +117,15 @@ class AuditFailure(Exception):
         self.label = label
 
 
+def incus_image_alias(image):
+    """Match the pinned importer's normalized, bounded local alias exactly."""
+    normalized = "ghcr.io/berriai/litellm@" + image.split("@")[1]
+    if len(normalized) <= 64:
+        return normalized
+    digest = hashlib.sha256(normalized.encode("utf-8")).digest()
+    return "ic-image-" + base64.b32encode(digest).decode("ascii").rstrip("=").lower()
+
+
 def read_public(path):
     """Bound reads and reject non-regular files without following final links."""
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -215,10 +225,7 @@ def audit(args):
     if (instance.get("name") != args.instance or instance.get("status") != "Running"
             or any(config.get(k) != v for k, v in required.items())):
         raise AuditFailure("FAIL_OWNERSHIP")
-    # incus-compose NewImage uses distribution/reference.ParseDockerRef, which
-    # drops a tag when a digest is present. No other alias normalization allowed.
-    normalized = "ghcr.io/berriai/litellm@" + args.expected_image.split("@")[1]
-    if (config.get("user.image_alias") != normalized
+    if (config.get("user.image_alias") != incus_image_alias(args.expected_image)
             or config.get("volatile.base_image") != args.expected_incus_fingerprint):
         raise AuditFailure("FAIL_IMAGE")
     expanded = instance.get("expanded_config")
