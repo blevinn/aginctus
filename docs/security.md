@@ -43,13 +43,16 @@ recorded offline real-Incus checks exercise guest credential delivery. These
 do not establish the pilot's deployed firewall, guest routes, effective key
 scope, provider TLS, or successful model-backed tool execution.
 
-[Release #118](https://github.com/blevinn/aginctus/issues/118) is the acceptance
-checklist: [#257](https://github.com/blevinn/aginctus/issues/257) requires live
-gateway-only egress and isolation evidence; [#122](https://github.com/blevinn/aginctus/issues/122)
-requires authenticated upstream inference and is on operator hold pending that
-evidence; [#123](https://github.com/blevinn/aginctus/issues/123) requires real
-managed-workload inference; [#124](https://github.com/blevinn/aginctus/issues/124)
-requires the repeatable coding task and cleanup. The bundled
+[Release #118](https://github.com/blevinn/aginctus/issues/118) records accepted
+live pilot coding/inference at `57c2da6`, scoped credential cleanup and the
+October 29 runtime/permanent network audit and targeted packet controls.
+These are independent observations, not conclusions drawn from hermetic tests.
+[#122](https://github.com/blevinn/aginctus/issues/122) and
+[#123](https://github.com/blevinn/aginctus/issues/123) retain explicit
+recovery, attribution and evidence-tier decisions. Full fresh-host execution
+of the [deployment/acceptance procedure](v0.1-deployment-acceptance.md) is pending.
+Neither no-route nor a timeout proves routed IPv6 enforcement or exact packet
+verdicts; disruptive live recovery remains unrun. The bundled
 [live acceptance dispatcher](acceptance-opencode-live.md) requires reviewed
 operator hooks; mocks, no-op hooks, and health HTTP 200 are not live acceptance.
 
