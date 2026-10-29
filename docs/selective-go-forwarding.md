@@ -1,8 +1,10 @@
 # Selective OpenCode Go forwarding
 
 This is the opt-in native Responses policy for `aginctus-go-pilot`.
-Implementation and isolated protocol acceptance are available; **live deployment
-and provider acceptance remain pending** under [#456](https://github.com/blevinn/aginctus/issues/456),
+Implementation, isolated protocol acceptance and live pilot coding/inference
+evidence are available at `57c2da6` in [#118](https://github.com/blevinn/aginctus/issues/118).
+Fresh-host reproducibility and final release decisions remain separate from
+[#456](https://github.com/blevinn/aginctus/issues/456),
 [#122](https://github.com/blevinn/aginctus/issues/122) and
 [#123](https://github.com/blevinn/aginctus/issues/123).
 
@@ -116,17 +118,13 @@ These tests do **not** boot the workload image, traverse Herdr/Incus or exercise
 the pilot firewall. They use a cached PostgreSQL **18.6 binary**, not the declared
 production PostgreSQL image, and do not validate upgrades or persistent gateway
 restart. aarch64 execution and a real wrong-version OCI image are unrun; the
-version rejection has import-level regression coverage. Fast, single-packet
-buffered replies expose the real client's event-consumer completion defect,
-tracked in [#542](https://github.com/blevinn/aginctus/issues/542): completed
-parts exist in its disposable database, but the CLI can exit before printing
-terminal text/stop events. This reproduces directly and through the gateway.
-The accepted fixture sends complete incremental SSE and does not establish
-buffered-output reliability. A minimal source fix is feasible, but the exact
-pinned source/dependency/tool closure is not cached and its realization is
-blocked; no unverified patch or sleep-based production workaround is shipped.
-External Go entitlement, provider
-accounting, billing and model-driven filesystem tools remain live release gates.
+version rejection has import-level regression coverage. The historical
+fast-buffered event-drain defect is addressed by the pinned source patch
+from #556. [Actual patched-runtime validation](opencode-runtime-validation.md)
+passes incremental and one-write buffered delivery directly and through pinned
+LiteLLM/disposable PostgreSQL, preserving native terminal text/stop assertions.
+Live pilot coding/inference is independently recorded in #118; neither protocol
+nor pilot evidence establishes independent provider billing/accounting.
 
 ### Reproduce without contacting providers
 
@@ -216,7 +214,8 @@ installed LiteLLM metadata and loopback readiness/liveliness. It emits only
 allowlisted JSON classifications. It never imports the callback, prints expanded
 configuration or inspects keys. PASS is **not** proof that an already running
 proxy loaded the files; startup and actual request acceptance remain necessary.
-The audit has fixture/subprocess coverage; it has not been run against the pilot.
+The audit has fixture/subprocess coverage; #118 records the current-pin pilot
+delivery audit and fresh-process loading evidence separately.
 
 ## Migration, activation and rollback
 
@@ -252,7 +251,8 @@ Before a **human-authorized LiteLLM-only** migration, record privately:
 No generic live mutation command is prescribed: the observed instance/image
 mapping and storage determine the safe action. The required approval is narrowly
 **delivery and reload/recreation of the verified owned LiteLLM instance**, with
-PostgreSQL and secret state preserved. This workstream has not performed it.
+PostgreSQL and secret state preserved. The accepted pilot's current runtime is
+not permission to repeat that migration or remove its reconciler hold.
 
 After the approved action, run the delivery audit, readiness and existing scoped
 registry/key checks. Establish fresh-process loading and real forwarding in the
@@ -264,8 +264,8 @@ it safe for Go traffic: disable Go consumers until the selective policy is valid
 
 ## Final operator acceptance sequence
 
-1. Human merges the reviewed stack in parent order, retargeting each child and
-   requiring its hosted checks. Pin the resulting Aginctus revision.
+1. Pin the reviewed Aginctus revision and require its hosted checks. For a new
+   runtime change, review the full source/configuration delta before activation.
 2. Repeat both offline probes, including restricted-key deletion/denial. Complete
    disposable guest-delivery/production-PostgreSQL acceptance where available;
    record the remaining Incus/guest boundary separately from loopback proof.
@@ -288,6 +288,7 @@ it safe for Go traffic: disable Go consumers until the selective policy is valid
 7. Always revoke the exact test key and verify denial with the guarded tool;
    preserve protected evidence on uncertain cleanup. Record only classifications
    and safe correlation, not headers, keys, transcripts or raw spend-log rows.
-8. Only then progress #121's model-driven filesystem/tool task and #124's
-   repeatable all-up proof. Keep #456/#122/#123/#118 open until their distinct
-   live requirements have evidence; offline completeness is not release approval.
+8. Record the model-driven filesystem/tool task and repeatable all-up proof.
+   #118 already records accepted pilot functional evidence; a new deployment
+   still needs its own independently checked handoff. Offline completeness is
+   not release approval.
