@@ -98,6 +98,8 @@ currently supported configuration or a release acceptance claim.
   provisioning, isolation, ownership, and teardown.
 - [OpenCode workload](workloads/opencode.md) — first agent workload
   image, guest services, and local image workflow.
+- [Pinned OpenCode runtime validation](opencode-runtime-validation.md) — actual
+  patched incremental/buffered terminal completion and isolated gateway controls.
 
 ## Herdr SSH and persistent state
 
