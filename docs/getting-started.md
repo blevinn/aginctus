@@ -2,6 +2,11 @@
 
 Aginctus controls Incus resources for a private Herdr/OpenCode environment and a LiteLLM inference gateway. This guide covers **installation, inspection and explicitly selected deployment**; it does not claim a successful live pilot. Read [security limitations](security.md) and check [v0.1 release acceptance](https://github.com/blevinn/aginctus/issues/118) before using real credentials or billable models.
 
+For the pinned release-candidate deployment, credential lifecycle, optional real
+coding smoke and independently checked cleanup, use the
+[v0.1 operator handoff](v0.1-deployment-acceptance.md). Its full fresh-host
+execution remains pending; existing pilot functional acceptance is separate.
+
 ## Host prerequisites
 
 - Linux host with Nix flakes enabled; a working local Incus daemon and initialized storage pool are required only for Incus operations.

@@ -107,6 +107,8 @@ currently supported configuration or a release acceptance claim.
 
 ## Acceptance and validation
 
+- [v0.1 deployment and acceptance](v0.1-deployment-acceptance.md) — pinned fresh-host
+  procedure, manual coding smoke, repeat/cleanup contracts and human signoff gaps.
 - [Unified test reporting](design/test-reporting.md) — implemented hermetic, VM, pilot and coverage views; planned local acceptance observations are tracked separately.
 - [Incus testenv VM image](testenv-incus-vm-image.md) — opt-in NixOS VM
   artifact for a dedicated, isolated test worker; not agent-executable yet.

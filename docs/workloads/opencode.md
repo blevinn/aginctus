@@ -1,6 +1,9 @@
 # OpenCode workload
 
-Status: OpenCode image, lifecycle, fail-closed launcher and explicit private gateway provisioning/discovery command are implemented. Live managed-workload inference and end-to-end acceptance remain unverified (#122/#123/#124).
+Status: image, lifecycle, fail-closed launcher and private gateway provisioning
+are implemented. Genuine managed-workload coding/inference and cleanup passed
+on the `57c2da6` pilot (#118). Full fresh-host deployment/smoke/repeat remains
+pending in the [v0.1 operator handoff](../v0.1-deployment-acceptance.md).
 
 ## Purpose
 
@@ -65,7 +68,7 @@ The image invokes an Aginctus OpenCode launcher from Herdr and interactive shell
 
 For the opt-in Go pilot alias `aginctus-go-pilot` on Responses, the
 launcher registers a *local, Nix-packaged* OpenCode plugin via a `file://` URL
-in `OPENCODE_CONFIG_CONTENT`. The pinned OpenCode v1.15.11 custom provider
+in `OPENCODE_CONFIG_CONTENT`. The pinned OpenCode custom provider
 otherwise emits `x-session-affinity` but not the Go-required
 `x-opencode-session`. Its supported `chat.headers` hook gives this plugin
 the actual `sessionID` of each request. The plugin forwards that identifier
@@ -73,8 +76,9 @@ unchanged only when provider `aginctus` and model `aginctus-go-pilot`
 match; absent/malformed session IDs fail closed. It never fabricates an ID,
 overrides the user agent, or reads credentials. Other model aliases do not
 load the plugin. This completes only the **client-to-gateway** session-header
-leg; #456 still requires native pinned LiteLLM Responses forwarding, upstream
-header exposure assessment, and operator-approved live provider validation.
+leg. Selective pinned LiteLLM forwarding and exposure controls are documented
+in the [forwarding guide](../selective-go-forwarding.md); actual pilot/provider
+evidence and remaining release decisions are recorded in #118.
 
 If the endpoint, model or key is absent/invalid, OpenCode does **not** launch. An incorrect DNS name or an unreachable gateway fails requests without making direct upstream network connectivity available. The management network stays unrouted and without NAT.
 
@@ -118,7 +122,10 @@ incus exec aginctus-dev --project default -- runuser -u agent -- opencode models
 
 Then use the existing Herdr client to create a disposable remote workspace, start an OpenCode agent, prompt it to create a marker file under the **guest-local** workspace, verify the file content, terminate the agent and remove the temporary workspace. Inspect gateway access logs for an authenticated LiteLLM request without logging secrets. Test a deliberately invalid key and temporarily unreachable private endpoint: both must fail without fallback to a public provider. Confirm `incus network show "$(aginctus config get incus.management.network.name | tr -d '"')"` still reports `ipv4.nat=false` and `ipv4.routing=false` and that the agent cannot directly reach an external provider.
 
-**Remaining acceptance:** #220's firewall integration is implemented, but the deployed host's actual network path must still be verified. #122 requires approved upstream inference, #123 a real managed OpenCode→LiteLLM request, #124 the repeatable Herdr-managed coding task, and #172 the native OAuth Responses/tool-event contract where applicable. Provisioning is implemented; actual key validity, model grants and live traffic must be proven separately.
+**Per-deployment acceptance:** revalidate actual host networking, key scope and
+native traffic on a new installation. The accepted pilot already proves genuine
+Herdr/OpenCode private inference and coding, while #118 retains the fresh-host
+handoff and explicit remaining risk decisions. OAuth is outside v0.1 scope.
 
 ## Provision private gateway access (#123)
 

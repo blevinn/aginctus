@@ -1,9 +1,11 @@
 # Release process
 
 This is the **release operator runbook**, not proof that any Aginctus version is ready.
-The v0.1 acceptance checklist is [#118](https://github.com/blevinn/aginctus/issues/118);
-live inference, Herdr/OpenCode execution, network enforcement, and host checks remain
-unverified until independently evidenced. Merging release tooling does not pass them.
+The v0.1 acceptance checklist is [#118](https://github.com/blevinn/aginctus/issues/118).
+Its five functional criteria have live pilot evidence; the
+[deployment and acceptance handoff](v0.1-deployment-acceptance.md) distinguishes
+that evidence from pending fresh-host reproducibility and human risk decisions.
+Merging release tooling does not pass acceptance or authorize publication.
 
 ## Version and Git standards
 
