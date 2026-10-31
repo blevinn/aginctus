@@ -386,16 +386,65 @@ Afterward independently verify complete QEMU VM/disk deletion on success and
 failure. Cache-miss/offline-pull failure acceptance and outer-worker disposal
 remain operator gates; staged alias presence alone does not prove either.
 
-The unchanged runner report records pass only from the complete scenario's
-exit status. Both `upstream_inference` and whole-environment `cleanup` remain
-`not_verified`, even when owned workspace/key/listener checks pass. The guest
-cannot attest its own outer disk deletion. No real provider/OAuth acceptance,
-autonomous reasoning quality, pilot deployment or live release sign-off is
-claimed.
+### Persisted per-gate observations (#461)
+
+The guest observer writes `/run/aginctus-full-stack/result.json` in its outer
+`finally` block, including on task or teardown failure. The immutable NixOS
+driver calls a fixed immutable reader and revalidates the returned JSON before
+writing `full-stack.json` in its private output directory. It adds separate
+storage-preservation and packet-counter outcomes, including a storage readback
+after a failed task. The runner reads only that fixed artifact before removing
+its temporary driver directory and embeds the allowlisted `full_stack` object
+in `.vm-harness-results/<24-hex-run-id>/result.json`.
+
+The optional extension preserves schema-v1 reports and their existing generic
+exit status. It contains the nine named `phases` and fixed `gates`, each with
+`pass`, `fail` or `not_verified`. A phase/gate is marked failed before its check
+and passed only when the observer completes that check. Unreached checks stay
+unverified. Tool transcript, exact fixture diff, fresh independent test,
+credential scope, gateway correlation, workload network, injected-failure
+cleanup control, fixture removal, foreign inventory preservation, revocation,
+key absence, model removal and listener shutdown are separate observations.
+`phases.close` includes independent owned-workspace absence readback. The
+injected failure control has its own observer, so its expected fault cannot
+overwrite the main run's phases or claim the main task ran. Partial cleanup
+successes survive a later failure. Storage preservation does not mean removal.
+
+The artifact contract rejects unknown fields/values, is limited to 4096 bytes,
+and transports no transcripts, payloads, keys, hashes of keys, paths, headers or
+arbitrary diagnostics. Reads reject symlinks, non-regular/multiply linked files,
+wrong owners and group/world access. Directories are private, outputs are
+exclusive mode-0600 files, and path operations are anchored to directory file
+descriptors. The driver uses its existing output-directory convention, with
+the runner explicitly selecting a fresh private temporary directory. No
+guest-selected host path or executable is accepted.
+
+Inspect a selected persisted result without launching any VM or provider:
+
+```sh
+nix --quiet develop --no-update-lock-file -c just check vm-report <run-id>
+nix --quiet develop --no-update-lock-file -c just check vm-report-json <run-id>
+```
+
+Passing new runs require both a zero driver exit and a complete valid artifact.
+Missing/invalid evidence makes a zero-exit run fail; on failed/timed-out runs,
+any completed valid artifact is retained. Failure before publication, VM loss,
+SIGKILL or timeout before driver export can leave no extension. Absence is not
+proof, and stdout phase labels are never imported as evidence. Old v1 reports
+without the extension remain readable, including `full-stack` reports.
+
+The explicit source is `guest_observation_not_attestation`: the guest and the
+unprivileged driver account remain trusted. This is not cryptographic
+attestation, installed-worker acceptance or independent host-disposal proof.
+Both `upstream_inference` and whole-environment `cleanup` remain `not_verified`,
+even when owned workspace/key/listener checks pass. The guest cannot attest
+its own outer disk deletion. No real provider/OAuth acceptance, autonomous
+reasoning quality, pilot deployment or live release sign-off is claimed. MCP
+remains read-only and unsupported testenv capabilities remain unsupported.
 
 The staging helper's `c.WarnError(c.Done, ...)` reports connection-finalization
 errors as warnings rather than promoting them into its exit status. Neither
-its receipt nor the full-stack runner's generic pass establishes staging
+its receipt nor the full-stack runner's per-gate observations establish staging
 connection cleanup, storage cleanup or outer VM/disk removal. Those remain
 separate operator observations.
 
