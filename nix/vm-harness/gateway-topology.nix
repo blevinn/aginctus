@@ -60,6 +60,7 @@ pkgs.testers.runNixOSTest {
       virtualisation.memorySize = lib.mkForce 8192;
       virtualisation.diskSize = lib.mkForce 32768;
       virtualisation.cores = lib.mkIf fullStack 2;
+      boot.supportedFilesystems = lib.optionals fullStack [ "btrfs" ];
       services.timesyncd.enable = lib.mkIf fullStack false;
       environment.systemPackages =
         lib.optionals synthetic [ syntheticProbe ] ++ lib.optionals fullStack [ pkgs.go ];
@@ -101,7 +102,32 @@ pkgs.testers.runNixOSTest {
   testScript = ''
     start_all()
     machine.wait_for_unit("incus.service")
-    machine.succeed("incus admin init --auto --storage-backend dir")
+  ''
+  + (
+    if fullStack then
+      ''
+        # Guest-local loopback Btrfs, as in storage-network.nix. Use it for all
+        # workload roots, gateway roots and retained custom volumes, not just a probe.
+        machine.succeed("incus admin init --minimal")
+        machine.succeed("incus storage create default btrfs size=20GiB")
+        machine.succeed("incus profile device add default root disk path=/ pool=default")
+        import json
+        def inspect_storage():
+            pool = json.loads(machine.succeed("incus query /1.0/storage-pools/default"))
+            assert pool["driver"] == "btrfs", "full-stack storage is not Btrfs"
+            assert pool["config"]["source"].startswith("/var/lib/incus/disks/"), "expected guest-local loop backing"
+            machine.succeed("test -f " + pool["config"]["source"])
+            volumes = json.loads(machine.succeed("incus storage volume list default --all-projects --format json"))
+            assert isinstance(volumes, list), "storage inventory unavailable"
+            return volumes
+        inspect_storage()
+      ''
+    else
+      ''
+        machine.succeed("incus admin init --auto --storage-backend dir")
+      ''
+  )
+  + ''
     # The pinned incus-compose driver uses local HTTPS for image caching.
     # Bind only loopback on the disposable NixOS guest; no public daemon.
     machine.succeed("incus config set core.https_address 127.0.0.1:8443")
@@ -206,8 +232,28 @@ pkgs.testers.runNixOSTest {
   + lib.optionalString synthetic ''
     # Unlike topology-only acceptance, this calls real LiteLLM APIs and
     # proves scoped-key routing to the private, test-only Responses server.
-    machine.succeed("aginctus-vm-synthetic-probe")
   ''
+  + (
+    if fullStack then
+      ''
+        storage_before = inspect_storage()
+        assert storage_before, "full-stack must actually use the Btrfs pool"
+        try:
+            machine.succeed("aginctus-vm-synthetic-probe")
+        finally:
+            storage_after = inspect_storage()
+            # Workspace/key cleanup is NOT volume, snapshot or loop-image removal.
+            # Retained workload/gateway state remains until outer VM/disk disposal.
+            assert {(v["project"], v["type"], v["name"]) for v in storage_before}.issubset(
+                {(v["project"], v["type"], v["name"]) for v in storage_after}
+            ), "scoped workspace cleanup unexpectedly removed retained storage"
+            print("NOTE: Btrfs pool/volumes retained; storage and outer-disk cleanup not verified")
+      ''
+    else
+      lib.optionalString synthetic ''
+        machine.succeed("aginctus-vm-synthetic-probe")
+      ''
+  )
   + lib.optionalString fullStack ''
     rules = json.loads(machine.succeed("nft -j list table inet aginctus_full_stack"))["nftables"]
     counters = [expr["counter"]["packets"] for row in rules if "rule" in row
