@@ -267,3 +267,68 @@ func (n *nativeIncusVMClient) List(ctx context.Context) ([]IncusVMInstance, erro
 	}
 	return result, nil
 }
+
+// RootVolumePresent independently queries the project-scoped VM volume API.
+// It does not infer volume reclamation from instance absence or delete volumes.
+func (n *nativeIncusVMClient) RootVolumePresent(ctx context.Context, pool, name string) (bool, error) {
+	if pool != "testenv" || !vmSafeName.MatchString(name) {
+		return false, ErrOwnershipMismatch
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	requestCtx, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	volume, _, err := server.GetStoragePoolVolume(pool, "virtual-machine", name)
+	if ctxErr := requestCtx.Err(); ctxErr != nil {
+		return false, safeIncusError("testenv root volume inventory unverified", ctxErr)
+	}
+	if api.StatusErrorCheck(err, http.StatusNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, safeIncusError("testenv root volume inventory unavailable", err)
+	}
+	if volume == nil || volume.Name != name || volume.Type != "virtual-machine" {
+		return false, ErrOwnershipMismatch
+	}
+	return true, nil
+}
+
+func (n *nativeIncusVMClient) InspectWorkerPool(ctx context.Context) (WorkerPoolInspection, error) {
+	var result WorkerPoolInspection
+	requestCtx, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	pool, _, err := server.GetStoragePool("testenv")
+	if err != nil || pool == nil {
+		return result, safeIncusError("worker pool metadata unavailable", err)
+	}
+	resources, err := server.GetStoragePoolResources("testenv")
+	if err != nil || resources == nil {
+		return result, safeIncusError("worker pool resources unavailable", err)
+	}
+	if err := requestCtx.Err(); err != nil {
+		return result, err
+	}
+	return WorkerPoolInspection{Name: pool.Name, Driver: pool.Driver, Config: pool.Config, Status: pool.Status,
+		Total: resources.Space.Total, Used: resources.Space.Used}, nil
+}
+
+func (n *nativeIncusVMClient) InspectWorkerImage(ctx context.Context, fingerprint string) (WorkerImageInspection, error) {
+	var result WorkerImageInspection
+	if !vmDigest.MatchString(fingerprint) {
+		return result, ErrOwnershipMismatch
+	}
+	requestCtx, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	image, _, err := server.GetImage(fingerprint)
+	if err != nil || image == nil {
+		return result, safeIncusError("worker image metadata unavailable", err)
+	}
+	if err := requestCtx.Err(); err != nil {
+		return result, err
+	}
+	return WorkerImageInspection{Fingerprint: image.Fingerprint, Project: image.Project,
+		Type: image.Type, Architecture: image.Architecture, Public: image.Public,
+		AutoUpdate: image.AutoUpdate, Cached: image.Cached, RemoteSource: image.UpdateSource != nil}, nil
+}
