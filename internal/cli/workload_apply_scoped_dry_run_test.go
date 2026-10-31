@@ -7,42 +7,35 @@ import (
 	"strings"
 	"testing"
 
-	incusapply "github.com/abiosoft/incus-apply/apply"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
-	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
+	"github.com/blevinn/aginctus/internal/orchestration/native"
 )
 
-func stubScopedNativeDiff(t *testing.T, answer incusapply.Preview, failure error) *int {
+func stubScopedNativeDiff(t *testing.T, answer native.InstancePlan, failure error) *int {
 	t.Helper()
 	original := planScopedExistingWorkloadDiff
 	t.Cleanup(func() { planScopedExistingWorkloadDiff = original })
 	calls := 0
-	planScopedExistingWorkloadDiff = func(_ context.Context, raw json.RawMessage) (incusapply.Preview, error) {
+	planScopedExistingWorkloadDiff = func(_ context.Context, intent native.InstanceIntent) (native.InstancePlan, error) {
 		calls++
-		var cfg applydriver.Config
-		if err := json.Unmarshal(raw, &cfg); err != nil {
+		if err := intent.Validate(); err != nil {
 			t.Fatal(err)
 		}
-		if cfg.Project != "aginctus" || cfg.Operation != "upsert" ||
-			!cfg.RejectUnsupportedChanges || !cfg.EnsureRunning ||
-			len(cfg.Documents) != 1 || cfg.RequireExistingConfig["user.aginctus.role"] != "agent-workload" {
-			t.Fatalf("unsafe native planner input: %#v", cfg)
+		if intent.Identity.Project != "aginctus" || intent.Identity.Name != "aginctus-dev" ||
+			!intent.EnsureRunning || intent.WorkloadID != "dev" {
+			t.Fatalf("unsafe native planner input")
 		}
 		return answer, failure
 	}
 	return &calls
 }
 
-func oneScopedDiff(action string, changes int) incusapply.Preview {
-	item := incusapply.Item{ResourceID: "instance:aginctus-dev"}
+func oneScopedDiff(action string, changes int) native.InstancePlan {
+	plan := native.InstancePlan{Identity: native.InstanceIdentity{Project: "aginctus", Name: "aginctus-dev"}, Action: native.Action(action)}
 	for i := 0; i < changes; i++ {
-		item.Changes = append(item.Changes, incusapply.Change{Path: "config.secret", Old: "sensitive-before", New: "sensitive-after"})
+		plan.Changes = append(plan.Changes, native.FieldChange{Field: "config.secret"})
 	}
-	return incusapply.Preview{
-		ResourceCount: 1,
-		Groups:        []incusapply.Group{{Action: action, Items: []incusapply.Item{item}}},
-		Summary:       "sensitive upstream summary",
-	}
+	return plan
 }
 
 func TestScopedWorkloadApplyNativeDryRunSummarizesWithoutSecrets(t *testing.T) {
@@ -90,19 +83,18 @@ func TestScopedWorkloadApplyNativeDryRunSummarizesWithoutSecrets(t *testing.T) {
 func TestScopedWorkloadApplyNativeDryRunFailsClosed(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
-		preview incusapply.Preview
+		preview native.InstancePlan
 		err     error
 	}{
 		{"create", oneScopedDiff("create", 0), nil},
 		{"replace", oneScopedDiff("replace", 0), nil},
 		{"delete", oneScopedDiff("delete", 0), nil},
 		{"unknown", oneScopedDiff("invented", 0), nil},
-		{"missing resources", incusapply.Preview{}, nil},
-		{"multiple resources", incusapply.Preview{ResourceCount: 2, Groups: []incusapply.Group{{Action: "update", Items: []incusapply.Item{{}, {}}}}}, nil},
-		{"two groups", incusapply.Preview{ResourceCount: 1, Groups: []incusapply.Group{
-			{Action: "update", Items: []incusapply.Item{{}}},
-			{Action: "unchanged", Items: []incusapply.Item{{}}},
-		}}, nil},
+		{"missing identity", native.InstancePlan{}, nil},
+		{"wrong target", native.InstancePlan{Identity: native.InstanceIdentity{Project: "aginctus", Name: "other"}, Action: native.Update}, nil},
+		{"wrong project", native.InstancePlan{Identity: native.InstanceIdentity{Project: "foreign", Name: "aginctus-dev"}, Action: native.Update}, nil},
+		{"inconsistent unchanged", oneScopedDiff("unchanged", 1), nil},
+		{"claims write authority", native.InstancePlan{Identity: native.InstanceIdentity{Project: "aginctus", Name: "aginctus-dev"}, Action: native.Update, WriteAuthorized: true}, nil},
 		{"native error", oneScopedDiff("update", 1), errors.New("sensitive Incus credentials")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

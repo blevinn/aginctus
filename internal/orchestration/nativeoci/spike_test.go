@@ -13,6 +13,7 @@ import (
 	"github.com/lxc/incus/v7/shared/api"
 
 	agincus "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/orchestration/native"
 )
 
 // TestDaemonOCI deliberately requires a guest-only marker as well as explicit
@@ -97,7 +98,14 @@ func TestDaemonOCI(t *testing.T) {
 				t.Fatal("repeated pull changed image inventory")
 			}
 			name := image.name + "-spike"
-			config := map[string]string{"environment.AGINCTUS_SPIKE": "synthetic"}
+			alias := name + "-image"
+			if err := client.CreateImageAlias(api.ImageAliasesPost{ImageAliasesEntry: api.ImageAliasesEntry{Name: alias, ImageAliasesEntryPut: api.ImageAliasesEntryPut{Target: fingerprint}}}); err != nil {
+				t.Fatal(err)
+			}
+			config := map[string]string{
+				"environment.AGINCTUS_SPIKE": "synthetic", "user.aginctus.managed": "true",
+				"user.aginctus.resource": "workload", "user.aginctus.role": "agent-workload", "user.aginctus.workload": image.name,
+			}
 			if image.name == "postgres" {
 				config["environment.POSTGRES_PASSWORD"] = "disposable-synthetic-password"
 			}
@@ -122,6 +130,22 @@ func TestDaemonOCI(t *testing.T) {
 			state, _, err := client.GetInstanceState(name)
 			if err != nil || state.StatusCode != api.Running {
 				t.Fatal("OCI service did not remain running")
+			}
+			intent := native.InstanceIntent{
+				Identity: native.InstanceIdentity{Project: scope.Name, Name: name}, WorkloadID: image.name,
+				Type: "container", ImageAlias: alias, EnsureRunning: true, Config: config, Profiles: []string{}, Devices: devices,
+			}
+			for range 2 {
+				plan, err := native.PlanLocalExistingInstance(ctx, intent)
+				if err != nil || plan.Action != native.Unchanged || len(plan.Changes) != 0 || plan.WriteAuthorized {
+					t.Fatalf("native SDK no-op planning failed: %+v, %v", plan, err)
+				}
+			}
+			foreign := intent
+			foreign.WorkloadID = "foreign"
+			foreign.Config = map[string]string{"user.aginctus.managed": "true", "user.aginctus.resource": "workload", "user.aginctus.role": "agent-workload", "user.aginctus.workload": "foreign"}
+			if _, err := native.PlanLocalExistingInstance(ctx, foreign); err == nil {
+				t.Fatal("native planner accepted foreign workload identity")
 			}
 			probe := []string{"python", "-c", "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5).status == 200"}
 			if image.name == "postgres" {
