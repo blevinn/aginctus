@@ -125,9 +125,12 @@ func (b *IncusVMBackend) checkIncusOwned(actual *IncusVMInstance, ref VMRef) (ti
 		actual.Config["user.aginctus.testenv.image"] != ref.ImageFingerprint {
 		return time.Time{}, ErrOwnershipMismatch
 	}
+	if !incusInstanceOptionsAllowed(actual.Config) {
+		return time.Time{}, ErrOwnershipMismatch
+	}
 	// A root disk may be managed by Incus, never a host bind source.
 	root, ok := actual.Devices["root"]
-	if !ok || len(actual.Devices) != 1 ||
+	if !ok || len(actual.Devices) != 1 || len(root) != 4 ||
 		root["type"] != "disk" || root["path"] != "/" ||
 		root["source"] != "" || root["pool"] != b.pool ||
 		root["size"] != fmt.Sprintf("%dGiB", ref.Policy.RootDiskGiB) ||
@@ -146,6 +149,24 @@ func (b *IncusVMBackend) checkIncusOwned(actual *IncusVMInstance, ref VMRef) (ti
 		return time.Time{}, ErrOwnershipMismatch
 	}
 	return expiry, nil
+}
+
+// Only the launch plan's options are admitted; see docs/testenv-worker.md.
+// The dedicated daemon remains trusted for its image and volatile metadata.
+func incusInstanceOptionsAllowed(config map[string]string) bool {
+	for key := range config {
+		switch key {
+		case "limits.cpu", "limits.memory", "security.nesting",
+			"user.aginctus.testenv.run", "user.aginctus.testenv.image",
+			"user.aginctus.testenv.expires", incusPolicyKey, incusPolicyMACKey:
+			continue
+		}
+		if strings.HasPrefix(key, "volatile.") || strings.HasPrefix(key, "image.") {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (b *IncusVMBackend) Create(ctx context.Context, spec VMCreateSpec) (VMRef, error) {
