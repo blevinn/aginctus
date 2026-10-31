@@ -31,27 +31,7 @@ let
   # The Go config loader treats these as runtime-only secrets, but the
   # freeform options layer would otherwise allow them into the world-readable
   # Nix store.
-  forbiddenGatewaySecrets = [
-    [
-      "gateway"
-      "postgres"
-      "password"
-    ]
-    [
-      "gateway"
-      "master"
-      "key"
-    ]
-    [
-      "gateway"
-      "salt"
-      "key"
-    ]
-  ];
-
-  configuredSecretPaths = builtins.filter (
-    path: lib.hasAttrByPath path cfg.settings
-  ) forbiddenGatewaySecrets;
+  configuredSecretPaths = import ./runtime-secret-paths.nix { inherit lib; } cfg.settings;
 
   validImageAlias =
     alias:
@@ -69,7 +49,7 @@ let
     id: !(builtins.hasAttr id cfg.settings.workloads)
   ) cfg.reconcile.workloads;
 
-  configFile = jsonFormat.generate "aginctus-config.json" cfg.settings;
+  configFile = jsonFormat.generate "aginctus-config.json" (mcpSettings.renderSettings cfg.settings);
   # Nonsecret, declared package identity for read-only system/user parity audit.
   operatorPackageManifest = jsonFormat.generate "aginctus-system-package.json" {
     schema = 1;
@@ -101,6 +81,8 @@ let
 
   # Share exactly one typed settings registry with Home Manager.
   knownSettingsOptions = import ./settings-options.nix { inherit lib jsonFormat; };
+  # Render the MCP subtree in the shape the Aginctus Go schema accepts.
+  mcpSettings = import ./mcp-settings.nix { inherit lib; };
 in
 {
   imports = [ ./egress-firewall.nix ];
@@ -223,9 +205,7 @@ in
       }
       {
         assertion = configuredSecretPaths == [ ];
-        message = "services.aginctus.settings cannot contain runtime gateway secrets: ${
-          lib.concatStringsSep ", " (map (path: lib.concatStringsSep "." path) configuredSecretPaths)
-        }. Leave secrets unset to generate and persist protected runtime state; see docs/configuration.md.";
+        message = "services.aginctus.settings cannot contain runtime gateway secrets: ${lib.concatStringsSep ", " configuredSecretPaths}. Leave secrets unset to generate and persist protected runtime state; see docs/configuration.md.";
       }
       {
         assertion = builtins.all validImageAlias enabledImageAliases;
@@ -243,7 +223,8 @@ in
         assertion = !(cfg.reconcile.gateway && !cfg.reconcile.enable);
         message = "services.aginctus.reconcile.gateway requires services.aginctus.reconcile.enable; the gateway apply runs as part of the host reconciliation flow.";
       }
-    ];
+    ]
+    ++ mcpSettings.assertions "services.aginctus" cfg.settings.mcp;
 
     # ExtraCommands executes before the NixOS iptables firewall's final
     # reject, unlike an independent nftables accept-only base chain.

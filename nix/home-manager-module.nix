@@ -16,6 +16,8 @@ let
   cfg = config.programs.aginctus;
   jsonFormat = pkgs.formats.json { };
   knownSettingsOptions = import ./settings-options.nix { inherit lib jsonFormat; };
+  # Render the MCP subtree in the shape the Aginctus Go schema accepts.
+  mcpSettings = import ./mcp-settings.nix { inherit lib; };
   # Export the declared user CLI package, never credentials or environment.
   operatorPackageManifest = jsonFormat.generate "aginctus-user-package.json" {
     schema = 1;
@@ -25,30 +27,7 @@ let
 
   # Both dotted keys and nested objects are possible in the freeform JSON
   # layer. Reject runtime credential paths before writing the Nix store.
-  runtimeSecretKeys = [
-    "gateway.postgres.password"
-    "gateway.master.key"
-    "gateway.salt.key"
-  ];
-  configuredSecretPaths =
-    let
-      visit =
-        prefix: value:
-        if builtins.isAttrs value then
-          lib.concatLists (
-            lib.mapAttrsToList (
-              name: nested:
-              let
-                path = prefix ++ [ name ];
-                dotted = lib.concatStringsSep "." path;
-              in
-              lib.optional (lib.elem (lib.toLower dotted) runtimeSecretKeys) dotted ++ visit path nested
-            ) value
-          )
-        else
-          [ ];
-    in
-    visit [ ] cfg.settings;
+  configuredSecretPaths = import ./runtime-secret-paths.nix { inherit lib; } cfg.settings;
 in
 {
   options.programs.aginctus = {
@@ -82,11 +61,13 @@ in
           "programs.aginctus.settings cannot contain runtime gateway secrets: "
           + lib.concatStringsSep ", " configuredSecretPaths;
       }
-    ];
+    ]
+    ++ mcpSettings.assertions "programs.aginctus" cfg.settings.mcp;
 
     home.packages = [ cfg.package ];
     xdg.configFile."aginctus/operator-package.json".source = operatorPackageManifest;
-    xdg.configFile."aginctus/config.json".source =
-      jsonFormat.generate "aginctus-user-config.json" cfg.settings;
+    xdg.configFile."aginctus/config.json".source = jsonFormat.generate "aginctus-user-config.json" (
+      mcpSettings.renderSettings cfg.settings
+    );
   };
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/blevinn/aginctus/internal/mcpschema"
 	"os"
 	"path/filepath"
 	"strings"
@@ -532,5 +533,64 @@ func TestMCPAbsentDeclarationDoesNotChangeV01FailureSurface(t *testing.T) {
 	}
 	if len(policy.Workloads()) != 0 {
 		t.Fatalf("workloads = %+v", policy.Workloads())
+	}
+}
+
+// The redacted report is the contract between the effective configuration
+// and the gateway and OpenCode adapters that consume the policy.
+func TestMCPReportContract(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	writeConfigFile(t, path, `{
+		"mcp": {
+			"servers": {
+				"docs": {
+					"transport": "streamable-http",
+					"url": "https://docs.example.com/mcp",
+					"credentialRef": "docs-token",
+					"allowedTools": ["fetch", "search"]
+				}
+			},
+			"capabilities": {"coding": {"requires": ["mcp-tools"]}},
+			"grants": {"dev": {"capability": "coding", "servers": {"docs": ["search"]}}},
+			"gateway": {"enabled": true}
+		}
+	}`)
+	effective := loadConfig(t, &Loader{}, Options{ConfigurationFile: path})
+	policy, err := effective.MCP()
+	if err != nil {
+		t.Fatalf("MCP() error = %v", err)
+	}
+	encoded, err := policy.Report().JSON()
+	if err != nil {
+		t.Fatalf("JSON() error = %v", err)
+	}
+	report := string(encoded)
+	if strings.Contains(report, "docs-token") {
+		t.Fatalf("the report disclosed the credential reference: %s", report)
+	}
+	if !strings.Contains(report, `"hasCredentialReference": true`) {
+		t.Fatalf("the report lost the credential reference state: %s", report)
+	}
+
+	// The adapter contract: one route per remote server, and one tool set
+	// per workload and server.
+	routes := map[string]string{}
+	for _, server := range policy.Report().Servers {
+		if server.Transport == mcpschema.TransportStreamableHTTP {
+			routes[server.Name] = server.Endpoint
+		}
+	}
+	if routes["docs"] != "https://docs.example.com/mcp" {
+		t.Fatalf("the adapter route = %q", routes["docs"])
+	}
+	workload, ok := policy.Workload("dev")
+	if !ok {
+		t.Fatal("the granted workload is missing from the policy")
+	}
+	if len(workload.Servers) != 1 || len(workload.Servers[0].Tools) != 1 {
+		t.Fatalf("the adapter tool set = %+v", workload.Servers)
+	}
+	if workload.Servers[0].Tools[0] != "search" {
+		t.Fatalf("the adapter tool set = %+v", workload.Servers)
 	}
 }
