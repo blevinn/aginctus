@@ -116,7 +116,7 @@ func Run(
 
 	// Migrate command families one at a time. Cobra validates the complete
 	// basic-command syntax before the configuration loader is consulted.
-	if commandArgs[0] == "gateway" && isGatewayCoreCommand(commandArgs[1:]) {
+	if commandArgs[0] == "gateway" {
 		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
 	}
 	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
