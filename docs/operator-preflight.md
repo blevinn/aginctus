@@ -108,8 +108,9 @@ aginctus operator project-ensure --project aginctus --confirm-create
 This is a **real mutation**. Run it only on an explicitly authorized
 disposable test host or as a deliberate provisioning step. It never
 uses `sudo`, `incus project switch`, or the caller's current Incus
-project. The Incus invocation includes `--force-local`; it will not
-implicitly create a remote project. It requires the explicit
+project. Mutation uses the official Incus SDK with a verified local Unix
+connection and explicit project identity; it will not implicitly create a
+remote project. It requires the explicit
 `--confirm-create` flag even when an existing project might be reused.
 
 The command first inspects `incus --force-local project list
@@ -121,14 +122,21 @@ without making any change. If it is `foreign` or
 renaming, or deletion.
 
 If enumeration reports `not-visible`, **do not infer absence**.
-Only an explicitly requested, atomic `incus --force-local project
-create` with all required `--config` flags is attempted. Incus
-itself rejects an existing name, including a foreign project that
-was hidden from the initial enumeration. A successful creation is
-reinspected and checked against the exact ownership and feature policy
+The native helper independently reads the exact project before preparing a
+mutation and again at the mutation boundary. It requires a confirmed request,
+local transport and the selected nondefault project. Denied or unknown reads
+fail closed. Only a verified not-found response permits an atomic SDK
+`CreateProject` request with ownership markers and feature flags in the initial
+body. Incus itself rejects an existing name, including a foreign project hidden
+from the initial enumeration or created during the final race window. No
+metadata is stamped onto a preexisting object. A successful creation is
+reinspected natively and checked against the exact ownership and feature policy
 before success is reported. If verification fails, the command reports
 an uncertain result and **never automatically deletes or rolls back**
-the created project. The administrator must inspect it before retrying.
+the created project. A lost or canceled create response can also leave a project
+present; cancellation is an error, not a successful no-op. The administrator must
+inspect the selected project before retrying. The SDK helper's partial result
+distinguishes an attempted request, a confirmed create and verified postflight.
 
 The command creates **only** the project object. It does not initialize
 profiles, configure a root disk, grant network access, import images,
