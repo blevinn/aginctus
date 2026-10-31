@@ -28,6 +28,7 @@
       nixosModules = {
         aginctus = import ./nix/nixos-module.nix { inherit self; };
         aginctusTestenvRecovery = import ./nix/testenv/recovery-worker.nix { inherit self; };
+        aginctusTestenvWorker = import ./nix/testenv/installed-worker.nix { inherit self; };
         default = self.nixosModules.aginctus;
       };
 
@@ -347,7 +348,14 @@
             vendorHash = "sha256-nOdS1XPJCl/knG3nRUu8m+/AEpG9BmniQ3GT5/RXpP0=";
             subPackages = [ "./cmd/aginctus-testenv-sweep" ];
           };
-          # Explicit operator invocation only; not installed into any service.
+          # Operator tooling is packaged independently from the public CLI.
+          testenv-worker-preflight = pkgs.buildGoModule {
+            pname = "aginctus-testenv-worker-preflight";
+            version = releaseVersion;
+            src = ./.;
+            vendorHash = "sha256-nOdS1XPJCl/knG3nRUu8m+/AEpG9BmniQ3GT5/RXpP0=";
+            subPackages = [ "./cmd/aginctus-testenv-worker-preflight" ];
+          };
           testenv-worker-acceptance = pkgs.buildGoModule {
             pname = "aginctus-testenv-acceptance";
             version = releaseVersion;
@@ -469,6 +477,9 @@
             inherit self nixpkgs system;
           };
           testenv-recovery-worker-policy = import ./nix/testenv/recovery-worker-check.nix {
+            inherit self nixpkgs system;
+          };
+          testenv-installed-worker-policy = import ./nix/testenv/installed-worker-check.nix {
             inherit self nixpkgs system;
           };
         }

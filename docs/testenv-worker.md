@@ -248,6 +248,92 @@ operator-managed bounded filesystem and review retention separately. No real
 worker execution is claimed by building the package or running fake tests.
 The authorization/service API and agent-facing mutations remain gated.
 
+## Installed read-only image and pool gate
+
+`aginctusTestenvWorker` composes the existing recovery identity/timer with
+an operator-started `aginctus-testenv-preflight` service. It never initializes
+Incus, creates/adopts a project or pool, imports images, or grants agent
+access. Provisioning remains an explicitly authorized operator step on the
+dedicated worker. The same `IncusProjectPolicy` used by the backend supplies
+the actual project checks; there is no second Nix policy table.
+
+The preflight requires the exact private, locally imported x86_64 VM image
+fingerprint in `aginctus-testenv`, without public, remote-update or cached
+image metadata. It admits an existing `testenv` **ZFS or LVM** pool reporting
+64–80 GiB total capacity and fingerprints its complete configuration for
+operator review. These outer-pool choices are separate from the inner
+Aginctus fixture's Btrfs pool. Capacity is a daemon-reported snapshot, not
+proof that quotas, storage isolation or physical reclamation work.
+
+Before activating the module, establish the daemon, restricted project,
+pool, marker and runtime key described above. On that separately approved
+worker only, obtain a candidate pool-configuration fingerprint with the
+immutable helper. Inspect the actual pool configuration independently before
+trusting its hash; do not automatically feed discovery into admission:
+
+```sh
+preflight=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-worker-preflight)
+"$preflight/bin/aginctus-testenv-worker-preflight" --help
+
+# Dedicated disposable worker ONLY, with the root-owned regular marker and
+# runtime key provisioned as above; substitute the actual imported fingerprint.
+sudo systemd-run --unit=aginctus-testenv-pool-inspect --wait --pipe --collect \
+  --service-type=exec --uid=aginctus-testenv --gid=aginctus-testenv \
+  --property=SupplementaryGroups=incus-admin \
+  --property=LoadCredential=policy-key:/var/lib/aginctus-testenv/worker-policy.key \
+  --property=RestrictAddressFamilies=AF_UNIX --property=IPAddressDeny=any \
+  --property=NoNewPrivileges=yes --property=ProtectSystem=strict \
+  --property=ProtectHome=yes --property=PrivateTmp=yes --property=PrivateDevices=yes \
+  --property=TimeoutStartSec=45s \
+  --setenv=AGINCTUS_TESTENV_WORKER_SOCKET=/var/lib/incus/unix.socket \
+  --setenv=AGINCTUS_TESTENV_POLICY_KEY_FILE=/run/credentials/aginctus-testenv-pool-inspect.service/policy-key \
+  --setenv=AGINCTUS_TESTENV_IMAGE_FINGERPRINT='<actual-64-hex-image-fingerprint>' \
+  "$preflight/bin/aginctus-testenv-worker-preflight" --pool-fingerprint
+```
+
+`inspection_only` is never an admission pass. The returned hash covers
+pool name, driver and configuration, not fluctuating used bytes or free
+capacity. It is not a secret. After independent review, configure the
+dedicated worker using reviewed immutable source:
+
+```nix
+{
+  imports = [ inputs.aginctus.nixosModules.aginctusTestenvWorker ];
+  virtualisation.incus.enable = true;
+  networking.nftables.enable = true;
+  services.aginctusTestenvWorker = {
+    enable = true;
+    dedicatedDisposableHost = true;
+    imageFingerprint = "<actual-64-hex-image-fingerprint>";
+    poolConfigFingerprint = "<reviewed-64-hex-pool-configuration-fingerprint>";
+  };
+}
+```
+
+The module rejects missing acknowledgement, mutable image aliases, invalid
+fingerprints, unsupported architectures, a missing Incus daemon and the
+Aginctus pilot service. It creates a nonsecret regular marker only when
+absent; existing mismatched markers are not replaced. Its preflight service
+does not start automatically. After a separately authorized deployment:
+
+```sh
+systemctl cat aginctus-testenv-preflight.service
+# Approved dedicated worker only:
+sudo systemctl start aginctus-testenv-preflight.service
+sudo journalctl -u aginctus-testenv-preflight.service --no-pager -n 10
+```
+
+The bounded report lists only fixed outcomes and the pool hash. Project,
+image and pool drift fail closed without daemon mutations. The service has
+no `RemainAfterExit` admission cache; a successful observation is not an
+authorization token or an assurance about subsequent daemon state. It does
+not gate recovery: removing an image must not prevent expired VM cleanup.
+The worker still has daemon-administrator authority, so its installation
+and configuration must be outside agent-writable checkouts. Resource
+enforcement, crash/reboot, cleanup, real daemon compatibility and runtime
+acceptance remain unverified until independently tested. No public CLI/MCP
+mutations are enabled by this module.
+
 ## Operational acceptance — not yet performed
 
 After operator approval and after validating real project restrictions,
