@@ -9,21 +9,46 @@ without changing the user's ambient project:
 aginctus operator preflight --project aginctus
 ```
 
-The project is **required** and explicit. The command runs only
-`incus info`, `incus list --project NAME --format json`, and optionally
-`incus project list --format json`, with a bounded timeout. It does not create,
+The project is **required**, explicit and non-`default`. The command uses
+GET-only `incus query --raw --request GET` requests for `/1.0?project=NAME`
+and `/1.0/instances?project=NAME&recursion=1`, plus optional
+`incus project list --format json`, with a bounded timeout. When the daemon
+identifies the caller by a TLS certificate fingerprint, it also attempts a
+GET of that exact `/1.0/certificates/FINGERPRINT` to inspect its restriction.
+It does not create,
 delete, configure, or switch projects, bridge networks, volumes, instances,
 trust grants, or firewall objects, and never calls `sudo`. Incus authorization
 or daemon initialization can have server-side effects beyond this CLI's
 control; this is not a substitute for a separately provisioned identity.
 
-A successful preflight proves **only** daemon and selected-project read
-access. The number of visible projects is diagnostic context, **not** proof
+A successful preflight proves **only** a trusted daemon identity and
+selected-project instance read access. For TLS identities with a readable
+self-certificate, diagnostics distinguish a restricted credential that
+declares the selected project from a broad unrestricted credential. A missing
+restriction, mismatched fingerprint or denied certificate read remains
+unproven. Unix, OIDC and other identities are not classified as administrators
+from their authentication method or username. Even an unrestricted TLS
+credential is **not proof of effective administrative capabilities**: an
+external authorizer may impose additional restrictions.
+
+The number of visible projects is diagnostic context, **not** proof
 of write permission or unrestricted administrator status. A denied project
 read fails before any subsequent probe. No raw subprocess diagnostic data or
 credential material appears in output. This deliberately cannot certify
 permissions for image alias updates, storage, host Linux bridges, or root
 firewall operations; the operations remain disabled pending #200 and #438/#439.
+
+Structured API 401 and 403 responses distinguish unauthenticated and denied
+requests. Missing CLI, local permission denial, cancellation, deadline and
+invalid responses have separate sanitized statuses. A subprocess transport
+failure remains `unavailable-or-denied`: the CLI may fail before returning a
+structured API response, so its stderr is neither parsed nor printed as an
+authorization oracle. Verify remote reachability and pre-provisioned identity
+with the host administrator. Cancellation during an optional probe fails the
+whole check rather than reporting success. No fallback identity is attempted.
+
+Exit status zero remains a **read-only diagnostic success**, never a write
+authorization or a prerequisite sufficient to enable user lifecycle services.
 
 Incus documents that local `incus-admin` members have full host-equivalent
 API access while confined `incus` group members are restricted to personal
