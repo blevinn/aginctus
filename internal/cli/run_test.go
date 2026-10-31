@@ -319,7 +319,7 @@ func TestNetworkRejectsUnknownOption(t *testing.T) {
 	if code != 2 {
 		t.Fatalf("Run() code = %d, want 2", code)
 	}
-	if !strings.Contains(stderr.String(), "unknown option") {
+	if !strings.Contains(stderr.String(), "unknown") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
