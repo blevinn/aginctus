@@ -209,26 +209,33 @@ rejects it at the source boundary before applying its merge policy.
 
 ## Merge and precedence behavior
 
-The MCP declaration follows the ordinary source precedence, but the `mcp`
-subtree is atomic. When a source supplies `mcp`, its complete value replaces
-the lower-priority MCP subtree; the loader never combines server registries,
-grants, capabilities or gateway intent across stores.
+The MCP declaration follows the ordinary source precedence and recursive
+object merge, except that each named server at `mcp.servers.<name>` is atomic.
+Supplying a server replaces that server's complete definition. Adding a new
+server preserves existing servers, capabilities, grants and gateway intent.
 
 | Source value | Merge behavior | Consequence |
 | --- | --- | --- |
-| Complete `mcp` object | Replaces the complete subtree | A higher-priority policy cannot inherit an endpoint, server, grant or capability from a lower-priority store. |
-| `mcp: {}` or `mcp: null` | Replaces the subtree with deny-by-default | Clears all lower-priority MCP declarations. |
-| Partial `mcp` object | Replaces the complete subtree | Missing declarations are not inherited; effective validation rejects an incomplete policy. |
+| New named server | Adds one complete server definition | Existing servers and their grants remain unchanged; the new server needs explicit grants. |
+| Existing named server | Replaces that server's complete definition | Transport, endpoint, command, credential reference and tool restrictions are not inherited from a lower-priority definition. |
+| URL-only server override | Replaces that server with an incomplete definition | Validation rejects the missing transport instead of inheriting it. |
+| `mcp: {}` or `mcp.servers: {}` | Recursively merges an empty object | Leaves inherited entries unchanged. |
+| `mcp: null` | Clears the complete MCP subtree | Selects deny-by-default. |
+| Named server set to `null` | Removes that server from effective policy | A remaining grant referencing it makes validation fail; remove or revoke the grant too. |
 
 Environment variables and repeated CLI overrides are collected into one
 source overlay before merging. A source can therefore construct a complete
-policy using several paths, but a partial higher-priority MCP overlay cannot
-silently retain lower-priority servers or grants.
+server using several paths. Environment entries are sorted for deterministic
+results; repeated CLI overrides retain their supplied order.
 
-Atomicity does not change precedence: the highest-priority complete `mcp`
-value still wins. In NixOS system operations, the explicit generated config
-file is applied after user and environment sources, so its declared MCP
-policy replaces ambient lower-priority MCP policy.
+Atomicity does not change precedence or establish source authority. Existing
+grants reference server names and remain in effect when a server is replaced.
+A higher-priority source can deliberately replace a complete server, and
+other MCP objects still merge recursively. The explicit generated NixOS config
+is applied after user and environment sources, but it replaces only same-named
+server definitions, not the complete ambient policy. A privileged gateway must
+select authoritative system sources before making requests; a user-context
+effective policy is not an authorization boundary.
 
 ## Declarative configuration
 

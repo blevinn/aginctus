@@ -128,18 +128,21 @@ their transports, opaque credential references, explicit per-workload server
 and tool grants, model and protocol capability requirements, and the central
 gateway MCP intent.
 
-The `mcp` subtree follows the ordinary source precedence but is atomic: a
-source that supplies it replaces the complete lower-priority MCP policy.
+Each named server at `mcp.servers.<name>` is atomic: a source that supplies
+it replaces that server's complete lower-priority definition. Adding a new
+server preserves existing servers and grants. Other MCP objects follow the
+ordinary recursive merge and source precedence.
 Environment variables and repeated CLI overrides are grouped into one
-source overlay, so one source can construct a complete policy using several
-paths. Other configuration paths retain recursive object merging.
+source overlay, so one source can construct a complete server using several
+paths.
 
-An empty `mcp` object or `mcp: null` clears lower-priority MCP declarations.
-A partial higher-priority MCP policy does not inherit servers or grants from
-another store and is rejected if incomplete. In NixOS system operations, the
-explicit generated configuration is applied after user and environment
-sources, so a declared system MCP policy replaces ambient lower-priority MCP
-policy.
+An empty `mcp` object leaves inherited entries unchanged; `mcp: null` clears
+the complete MCP policy. A partial server override does not inherit missing
+fields and is rejected if incomplete. Existing grants remain bound to server
+names. The generated NixOS configuration takes precedence over same-named
+ambient servers, but does not clear other ambient policy. A privileged gateway
+must select authoritative sources rather than trust a user-context merged
+configuration.
 
 The complete contract, including the credential rules, the effective grant
 semantics and the limits of declared policy, is documented in
