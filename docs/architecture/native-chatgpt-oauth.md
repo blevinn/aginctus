@@ -1,6 +1,11 @@
-# Native LiteLLM ChatGPT OAuth gateway decision (v0.1)
+# Native LiteLLM ChatGPT OAuth gateway decision (v0.2)
 
-Status: accepted architecture, **integration not yet deployed**. Tracked in #187; supersedes unmerged #186 and the custom OpenAI inference daemon from #170. Keep LiteLLM as the sole workload-facing inference gateway and preserve v0.1's shared LiteLLM API key.
+Status: accepted architecture, **integration not implemented end to end or deployed**. Tracked in [#187](https://github.com/blevinn/aginctus/issues/187), with credential ownership in [#171](https://github.com/blevinn/aginctus/issues/171), Responses fidelity in [#172](https://github.com/blevinn/aginctus/issues/172), and provider tracking in [#169](https://github.com/blevinn/aginctus/issues/169). The latest scope decision places this optional integration in [v0.2 #173](https://github.com/blevinn/aginctus/issues/173), independent of the approved non-OAuth v0.1 path. It supersedes unmerged #186 and the custom OpenAI inference daemon from #170. LiteLLM remains the sole workload-facing inference gateway; existing API-key providers and workload-ingress authentication remain required.
+
+**External blocker:** the operator has confirmed that a documented permitted-use
+basis for the native route has not been established. This is not an approval to
+enroll an account, import credentials, or enable inference. The authorization
+evidence required to resume activation is described below.
 
 ## Superseded standalone-daemon prototype
 
@@ -39,15 +44,15 @@ OpenCode / Hermes -> LiteLLM (private endpoint, v0.1 shared key)
 
 The managed volume `aginctus-gateway-<id>-credentials` belongs to the **LiteLLM process acting as the credential manager**. Never attach it to PostgreSQL or workloads. A writable mount is needed because LiteLLM refreshes tokens. A successful Incus volume creation alone says nothing about secure mounts. Existing daemon images may remain available for development but must not be deployed for OAuth inference.
 
-After authenticated host handoff, LiteLLM is the sole refresh-token owner; host refresh must be disabled or rejected. Require explicit user authorization and account selection at handoff. Treat ambiguous acknowledgement/crash as recovery-required and fail closed. Never put OAuth tokens in generated Compose/Jsonnet, Nix store, process arguments, Incus instance configuration, or logs.
+LiteLLM must be the sole credential and refresh-token owner. Use controlled native device-flow enrollment, not a separate host OAuth client, importer, or token daemon. Require explicit user authorization and account/workspace selection before enrollment; no authentication as a side effect of inference. An interrupted or ambiguous enrollment must fail closed without replacing a valid session. Never put OAuth tokens in generated Compose/Jsonnet, Nix store, process arguments, Incus instance configuration, or logs.
 
-It is **not enough** to mount arbitrary host authentication files or copy tokens into the volume. Establish a tested, permission-constrained, atomic import/refresh protocol or choose a documented LiteLLM-native device-flow enrollment process with exclusive ownership. The compatibility of the existing Aginctus host OAuth credential representation with LiteLLM's format is unverified.
+It is **not enough** to mount arbitrary host authentication files or copy tokens into the volume. Native enrollment and refresh need tested private storage, atomic replacement, and exclusive ownership. Do not reuse Codex CLI caches or the superseded SIWC credential representation: compatibility and authorization are not implied by either being an OAuth record.
 
-## v0.1 implementation checkpoints
+## v0.2 implementation checkpoints
 
 1. Add opt-in native ChatGPT Responses route to LiteLLM config; preserve current key providers and default behavior.
 2. Securely attach only the managed volume to LiteLLM with writable ownership and restart persistence. Validate Incus project/pool/device placement; no volume in PostgreSQL or workloads.
-3. Implement authenticated device-flow enrollment/handoff, single refresh owner, account binding, logout/revocation, and recovery rules.
+3. Implement explicitly authorized native device-flow enrollment, single refresh owner, account binding, logout/revocation, and recovery rules.
 4. Prove pinned-version Responses streaming, tool-call events and completion statuses with actual OpenCode traffic through LiteLLM.
 5. Verify that the `aginctus-egress` bridge is present or reconcile it through the existing gateway provisioning path before attempting live deployment. The earlier #186 daemon deployment failed because the bridge was missing, not because provider credentials were invalid.
 
@@ -118,8 +123,10 @@ The audit can inspect a **stopped** guest. It neither opens the volume's files
 nor logs credentials; it cannot prove `auth.json` permissions, LiteLLM
 process/workers, crash-safe refresh, user consent, backend readiness or an
 authenticated inference response. Thus a pass is **not** permission to enable
-`CHATGPT_TOKEN_DIR` or a `chatgpt/` model. Guest file preparation is #217;
-the independent gateway database and firewall work remains under #219/#220.
+`CHATGPT_TOKEN_DIR` or a `chatgpt/` model. Guest file preparation remains
+required under #171/#187. PR #217 was closed without merge; it is historical
+reference, not an available implementation. Database readiness and effective
+gateway firewall/egress checks remain independent prerequisites.
 
 ### Offline Responses event contract verifier (no gateway activation)
 
@@ -168,6 +175,98 @@ The upstream `litellm/llms/chatgpt/authenticator.py` implementation directly rew
 
 OpenAI's individual Terms of Use (https://openai.com/policies/terms-of-use/) restrict automated/programmatic output extraction. The applicability to routing a personal ChatGPT subscription through LiteLLM for workload inference is not established here; obtain a documented authorization basis before enabling this route. Use an approved API-key-backed provider as a separate supported route when appropriate.
 
+### Verified native provider contract
+
+The source references below describe the pinned provider's behavior, not a
+successful Aginctus integration or a grant of permission:
+
+- [Native constants and headers](https://github.com/BerriAI/litellm/blob/v1.103.0/litellm/llms/chatgpt/common_utils.py)
+  identify a Codex device flow at `auth.openai.com`, a Codex client identity,
+  and the inference base `https://chatgpt.com/backend-api/codex`. This is
+  neither OpenAI Platform API-key authentication nor the historical SIWC
+  dynamic-registration flow. Do not substitute the historical SIWC scopes,
+  client registration, or `api.openai.com/v1` inference contract.
+- [Native authentication](https://github.com/BerriAI/litellm/blob/v1.103.0/litellm/llms/chatgpt/authenticator.py)
+  requests a device code, polls for an authorization code and PKCE material,
+  then exchanges it using the provider's device callback URI. There is no
+  Aginctus loopback browser callback in this path. JWT claims are decoded
+  without signature, issuer, or audience validation; claim extraction is not
+  validated account identity. The persisted record contains `access_token`,
+  `refresh_token`, `id_token`, `expires_at`, and `account_id`.
+- [Native Responses transformation](https://github.com/BerriAI/litellm/blob/v1.103.0/litellm/llms/chatgpt/responses/transformation.py)
+  obtains authentication from that native record, adds bearer authentication
+  and `ChatGPT-Account-Id`, uses `/responses`, and forces `store:false` and
+  `stream:true` upstream. It filters unsupported request fields. Verify actual
+  streaming, cancellation, retries, function-call continuation and terminal
+  completion on the pinned runtime, rather than treating this transformation
+  as end-to-end acceptance.
+- The auth file is process-global, not per virtual key or model. Local aliases
+  do not bind separate ChatGPT accounts. All authorized callers of active
+  `chatgpt/` routes would use the same enrolled account/workspace. Workload
+  ingress keys must never become provider tokens or permit arbitrary account
+  selection. Review client-header forwarding as part of that boundary.
+- Refresh uses the stored refresh token and preserves it if the response omits
+  a replacement. Native writes are in-place and write failures are logged
+  rather than propagated. A refresh failure can fall through to interactive
+  enrollment; malformed token responses can appear in exception messages.
+  Private volume attachment and a single guest do not fix concurrent workers,
+  threads, interrupted writes, or lost refresh-token rotation.
+- The provider does not implement logout or remote revocation. Local removal
+  must stop use and prevent an in-flight refresh from recreating credentials;
+  it must be distinguished from upstream revocation. Do not invent a revoke
+  endpoint or promise remote invalidation from local deletion.
+
+The [current LiteLLM provider documentation](https://docs.litellm.ai/docs/providers/chatgpt/)
+also describes the global account scope, pre-enrollment requirement, refresh
+races and in-place writes. Its newer-release behavior is not evidence that
+the pinned runtime has been fixed. OpenAI's
+[authentication documentation](https://developers.openai.com/codex/auth/)
+describes device-login enablement in personal security settings or workspace
+permissions; enablement alone does not resolve authorization for this relay.
+
+### Remaining lifecycle and acceptance checklist
+
+| Area | Implemented here | Required before end-to-end acceptance |
+| --- | --- | --- |
+| Provider/model selection | Private nonsecret registrations and read-only Responses route rendering | Approved account/workspace and entitled model binding; optional native deployment; no fallback to API credentials or another account |
+| Authorization and consent | Activation prohibition and documented external blocker | Recorded permitted-use basis and explicit consent for the selected workloads, including autonomous/background access |
+| Enrollment | No active Aginctus login command | Controlled native device flow; bounded network/polling deadlines; cancellation; validation of provider response/PKCE/identity invariants; failed reauthentication preserves the valid record |
+| Storage | Owned project-local volume and exclusive attachment metadata audit | Verified runtime UID/GID; private 0700 directory and 0600 regular non-symlink file; safe existing-file checks; atomic durable updates and recovery |
+| Refresh | Upstream native implementation only, not activated | Sole owner across enrollment and runtime; serialized reread/refresh/write across workers; validated replacements; safe rotation; revoked-token diagnostics without automatic login or secret leakage |
+| Restart and disconnect | No OAuth lifecycle acceptance | Recovery of persisted rotated state; race-safe local logout/removal; documented upstream revocation procedure; predictable reauthentication |
+| Model execution | Offline terminal Responses/function-call verifier | Real authorized OpenCode → private LiteLLM → native provider inference; streaming/tool continuation and actual tool side effect; terminal completion; cancellation/retries/errors; workload secret isolation |
+| Regression coverage | Existing registration, volume and synthetic Responses tests | Deterministic native lifecycle tests covering success, rejection, malformed responses, exchange/refresh failures, concurrency, rotation, restart, logout and API-key compatibility |
+
+Do not activate merely to discover whether these requirements hold. Prefer a
+verified compatible native provider implementation; any local runtime fix must
+stay inside the LiteLLM-native path and ship with its deployment and tests,
+not as an orphaned module or a new OAuth proxy.
+
+### External authorization evidence needed to resume activation
+
+Record the decision in #187 or link a reviewed, nonsecret authorization record
+from it. It must identify:
+
+1. The applicable provider permission/terms basis for third-party native
+   subscription inference through LiteLLM using this Codex device flow and
+   backend, rather than assuming SIWC permission applies to it.
+2. The consenting account owner and selected workspace, with any required
+   workspace-admin approval and device-login prerequisites. Do not publish
+   tokens, personal account details, or device codes in the issue.
+3. The permitted workloads/callers and model scope, including whether
+   autonomous/background use is authorized. Multiple workload keys still
+   consume one ChatGPT account; consent must cover that scope.
+4. Approval for a controlled live enrollment and inference acceptance run in
+   the managed gateway topology, after credential-safety fixes are verified.
+
+An operator acknowledgement cannot establish provider permission by itself.
+This document does not conclude that native subscription inference is
+universally prohibited or permitted. Until the basis is established, keep
+native authentication disabled and the acceptance issues open. There is no
+supported Aginctus OAuth login, status, reauthentication, or logout sequence to
+advertise yet. The registration and audit commands above inspect intent and
+metadata only; they cannot exercise the requested user journey.
+
 ## Scope guardrails
 
-Do not add another OpenAI Responses proxy or multiple LiteLLM instances by default. Use only supported ChatGPT models and account permissions. Explicitly error on unsupported features. Per-workload LiteLLM identities belong in v0.2 (#177), not this milestone. No live OAuth credential deployment occurs as a side effect of merging this document.
+Do not add another OpenAI Responses proxy or multiple LiteLLM instances by default. Use only supported ChatGPT models and account permissions. Explicitly error on unsupported features. Coordinate per-workload LiteLLM identities with v0.2 #177. No live OAuth credential deployment occurs as a side effect of merging this document.
