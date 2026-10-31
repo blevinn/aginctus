@@ -22,6 +22,8 @@ else:
     from tool_sequence import stream as tool_stream
 
 MAX_BODY = 16384
+# Actual OpenCode declarations and cumulative tool history exceed the text probe.
+MAX_TOOL_BODY = 1048576
 TOKEN = "synthetic-fixture-only"
 NONCE = re.compile(r"\bnonce=([a-zA-Z0-9_-]{8,64})\b")
 
@@ -149,7 +151,8 @@ class Handler(BaseHTTPRequestHandler):
             size = int(self.headers["Content-Length"])
         else:
             return self._send(400, b"{}")
-        if size <= 0 or size > MAX_BODY:
+        limit = MAX_TOOL_BODY if self.server.tool_sequence is not None else MAX_BODY
+        if size <= 0 or size > limit:
             return self._send(413, b"{}")
         raw = self.rfile.read(size)
         if self.server.tool_sequence is not None:

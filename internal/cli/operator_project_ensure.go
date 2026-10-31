@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"sort"
 	"time"
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/orchestration/native"
 )
 
 // Provisioning is deliberately limited to the LOCAL Incus daemon. A caller's
@@ -18,25 +18,17 @@ var inspectLocalProjects = func(ctx context.Context) ([]byte, error) {
 	return exec.CommandContext(ctx, "incus", "--force-local", "project", "list", "--format", "json").Output()
 }
 
-func localProjectCreateArgs(scope incusscope.ProjectScope) []string {
-	policy := scope.DesiredConfig()
-	keys := make([]string, 0, len(policy))
-	for key := range policy {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	args := []string{"--force-local", "project", "create", scope.Name}
-	for _, key := range keys {
-		args = append(args, "--config", key+"="+policy[key])
-	}
-	return args
-}
-
 var createLocalProject = func(ctx context.Context, scope incusscope.ProjectScope) error {
-	// Incus creation is atomic and refuses an already-existing project.
-	// Never use edit/set/delete, overwrite a conflicting name, or print the
-	// command's output (which is external, potentially sensitive data).
-	return exec.CommandContext(ctx, "incus", localProjectCreateArgs(scope)...).Run()
+	// The CLI confirmation gates this call. Native execution independently
+	// revalidates local scope, ownership/policy and absence at the write boundary.
+	result, err := native.EnsureLocalProject(ctx, scope, native.ProjectCreateAuthorization{Confirmed: true})
+	if err != nil {
+		return err
+	}
+	if !result.Created || !result.Verified {
+		return fmt.Errorf("project became visible before creation; no mutation performed")
+	}
+	return nil
 }
 
 type operatorProjectEnsureReport struct {
@@ -88,7 +80,7 @@ func runOperatorProjectEnsure(ctx context.Context, args []string, stdout, stderr
 		// Explicit create is safe only because Incus itself rejects a
 		// same-name existing project atomically.
 		if err := createLocalProject(ctx, scope); err != nil {
-			fmt.Fprintln(stderr, "operator project-ensure: local project creation refused or failed; no existing project modified")
+			fmt.Fprintln(stderr, "operator project-ensure: native project creation refused or failed; project may exist; inspect exact project state before retry; no automatic rollback")
 			return 1
 		}
 		result = "created"

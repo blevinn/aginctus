@@ -8,11 +8,9 @@ import (
 	"strings"
 	"time"
 
-	incusapply "github.com/abiosoft/incus-apply/apply"
-
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/orchestration"
-	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
+	"github.com/blevinn/aginctus/internal/orchestration/native"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -28,10 +26,8 @@ type scopedWorkloadApplyPreview struct {
 	Plan            orchestration.Plan `json:"plan"`
 }
 
-// Injected in hermetic tests: a native diff only, never ExecuteContext.
-var planScopedExistingWorkloadDiff = func(ctx context.Context, raw json.RawMessage) (incusapply.Preview, error) {
-	return applydriver.New().PlanScopedInstance(ctx, raw)
-}
+// Injected in hermetic tests: read-only observation and pure planning only.
+var planScopedExistingWorkloadDiff = native.PlanLocalExistingInstance
 
 type scopedWorkloadApplyDiff struct {
 	Kind            string `json:"kind"`
@@ -43,20 +39,21 @@ type scopedWorkloadApplyDiff struct {
 	WriteAuthorized bool   `json:"writeAuthorized"`
 }
 
-func classifyScopedWorkloadDiff(preview incusapply.Preview) (string, int, error) {
+func classifyScopedWorkloadDiff(preview native.InstancePlan, identity native.InstanceIdentity) (string, int, error) {
 	// No raw diff values, notes, resource names, or upstream error detail
 	// are returned. Treat creation, replacement, unknown or multi-resource
 	// previews as errors, even though planning itself never mutates.
-	if preview.ResourceCount != 1 || len(preview.Groups) != 1 ||
-		len(preview.Groups[0].Items) != 1 {
+	if preview.Identity != identity || preview.WriteAuthorized {
 		return "", 0, fmt.Errorf("ambiguous scoped workload diff")
 	}
-	group := preview.Groups[0]
-	switch group.Action {
-	case "unchanged":
+	switch preview.Action {
+	case native.Unchanged:
+		if len(preview.Changes) != 0 {
+			return "", 0, fmt.Errorf("inconsistent scoped workload diff")
+		}
 		return "unchanged", 0, nil
-	case "update":
-		return "would-update", len(group.Items[0].Changes), nil
+	case native.Update:
+		return "would-update", len(preview.Changes), nil
 	default:
 		return "", 0, fmt.Errorf("create, replace or unsupported scoped diff")
 	}
@@ -91,20 +88,20 @@ func runScopedWorkloadApplyRender(ctx context.Context, args []string, stdout, st
 		fmt.Fprintln(stderr, "workload apply preview: requires an existing, verified running or stopped owned workload")
 		return 1
 	}
-	plan, err := spec.PlanScopedExisting(scope)
-	if err != nil {
-		fmt.Fprintln(stderr, "workload apply preview: cannot build safe instance-only plan")
-		return 1
-	}
 	if rest[1] == "--dry-run" {
 		// This path intentionally calls only the native planner. The
 		// preview is never passed to the orchestration Execute engine.
-		preview, err := planScopedExistingWorkloadDiff(ctx, plan.Steps[0].Configuration)
+		intent, err := spec.NativeExistingIntent(scope)
+		if err != nil {
+			fmt.Fprintln(stderr, "workload apply dry-run: cannot build safe native intent")
+			return 1
+		}
+		preview, err := planScopedExistingWorkloadDiff(ctx, intent)
 		if err != nil {
 			fmt.Fprintln(stderr, "workload apply dry-run: native local-project diff unavailable or rejected")
 			return 1
 		}
-		action, changes, err := classifyScopedWorkloadDiff(preview)
+		action, changes, err := classifyScopedWorkloadDiff(preview, intent.Identity)
 		if err != nil {
 			fmt.Fprintln(stderr, "workload apply dry-run: native diff proposes unsafe or ambiguous action")
 			return 1
@@ -130,6 +127,11 @@ func runScopedWorkloadApplyRender(ctx context.Context, args []string, stdout, st
 			return 1
 		}
 		return 0
+	}
+	plan, err := spec.PlanScopedExisting(scope)
+	if err != nil {
+		fmt.Fprintln(stderr, "workload apply preview: cannot build safe instance-only plan")
+		return 1
 	}
 	report := scopedWorkloadApplyPreview{
 		Kind: "ScopedWorkloadApplyPreview", Project: project, WorkloadID: spec.ID,

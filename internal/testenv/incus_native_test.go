@@ -34,7 +34,7 @@ func testIncusResponse(body string) *http.Response {
 }
 
 func TestIncusNativeRequestsHonorContextAndProject(t *testing.T) {
-	for _, method := range []string{"project", "image", "get", "list", "create", "start", "stop", "delete"} {
+	for _, method := range []string{"project", "image", "get", "list", "create", "start", "stop", "delete", "root-volume"} {
 		t.Run(method, func(t *testing.T) {
 			n := nativeHTTPTestClient(t, incusTestRoundTrip(func(r *http.Request) (*http.Response, error) {
 				if r.URL.Query().Get("project") != DefaultVMProject {
@@ -71,6 +71,8 @@ func TestIncusNativeRequestsHonorContextAndProject(t *testing.T) {
 					err = n.Stop(ctx, "testenv-vm-test")
 				case "delete":
 					err = n.Delete(ctx, "testenv-vm-test")
+				case "root-volume":
+					_, err = n.RootVolumePresent(ctx, "testenv", "testenv-vm-test")
 				}
 				done <- err
 			}()
@@ -83,6 +85,55 @@ func TestIncusNativeRequestsHonorContextAndProject(t *testing.T) {
 				t.Fatal("native request ignored deadline")
 			}
 		})
+	}
+}
+
+func TestIncusRootVolumeInventoryRequiresScopedIndependentResponse(t *testing.T) {
+	for _, tc := range []struct {
+		name, body       string
+		present, wantErr bool
+	}{
+		{"present", `{"type":"sync","status_code":200,"metadata":{"name":"testenv-vm-test","type":"virtual-machine"}}`, true, false},
+		{"absent", `{"type":"error","error_code":404,"error":"missing"}`, false, false},
+		{"denied", `{"type":"error","error_code":403,"error":"synthetic-secret"}`, false, true},
+		{"wrong-volume", `{"type":"sync","status_code":200,"metadata":{"name":"foreign","type":"virtual-machine"}}`, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			n := nativeHTTPTestClient(t, incusTestRoundTrip(func(r *http.Request) (*http.Response, error) {
+				if r.Method != http.MethodGet || r.URL.Path != "/1.0/storage-pools/testenv/volumes/virtual-machine/testenv-vm-test" || r.URL.Query().Get("project") != DefaultVMProject {
+					t.Fatal("volume query lost scope", r.URL)
+				}
+				response := testIncusResponse(tc.body)
+				if tc.name == "absent" {
+					response.StatusCode = http.StatusNotFound
+				}
+				if tc.name == "denied" {
+					response.StatusCode = http.StatusForbidden
+				}
+				return response, nil
+			}))
+			present, err := n.RootVolumePresent(context.Background(), "testenv", "testenv-vm-test")
+			if present != tc.present || (err != nil) != tc.wantErr {
+				t.Fatalf("bad inventory result: %v %v", present, err)
+			}
+			if err != nil && strings.Contains(err.Error(), "synthetic-secret") {
+				t.Fatal("daemon error leaked")
+			}
+		})
+	}
+}
+
+func TestIncusRootVolumeCancellationIsNeverAbsence(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n := nativeHTTPTestClient(t, incusTestRoundTrip(func(*http.Request) (*http.Response, error) {
+		cancel()
+		response := testIncusResponse(`{"type":"error","error_code":404,"error":"missing"}`)
+		response.StatusCode = http.StatusNotFound
+		return response, nil
+	}))
+	if present, err := n.RootVolumePresent(ctx, "testenv", "testenv-vm-test"); present || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation substituted for volume absence: %v %v", present, err)
 	}
 }
 
