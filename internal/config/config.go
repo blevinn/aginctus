@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
@@ -159,17 +160,20 @@ func (l *Loader) Load(options Options) (*Config, error) {
 			return nil, fmt.Errorf("load command-line configuration file: %w", err)
 		}
 	}
-	for _, override := range options.Overrides {
-		if err := mergeOverride(values, override); err != nil {
-			// Never echo the raw override: it may contain a credential.
-			return nil, fmt.Errorf("apply command-line configuration: %w", err)
-		}
+	if err := mergeOverrides(values, options.Overrides); err != nil {
+		// Never echo the raw override: it may contain a credential.
+		return nil, fmt.Errorf("apply command-line configuration: %w", err)
 	}
 
 	selected := &Config{values: values}
 	// Validate once after all precedence layers have been applied. An
 	// invalid selection must not be silently interpreted as "default".
 	if _, err := selected.IncusProjectScope(); err != nil {
+		return nil, err
+	}
+	// The MCP policy is resolved from the same fully merged selection, so
+	// an invalid MCP declaration fails before any deployment operation.
+	if _, err := selected.MCP(); err != nil {
 		return nil, err
 	}
 	return selected, nil
@@ -279,12 +283,18 @@ func mergeJSON(dst map[string]any, data []byte) error {
 	if err := rejectRuntimeSecretValues("", src); err != nil {
 		return err
 	}
-	mergeMaps(dst, src)
+	if err := rejectMCPCredentialValues(nil, src); err != nil {
+		return err
+	}
+	mergeSource(dst, src, nil)
 	return nil
 }
 
 func mergeEnvironment(dst map[string]any, environment []string) error {
-	for _, entry := range environment {
+	overlay := map[string]any{}
+	entries := append([]string(nil), environment...)
+	sort.Strings(entries)
+	for _, entry := range entries {
 		name, value, ok := strings.Cut(entry, "=")
 		if !ok || !strings.HasPrefix(name, EnvPrefix) {
 			continue
@@ -299,19 +309,27 @@ func mergeEnvironment(dst map[string]any, environment []string) error {
 		if isRuntimeSecretPath(path) {
 			continue
 		}
-		if err := setPath(dst, path, parseValue(value)); err != nil {
+		if err := setPath(overlay, path, parseValue(value)); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
+	mergeSource(dst, overlay, nil)
 	return nil
 }
 
-func mergeOverride(dst map[string]any, override string) error {
-	path, value, ok := strings.Cut(override, "=")
-	if !ok {
-		return fmt.Errorf("expected path=value")
+func mergeOverrides(dst map[string]any, overrides []string) error {
+	overlay := map[string]any{}
+	for _, override := range overrides {
+		path, value, ok := strings.Cut(override, "=")
+		if !ok {
+			return fmt.Errorf("expected path=value")
+		}
+		if err := setPath(overlay, path, parseValue(value)); err != nil {
+			return err
+		}
 	}
-	return setPath(dst, path, parseValue(value))
+	mergeSource(dst, overlay, nil)
+	return nil
 }
 
 func parseValue(value string) any {
@@ -328,6 +346,9 @@ func setPath(dst map[string]any, path string, value any) error {
 		return err
 	}
 	if err := rejectRuntimeSecretValues(strings.Join(parts, "."), value); err != nil {
+		return err
+	}
+	if err := rejectMCPCredentialValues(parts, value); err != nil {
 		return err
 	}
 
@@ -359,16 +380,46 @@ func splitPath(path string) ([]string, error) {
 	return parts, nil
 }
 
-func mergeMaps(dst, src map[string]any) {
+// Atomic configuration paths replace their complete subtree when a source
+// supplies them. A wildcard matches one named registry entry, so adding an
+// MCP server preserves other servers without composing its upstream settings
+// across sources. Other paths retain ordinary deep-merge behavior.
+var atomicConfigPaths = [][]string{{"mcp", "servers", "*"}}
+
+func mergeSource(dst, src map[string]any, prefix []string) {
 	for key, value := range src {
+		path := append(append([]string(nil), prefix...), key)
+		if isAtomicConfigPath(path) {
+			dst[key] = cloneValue(value)
+			continue
+		}
 		srcMap, srcIsMap := value.(map[string]any)
 		dstMap, dstIsMap := dst[key].(map[string]any)
 		if srcIsMap && dstIsMap {
-			mergeMaps(dstMap, srcMap)
+			mergeSource(dstMap, srcMap, path)
 			continue
 		}
 		dst[key] = cloneValue(value)
 	}
+}
+
+func isAtomicConfigPath(path []string) bool {
+	for _, atomicPath := range atomicConfigPaths {
+		if len(path) != len(atomicPath) {
+			continue
+		}
+		matches := true
+		for index := range path {
+			if atomicPath[index] != "*" && path[index] != atomicPath[index] {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneMap(src map[string]any) map[string]any {

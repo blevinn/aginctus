@@ -13,7 +13,16 @@ Preserve the Aginctus-owned configuration, restricted Jsonnet evaluation, orches
 
 v0.1 is released. The current target is to complete native orchestration and retire both dependencies in v0.2, as specified in #153. Cutover still requires the safety, parity and recovery gates below; release scheduling does not authorize bypassing them. Existing working Apply/Compose paths remain available until their replacements pass those gates.
 
-Prefer typed Incus SDK operations over subprocess invocation for the native backend. Do not build a general-purpose Compose replacement. Defer final gateway/OCI image choices pending a feasibility spike.
+Prefer typed Incus SDK operations over subprocess invocation for the native backend. Do not build a general-purpose Compose replacement. For the supported public gateway images, resolve registry metadata to an immutable platform-specific manifest, then let Incus pull and convert that image through its native API. A narrow ORAS metadata reader is not an orchestration backend. Private-registry credentials and production image ownership remain separately gated.
+
+The immediate implementation is a small operation-oriented resource lifecycle,
+with runtime intent separate from SDK observations, planning and explicitly
+authorized execution. Stable identities, field ownership and non-mutating plans
+provide the seam for future desired-state configuration. Continuous controllers,
+generic resource DSLs and external reconciliation engines are deferred.
+
+The [OCI feasibility assessment](../design/native-oci-feasibility.md) records
+the daemon-side pull strategy and remaining production acceptance gates.
 
 The immediate implementation is a small operation-oriented resource lifecycle,
 with runtime intent separate from SDK observations, planning and explicitly
