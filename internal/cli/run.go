@@ -82,15 +82,6 @@ func Run(
 	}
 
 
-	// The test environment does not consume pilot configuration or Incus.
-	// Dispatch before the normal host-facing config loader.
-	if commandArgs[0] == "testenv" {
-		if len(options.Overrides) != 0 || options.ConfigurationFile != "" {
-			fmt.Fprintln(stderr, "testenv: host configuration options are not supported")
-			return 2
-		}
-		return runTestenv(ctx, commandArgs[1:], stdout, stderr)
-	}
 
 	// Migrate command families one at a time. Cobra validates the complete
 	// basic-command syntax before the configuration loader is consulted.
@@ -99,7 +90,7 @@ func Run(
 	}
 	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
 		commandArgs[0] == "apply" || commandArgs[0] == "remove" || commandArgs[0] == "status" ||
-		commandArgs[0] == "network" || commandArgs[0] == "herdr" || commandArgs[0] == "workload" || commandArgs[0] == "operator" {
+		commandArgs[0] == "network" || commandArgs[0] == "herdr" || commandArgs[0] == "workload" || commandArgs[0] == "operator" || commandArgs[0] == "testenv" {
 		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
 	}
 
