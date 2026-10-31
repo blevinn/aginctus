@@ -92,7 +92,7 @@ func Run(
 	}
 	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
 		commandArgs[0] == "apply" || commandArgs[0] == "remove" || commandArgs[0] == "status" ||
-		commandArgs[0] == "network" || commandArgs[0] == "herdr" || commandArgs[0] == "workload" || commandArgs[0] == "operator" || commandArgs[0] == "testenv" {
+		commandArgs[0] == "network" || commandArgs[0] == "herdr" || commandArgs[0] == "workload" || commandArgs[0] == "operator" || commandArgs[0] == "testenv" || commandArgs[0] == "images" {
 		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
 	}
 
@@ -105,8 +105,6 @@ func Run(
 	switch commandArgs[0] {
 	case "doctor":
 		return runDoctor(ctx, commandArgs[1:], stdout, stderr, incusClient)
-	case "images":
-		return runConfiguredImages(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "config":
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
 	case "gateway":
