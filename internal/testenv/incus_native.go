@@ -267,3 +267,30 @@ func (n *nativeIncusVMClient) List(ctx context.Context) ([]IncusVMInstance, erro
 	}
 	return result, nil
 }
+
+// RootVolumePresent independently queries the project-scoped VM volume API.
+// It does not infer volume reclamation from instance absence or delete volumes.
+func (n *nativeIncusVMClient) RootVolumePresent(ctx context.Context, pool, name string) (bool, error) {
+	if pool != "testenv" || !vmSafeName.MatchString(name) {
+		return false, ErrOwnershipMismatch
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	requestCtx, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	volume, _, err := server.GetStoragePoolVolume(pool, "virtual-machine", name)
+	if ctxErr := requestCtx.Err(); ctxErr != nil {
+		return false, safeIncusError("testenv root volume inventory unverified", ctxErr)
+	}
+	if api.StatusErrorCheck(err, http.StatusNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, safeIncusError("testenv root volume inventory unavailable", err)
+	}
+	if volume == nil || volume.Name != name || volume.Type != "virtual-machine" {
+		return false, ErrOwnershipMismatch
+	}
+	return true, nil
+}
