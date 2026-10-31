@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,6 +59,9 @@ func TestOperatorPackageManifestState(t *testing.T) {
 }
 
 func TestOperatorPackageAuditPair(t *testing.T) {
+	previous := inspectOperatorExecutable
+	inspectOperatorExecutable = func() (string, error) { return fixturePackageA + "/bin/.aginctus-wrapped", nil }
+	t.Cleanup(func() { inspectOperatorExecutable = previous })
 	dir := t.TempDir()
 	system := filepath.Join(dir, "system.json")
 	user := filepath.Join(dir, "user.json")
@@ -98,6 +102,48 @@ func TestOperatorPackageAuditPair(t *testing.T) {
 	check("user", 1, "missing or unverified")
 	if code := renderOperatorPackageAudit("unknown", system, user, &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
 		t.Fatalf("accepted unknown owner: %d", code)
+	}
+}
+
+func TestOperatorPackageAuditObservedCLI(t *testing.T) {
+	dir := t.TempDir()
+	system := writeOperatorPackageFixture(t, dir, "system", fixturePackageA)
+	user := writeOperatorPackageFixture(t, dir, "user", fixturePackageA)
+	previous := inspectOperatorExecutable
+	t.Cleanup(func() { inspectOperatorExecutable = previous })
+	for _, tc := range []struct {
+		name, executable, want string
+		err                    error
+		code                   int
+	}{
+		{"direct", fixturePackageA + "/bin/aginctus", "observed running CLI path", nil, 0},
+		{"wrapped", fixturePackageA + "/bin/.aginctus-wrapped", "observed running CLI path", nil, 0},
+		{"other revision", fixturePackageB + "/bin/aginctus", "differs from the selected", nil, 1},
+		{"non-Nix", "/usr/bin/aginctus", "identity is unverified", nil, 1},
+		{"development", "/tmp/go-build/private-token/aginctus", "identity is unverified", nil, 1},
+		{"lookup failed", "", "identity is unverified", errors.New("private-token"), 1},
+		{"deleted executable", fixturePackageA + "/bin/aginctus (deleted)", "identity is unverified", nil, 1},
+		{"wrong binary", fixturePackageA + "/bin/other", "identity is unverified", nil, 1},
+		{"traversal", fixturePackageA + "/bin/../bin/aginctus", "identity is unverified", nil, 1},
+		{"profile symlink path", "/home/operator/.nix-profile/bin/aginctus", "identity is unverified", nil, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inspectOperatorExecutable = func() (string, error) { return tc.executable, tc.err }
+			for _, owner := range []string{"system", "user"} {
+				var out, errOut bytes.Buffer
+				code := renderOperatorPackageAudit(owner, system, user, &out, &errOut)
+				all := out.String() + errOut.String()
+				if code != tc.code || !strings.Contains(all, tc.want) {
+					t.Fatalf("owner=%s code=%d: %s", owner, code, all)
+				}
+				if strings.Contains(all, "private-token") || strings.Contains(all, "/nix/store/") || strings.Contains(all, dir) {
+					t.Fatal("audit leaked executable, manifest path or raw error")
+				}
+				if code == 0 && !strings.Contains(all, "write authority remain unverified") {
+					t.Fatal("package consistency must not claim write authority")
+				}
+			}
+		})
 	}
 }
 
