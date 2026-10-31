@@ -121,6 +121,34 @@ For example, a system file may define:
 
 and a user file may override only the name without repeating the rest of the object.
 
+## MCP declarations
+
+The `mcp` subtree holds the normalized MCP configuration: named servers and
+their transports, opaque credential references, explicit per-workload server
+and tool grants, model and protocol capability requirements, and the central
+gateway MCP intent.
+
+Each named server at `mcp.servers.<name>` is atomic: a source that supplies
+it replaces that server's complete lower-priority definition. Adding a new
+server preserves existing servers and grants. Other MCP objects follow the
+ordinary recursive merge and source precedence.
+Environment variables and repeated CLI overrides are grouped into one
+source overlay, so one source can construct a complete server using several
+paths.
+
+An empty `mcp` object leaves inherited entries unchanged; `mcp: null` clears
+the complete MCP policy. A partial server override does not inherit missing
+fields and is rejected if incomplete. Existing grants remain bound to server
+names. The generated NixOS configuration takes precedence over same-named
+ambient servers, but does not clear other ambient policy. A privileged gateway
+must select authoritative sources rather than trust a user-context merged
+configuration.
+
+The complete contract, including the credential rules, the effective grant
+semantics and the limits of declared policy, is documented in
+[MCP configuration](mcp-configuration.md). A configuration without an `mcp`
+key declares no MCP policy and authorizes nothing.
+
 ## Selected Incus project (v0.2 foundation)
 
 `incus.project` is the declarative, single-deployment **target** for
