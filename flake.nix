@@ -347,6 +347,15 @@
             vendorHash = "sha256-nOdS1XPJCl/knG3nRUu8m+/AEpG9BmniQ3GT5/RXpP0=";
             subPackages = [ "./cmd/aginctus-testenv-sweep" ];
           };
+          # Explicit operator invocation only; not installed into any service.
+          testenv-worker-acceptance = pkgs.buildGoModule {
+            pname = "aginctus-testenv-acceptance";
+            version = releaseVersion;
+            src = ./.;
+            vendorHash = "sha256-nOdS1XPJCl/knG3nRUu8m+/AEpG9BmniQ3GT5/RXpP0=";
+            subPackages = [ "./cmd/aginctus-testenv-acceptance" ];
+            ldflags = [ "-X=main.revision=${self.rev or "source-${self.narHash}"}" ];
+          };
           aginctus = aginctusCli;
           default = aginctusCli;
           # Expose exactly the runtime used by the workload image for contract tests.
