@@ -172,6 +172,11 @@ func (l *Loader) Load(options Options) (*Config, error) {
 	if _, err := selected.IncusProjectScope(); err != nil {
 		return nil, err
 	}
+	// The MCP policy is resolved from the same fully merged selection, so
+	// an invalid MCP declaration fails before any deployment operation.
+	if _, err := selected.MCP(); err != nil {
+		return nil, err
+	}
 	return selected, nil
 }
 
@@ -279,6 +284,9 @@ func mergeJSON(dst map[string]any, data []byte) error {
 	if err := rejectRuntimeSecretValues("", src); err != nil {
 		return err
 	}
+	if err := rejectMCPCredentialValues(nil, src); err != nil {
+		return err
+	}
 	mergeMaps(dst, src)
 	return nil
 }
@@ -328,6 +336,9 @@ func setPath(dst map[string]any, path string, value any) error {
 		return err
 	}
 	if err := rejectRuntimeSecretValues(strings.Join(parts, "."), value); err != nil {
+		return err
+	}
+	if err := rejectMCPCredentialValues(parts, value); err != nil {
 		return err
 	}
 
