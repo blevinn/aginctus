@@ -14,9 +14,19 @@ import (
 func addTestenvCommands(root *cobra.Command, stdout, stderr io.Writer,
 	status *int, options *config.Options,
 ) {
-	testenv := &cobra.Command{Use: "testenv", Short: "Run isolated test environments"}
+	groupRun := func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return fmt.Errorf("%s requires a subcommand", cmd.CommandPath())
+		}
+		return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+	}
+	testenv := &cobra.Command{
+		Use: "testenv", Short: "Run isolated test environments", RunE: groupRun,
+	}
 	root.AddCommand(testenv)
-	vm := &cobra.Command{Use: "vm", Short: "Inspect or exercise a disposable VM scenario"}
+	vm := &cobra.Command{
+		Use: "vm", Short: "Inspect or exercise a disposable VM scenario", RunE: groupRun,
+	}
 	testenv.AddCommand(vm)
 	add := func(parent *cobra.Command, name string, rule cobra.PositionalArgs, prefix []string) {
 		argsFor := append([]string(nil), prefix...)

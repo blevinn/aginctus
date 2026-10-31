@@ -26,6 +26,19 @@ func runBasicCobra(
 
 	root.Version = Version
 	root.SetVersionTemplate(fmt.Sprintf("aginctus %s (revision %s)\n", Version, buildRevision()))
+	root.SetHelpCommand(&cobra.Command{
+		Use: "help [command]", Short: "Help about any command", Args: cobra.ArbitraryArgs,
+		RunE: func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return root.Help()
+			}
+			target, remaining, err := root.Find(args)
+			if err != nil || target == nil || len(remaining) != 0 {
+				return fmt.Errorf("unknown help topic %q", strings.Join(args, " "))
+			}
+			return target.Help()
+		},
+	})
 	root.AddCommand(&cobra.Command{
 		Use: "version", Short: "Print build provenance", Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
@@ -67,7 +80,17 @@ func runBasicCobra(
 		return effective, err
 	}
 
-	configCmd := &cobra.Command{Use: "config", Short: "Read effective configuration"}
+	configCmd := &cobra.Command{
+		Use:   "config",
+		Short: "Read effective configuration",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+		},
+	}
 	configCmd.AddCommand(&cobra.Command{
 		Use: "show", Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
