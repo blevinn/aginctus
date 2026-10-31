@@ -245,8 +245,7 @@ func TestMCPCredentialFieldsRejectedInEnvironmentAndOverrides(t *testing.T) {
 }
 
 // A lower-precedence source cannot smuggle a credential past a later
-// override: the loader deep-merges objects, so the forbidden field would
-// otherwise survive in the effective configuration.
+// override: every source is checked even if its server is later replaced.
 func TestMCPCredentialFieldRejectedBeforeALaterOverride(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")
@@ -260,10 +259,8 @@ func TestMCPCredentialFieldRejectedBeforeALaterOverride(t *testing.T) {
 	}
 }
 
-// MCP is an atomic configuration subtree. A source supplies the complete
-// policy and replaces lower-priority MCP policy, while ordinary settings
-// retain the loader's existing recursive object merge.
-func TestMCPAtomicSubtreeSemantics(t *testing.T) {
+// Named servers are atomic, while the registries merge across sources.
+func TestMCPAtomicServerSemantics(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")
 	userPath := filepath.Join(dir, "user.json")
@@ -285,8 +282,7 @@ func TestMCPAtomicSubtreeSemantics(t *testing.T) {
 
 	loader := &Loader{SystemPath: systemPath, UserPath: userPath}
 
-	// The higher-precedence MCP subtree replaces the lower one as a unit:
-	// the endpoint and grants agree, and the lower-only server disappears.
+	// Replacing docs does not remove unrelated servers or capabilities.
 	effective := loadConfig(t, loader, Options{})
 	policy, err := effective.MCP()
 	if err != nil {
@@ -301,12 +297,11 @@ func TestMCPAtomicSubtreeSemantics(t *testing.T) {
 	if server, ok := policy.Server("docs"); !ok || server.URL != "https://user.example.com/mcp" {
 		t.Fatalf("effective endpoint = %+v, %v", server, ok)
 	}
-	if _, ok := policy.Server("system-only"); ok {
-		t.Fatal("a server from the lower-priority policy survived atomic replacement")
+	if _, ok := policy.Server("system-only"); !ok {
+		t.Fatal("replacing one server removed an unrelated server")
 	}
 
-	// Both null and an empty object replace the inherited subtree. Null
-	// selects the schema's deny-by-default state; an empty object does too.
+	// Null still clears the entire policy; empty objects merge without changes.
 	effective = loadConfig(t, loader, Options{
 		Overrides: []string{"mcp=null"},
 	})
@@ -324,12 +319,12 @@ func TestMCPAtomicSubtreeSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MCP() error = %v", err)
 	}
-	if len(policy.Servers()) != 0 || len(policy.Workloads()) != 0 {
-		t.Fatalf("an empty MCP object did not clear the inherited subtree: servers=%+v workloads=%+v", policy.Servers(), policy.Workloads())
+	if len(policy.Servers()) != 2 || !policy.Allows("dev", "docs", "fetch") {
+		t.Fatalf("an empty MCP object changed inherited policy: servers=%+v workloads=%+v", policy.Servers(), policy.Workloads())
 	}
 }
 
-func TestMCPAtomicSubtreeRequiresACompleteHigherPriorityPolicy(t *testing.T) {
+func TestMCPAtomicServerRequiresACompleteHigherPriorityDefinition(t *testing.T) {
 	systemPath := filepath.Join(t.TempDir(), "system.json")
 	writeConfigFile(t, systemPath, mcpRemoteServer)
 	loader := &Loader{
@@ -339,7 +334,70 @@ func TestMCPAtomicSubtreeRequiresACompleteHigherPriorityPolicy(t *testing.T) {
 		},
 	}
 	if _, err := loader.Load(Options{}); err == nil {
-		t.Fatal("a partial higher-priority MCP value merged into the lower-priority policy")
+		t.Fatal("a partial higher-priority server inherited its transport")
+	}
+}
+
+func TestMCPAddingServerPreservesExistingPolicy(t *testing.T) {
+	for _, source := range []string{"user", "environment", "file", "cli"} {
+		t.Run(source, func(t *testing.T) {
+			dir := t.TempDir()
+			systemPath := filepath.Join(dir, "system.json")
+			overlayPath := filepath.Join(dir, "overlay.json")
+			writeConfigFile(t, systemPath, mcpRemoteServer)
+			writeConfigFile(t, overlayPath, `{"mcp":{"servers":{"extra":{"transport":"stdio","command":"/bin/extra"}}}}`)
+			loader := &Loader{SystemPath: systemPath}
+			options := Options{}
+			switch source {
+			case "user":
+				loader.UserPath = overlayPath
+			case "environment":
+				loader.Environment = []string{"AGINCTUS_MCP_SERVERS_EXTRA_TRANSPORT=stdio", "AGINCTUS_MCP_SERVERS_EXTRA_COMMAND=/bin/extra"}
+			case "file":
+				options.ConfigurationFile = overlayPath
+			case "cli":
+				options.Overrides = []string{"mcp.servers.extra.transport=stdio", "mcp.servers.extra.command=/bin/extra"}
+			}
+			policy, err := loadConfig(t, loader, options).MCP()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(policy.Servers()) != 2 || !policy.Allows("dev", "docs", "search") {
+				t.Fatal("adding a server changed the existing server or its grant")
+			}
+			if policy.Allows("dev", "extra", "search") {
+				t.Fatal("adding a server implicitly granted access")
+			}
+		})
+	}
+}
+
+func TestMCPServerReplacementDropsLowerPriorityFields(t *testing.T) {
+	systemPath := filepath.Join(t.TempDir(), "system.json")
+	writeConfigFile(t, systemPath, mcpRemoteServer)
+	loader := &Loader{SystemPath: systemPath}
+	// A transport change must discard the old URL and tool restrictions,
+	// while the independently configured named grant remains in effect.
+	effective := loadConfig(t, loader, Options{Overrides: []string{
+		"mcp.servers.docs.transport=stdio", "mcp.servers.docs.command=/bin/docs",
+		"mcp.gateway.enabled=false",
+	}})
+	for _, field := range []string{"url", "allowedTools"} {
+		if _, ok := effective.Get("mcp.servers.docs." + field); ok {
+			t.Fatalf("replacement inherited %s", field)
+		}
+	}
+	policy, err := effective.MCP()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !policy.Allows("dev", "docs", "search") {
+		t.Fatal("replacing a server removed its independently configured grant")
+	}
+	for _, value := range []string{"{}", "null"} {
+		if _, err := loader.Load(Options{Overrides: []string{"mcp.servers.docs=" + value}}); err == nil {
+			t.Fatalf("server %s inherited a valid definition or silently retained a dangling grant", value)
+		}
 	}
 }
 
@@ -362,7 +420,7 @@ func TestMCPEnvironmentOverlayIsDeterministic(t *testing.T) {
 	}
 }
 
-func TestMCPAtomicSubtreeGroupsCLIOverridesAndLeavesOtherSettingsRecursive(t *testing.T) {
+func TestMCPAtomicServerGroupsCLIOverridesAndLeavesOtherSettingsRecursive(t *testing.T) {
 	systemPath := filepath.Join(t.TempDir(), "system.json")
 	writeConfigFile(t, systemPath, `{"firewall":{"zone":"system-zone"}}`)
 	loader := &Loader{SystemPath: systemPath}
