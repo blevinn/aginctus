@@ -75,6 +75,9 @@ test-vm-synthetic-gateway:
 # Operator-only KVM, no Herdr/OpenCode tool execution or live inference.
 test-vm-synthetic-tool-gateway:
     python3 scripts/vm_harness/runner.py test synthetic-tool-gateway
+# Real Herdr/OpenCode tools through the synthetic gateway, dedicated worker only.
+test-vm-full-stack:
+    python3 scripts/vm_harness/runner.py test full-stack
 # Genuine pinned OpenCode tool execution INSIDE a disposable no-egress VM.
 # Still a loopback synthetic model: not Herdr/LiteLLM acceptance.
 test-vm-opencode-tool-loopback:
