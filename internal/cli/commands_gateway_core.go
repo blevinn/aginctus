@@ -12,17 +12,6 @@ import (
 
 // Gateway command families are converted incrementally. Only core commands
 // are intercepted here; model/provider and egress remain on the legacy path.
-func isGatewayCoreCommand(args []string) bool {
-	if len(args) == 0 {
-		return false
-	}
-	switch args[0] {
-	case "status", "remove", "apply", "up", "validate", "render", "credential-storage", "provider", "model", "egress", "responses":
-		return true
-	default:
-		return false
-	}
-}
 
 // executeGatewayCredential keeps the existing private-volume validation
 // and side-effect sequencing independent of CLI argument parsing.
@@ -157,7 +146,12 @@ func addGatewayCoreCommands(
 	root *cobra.Command, stdout, stderr io.Writer,
 	load func() (*config.Config, error), status *int,
 ) *cobra.Command {
-	gatewayCmd := &cobra.Command{Use: "gateway", Short: "Inspect and reconcile the AI gateway"}
+	gatewayCmd := &cobra.Command{Use: "gateway", Short: "Inspect and reconcile the AI gateway", Args: cobra.NoArgs}
+	gatewayCmd.RunE = func(_ *cobra.Command, _ []string) error {
+		printGatewayUsage(stderr)
+		*status = 2
+		return nil
+	}
 	root.AddCommand(gatewayCmd)
 	add := func(parent *cobra.Command, name string, aliases []string, flags func(*cobra.Command),
 		run func(*cobra.Command, *config.Config) int,

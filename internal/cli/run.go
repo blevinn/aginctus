@@ -13,8 +13,6 @@ import (
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
-	"github.com/blevinn/aginctus/internal/modelregistry"
-	"github.com/blevinn/aginctus/internal/providerregistry"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -116,7 +114,7 @@ func Run(
 
 	// Migrate command families one at a time. Cobra validates the complete
 	// basic-command syntax before the configuration loader is consulted.
-	if commandArgs[0] == "gateway" && isGatewayCoreCommand(commandArgs[1:]) {
+	if commandArgs[0] == "gateway" {
 		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
 	}
 	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
@@ -143,8 +141,6 @@ func Run(
 		return runConfiguredImages(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "config":
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
-	case "gateway":
-		return runGateway(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", commandArgs[0])
 		printUsage(stderr)
@@ -374,210 +370,7 @@ var ensureCredentialStorage = gateway.EnsureCredentialVolume
 var attachGatewayCredentials = gateway.AttachCredentialVolume
 var auditGatewayCredentials = gateway.AuditCredentialAttachment
 
-func runGateway(
-	ctx context.Context,
-	args []string,
-	stdout, stderr io.Writer,
-	incusClient IncusClient,
-	effective *config.Config,
-) int {
-	if len(args) == 3 && args[0] == "model" && args[2] == "render" {
-		definition, err := renderRegisteredModel(args[1])
-		if err != nil {
-			fmt.Fprintf(stderr, "render registered model: %v\n", err)
-			return 1
-		}
-		fmt.Fprintln(stdout, string(definition))
-		fmt.Fprintln(stderr, "model definition rendered for review only; gateway routing and credentials remain inactive")
-		return 0
-	}
-	if len(args) > 0 && args[0] == "model" && (len(args) == 2 && args[1] == "list" || len(args) == 3 && args[2] == "show") {
-		path, err := modelregistry.DefaultPath()
-		if err != nil {
-			fmt.Fprintln(stderr, "resolve model registry: unavailable")
-			return 1
-		}
-		reg, err := modelregistry.Load(path)
-		if err != nil {
-			fmt.Fprintln(stderr, "read private model registry: invalid or inaccessible")
-			return 1
-		}
-		if args[1] == "list" {
-			for _, model := range reg.Models {
-				fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", model.Name, model.Source, model.Provider, "activation pending")
-			}
-			return 0
-		}
-		for _, model := range reg.Models {
-			if model.Name == args[1] {
-				fmt.Fprintf(stdout, "model %q: source %q via provider %q (authorization and activation pending)\n", model.Name, model.Source, model.Provider)
-				return 0
-			}
-		}
-		fmt.Fprintf(stderr, "model alias %q is not registered\n", args[1])
-		return 1
-	}
-	if len(args) > 0 && args[0] == "provider" && (len(args) == 2 && args[1] == "list" || len(args) == 3 && args[2] == "show") {
-		path, err := providerregistry.DefaultPath()
-		if err != nil {
-			fmt.Fprintf(stderr, "provider registry path: %v\n", err)
-			return 1
-		}
-		reg, err := providerregistry.Load(path)
-		if err != nil {
-			fmt.Fprintf(stderr, "read provider registry: %v\n", err)
-			return 1
-		}
-		if args[1] == "list" {
-			for _, p := range reg.Providers {
-				fmt.Fprintf(stdout, "%s\t%s\t%s\n", p.Alias, p.Type, "authentication pending")
-			}
-			return 0
-		}
-		for _, p := range reg.Providers {
-			if p.Alias == args[1] {
-				fmt.Fprintf(stdout, "provider %q (%s): registered locally (authentication pending)\n", p.Alias, p.Type)
-				return 0
-			}
-		}
-		fmt.Fprintf(stderr, "provider alias %q is not registered\n", args[1])
-		return 1
-	}
-	if len(args) > 0 && (args[0] == "provider" || args[0] == "model") {
-		if len(args) < 3 || args[2] != "register" {
-			printGatewayUsage(stderr)
-			return 2
-		}
-		kind, name := args[0], args[1]
-		provider, source, alias, dryRun := "", "", "", false
-		for _, arg := range args[3:] {
-			switch {
-			case arg == "--dry-run":
-				dryRun = true
-			case strings.HasPrefix(arg, "--alias=") && kind == "provider":
-				alias = strings.TrimPrefix(arg, "--alias=")
-			case strings.HasPrefix(arg, "--provider=") && kind == "model":
-				provider = strings.TrimPrefix(arg, "--provider=")
-			case strings.HasPrefix(arg, "--source=") && kind == "model":
-				source = strings.TrimPrefix(arg, "--source=")
-			default:
-				fmt.Fprintf(stderr, "unknown or invalid registration option %q\n", arg)
-				return 2
-			}
-		}
-		if kind == "provider" {
-			if alias == "" {
-				alias = name
-			}
-			var rendered []byte
-			var err error
-			switch name {
-			case "chatgpt":
-				rendered, err = gateway.ChatGPTProviderRegistration(alias)
-			case "opencode-go":
-				rendered, err = gateway.OpenCodeGoProviderRegistration(alias)
-			default:
-				fmt.Fprintln(stderr, "unsupported provider type")
-				return 2
-			}
-			if err != nil {
-				fmt.Fprintf(stderr, "gateway provider: %v\n", err)
-				return 2
-			}
-			if dryRun {
-				fmt.Fprintln(stdout, string(rendered))
-				return 0
-			}
-			path, err := providerregistry.DefaultPath()
-			if err != nil {
-				fmt.Fprintf(stderr, "provider registry path: %v\n", err)
-				return 1
-			}
-			changed, err := providerregistry.Register(path, providerregistry.Provider{Type: name, Alias: alias})
-			if err != nil {
-				fmt.Fprintf(stderr, "register provider: %v\n", err)
-				return 1
-			}
-			if changed {
-				fmt.Fprintf(stdout, "provider %q (%s): registered locally (authentication pending)\n", alias, name)
-			} else {
-				fmt.Fprintf(stdout, "provider %q (%s): already registered (authentication pending)\n", alias, name)
-			}
-			return 0
-		}
 
-		if source == "" {
-			source = name
-		}
-		if provider == "" && strings.HasPrefix(source, "chatgpt/") {
-			provider = "chatgpt"
-		}
-		if provider == "" {
-			fmt.Fprintln(stderr, "model registration requires --provider=ALIAS (or --source=chatgpt/...)")
-			return 2
-		}
-		path, err := providerregistry.DefaultPath()
-		if err != nil {
-			fmt.Fprintln(stderr, "cannot verify provider alias")
-			return 1
-		}
-		providers, err := providerregistry.Load(path)
-		if err != nil {
-			fmt.Fprintln(stderr, "cannot read private provider registry")
-			return 1
-		}
-		providerType := ""
-		for _, p := range providers.Providers {
-			if p.Alias == provider {
-				providerType = p.Type
-				break
-			}
-		}
-		if providerType == "" {
-			fmt.Fprintf(stderr, "model provider alias %q is not registered locally\n", provider)
-			if dryRun {
-				return 2
-			}
-			return 1
-		}
-		var rendered []byte
-		switch providerType {
-		case "chatgpt":
-			rendered, err = gateway.ChatGPTModelRegistration(name, source)
-		case "opencode-go":
-			rendered, err = gateway.OpenCodeGoModelRegistration(name, source)
-		default:
-			fmt.Fprintln(stderr, "unsupported model provider type")
-			return 2
-		}
-		if err != nil {
-			fmt.Fprintf(stderr, "invalid %s Responses model registration: %v\n", providerType, err)
-			return 2
-		}
-		if dryRun {
-			fmt.Fprintln(stdout, string(rendered))
-			return 0
-		}
-		modelPath, err := modelregistry.DefaultPath()
-		if err != nil {
-			fmt.Fprintln(stderr, "resolve model registry: unavailable")
-			return 1
-		}
-		changed, err := modelregistry.Register(modelPath, modelregistry.Model{Name: name, Provider: provider, Source: source})
-		if err != nil {
-			fmt.Fprintf(stderr, "register model: %v\n", err)
-			return 1
-		}
-		if changed {
-			fmt.Fprintf(stdout, "model %q: registered locally (authorization and activation pending)\n", name)
-		} else {
-			fmt.Fprintf(stdout, "model %q: already registered (authorization and activation pending)\n", name)
-		}
-		return 0
-	}
-	printGatewayUsage(stderr)
-	return 2
-}
 func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
