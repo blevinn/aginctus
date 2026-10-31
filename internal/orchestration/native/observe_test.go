@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -132,7 +133,12 @@ func TestInstanceObservationFailsClosed(t *testing.T) {
 func TestInstanceObservationSDKUsesOnlyScopedLocalReads(t *testing.T) {
 	intent, observed := instanceFixture()
 	reader := &fakeInstanceReader{intent: intent, observed: observed}
-	socket := filepath.Join(t.TempDir(), "incus.sock")
+	fixtureDir, err := os.MkdirTemp("/tmp", "incus-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(fixtureDir) })
+	socket := filepath.Join(fixtureDir, "incus.sock")
 	listener, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatal(err)
