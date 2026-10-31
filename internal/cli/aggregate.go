@@ -170,7 +170,7 @@ func executeAggregateApply(ctx context.Context, render bool, fromFile string, st
 			err = encoder.Encode(plan)
 		}
 		if err != nil {
-			fmt.Fprintf(stderr, "render orchestration: %v\\n", err)
+			fmt.Fprintf(stderr, "render orchestration: %v\n", err)
 			return 1
 		}
 		return 0
@@ -180,14 +180,14 @@ func executeAggregateApply(ctx context.Context, render bool, fromFile string, st
 		plan, err = aggregateApplyPlan(effective)
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "load orchestration: %v\\n", err)
+		fmt.Fprintf(stderr, "load orchestration: %v\n", err)
 		return 1
 	}
 	if err := executeAggregatePlan(ctx, plan, effective); err != nil {
-		fmt.Fprintf(stderr, "apply orchestration: %v\\n", err)
+		fmt.Fprintf(stderr, "apply orchestration: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "applied orchestration %q (%d steps)\\n", plan.Metadata.Name, len(plan.Steps))
+	fmt.Fprintf(stdout, "applied orchestration %q (%d steps)\n", plan.Metadata.Name, len(plan.Steps))
 	return 0
 }
 
