@@ -105,6 +105,7 @@ nix develop -c just test-vm-runtime-lifecycle
 nix develop -c just test-vm-gateway-topology
 nix develop -c just test-vm-synthetic-gateway
 nix develop -c just test-vm-synthetic-tool-gateway
+nix --quiet develop --no-update-lock-file -c just test-vm-full-stack
 nix develop -c just test-vm-ownership-recovery
 nix develop -c just vm-debug
 ```
@@ -239,17 +240,123 @@ HTTP turns and key revocation. It cannot validate real guest tool actions
 because the function results are **explicitly fake**. The text-only
 `synthetic-gateway` scenario remains unchanged. This networked scenario
 is heavyweight, is not part of check-all, and requires a disposable KVM
-worker and OCI provisioning. Actual Herdr+OpenCode E2E remains #558.
+worker and OCI provisioning. The separate full-stack implementation below
+adds actual Herdr/OpenCode execution; its dedicated-worker acceptance remains
+an explicit gate.
+
+## Synthetic Herdr/OpenCode full-stack scenario (#558)
+
+`just test-vm-full-stack` selects the fixed `full-stack` registry entry and
+`vm-harness-full-stack` NixOS driver. It is opt-in, excluded from hermetic CI,
+and must run only on the dedicated, unprivileged x86_64 KVM worker described
+above. No suitable worker was used to accept this implementation. A passing
+hostless test or derivation evaluation does **not** establish a working E2E run.
+Existing topology acceptance is separate evidence and need not be rerun just
+to validate this scenario's hermetic changes.
+
+The scenario imports the [test-only OCI staging module](#test-only-immutable-oci-staging-interface-532),
+uses its native-platform immutable leaf digests, and checks staged aliases
+before and after real `gateway up`. After provisioning it installs guest-local
+IPv4/IPv6 outer-interface output/forward reject rules with packet counters.
+An attempted external packet during deployment or agent execution fails the test. Workload
+containers remain management-only; LiteLLM alone reaches the synthetic
+listener on the private egress bridge. No live provider is registered.
+
+The real production Herdr/OpenCode workload image is extended **only for this
+test** with the pinned Go toolchain. Herdr client SSH identity creation,
+authorization, host-key pinning and machine registration happen inside the
+fresh disposable VM through the shipped helpers and CLI. No host credentials,
+host workspaces or ambient SSH agent are transported.
+
+`scripts/vm_harness/full_stack.py` owns a run-scoped fixture and in-process
+adapter with the existing nine phase names and workspace/run-ID arguments:
+
+```text
+preflight → open → start → prompt → wait → credential-check → gateway-evidence
+                                              ↘ stop → close
+```
+
+The existing mock/live shell dispatcher and live marker requirements are
+unchanged. This synthetic adapter never emits `upstream-inference-confirmed`.
+It does not install hooks into, enable, or authorize live acceptance.
+
+Required gates, each failing closed:
+
+- The deliberately broken Go fixture must fail its actual Go assertion first.
+- Real Herdr creates the labeled workspace, starts the pinned OpenCode agent,
+  submits a nonce-bearing task and waits for done/idle. The trusted test
+  upstream requests `read`, `edit`, and `bash` in order; no fake tool results
+  are supplied by the harness.
+- Independent `opencode session list`/`export` readback must find exactly one
+  native session for that workspace, three completed tool parts with exact
+  call IDs/inputs, the terminal synthetic message and a stop finish. Raw
+  transcripts stay in guest-runner memory and are never printed or persisted.
+- Independent file reads must show exactly the expected source change,
+  unchanged module/test/config fixtures, and the nonce marker created by the
+  actual bash test command. A fresh Go test runs on checked copies in the
+  outer disposable VM, separately from the agent's test.
+- A fresh 15-minute virtual key is limited to the synthetic alias with a
+  budget and rate limit. Anonymous/invalid-key requests and an out-of-scope
+  model request must be denied; the scoped model listing must be exact.
+  Credential checks cover private workload-key metadata and known provider
+  credential locations, not exhaustive secret discovery.
+- Gateway-side PostgreSQL spend records must contain four distinct successful
+  native Responses request IDs, the fresh key's hash, the exact alias, and
+  the **same native session ID independently read from OpenCode**. The
+  runner's issuance associates that fresh key with this run; no prompt-only
+  run-ID attribution or fabricated native session is accepted. Missing schema
+  fields, delayed/unavailable logging or extra agent model requests fail.
+  Spend success labels alone are insufficient: the native transcript,
+  upstream ordered continuations and independently tested files are separate
+  required observations. This is synthetic correlation, not cryptographic
+  provenance or evidence of a billable provider response.
+- The workload must connect to the private gateway and independently report
+  `ENETUNREACH` for direct public IPv4. A separate LiteLLM external TCP attempt
+  must fail and increment the guest outer-interface forwarding-deny counter.
+  This is a narrow no-route/packet-control observation, not fleet-wide
+  credential-egress or arbitrary firewall-bypass acceptance.
+- Stop and owned close run after partial failures. Herdr inventory must confirm
+  workspace absence. The fixture is removed and its absence independently
+  read back. Key deletion must be followed by actual rejection, model deletion
+  by alias absence, and the synthetic listener must stop. Failed teardown is
+  a failure, even after a passing task. An uncertain remote create still
+  requires destroying the entire disposable VM.
+
+Hostless validation, safe in the current multipurpose checkout:
+
+```sh
+nix --quiet develop --no-update-lock-file -c python3 -m unittest scripts.vm_harness.test_full_stack scripts.vm_harness.test_tool_sequence scripts.vm_harness.test_synthetic_responses scripts.vm_harness.test_runner -v
+nix --quiet develop --no-update-lock-file -c go test ./internal/testenv ./tests/oci-stage
+nix --quiet eval --no-update-lock-file .#vm-harness-full-stack.drvPath
+nix --quiet develop --no-update-lock-file -c just check report-json
+```
+
+Next operator gate, **only on a separately authorized dedicated KVM worker**:
+apply worker CPU/storage quotas, confirm no pilot credentials/routes/Incus
+privilege, then run the fixed command above. Preserve the private runner
+result with revision and lock hash, reviewed staging receipts, phase outcomes,
+and packet-counter observations. Inspect failures without sharing raw driver
+transcripts. The runner has a 15-minute total runtime deadline, including OCI
+staging; insufficient provisioning time is a failed gate, not a retry loop.
+Afterward independently verify complete QEMU VM/disk deletion on success and
+failure. Cache-miss/offline-pull failure acceptance and outer-worker disposal
+remain operator gates; staged alias presence alone does not prove either.
+
+The unchanged runner report records pass only from the complete scenario's
+exit status. Both `upstream_inference` and whole-environment `cleanup` remain
+`not_verified`, even when owned workspace/key/listener checks pass. The guest
+cannot attest its own outer disk deletion. No real provider/OAuth acceptance,
+autonomous reasoning quality, pilot deployment or live release sign-off is
+claimed.
 
 ## Test-only immutable OCI staging interface (#532)
 
 `nix/vm-harness/oci-staging.nix` is an explicit, additive guest module for
 dedicated-worker acceptance. Import it alongside `aginctus-host.nix` using
-`(import ./oci-staging.nix { inherit self system; })`. It is **not imported by
-the existing gateway scenarios**. The full-stack integration owner must add
-that import and the provisioning/check calls below to the chosen scenario.
-`gateway-topology.nix` retains its current networked tag-based behavior until
-that integration is made.
+`(import ./oci-staging.nix { inherit self system; })`. The opt-in `full-stack`
+scenario imports it and performs the provisioning/check calls below. The
+existing topology and synthetic transport scenarios retain their separate
+networked tag-based behavior.
 
 The sole input manifest, `tests/oci-stage/pins.json`, records anonymous registry
 verification on 2026-10-30 for the declared LiteLLM and PostgreSQL source tags.
