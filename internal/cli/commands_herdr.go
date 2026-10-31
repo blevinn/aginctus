@@ -51,7 +51,7 @@ func addHerdrCommands(
 	herdr.AddCommand(client)
 	for _, action := range []struct {
 		name, operation string
-		aliases []string
+		aliases         []string
 	}{
 		{"apply", "upsert", []string{"ensure"}},
 		{"remove", "delete", []string{"teardown"}},
