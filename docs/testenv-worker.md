@@ -105,6 +105,235 @@ start, exec and destruction, including expiry reconciliation, and permit
 daemon metadata on an otherwise valid run. They do not prove actual Incus
 project enforcement, real-host isolation or complete storage reclamation.
 
+## Opt-in real-worker lifecycle helper
+
+`testenv-worker-acceptance` packages the fixed
+`aginctus-testenv-acceptance` binary in the Nix store. It uses the same
+`IncusVMBackend`, signed handles, readiness probes, typed guest exec and
+destruction path as the worker library. It is not installed or started by
+the recovery module, normal checks, public CLI or MCP. Its commands and
+resource sizes cannot be overridden by a checkout manifest or guest input.
+
+### Prerequisites and invocation
+
+**Run only after separate operator approval on the dedicated disposable
+worker described above. Never run this on a multipurpose host or the pilot.**
+An acknowledgement and marker are accident-prevention gates, not proof of
+host isolation or project-scoped daemon credentials. The process still has
+daemon-administrator authority through `incus-admin`.
+
+Before running, the operator must independently:
+
+- Establish the worker's isolation, restricted `aginctus-testenv` project,
+  `testenv` storage pool with effective quotas, and the no-NIC/no-host-device
+  project policy printed by `aginctus testenv vm policy`. The helper never
+  provisions any of these.
+- Build/import the [reviewed VM image](testenv-incus-vm-image.md), record its
+  actual full Incus image fingerprint, and ensure the image fits a 32 GiB
+  root disk. Only lowercase 64-hex fingerprints are accepted, not aliases.
+- Provision the stable policy key and non-login `aginctus-testenv` identity
+  described above. Never copy the key into the checkout, store or guest.
+- Provision `/etc/aginctus-testenv` as a root-owned real directory, without
+  group/world write access, and a root-owned **regular, single-link** file
+  `/etc/aginctus-testenv/disposable-worker`, also without group/world write
+  access. Its exact content is `aginctus-dedicated-disposable-worker-v1`
+  followed by one newline. A symlink, including a Nix `environment.etc`
+  store symlink, is deliberately rejected.
+- Supply an existing, preferably stopped, unsigned foreign VM sentinel in
+  that project, with a name outside the `testenv-` namespace. Do not attach
+  secrets to the sentinel. Keep it unchanged throughout the test. It occupies
+  one of the project's two instance slots; the helper creates its own two
+  VMs **sequentially**. Size the sentinel so the helper also fits the aggregate
+  CPU, memory and disk project limits. No other signed runs may exist at admission.
+- Quiesce other lifecycle writers and the recovery timer for this bounded
+  trial so they cannot race the helper's retained expiry observation.
+  Arrange to restore the independent timer after the trial, including after
+  failure. A quiesced timer is not independent recovery evidence.
+
+The following commands are **instructions for that approved worker only**,
+not part of hermetic validation. Use a clean checkout of the reviewed pinned
+revision, not an agent-writable checkout, and substitute the actual image
+fingerprint and sentinel name. The transient unit supplies the runtime key
+and an owned private report root without installing a persistent service:
+
+```sh
+helper=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-worker-acceptance)
+"$helper/bin/aginctus-testenv-acceptance" --help
+
+# On the independently approved dedicated worker ONLY:
+sudo systemd-run --unit=aginctus-testenv-acceptance --wait --pipe --collect \
+  --service-type=exec --uid=aginctus-testenv --gid=aginctus-testenv \
+  --property=SupplementaryGroups=incus-admin \
+  --property=LoadCredential=policy-key:/var/lib/aginctus-testenv/worker-policy.key \
+  --property=StateDirectory=aginctus-testenv-acceptance \
+  --property=StateDirectoryMode=0700 \
+  --property=UMask=0077 --property=NoNewPrivileges=yes \
+  --property=ProtectSystem=strict --property=ProtectHome=yes \
+  --property=PrivateTmp=yes --property=PrivateDevices=yes \
+  --property=RestrictAddressFamilies=AF_UNIX --property=IPAddressDeny=any \
+  --property=TimeoutStartSec=13min --property=TimeoutStopSec=150s \
+  "$helper/bin/aginctus-testenv-acceptance" \
+  --disposable-worker DEDICATED_DISPOSABLE_WORKER \
+  --socket /var/lib/incus/unix.socket --project aginctus-testenv \
+  --image '<actual-64-hex-imported-image-fingerprint>' \
+  --policy-key-file /run/credentials/aginctus-testenv-acceptance.service/policy-key \
+  --report-root /var/lib/aginctus-testenv-acceptance \
+  --foreign-instance '<existing-unsigned-foreign-vm>'
+```
+
+The worker socket and project must be supplied explicitly and match those
+fixed values. No Incus default remote or inherited socket environment is used.
+The helper rejects root; `systemd-run` starts the dedicated non-root identity.
+Trusted report/key ancestors and same-UID writers remain operator concerns.
+
+### What the helper proves when actually run successfully
+
+Each VM uses two CPUs, 4096 MiB RAM, a 32 GiB root disk and a three-minute
+signed TTL. The helper checks create, agent readiness (up to two minutes),
+running status, and the fixed guest-agent command
+`/run/current-system/sw/bin/incus --version` with a ten-second budget.
+It requires successful exit, nonempty stdout and empty stderr, but does not
+claim that the reported version string authenticates the inner daemon.
+
+The ephemeral VM follows explicit backend destruction. The retained VM is
+left until its **actual** expiry, re-observed as present, then passed through
+the backend's same scoped expiry/ownership destruction path used by the
+reconciler. The helper never advances its production clock or runs a broad
+sweep over other runs. A retargeted signed handle must be refused before
+foreign mutation; the sentinel's adapter-visible configuration/devices,
+profiles, retention and status must compare unchanged at the end.
+
+The independent volume API must positively observe each live VM root volume,
+then report both absent after instance cleanup. This is separate evidence
+from instance absence. It is **not** proof of physical block reclamation,
+snapshot/backups/custom-volume removal, pool quotas or complete disk cleanup.
+Sentinel comparison is not a full foreign-resource inventory or proof against
+concurrent administrators. Expanded runtime preflight is not an adversarial
+project-enforcement test.
+
+### Evidence, failure and remaining acceptance
+
+The helper emits a bounded JSON summary containing a run ID and pass/fail.
+Inspect `/var/lib/aginctus-testenv-acceptance/<run-id>/result.json` privately
+as the worker operator. It uses the existing `schema_version`, `status`,
+`results`, run-ID and `disposable_guest_no_live_provider` evidence conventions,
+with profile `dedicated_worker`; it is not input to the batch `vm-report`
+reader and must not be represented as a hermetic report or live-provider proof.
+The store package embeds the reviewed source identity (`source-<narHash>` for
+dirty/non-Git builds). The private result also records the image fingerprint,
+project, signed per-VM handles, fixed check outcomes and failure stage.
+It never records guest output, daemon diagnostics, foreign configuration or
+key bytes. Keep signed handles private even though they are not credentials.
+
+Evidence is written atomically as 0600 in a new 0700 run directory, fsynced
+before daemon admission and after handle updates, and limited to 32 KiB per
+record. An advisory lock serializes this helper within a report root, not
+other daemon clients. Interrupted create/start can precede local handle
+persistence; signed daemon metadata and the separately installed recovery
+timer remain necessary for that window.
+
+The foreground budget is ten minutes plus up to two minutes of scoped
+best-effort cleanup on error/cancellation. Only returned signed handles are
+eligible for cleanup; policy drift still blocks destruction. Preserve the
+private failed/incomplete result and independently inspect remaining instance
+and volume inventory. Do not rotate the policy key. Restore the independent
+timer through the dedicated operator procedure.
+
+A helper `pass` covers only its implemented lifecycle subset. `crash_reboot`,
+`nested_isolation`, `storage_reclamation` and `report_retention` remain
+`not_verified`: no SIGKILL/reboot, nested Incus/Btrfs workload, packet isolation,
+physical storage reclamation or report retention/GC trial is implemented.
+Reports are deliberately retained, never automatically pruned; provision an
+operator-managed bounded filesystem and review retention separately. No real
+worker execution is claimed by building the package or running fake tests.
+The authorization/service API and agent-facing mutations remain gated.
+
+## Installed read-only image and pool gate
+
+`aginctusTestenvWorker` composes the existing recovery identity/timer with
+an operator-started `aginctus-testenv-preflight` service. It never initializes
+Incus, creates/adopts a project or pool, imports images, or grants agent
+access. Provisioning remains an explicitly authorized operator step on the
+dedicated worker. The same `IncusProjectPolicy` used by the backend supplies
+the actual project checks; there is no second Nix policy table.
+
+The preflight requires the exact private, locally imported x86_64 VM image
+fingerprint in `aginctus-testenv`, without public, remote-update or cached
+image metadata. It admits an existing `testenv` **ZFS or LVM** pool reporting
+64–80 GiB total capacity and fingerprints its complete configuration for
+operator review. These outer-pool choices are separate from the inner
+Aginctus fixture's Btrfs pool. Capacity is a daemon-reported snapshot, not
+proof that quotas, storage isolation or physical reclamation work.
+
+Before activating the module, establish the daemon, restricted project,
+pool, marker and runtime key described above. On that separately approved
+worker only, obtain a candidate pool-configuration fingerprint with the
+immutable helper. Inspect the actual pool configuration independently before
+trusting its hash; do not automatically feed discovery into admission:
+
+```sh
+preflight=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-worker-preflight)
+"$preflight/bin/aginctus-testenv-worker-preflight" --help
+
+# Dedicated disposable worker ONLY, with the root-owned regular marker and
+# runtime key provisioned as above; substitute the actual imported fingerprint.
+sudo systemd-run --unit=aginctus-testenv-pool-inspect --wait --pipe --collect \
+  --service-type=exec --uid=aginctus-testenv --gid=aginctus-testenv \
+  --property=SupplementaryGroups=incus-admin \
+  --property=LoadCredential=policy-key:/var/lib/aginctus-testenv/worker-policy.key \
+  --property=RestrictAddressFamilies=AF_UNIX --property=IPAddressDeny=any \
+  --property=NoNewPrivileges=yes --property=ProtectSystem=strict \
+  --property=ProtectHome=yes --property=PrivateTmp=yes --property=PrivateDevices=yes \
+  --property=TimeoutStartSec=45s \
+  --setenv=AGINCTUS_TESTENV_WORKER_SOCKET=/var/lib/incus/unix.socket \
+  --setenv=AGINCTUS_TESTENV_POLICY_KEY_FILE=/run/credentials/aginctus-testenv-pool-inspect.service/policy-key \
+  --setenv=AGINCTUS_TESTENV_IMAGE_FINGERPRINT='<actual-64-hex-image-fingerprint>' \
+  "$preflight/bin/aginctus-testenv-worker-preflight" --pool-fingerprint
+```
+
+`inspection_only` is never an admission pass. The returned hash covers
+pool name, driver and configuration, not fluctuating used bytes or free
+capacity. It is not a secret. After independent review, configure the
+dedicated worker using reviewed immutable source:
+
+```nix
+{
+  imports = [ inputs.aginctus.nixosModules.aginctusTestenvWorker ];
+  virtualisation.incus.enable = true;
+  networking.nftables.enable = true;
+  services.aginctusTestenvWorker = {
+    enable = true;
+    dedicatedDisposableHost = true;
+    imageFingerprint = "<actual-64-hex-image-fingerprint>";
+    poolConfigFingerprint = "<reviewed-64-hex-pool-configuration-fingerprint>";
+  };
+}
+```
+
+The module rejects missing acknowledgement, mutable image aliases, invalid
+fingerprints, unsupported architectures, a missing Incus daemon and the
+Aginctus pilot service. It creates a nonsecret regular marker only when
+absent; existing mismatched markers are not replaced. Its preflight service
+does not start automatically. After a separately authorized deployment:
+
+```sh
+systemctl cat aginctus-testenv-preflight.service
+# Approved dedicated worker only:
+sudo systemctl start aginctus-testenv-preflight.service
+sudo journalctl -u aginctus-testenv-preflight.service --no-pager -n 10
+```
+
+The bounded report lists only fixed outcomes and the pool hash. Project,
+image and pool drift fail closed without daemon mutations. The service has
+no `RemainAfterExit` admission cache; a successful observation is not an
+authorization token or an assurance about subsequent daemon state. It does
+not gate recovery: removing an image must not prevent expired VM cleanup.
+The worker still has daemon-administrator authority, so its installation
+and configuration must be outside agent-writable checkouts. Resource
+enforcement, crash/reboot, cleanup, real daemon compatibility and runtime
+acceptance remain unverified until independently tested. No public CLI/MCP
+mutations are enabled by this module.
+
 ## Operational acceptance — not yet performed
 
 After operator approval and after validating real project restrictions,
