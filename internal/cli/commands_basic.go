@@ -19,7 +19,7 @@ func runBasicCobra(
 	root := &cobra.Command{Use: "aginctus", SilenceUsage: true, SilenceErrors: true}
 	root.SetOut(stdout)
 	root.SetErr(stderr)
-	root.SetArgs(normalizeWorkloadLegacyArgs(args))
+	root.SetArgs(normalizeGatewayRegistryLegacyArgs(normalizeWorkloadLegacyArgs(args)))
 	root.CompletionOptions.DisableDefaultCmd = true
 
 	status := 0
@@ -87,7 +87,8 @@ func runBasicCobra(
 	addNetworkCommands(root, stdout, stderr, load, &status)
 	addHerdrCommands(root, stdout, stderr, load, &status)
 	addWorkloadCommands(root, stdout, stderr, load, &status)
-	addGatewayCoreCommands(root, stdout, stderr, load, &status)
+	gatewayCmd := addGatewayCoreCommands(root, stdout, stderr, load, &status)
+	addGatewayRegistryCommands(gatewayCmd, stdout, stderr, load, &status)
 
 	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Fprintf(stderr, "%v\nUsage: aginctus [global options] <command> [flags]\n", err)
