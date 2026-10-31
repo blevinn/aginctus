@@ -11,9 +11,14 @@ import json
 import os
 import re
 import stat
+import sys
 from contextlib import ExitStack
 from datetime import datetime, timedelta
 from pathlib import Path
+
+if not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scripts.vm_harness import evidence
 
 ROOT = Path(__file__).resolve().parents[2] / ".vm-harness-results"
 SCENARIOS = (
@@ -23,6 +28,7 @@ SCENARIOS = (
     "gateway-topology",
     "synthetic-gateway",
     "synthetic-tool-gateway",
+    "full-stack",
     "opencode-tool-loopback",
     "ownership-recovery",
 )
@@ -123,7 +129,7 @@ def normalize(record: dict, run_id: str) -> dict:
         "git_dirty": record.get("git_dirty"),
         "flake_lock_sha256": record.get("flake_lock_sha256"),
     }
-    return {
+    result = {
         "schema_version": 1,
         "profile": "disposable_vm",
         "status": status,
@@ -146,6 +152,13 @@ def normalize(record: dict, run_id: str) -> dict:
         "upstream_inference": "not_verified",
         "cleanup": "not_verified",
     }
+    if "full_stack" in record:
+        if scenario != "full-stack":
+            raise ValueError("full-stack evidence on another scenario")
+        result["full_stack"] = evidence.normalize(record["full_stack"])
+        if status == "pass" and not evidence.complete(result["full_stack"]):
+            raise ValueError("incomplete passing full-stack evidence")
+    return result
 
 
 def unavailable() -> dict:
@@ -182,6 +195,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Tier: {TIER}")
         if result["failure_stage"]:
             print(f"Failure stage: {result['failure_stage']}")
+        if "full_stack" in result:
+            print("Observations: guest readback, not cryptographic attestation")
+            for section in ("phases", "gates"):
+                for name, status in result["full_stack"][section].items():
+                    print(f"  {status.upper():12} {section}/{name}")
         print("Unverified: upstream inference, cleanup")
         if suite["status"] != "pass":
             print(f"Re-run explicitly: {suite['rerun']}")

@@ -294,3 +294,41 @@ func (n *nativeIncusVMClient) RootVolumePresent(ctx context.Context, pool, name 
 	}
 	return true, nil
 }
+
+func (n *nativeIncusVMClient) InspectWorkerPool(ctx context.Context) (WorkerPoolInspection, error) {
+	var result WorkerPoolInspection
+	requestCtx, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	pool, _, err := server.GetStoragePool("testenv")
+	if err != nil || pool == nil {
+		return result, safeIncusError("worker pool metadata unavailable", err)
+	}
+	resources, err := server.GetStoragePoolResources("testenv")
+	if err != nil || resources == nil {
+		return result, safeIncusError("worker pool resources unavailable", err)
+	}
+	if err := requestCtx.Err(); err != nil {
+		return result, err
+	}
+	return WorkerPoolInspection{Name: pool.Name, Driver: pool.Driver, Config: pool.Config, Status: pool.Status,
+		Total: resources.Space.Total, Used: resources.Space.Used}, nil
+}
+
+func (n *nativeIncusVMClient) InspectWorkerImage(ctx context.Context, fingerprint string) (WorkerImageInspection, error) {
+	var result WorkerImageInspection
+	if !vmDigest.MatchString(fingerprint) {
+		return result, ErrOwnershipMismatch
+	}
+	requestCtx, server, cancel := n.requestClient(ctx)
+	defer cancel()
+	image, _, err := server.GetImage(fingerprint)
+	if err != nil || image == nil {
+		return result, safeIncusError("worker image metadata unavailable", err)
+	}
+	if err := requestCtx.Err(); err != nil {
+		return result, err
+	}
+	return WorkerImageInspection{Fingerprint: image.Fingerprint, Project: image.Project,
+		Type: image.Type, Architecture: image.Architecture, Public: image.Public,
+		AutoUpdate: image.AutoUpdate, Cached: image.Cached, RemoteSource: image.UpdateSource != nil}, nil
+}

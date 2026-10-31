@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import stat
 import subprocess
 import tempfile
@@ -11,10 +12,122 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.vm_harness import runner
+from scripts.vm_harness import evidence, runner
 
 
 class RunnerTests(unittest.TestCase):
+    def test_full_stack_imports_only_fixed_artifact_even_on_runtime_failure(self):
+        for code in (0, 42, "timeout"):
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                record = evidence.Evidence().record
+                for section in ("phases", "gates"):
+                    record[section] = dict.fromkeys(record[section], "pass")
+                if code:
+                    record["phases"]["prompt"] = "fail"
+                    record["phases"]["wait"] = "not_verified"
+
+                def run(command, **kwargs):
+                    if command[0] == "git":
+                        return subprocess.CompletedProcess(command, 0, "", "")
+                    if command[0] == "nix":
+                        return subprocess.CompletedProcess(command, 0, "/nix/store/driver\n", "")
+                    evidence.write_artifact(Path(kwargs["cwd"]), record)
+                    # Neither arbitrary files nor process output are evidence.
+                    (Path(kwargs["cwd"]) / "secret.json").write_text("SECRET_CANARY")
+                    if code == "timeout":
+                        raise subprocess.TimeoutExpired(command, 900)
+                    return subprocess.CompletedProcess(command, code, "SECRET_CANARY", "SECRET_CANARY")
+
+                with (patch.object(runner, "ROOT", root),
+                      patch.object(runner, "driver_from_build", return_value=Path("/nix/store/driver")),
+                      patch.object(runner.subprocess, "run", side_effect=run),
+                      contextlib.redirect_stdout(io.StringIO()),
+                      contextlib.redirect_stderr(io.StringIO())):
+                    self.assertEqual(runner.main(["test", "full-stack"]), 1 if code == "timeout" else code)
+                path = next((root / ".vm-harness-results").glob("*/result.json"))
+                result = json.loads(path.read_text())
+                self.assertEqual(result["full_stack"], record)
+                self.assertEqual(result["failure_stage"], "runtime" if code else None)
+                self.assertNotIn("CANARY", path.read_text())
+
+    def test_full_stack_green_exit_requires_complete_valid_artifact(self):
+        for kind in ("missing", "incomplete", "symlink", "payload"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+
+                def run(command, **kwargs):
+                    if command[0] == "git":
+                        return subprocess.CompletedProcess(command, 0, "", "")
+                    if command[0] == "nix":
+                        return subprocess.CompletedProcess(command, 0, "/nix/store/driver\n", "")
+                    state = Path(kwargs["cwd"])
+                    if kind == "incomplete":
+                        evidence.write_artifact(state, evidence.Evidence().record)
+                    elif kind == "symlink":
+                        (state / evidence.ARTIFACT).symlink_to(root / "secret")
+                    elif kind == "payload":
+                        (state / evidence.ARTIFACT).write_text('{"secret":"CANARY"}')
+                    return subprocess.CompletedProcess(command, 0, "PASS: all gates", "")
+
+                with (patch.object(runner, "ROOT", root),
+                      patch.object(runner, "driver_from_build", return_value=Path("/nix/store/driver")),
+                      patch.object(runner.subprocess, "run", side_effect=run),
+                      contextlib.redirect_stdout(io.StringIO()),
+                      contextlib.redirect_stderr(io.StringIO())):
+                    self.assertEqual(runner.main(["test", "full-stack"]), 1)
+                result = json.loads(next((root / ".vm-harness-results").glob("*/result.json")).read_text())
+                self.assertEqual(result["status"], "fail")
+                self.assertEqual(result["failure_stage"], "runtime")
+
+    def test_artifact_rejects_paths_permissions_links_size_and_payloads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            record = evidence.Evidence().record
+            evidence.write_artifact(root, record)
+            path = root / evidence.ARTIFACT
+            self.assertEqual(evidence.read_artifact(root), record)
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            for mode in (0o644, 0o666):
+                path.chmod(mode)
+                with self.assertRaises(ValueError):
+                    evidence.read_artifact(root)
+            path.chmod(0o600)
+            with (patch.object(evidence.os, "getuid", return_value=os.getuid() + 1),
+                  self.assertRaises(ValueError)):
+                evidence.read_artifact(root)
+            with self.assertRaises(ValueError):
+                evidence.read_artifact(root, "../secret")
+            with self.assertRaises(FileExistsError):
+                evidence.write_artifact(root, record)
+            root.chmod(0o755)
+            with self.assertRaises(ValueError):
+                evidence.read_artifact(root)
+            with self.assertRaises(ValueError):
+                runner.write_report("smoke", 0, runner.Provenance(), root)
+            root.chmod(0o700)
+            hardlink = root / "hardlink"
+            os.link(path, hardlink)
+            with self.assertRaises(ValueError):
+                evidence.read_artifact(root)
+            hardlink.unlink()
+            alias = root / "alias"
+            alias.symlink_to(root, target_is_directory=True)
+            with self.assertRaises(OSError):
+                evidence.read_artifact(alias)
+            for content in (b"x" * (evidence.MAX_BYTES + 1), b"{broken", b'{"secret":"CANARY"}'):
+                path.write_bytes(content)
+                with self.assertRaises(ValueError):
+                    evidence.read_artifact(root)
+            path.unlink()
+            path.symlink_to(root / "secret")
+            with self.assertRaises(OSError):
+                evidence.read_artifact(root)
+            path.unlink()
+            os.mkfifo(path, 0o600)
+            with self.assertRaises(ValueError):
+                evidence.read_artifact(root)
+
     def test_sanitizes_inherited_host_authority(self):
         env = runner.clean_environment(
             {
