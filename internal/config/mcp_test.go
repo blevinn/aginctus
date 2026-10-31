@@ -344,6 +344,25 @@ func TestMCPAtomicSubtreeRequiresACompleteHigherPriorityPolicy(t *testing.T) {
 	}
 }
 
+func TestMCPEnvironmentOverlayIsDeterministic(t *testing.T) {
+	policyJSON := `{"servers":{"docs":{"transport":"streamable-http","url":"https://base.example.com/mcp"}},"capabilities":{"coding":{"requires":["mcp-tools"]}},"grants":{"dev":{"capability":"coding","servers":{"docs":["search"]}}},"gateway":{"enabled":true}}`
+	entries := []string{
+		"AGINCTUS_MCP=" + policyJSON,
+		"AGINCTUS_MCP_SERVERS_DOCS_URL=https://override.example.com/mcp",
+	}
+	for _, environment := range [][]string{entries, {entries[1], entries[0]}} {
+		effective := loadConfig(t, &Loader{Environment: environment}, Options{})
+		policy, err := effective.MCP()
+		if err != nil {
+			t.Fatalf("MCP() error = %v", err)
+		}
+		server, ok := policy.Server("docs")
+		if !ok || server.URL != "https://override.example.com/mcp" {
+			t.Fatalf("environment order produced server %+v, %v", server, ok)
+		}
+	}
+}
+
 func TestMCPAtomicSubtreeGroupsCLIOverridesAndLeavesOtherSettingsRecursive(t *testing.T) {
 	systemPath := filepath.Join(t.TempDir(), "system.json")
 	writeConfigFile(t, systemPath, `{"firewall":{"zone":"system-zone"}}`)

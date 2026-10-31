@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
@@ -291,7 +292,9 @@ func mergeJSON(dst map[string]any, data []byte) error {
 
 func mergeEnvironment(dst map[string]any, environment []string) error {
 	overlay := map[string]any{}
-	for _, entry := range environment {
+	entries := append([]string(nil), environment...)
+	sort.Strings(entries)
+	for _, entry := range entries {
 		name, value, ok := strings.Cut(entry, "=")
 		if !ok || !strings.HasPrefix(name, EnvPrefix) {
 			continue
