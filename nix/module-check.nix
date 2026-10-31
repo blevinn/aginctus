@@ -122,6 +122,66 @@ let
       gateway = true;
     };
   };
+  withMCP = evaluate {
+    services.aginctus.settings.mcp = {
+      servers.docs = {
+        transport = "streamable-http";
+        url = "https://docs.example.com/mcp";
+        credentialRef = "docs-token";
+        allowedTools = [
+          "fetch"
+          "search"
+        ];
+      };
+      servers.local = {
+        transport = "stdio";
+        command = "/usr/bin/mcp-local";
+      };
+      capabilities.coding = {
+        protocol = "responses";
+        requires = [ "mcp-tools" ];
+      };
+      grants.dev = {
+        capability = "coding";
+        servers.docs = [ "search" ];
+      };
+      gateway.enabled = true;
+    };
+  };
+  unauthenticatedGateway = evaluate {
+    services.aginctus.settings.mcp.gateway = {
+      enabled = true;
+      requireAuthenticatedWorkload = false;
+    };
+  };
+  remoteWithoutURL = evaluate {
+    services.aginctus.settings.mcp.servers.docs = {
+      transport = "streamable-http";
+    };
+  };
+  stdioWithoutCommand = evaluate {
+    services.aginctus.settings.mcp.servers.local = {
+      transport = "stdio";
+    };
+  };
+  gatewayWithoutRemoteServer = evaluate {
+    services.aginctus.settings.mcp.gateway.enabled = true;
+  };
+  remoteWithoutGateway = evaluate {
+    services.aginctus.settings.mcp.servers.docs = {
+      transport = "streamable-http";
+      url = "https://docs.example.com/mcp";
+    };
+  };
+  forbiddenCredentialField = evaluate {
+    services.aginctus.settings.mcp.servers.docs = {
+      transport = "stdio";
+      command = "/bin/mcp-local";
+      headers = {
+        Authorization = "Bearer forbidden";
+      };
+    };
+  };
 
   settings = base.services.aginctus.settings;
   imageUnit = base.systemd.services.aginctus-image-herdr-client;
@@ -289,6 +349,37 @@ assert
     stub
   ];
 assert builtins.elem pkgs.incus imageUnit.path;
+# The MCP subtree stays deny by default and never creates a grant.
+assert settings.mcp.gateway.enabled == false;
+assert settings.mcp.gateway.requireAuthenticatedWorkload;
+assert settings.mcp.gateway.upstreamTimeoutSeconds == 30;
+assert settings.mcp.servers == { };
+assert settings.mcp.grants == { };
+assert settings.mcp.capabilities == { };
+assert withMCP.services.aginctus.settings.mcp.servers.docs.transport == "streamable-http";
+assert withMCP.services.aginctus.settings.mcp.servers.docs.credentialRef == "docs-token";
+assert withMCP.services.aginctus.settings.mcp.servers.local.command == "/usr/bin/mcp-local";
+assert withMCP.services.aginctus.settings.mcp.grants.dev.servers.docs == [ "search" ];
+assert withMCP.services.aginctus.settings.mcp.gateway.enabled;
+assert lib.any (item: lib.hasInfix "requireAuthenticatedWorkload" item.message) (
+  failedAginctusAssertions unauthenticatedGateway
+);
+assert lib.any (item: lib.hasInfix "require a url" item.message) (
+  failedAginctusAssertions remoteWithoutURL
+);
+assert lib.any (item: lib.hasInfix "require a command" item.message) (
+  failedAginctusAssertions stdioWithoutCommand
+);
+assert lib.any (item: lib.hasInfix "requires at least one streamable-http server" item.message) (
+  failedAginctusAssertions gatewayWithoutRemoteServer
+);
+assert lib.any (item: lib.hasInfix "must be enabled to route" item.message) (
+  failedAginctusAssertions remoteWithoutGateway
+);
+# The MCP subtree is strict, so a credential-bearing field is an evaluation
+# error instead of a field in the generated configuration.
+assert
+  !(builtins.tryEval forbiddenCredentialField.services.aginctus.settings.mcp.servers.docs).success;
 assert
   reconcile.restartTriggers == [
     withReconcile.environment.etc."aginctus/config.json".source

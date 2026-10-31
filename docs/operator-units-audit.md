@@ -54,7 +54,7 @@ credential-state collisions. Neither diagnostic copies, reads, or moves
 gateway credentials. Reversible ownership migration belongs to [#442](https://github.com/blevinn/aginctus/issues/442).
 
 
-## Declared CLI package compatibility
+## Declared and observed CLI package compatibility
 
 The NixOS and Home Manager modules also publish **nonsecret package
 declarations** when enabled. The host writes
@@ -73,18 +73,26 @@ aginctus operator package-audit --owner user
 ```
 
 The audit does not load application configuration or accept overrides.
-It reads only these two fixed, bounded JSON files. It requires the
+It reads only these two fixed, bounded JSON files and asks the OS for the
+current process's executable path. It requires the
 selected authority to have a valid declaration; missing declarations
 for the *other* authority are allowed for single-owner installations.
 When both exist, the package store paths must be **exactly equal**.
 Malformed/unreadable declarations and different package outputs fail
-conservatively. Output reports only `declared`, `absent`, or
-`unverified`; it does not print absolute paths or manifest contents.
+conservatively. The observed CLI must also be the `bin/aginctus` or packaged
+`bin/.aginctus-wrapped` executable under that exact selected Nix output.
+An unrelated package, development build, deleted executable or unavailable
+OS observation fails closed. Invoke the selected profile's CLI and repeat the
+read-only audit to resolve a mismatch; the audit never switches profiles.
+It does not trust `PATH`, command-line names or a self-reported version string
+as running identity. Output does not print absolute paths, raw lookup errors
+or manifest contents.
 
-**This tests the packages declared by Nix, not running-service revision
-identity.** A separately installed CLI, external unit, override in a
-unit drop-in, stale generation, or another user's service can still run
-a different revision. Differences in package derivation also need not
+**This compares declarations with the current CLI's OS-observed executable
+path, not running-service revision identity or binary attestation.** An external
+unit, override in a unit drop-in, stale service generation or another user's
+service can still run a different revision. Declarations remain self-declared
+metadata, not proof of runtime Incus authorization. Differences in package derivation also need not
 imply protocol incompatibility; until a cross-version compatibility
 contract exists, this diagnostic treats them as unverified rather than
 assuming safety. It is **not an authorization oracle or write guard**.

@@ -16,6 +16,26 @@ const maxOperatorPackageManifestSize = 4096
 // It is not evidence that the corresponding binary is currently running.
 var operatorPackageStorePath = regexp.MustCompile(`^/nix/store/[0-9a-z]{32}-[A-Za-z0-9][A-Za-z0-9+._-]*$`)
 
+// Observe this process through the OS, never argv[0], PATH or a declaration.
+var inspectOperatorExecutable = os.Executable
+
+func observedOperatorPackage() (string, bool) {
+	executable, err := inspectOperatorExecutable()
+	if err != nil || filepath.Clean(executable) != executable {
+		return "", false
+	}
+	// The packaged CLI uses makeWrapper; the kernel observes its wrapped binary.
+	if filepath.Base(executable) != "aginctus" && filepath.Base(executable) != ".aginctus-wrapped" {
+		return "", false
+	}
+	bin := filepath.Dir(executable)
+	pkg := filepath.Dir(bin)
+	if filepath.Base(bin) != "bin" || !operatorPackageStorePath.MatchString(pkg) {
+		return "", false
+	}
+	return pkg, true
+}
+
 type operatorPackageManifest struct {
 	Schema    int    `json:"schema"`
 	Authority string `json:"authority"`
@@ -105,8 +125,10 @@ func renderOperatorPackageAudit(owner, systemPath, userPath string, stdout, stde
 	fmt.Fprintf(stdout, "Declared operator package identity: system=%s user=%s\n", systemState, userState)
 
 	selected := systemState
+	selectedPackage := systemPackage
 	if owner == "user" {
 		selected = userState
+		selectedPackage = userPackage
 	}
 	if selected != operatorPackageDeclared ||
 		systemState == operatorPackageUnverified || userState == operatorPackageUnverified {
@@ -118,6 +140,15 @@ func renderOperatorPackageAudit(owner, systemPath, userPath string, stdout, stde
 		fmt.Fprintln(stderr, "operator package declarations differ: system/user CLI version compatibility is unverified")
 		return 1
 	}
-	fmt.Fprintln(stdout, "Declared package outputs are consistent; running services, active version, ownership and write authority remain unverified")
+	observedPackage, ok := observedOperatorPackage()
+	if !ok {
+		fmt.Fprintln(stderr, "running CLI package identity is unverified; invoke the selected Nix profile's Aginctus CLI and repeat this read-only audit")
+		return 1
+	}
+	if observedPackage != selectedPackage {
+		fmt.Fprintln(stderr, "running CLI differs from the selected package declaration; align the explicitly selected CLI/profile before further preflight")
+		return 1
+	}
+	fmt.Fprintln(stdout, "Declared package outputs are consistent with the observed running CLI path; service executables, protocol compatibility, ownership and write authority remain unverified")
 	return 0
 }

@@ -1,0 +1,28 @@
+{
+  "valid": {
+    "defaults": {},
+    "overrides": {
+      "incus": {"project": "operator-test", "management": {"network": {"name": "operator-mgmt", "ipv4": {"address": "10.42.0.1/24", "nat": false}}}},
+      "gateway": {"id": "operator", "litellm": {"forwardClientHeaders": ["model-a", "provider/*"]}},
+      "firewall": {"zone": "aginctus-test", "egress": {"uplinkZone": "public", "allowTailscaleRouting": false}}
+    },
+    "freeform": {
+      "future": {"nested": {"enabled": true}, "empty": {}, "list": ["a", 2, false], "unset": null},
+      "future.dotted": "literal JSON key",
+      "gateway": {"credentials": {"storage": {"pool": "operator-pool"}}, "egress": {"network": {"name": "operator-egress"}}},
+      "workloads": {"dev": {"instance": {"name": "aginctus-dev"}, "runtime": {"type": "opencode"}, "isolation": "container", "image": {"alias": "aginctus-opencode-workload"}, "storage": {"pool": "default"}, "future": {"enabled": true}}}
+    },
+    "dotted-known": {"gateway.id": "literal-not-a-path", "incus.project": "literal-not-a-project"}
+  },
+  "invalid": {
+    "default-project": {"incus": {"project": "default"}},
+    "path-project": {"incus": {"project": "../escape"}},
+    "empty-project": {"incus": {"project": ""}},
+    "space-project": {"incus": {"project": "two projects"}},
+    "password-nested": {"gateway": {"postgres": {"password": "synthetic-secret-sentinel"}}},
+    "master-null": {"gateway": {"master": {"key": null}}},
+    "salt-dotted": {"gateway.salt.key": "synthetic-secret-sentinel"},
+    "master-mixed": {"gateway": {"MASTER.key": "synthetic-secret-sentinel"}},
+    "password-case": {"GATEWAY.Postgres.Password": "synthetic-secret-sentinel"}
+  }
+}
