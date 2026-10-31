@@ -381,6 +381,9 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 2 && args[0] == "credential-storage" {
+		return executeGatewayCredential(ctx, args[1], stdout, stderr, effective)
+	}
 	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "audit" && strings.HasPrefix(args[3], "--uplink-zone=") {
 		spec, err := gateway.FromConfig(effective)
 		if err != nil {
@@ -739,21 +742,21 @@ func printGatewayUsage(w io.Writer) {
 
 // transitionHerdrClientCommand executes a validated lifecycle action.
 func transitionHerdrClientCommand(ctx context.Context, action string, stdout, stderr io.Writer, effective *config.Config) int {
-		spec, err := herdrclient.FromConfig(effective)
-		if err != nil {
-			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
-			return 1
-		}
-		if err := transitionHerdrClient(ctx, spec, action); err != nil {
-			fmt.Fprintf(stderr, "Herdr client %s: %v\n", action, err)
-			return 1
-		}
-		verb := "started"
-		if action == "stop" {
-			verb = "stopped"
-		}
-		fmt.Fprintf(stdout, "Herdr client %q: %s\n", spec.Name, verb)
-		return 0
+	spec, err := herdrclient.FromConfig(effective)
+	if err != nil {
+		fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
+		return 1
+	}
+	if err := transitionHerdrClient(ctx, spec, action); err != nil {
+		fmt.Fprintf(stderr, "Herdr client %s: %v\n", action, err)
+		return 1
+	}
+	verb := "started"
+	if action == "stop" {
+		verb = "stopped"
+	}
+	fmt.Fprintf(stdout, "Herdr client %q: %s\n", spec.Name, verb)
+	return 0
 }
 
 // executeHerdrClientOperation is called only from parsed Cobra leaves.
