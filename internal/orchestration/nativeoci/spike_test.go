@@ -45,10 +45,18 @@ func TestDaemonOCI(t *testing.T) {
 	}
 	// Atomic create refuses collisions. Failed tests retain guest state for
 	// inspection; destroying the disposable VM is the cleanup boundary.
-	if err := server.CreateProject(api.ProjectsPost{
-		Name: scope.Name, ProjectPut: api.ProjectPut{Config: scope.DesiredConfig()},
-	}); err != nil {
+	for attempt := range 2 {
+		result, err := native.EnsureLocalProject(ctx, scope, native.ProjectCreateAuthorization{Confirmed: true})
+		if err != nil || !result.Verified || result.Created != (attempt == 0) {
+			t.Fatalf("native create/reuse failed: %+v, %v", result, err)
+		}
+	}
+	foreignScope, _ := agincus.NewProjectScope("aginctus-native-foreign")
+	if err := server.CreateProject(api.ProjectsPost{Name: foreignScope.Name}); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := native.EnsureLocalProject(ctx, foreignScope, native.ProjectCreateAuthorization{Confirmed: true}); err == nil {
+		t.Fatal("native project provisioning adopted foreign object")
 	}
 	client := server.UseProject(scope.Name)
 	if err := server.UseProject("default").CreateNetwork(api.NetworksPost{Name: "spike-mgmt", Type: "bridge", NetworkPut: api.NetworkPut{Config: map[string]string{
