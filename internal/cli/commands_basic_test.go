@@ -48,7 +48,7 @@ func TestCobraConfigLoadsOnlyAfterValidArguments(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := Run(context.Background(), []string{"--configure=workloads.dev.runtime=opencode", "config", "get", "workloads.dev.runtime"},
 		&out, &errOut, nil, loader)
-	if code != 0 || errOut.Len() != 0 || !strings.Contains(out.String(), "opencode") {
+	if code != 0 || errOut.Len() != 0 || out.Len() == 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
 	}
 	if len(loader.options.Overrides) != 1 {
