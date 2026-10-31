@@ -17,7 +17,7 @@ func isGatewayCoreCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "status", "remove", "apply", "up", "validate", "render", "credential-storage", "provider", "model":
+	case "status", "remove", "apply", "up", "validate", "render", "credential-storage", "provider", "model", "egress", "responses":
 		return true
 	default:
 		return false
