@@ -121,6 +121,23 @@ For example, a system file may define:
 
 and a user file may override only the name without repeating the rest of the object.
 
+## MCP declarations
+
+The `mcp` subtree holds the normalized MCP configuration: named servers and
+their transports, opaque credential references, explicit per-workload server
+and tool grants, model and protocol capability requirements, and the central
+gateway MCP intent.
+
+It follows the ordinary precedence rules above. Because object keys merge
+recursively while arrays replace wholesale, a higher-precedence source
+narrows a granted tool list instead of extending it, and a `null` value
+withdraws an inherited declaration.
+
+The complete contract, including the credential rules, the effective grant
+semantics and the limits of declared policy, is documented in
+[MCP configuration](mcp-configuration.md). A configuration without an `mcp`
+key declares no MCP policy and authorizes nothing.
+
 ## Selected Incus project (v0.2 foundation)
 
 `incus.project` is the declarative, single-deployment **target** for
