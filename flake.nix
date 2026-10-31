@@ -427,6 +427,9 @@
           vm-harness-gateway-topology = import ./nix/vm-harness/gateway-topology.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-native-oci = import ./nix/vm-harness/native-oci.nix {
+            inherit self nixpkgs system;
+          };
           vm-harness-synthetic-gateway = import ./nix/vm-harness/gateway-topology.nix {
             inherit self nixpkgs system;
             synthetic = true;

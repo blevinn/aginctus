@@ -189,6 +189,16 @@ class RunnerTests(unittest.TestCase):
             ".#vm-harness-synthetic-gateway.driver",
         )
 
+    def test_native_oci_uses_disposable_networked_driver(self):
+        self.assertEqual(
+            runner.build_arguments("native-oci", False)[-1],
+            ".#vm-harness-native-oci.driver",
+        )
+        self.assertNotIn(
+            "AGINCTUS_NATIVE_OCI_SPIKE",
+            runner.clean_environment({"AGINCTUS_NATIVE_OCI_SPIKE": "disposable-vm"}),
+        )
+
     def test_opencode_tool_loopback_is_an_isolated_fixed_target(self):
         self.assertEqual(
             runner.build_arguments("opencode-tool-loopback", False)[-1],
