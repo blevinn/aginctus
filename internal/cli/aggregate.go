@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
@@ -157,11 +156,13 @@ var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, ef
 	return err
 }
 
-func runAggregateApply(ctx context.Context, args []string, stdout, stderr io.Writer, effective *config.Config) int {
+// executeAggregateApply runs a fully parsed, typed CLI operation. Flags and
+// positional syntax have already been validated by Cobra before loading config.
+func executeAggregateApply(ctx context.Context, render bool, fromFile string, stdout, stderr io.Writer, effective *config.Config) int {
 	var plan orchestration.Plan
 	var err error
 	switch {
-	case len(args) == 1 && args[0] == "--render":
+	case render:
 		plan, err = aggregateApplyPlan(effective)
 		if err == nil {
 			encoder := json.NewEncoder(stdout)
@@ -169,29 +170,24 @@ func runAggregateApply(ctx context.Context, args []string, stdout, stderr io.Wri
 			err = encoder.Encode(plan)
 		}
 		if err != nil {
-			fmt.Fprintf(stderr, "render orchestration: %v\n", err)
+			fmt.Fprintf(stderr, "render orchestration: %v\\n", err)
 			return 1
 		}
 		return 0
-	case len(args) == 0:
-		plan, err = aggregateApplyPlan(effective)
-	case len(args) == 2 && args[0] == "--from":
-		plan, err = readAggregatePlan(args[1])
-	case len(args) == 1 && strings.HasPrefix(args[0], "--from="):
-		plan, err = readAggregatePlan(strings.TrimPrefix(args[0], "--from="))
+	case fromFile != "":
+		plan, err = readAggregatePlan(fromFile)
 	default:
-		printApplyUsage(stderr)
-		return 2
+		plan, err = aggregateApplyPlan(effective)
 	}
 	if err != nil {
-		fmt.Fprintf(stderr, "load orchestration: %v\n", err)
+		fmt.Fprintf(stderr, "load orchestration: %v\\n", err)
 		return 1
 	}
 	if err := executeAggregatePlan(ctx, plan, effective); err != nil {
-		fmt.Fprintf(stderr, "apply orchestration: %v\n", err)
+		fmt.Fprintf(stderr, "apply orchestration: %v\\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "applied orchestration %q (%d steps)\n", plan.Metadata.Name, len(plan.Steps))
+	fmt.Fprintf(stdout, "applied orchestration %q (%d steps)\\n", plan.Metadata.Name, len(plan.Steps))
 	return 0
 }
 
