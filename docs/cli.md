@@ -74,11 +74,13 @@ To check the **live proposed drift** without applying changes, use:
 aginctus workload apply --project aginctus dev --dry-run
 ```
 
-The `--dry-run` form uses the pinned `incus-apply` **native** backend,
+The `--dry-run` form uses Aginctus-owned typed workload intent and the official Incus SDK,
 which connects through the local Incus Unix socket and selects the exact
 project through the API. After verifying the existing owned workload, it
 asks the native planner to compute a read-only diff, then checks ownership
-and observed state again. A proposed **create**, replace, delete, ambiguous
+and observed state again. The SDK reader verifies the exact instance and local
+image alias/fingerprint, rechecks instance ETag/creation identity and alias,
+and verifies project policy again. A proposed **create**, replace, delete, ambiguous
 or unknown action fails closed, not a green light to create or replace.
 The machine-readable `ScopedWorkloadApplyDiff` report contains only
 `action` (`unchanged` or `would-update`), `changeCount`, the selected
@@ -86,12 +88,18 @@ project and workload identity, and **`writeAuthorized: false`**. It
 deliberately excludes raw diff values, resource notes and native daemon
 diagnostics, which may contain sensitive configuration.
 
+The typed planner compares only explicitly managed config and device properties.
+It preserves extra devices, workspace mounts, volume attachments and unmanaged
+fields. Image/type/profile/device drift requires separate replacement or
+attachment policy and fails the current CLI preview; it never authorizes
+recreation. A stopped matching instance reports `would-update` with zero field
+changes because the requested lifecycle is running. This internal existing-only
+contract is not a new public desired-state configuration format.
+
 Neither preview grants the authority to execute a scoped write. The native
-planner's observation can become stale immediately; `incus-apply` still
-supports creating absent resources during ordinary upsert, and project
-selection alone cannot fence other Incus clients. The pinned native backend
-is local-only, but its `ForceLocal` option is relevant to the *command*
-backend and is not an additional native-mode safeguard. Bare scoped
+planner's observation can become stale immediately, and project selection alone
+cannot fence other Incus clients. The read-only reader exposes no SDK mutation
+methods. Static `--render` still describes the legacy Apply plan. Bare scoped
 `apply`, `--force` and other mutating forms remain rejected pending
 existing-only server-side enforcement, controller authorization and
 disposable-Incus acceptance (#200/#201/#437/#441/#443). No v0.1 apply
