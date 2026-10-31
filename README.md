@@ -8,7 +8,7 @@ Aginctus **v0.1** is the initial single-host, operator-controlled NixOS/Incus ag
 
 - a multi-command Go CLI (`aginctus apply` / `remove` / `status` / `network ...` / `workload ...` / `gateway ...` / `herdr ...` / `images ...` / `doctor` / `config ...`);
 - a NixOS module (`services.aginctus`) with `nix flake check` evaluation and three opt-in firewall VM tests;
-- two guest images: Herdr client and OpenCode workload; a dedicated OAuth daemon image is planned but deferred out of v0.1 activation (see [architecture decision](docs/architecture/native-chatgpt-oauth.md));
+- two guest images: Herdr client and OpenCode workload; optional LiteLLM-native ChatGPT OAuth is gated v0.2 work (see [architecture decision and blockers](docs/architecture/native-chatgpt-oauth.md));
 - acceptance tooling for firewall reconciliation, OpenCode provisioning, and Herdr lifecycle phases, including an opt-in live dispatcher that requires operator-supplied hooks.
 
 Five functional criteria in [release acceptance #118](https://github.com/blevinn/aginctus/issues/118) have direct live pilot evidence: Herdr-managed OpenCode read/edited a broken fixture, ran real tests, completed, and used a private scoped LiteLLM gateway route to a real upstream provider. Independent key revocation and owned-resource cleanup were observed. The sixth, reproducible **fresh-host** test remains unchecked and is deferred to v0.2, not claimed as passing. The existing selective gateway configuration is under an explicit host reconciler hold; manual review is required before any convergence or upgrade. This is not an audited or production-hardened multi-tenant platform.

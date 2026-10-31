@@ -91,6 +91,7 @@ Use this map to pick the authoritative page for a given task:
 | Scoped workload key lifecycle | [gateway-workload-key-pilot.md](gateway-workload-key-pilot.md) | pilot |
 | Read-only inference smoke | [gateway-inference-smoke.md](gateway-inference-smoke.md) | pilot |
 | Selective Go client-header forwarding | [selective-go-forwarding.md](selective-go-forwarding.md) | pilot |
+| Native ChatGPT OAuth contract, lifecycle gaps and authorization gate | [native-chatgpt-oauth.md](architecture/native-chatgpt-oauth.md) | blocked v0.2 integration; no live activation |
 | LiteLLM OCI egress rollout | [litellm-oci-egress-pilot.md](litellm-oci-egress-pilot.md) | pilot |
 
 ## Security and host policy
