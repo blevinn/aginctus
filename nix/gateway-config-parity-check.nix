@@ -29,6 +29,38 @@ let
     incus.management.network.ipv4.address = "10.42.0.1/24";
   };
   moduleDefaults = configSource { };
+  # A configured MCP subtree rendered by the typed module options. The Go
+  # schema is authoritative, so the rendered source must resolve to the
+  # policy the schema describes.
+  mcpSource = configSource {
+    mcp = {
+      servers.docs = {
+        transport = "streamable-http";
+        url = "https://docs.example.com/mcp";
+        credentialRef = "docs-token";
+        allowedTools = [
+          "fetch"
+          "search"
+        ];
+      };
+      servers.local = {
+        transport = "stdio";
+        command = "/usr/bin/mcp-local";
+      };
+      capabilities.coding = {
+        protocol = "responses";
+        requires = [ "mcp-tools" ];
+      };
+      grants.dev = {
+        capability = "coding";
+        servers.docs = [ "search" ];
+      };
+      gateway.enabled = true;
+    };
+  };
+  mcpFixture = pkgs.runCommand "aginctus-nixos-mcp-fixture.json" { } ''
+    cp ${mcpSource} "$out"
+  '';
   fixtures =
     pkgs.runCommand "aginctus-nixos-gateway-fixtures.json" { nativeBuildInputs = [ pkgs.jq ]; }
       ''
@@ -72,12 +104,14 @@ self.packages.${system}.aginctus.overrideAttrs (old: {
     runHook preCheck
     export AGINCTUS_NIXOS_GATEWAY_FIXTURES=${fixtures}
     export AGINCTUS_NIXOS_MODULE_DEFAULTS=${moduleDefaults}
+    export AGINCTUS_NIXOS_MCP_FIXTURES=${mcpFixture}
     unset AGINCTUS_INCUS_INTEGRATION AGINCTUS_INCUS_DISPOSABLE
     go test ./internal/gateway -run '^TestNixOSGatewayConfigParity$' -count=1 -v
     go test ./internal/config -run '^TestDefaultsMatchNixOSModule$' -count=1 -v
+    go test ./internal/config -run '^TestNixOSMCPConfigParity$' -count=1 -v
     runHook postCheck
   '';
   passthru = (old.passthru or { }) // {
-    inherit fixtures moduleDefaults;
+    inherit fixtures moduleDefaults mcpFixture;
   };
 })
