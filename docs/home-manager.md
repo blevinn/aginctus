@@ -77,6 +77,18 @@ the Aginctus CLI in `home.packages` and creates
 `xdg.configFile."aginctus/config.json"` from the same typed defaults
 used by NixOS. The CLI reads this file using its existing XDG rules.
 
+The `operator-settings-parity` flake check compares complete rendered Home
+Manager and NixOS settings through the Go loader using shared fixtures. It
+covers defaults, explicit settings, freeform forward-compatible keys and
+environment/explicit-file/CLI precedence. JSON dotted keys remain literal keys;
+CLI `--config path=value` uses dotted paths. Runtime secret keys are rejected
+in nested, dotted and case-varied forms, including `null` values.
+
+Shared `firewall` settings describe CLI intent, not host authorization. Home
+Manager exposes no NixOS `services.aginctus.firewall` policy switches and does
+not install privileged services. User configuration cannot grant firewall or
+bridge authority; privileged host policy remains separately administered.
+
 `home-manager build --flake .#operator` evaluates the user generation without
 activating it. After inspecting the closure and reviewing any conflicts with
 existing `~/.config/aginctus/config.json`, a standalone operator can use
