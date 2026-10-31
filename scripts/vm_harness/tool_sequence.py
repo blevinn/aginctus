@@ -174,6 +174,7 @@ class ToolSequence:
         # own run-owned /tmp workspace. Never take workdir from HTTP input.
         if not isinstance(workdir, str) or not (
             workdir == "/workspace" or
+            re.fullmatch(r"/home/agent/aginctus-acceptance/aginctus-acceptance\.[A-Za-z0-9]{8}", workdir) or
             (workdir.startswith("/tmp/") and os.path.normpath(workdir) == workdir)
         ):
             raise SequenceError("untrusted fixture workspace root")
