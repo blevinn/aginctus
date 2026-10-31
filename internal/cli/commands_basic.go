@@ -32,7 +32,17 @@ func runBasicCobra(
 		return effective, err
 	}
 
-	configCmd := &cobra.Command{Use: "config", Short: "Read effective configuration"}
+	configCmd := &cobra.Command{
+		Use:   "config",
+		Short: "Read effective configuration",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+		},
+	}
 	configCmd.AddCommand(&cobra.Command{
 		Use: "show", Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
