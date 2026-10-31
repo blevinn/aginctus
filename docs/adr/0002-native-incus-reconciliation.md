@@ -24,6 +24,15 @@ generic resource DSLs and external reconciliation engines are deferred.
 The [OCI feasibility assessment](../design/native-oci-feasibility.md) records
 the daemon-side pull strategy and remaining production acceptance gates.
 
+The immediate implementation is a small operation-oriented resource lifecycle,
+with runtime intent separate from SDK observations, planning and explicitly
+authorized execution. Stable identities, field ownership and non-mutating plans
+provide the seam for future desired-state configuration. Continuous controllers,
+generic resource DSLs and external reconciliation engines are deferred.
+
+The [OCI feasibility assessment](../design/native-oci-feasibility.md) records
+the daemon-side pull strategy and remaining production acceptance gates.
+
 ## Safety and compatibility constraints
 
 - Existing v0.1 CLI workflows and managed deployments retain behavioral compatibility during migration.
