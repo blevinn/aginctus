@@ -19,6 +19,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+if __package__:
+    from . import evidence
+else:
+    import evidence
+
 ROOT = Path(__file__).resolve().parents[2]
 STORE_ROOT = Path("/nix/store")
 SCENARIOS = {
@@ -29,10 +34,17 @@ SCENARIOS = {
     "native-oci": "vm-harness-native-oci",
     "synthetic-gateway": "vm-harness-synthetic-gateway",
     "synthetic-tool-gateway": "vm-harness-synthetic-tool-gateway",
+    "full-stack": "vm-harness-full-stack",
     "opencode-tool-loopback": "vm-harness-opencode-tool-loopback",
     "ownership-recovery": "vm-harness-ownership-recovery",
 }
-NETWORKED_SCENARIOS = {"gateway-topology", "synthetic-gateway", "synthetic-tool-gateway", "native-oci"}
+NETWORKED_SCENARIOS = {
+    "gateway-topology",
+    "synthetic-gateway",
+    "synthetic-tool-gateway",
+    "native-oci",
+    "full-stack",
+}
 # Explicit allowlist: do not propagate secrets, Incus remotes, Nix build hooks,
 # QEMU arguments, inherited integration flags or SSH agents to test processes.
 PASSTHROUGH = ("PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TERM")
@@ -123,6 +135,7 @@ def write_report(
     *,
     launch_failed: bool = False,
     runtime_failed: bool = False,
+    full_stack: dict | None = None,
 ) -> Path:
     """Write synthetic-only, independently owned outcome metadata.
 
@@ -132,11 +145,8 @@ def write_report(
     if output_root.is_symlink():
         raise ValueError("refusing symlinked VM evidence root")
     output_root.mkdir(mode=0o700, exist_ok=True)
-    if not output_root.is_dir():
-        raise ValueError("VM evidence root is not a directory")
     run_id = secrets.token_hex(12)
     run_dir = output_root / run_id
-    run_dir.mkdir(mode=0o700)
     record = {
         "schema_version": 1,
         "run_id": run_id,
@@ -154,11 +164,27 @@ def write_report(
         "upstream_inference": "not_verified",
         "cleanup": "not_verified",
     }
+    if full_stack is not None:
+        if scenario != "full-stack":
+            raise ValueError("full-stack evidence on another scenario")
+        record["full_stack"] = evidence.normalize(full_stack)
     report = run_dir / "result.json"
-    fd = os.open(report, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as out:
-        json.dump(record, out, indent=2, sort_keys=True)
-        out.write("\n")
+    parent = os.open(output_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        evidence.require_private(parent, directory=True)
+        os.mkdir(run_id, mode=0o700, dir_fd=parent)
+        directory = os.open(run_id, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+        try:
+            evidence.require_private(directory, directory=True)
+            fd = os.open("result.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                         0o600, dir_fd=directory)
+            with os.fdopen(fd, "w", encoding="utf-8") as out:
+                json.dump(record, out, indent=2, sort_keys=True)
+                out.write("\n")
+        finally:
+            os.close(directory)
+    finally:
+        os.close(parent)
     return report
 
 
@@ -176,6 +202,7 @@ def main(argv: list[str] | None = None) -> int:
         command = build_arguments(args.scenario, args.mode == "debug")
         launch_failed = False
         runtime_failed = False
+        full_stack = None
         try:
             result = subprocess.run(
                 command,
@@ -203,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
             with tempfile.TemporaryDirectory(prefix="aginctus-vm-") as state:
                 try:
                     result = subprocess.run(
-                        [str(driver), "--no-interactive"],
+                        [str(driver), "--output_directory", state, "--no-interactive"],
                         cwd=state,
                         env=env,
                         text=True,
@@ -219,6 +246,17 @@ def main(argv: list[str] | None = None) -> int:
                     result = subprocess.CompletedProcess(
                         [], 1, "", "VM runtime could not start\n"
                     )
+                if args.scenario == "full-stack":
+                    try:
+                        full_stack = evidence.read_artifact(Path(state))
+                    except (OSError, ValueError, UnicodeError):
+                        pass
+                    if result.returncode == 0 and (
+                        full_stack is None or not evidence.complete(full_stack)
+                    ):
+                        result = subprocess.CompletedProcess(
+                            [], 1, "", "Full-stack evidence missing, invalid or incomplete\n"
+                        )
             runtime_failed = result.returncode != 0
         if args.mode == "test":
             report = write_report(
@@ -228,6 +266,7 @@ def main(argv: list[str] | None = None) -> int:
                 ROOT / ".vm-harness-results",
                 launch_failed=launch_failed,
                 runtime_failed=runtime_failed,
+                full_stack=full_stack,
             )
             print(f"VM evidence: {report}")
         if result.returncode != 0:

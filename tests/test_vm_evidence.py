@@ -10,10 +10,44 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.checks import vm_evidence
-from scripts.vm_harness import runner
+from scripts.vm_harness import evidence, runner
 
 
 class VMEvidenceTests(unittest.TestCase):
+    def test_optional_full_stack_is_read_only_allowlisted_and_preserves_old_v1(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, run_id, path = self.create(directory)
+            raw = json.loads(path.read_text())
+            raw["scenario"] = "full-stack"
+            old = vm_evidence.normalize(raw, run_id)
+            self.assertNotIn("full_stack", old)
+            outcomes = evidence.Evidence().record
+            for section in ("phases", "gates"):
+                outcomes[section] = dict.fromkeys(outcomes[section], "pass")
+            raw["full_stack"] = outcomes
+            path.write_text(json.dumps(raw))
+            with (patch.object(vm_evidence, "ROOT", root),
+                  contextlib.redirect_stdout(io.StringIO()) as out):
+                self.assertEqual(vm_evidence.main([run_id, "--format", "json"]), 0)
+            result = json.loads(out.getvalue())
+            self.assertEqual(result["full_stack"], outcomes)
+            self.assertEqual(result["cleanup"], "not_verified")
+            outcomes["phases"]["wait"] = "fail"
+            with self.assertRaises(ValueError):
+                vm_evidence.normalize(raw, run_id)
+            raw.update(status="fail", exit_code=1, failure_stage="runtime")
+            result = vm_evidence.normalize(raw, run_id)
+            self.assertEqual(result["full_stack"]["phases"]["close"], "pass")
+            mutations = [dict(outcomes, payload="SECRET_CANARY"),
+                         dict(outcomes, source="cryptographic_attestation"),
+                         dict(outcomes, gates={**outcomes["gates"], "scoped_key_revoked": "SECRET_CANARY"}),
+                         dict(outcomes, phases={"wait": "pass"})]
+            for bad in mutations:
+                with self.assertRaises(ValueError):
+                    vm_evidence.normalize({**raw, "full_stack": bad}, run_id)
+            with self.assertRaises(ValueError):
+                vm_evidence.normalize({**raw, "scenario": "smoke"}, run_id)
+
     def create(self, directory, *, exit_code=0, launch_failed=False):
         evidence_root = Path(directory) / "evidence"
         provenance = runner.Provenance("a" * 40, False, "b" * 64)
