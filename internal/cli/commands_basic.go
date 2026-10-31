@@ -74,6 +74,7 @@ func runBasicCobra(
 	root.AddCommand(doctor)
 
 	addAggregateCommands(root, stdout, stderr, load, &status)
+	addNetworkCommands(root, stdout, stderr, load, &status)
 
 	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Fprintf(stderr, "%v\nUsage: aginctus [global options] <command> [flags]\n", err)
