@@ -78,6 +78,33 @@ dedicated Incus daemon. The executable accepts no command-line
 arguments, uses no default Incus remote, rejects root, and prints only
 bounded aggregate success/failure counts.
 
+## Runtime instance policy
+
+Signed run metadata does not authorize arbitrary additional Incus options.
+Before initial start, status, guest execution, ownership discovery or cleanup,
+the backend checks the expanded instance configuration. Only the launch plan's
+CPU, memory, nesting and signed run metadata keys are accepted, plus the
+dedicated daemon's `image.*` and `volatile.*` metadata. Other keys, including
+raw QEMU overrides, cloud-init (also legacy `user.*` seed keys), environment,
+boot and snapshot controls, fail closed even when their values are empty.
+The single root disk must contain exactly `type`, `path`, `pool` and `size`,
+with the admitted values; additional disk options are rejected.
+
+These are application preflight checks, not atomic daemon authorization or a
+defense against a compromised worker daemon/administrator. The daemon remains
+trusted for image/volatile metadata and enforcing project restrictions. A
+concurrent administrator can change resources between checks and operations.
+Policy drift blocks the entire discovery/sweep before deletion; an operator
+must investigate it on the dedicated worker. Do not rotate the signing key or
+weaken policy to bypass a failed sweep. A recoverable signed handle is returned
+if post-create verification fails, but it does not authorize cleanup of a
+policy-drifted instance.
+
+Hostless regression tests exercise extra configuration and disk options before
+start, exec and destruction, including expiry reconciliation, and permit
+daemon metadata on an otherwise valid run. They do not prove actual Incus
+project enforcement, real-host isolation or complete storage reclamation.
+
 ## Operational acceptance — not yet performed
 
 After operator approval and after validating real project restrictions,

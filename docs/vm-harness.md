@@ -504,6 +504,112 @@ or packet-level isolation verified without those measurements. Issues #532,
 [#524](https://github.com/blevinn/aginctus/issues/524) and
 [#431](https://github.com/blevinn/aginctus/issues/431) remain open.
 
+## Test-only immutable OCI staging interface (#532)
+
+`nix/vm-harness/oci-staging.nix` is an explicit, additive guest module for
+dedicated-worker acceptance. Import it alongside `aginctus-host.nix` using
+`(import ./oci-staging.nix { inherit self system; })`. It is **not imported by
+the existing gateway scenarios**. The full-stack integration owner must add
+that import and the provisioning/check calls below to the chosen scenario.
+`gateway-topology.nix` retains its current networked tag-based behavior until
+that integration is made.
+
+The sole input manifest, `tests/oci-stage/pins.json`, records anonymous registry
+verification on 2026-10-30 for the declared LiteLLM and PostgreSQL source tags.
+It includes immutable index, per-platform manifest, config, compressed-layer
+size and expected Incus fingerprint for Linux amd64 and arm64. Source tags are
+provenance only; neither verification nor staging resolves mutable tags.
+The module forces gateway settings to the native platform's **leaf digest**,
+so Compose and staging use exactly the same reference. arm64 pins are verified
+registry metadata, not evidence of arm64 VM boot support.
+
+Hostless validation (registry verification requires public HTTPS, but downloads
+only bounded metadata, no layers, and reads no registry credentials):
+
+```sh
+nix --quiet develop --no-update-lock-file -c go test ./tests/oci-stage ./internal/orchestration/drivers/compose
+nix --quiet develop --no-update-lock-file -c go run ./tests/oci-stage plan
+nix --quiet develop --no-update-lock-file -c go run ./tests/oci-stage verify
+nix --quiet develop --no-update-lock-file -c just check report-json
+```
+
+`verify` hashes the actual bytes returned by the registries, checks each leaf's
+membership in the pinned index, verifies config OS/architecture and layer sizes,
+and reproduces the pinned Incus Compose layer-digest fingerprint algorithm.
+No layer contents or signatures are authenticated by this metadata-only check;
+Incus must verify actual content during import. Registry deletion/rate limiting
+remains a provisioning failure, never permission to substitute a newer tag.
+
+Inside the **disposable guest only**, after module import and image build,
+with a fresh initialized Incus daemon, no external remotes/auth, and no live
+provider credentials:
+
+```sh
+incus admin init --auto --storage-backend dir
+incus config set core.https_address 127.0.0.1:8443
+test "$(incus config get core.https_address)" = 127.0.0.1:8443
+ss -lntp
+systemctl start aginctus-test-oci-stage.service
+oci-stage check
+# Integration boundary: enforce worker/guest external-egress denial here,
+# retain independently measured packet counters, then deploy and infer.
+XDG_STATE_HOME=/run/aginctus-vm-gateway-state aginctus --configuration-file /etc/aginctus/config.json gateway up
+oci-stage check
+```
+
+Do not run these guest commands on the operator host or pilot. In a NixOS
+driver, use `machine.succeed(...)` after `start_all()` and waiting for
+`incus.service`. The helper's marker is an accidental-use guard, not isolation
+from root. Its Unix connection uses the fixed guest Incus socket and ignores
+socket/remote environment overrides. The staging client replaces loaded Incus
+configuration with anonymous defaults before resolving sources. The service
+uses private empty Incus config directories. No provider model is registered
+and no provider credentials are supplied by this module.
+
+Staging refuses non-loopback HTTPS and foreign gateway projects, creates only
+the marked gateway project when missing, then uses the **locked Compose image
+resource implementation** to import directly into that project's isolated
+image store. The current driver does not configure a shared image cache;
+seeding a separate cache project would not satisfy its project-local lookup.
+Aliases use the library's exact digest-reference normalization. A read-only
+`check` uses only guest Incus GETs, refuses missing/wrong fingerprint or
+architecture and incomplete OCI properties, and cannot repair or pull images.
+The `oci.volumes` metadata marker is required because its absence permits the
+library's registry metadata fallback. A poisoned alias is rejected, not
+automatically replaced. Unit tests exercise negative integrity checks and the
+pinned Compose implementation consuming staged aliases with pull-never.
+
+Budget: two sequential native-platform imports, about 508 MB compressed on
+amd64 or 513 MB on arm64 (decimal); each image's metadata-verified layer total
+must be at most 512 MiB. Metadata reads are capped at 4 MiB per document. The
+helper has a ten-minute context deadline; the service adds an eleven-minute
+timeout, 1 GiB helper memory and one CPU equivalent. **These are not incusd
+download/retry/unpack quotas**: daemon-side operations can outlive client
+cancellation. Allocate at most two vCPUs, 8 GiB RAM and a 32 GiB disposable
+guest disk at the worker boundary, plus a worker storage quota, before running.
+Compressed sizes do not bound extracted images or Nix store usage. On success
+or failure destroy the complete disposable VM/disk; never prune pilot stores.
+Do not retry failed staging indefinitely. The service has no automatic boot
+activation or restart policy.
+
+Successful `verify`, `stage` and `check` emit a small JSON receipt with the
+manifest SHA-256, action and architecture, without registry tokens or provider
+payloads. Preserve the reviewed receipt with the source revision, lock hash,
+worker bounds, guest listener inspection, provisioning outcome and separate
+packet measurements. Error diagnostics and VM transcripts require review
+before sharing. `offlineInference` and `cleanup` remain `not_verified` even
+after a successful check: a present image is not proof that no remote pull was
+attempted, and a deadline is not proof of deletion.
+
+Remaining dedicated-worker acceptance: actually boot x86_64 KVM, stage the
+images, verify the only daemon TCP listener is loopback, deny and measure
+external registry traffic **after provisioning**, run the integrated synthetic
+inference stage with no provider secrets, demonstrate cache-miss failure under
+that denial, and independently verify VM/disk deletion. Do not label offline CI
+or packet-level isolation verified without those measurements. Issues #532,
+[#524](https://github.com/blevinn/aginctus/issues/524) and
+[#431](https://github.com/blevinn/aginctus/issues/431) remain open.
+
 ## Machine-readable run evidence
 
 Every `runner.py test <scenario>` invocation writes an independent,

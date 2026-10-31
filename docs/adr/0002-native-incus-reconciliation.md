@@ -1,6 +1,6 @@
 # ADR 0002: Evolve toward Aginctus-native Incus reconciliation
 
-- Status: Accepted direction; implementation deferred
+- Status: Accepted; v0.2 implementation in progress
 - Date: 2026-10-12
 
 ## Context
@@ -11,9 +11,18 @@ Aginctus currently generates declarative orchestration plans with trusted Jsonne
 
 Preserve the Aginctus-owned configuration, restricted Jsonnet evaluation, orchestration plan, validation, and execution engine. Over time replace Apply/Compose drivers with native Incus resource reconciliation using the official Incus Go client. Target a narrowly scoped reconciler for projects, networks, images, volumes, instances and devices with structured observe/diff/plan/validate/execute semantics. Runtime adapters describe intent; they must not depend on orchestration backends.
 
-**Schedule is part of the decision:** no native migration implementation is to begin before the v0.1 deliverable has been accepted. Exploratory and incremental implementation may begin in v0.2, but finishing the migration is neither a v0.2 nor a v0.3 prerequisite; it may continue into later releases. v0.1 retains existing working Apply/Compose paths. This ADR and the tracking issues may be recorded ahead of implementation.
+v0.1 is released. The current target is to complete native orchestration and retire both dependencies in v0.2, as specified in #153. Cutover still requires the safety, parity and recovery gates below; release scheduling does not authorize bypassing them. Existing working Apply/Compose paths remain available until their replacements pass those gates.
 
 Prefer typed Incus SDK operations over subprocess invocation for the native backend. Do not build a general-purpose Compose replacement. Defer final gateway/OCI image choices pending a feasibility spike.
+
+The immediate implementation is a small operation-oriented resource lifecycle,
+with runtime intent separate from SDK observations, planning and explicitly
+authorized execution. Stable identities, field ownership and non-mutating plans
+provide the seam for future desired-state configuration. Continuous controllers,
+generic resource DSLs and external reconciliation engines are deferred.
+
+The [OCI feasibility assessment](../design/native-oci-feasibility.md) records
+the daemon-side pull strategy and remaining production acceptance gates.
 
 ## Safety and compatibility constraints
 

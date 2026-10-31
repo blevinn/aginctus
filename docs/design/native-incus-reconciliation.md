@@ -1,10 +1,10 @@
 # Native Incus reconciliation: staged migration design
 
-Status: **planned post-v0.1 architecture**, not implemented. See [ADR 0002](../adr/0002-native-incus-reconciliation.md) and [epic #153](https://github.com/blevinn/aginctus/issues/153).
+Status: **active v0.2 implementation**. Production execution still uses the legacy drivers. See [ADR 0002](../adr/0002-native-incus-reconciliation.md), [OCI feasibility](native-oci-feasibility.md) and [epic #153](https://github.com/blevinn/aginctus/issues/153).
 
 ## Release guardrails
 
-v0.1 is protected: **no implementation of this migration before v0.1 acceptance**, and no native-driver work is required to deliver v0.1. Incremental work may start in v0.2, but this is a multi-release refactor, **not a v0.2 release acceptance criterion**. Existing Apply/Compose behavior remains the supported execution path until individual subsystems pass parity gates.
+v0.1 is released. v0.2 targets complete native orchestration and dependency retirement. Existing Apply/Compose behavior remains the supported execution path until individual subsystems pass parity gates. Re-scope with the owner if a safe completion is infeasible; do not extend legacy forks to finish scoped writes.
 
 ## Target layering
 
@@ -27,6 +27,12 @@ Aginctus config / explicitly selected workloads
 ```
 
 Preserve current Aginctus-owned engine, ordered execution, fail-fast semantics and secrets-by-reference approach. Replace upstream-specific `apply`/`compose` plan bodies with a typed native resource contract incrementally; document versioning/migration for existing generated plans.
+
+Start with explicit bounded operations, not a continuous reconciler. Runtime
+adapters emit intent without SDK types. Observation and pure planning remain
+separate from actor authorization and mutation-time identity checks. Future
+desired-state configuration can drive the same operations; no external engine
+or general-purpose controller is part of this migration.
 
 ## Resource and lifecycle model
 
@@ -51,7 +57,7 @@ For each selected resource: observe actual state, compare Aginctus-controlled fi
 5. #158: Gateway and image lifecycle migration, contingent on spike.
 6. #159: Cutover, migration guidance, dependency cleanup and retirement of legacy drivers.
 
-Tasks may overlap where safe; the last step has no fixed release date. Issue #26's upstream-process proposal is an alternative long-term direction; reconsider rather than implementing both directions by default.
+Tasks may overlap where safe; v0.2 is the completion target subject to the safety gates. Revisit #26's upstream-process proposal only when native orchestration fully supersedes it.
 
 ## Completion gates
 
