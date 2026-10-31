@@ -381,10 +381,10 @@ func splitPath(path string) ([]string, error) {
 }
 
 // Atomic configuration paths replace their complete subtree when a source
-// supplies them. This keeps policy registries from being assembled out of
-// unrelated lower-priority stores while preserving ordinary deep-merge
-// behavior everywhere else.
-var atomicConfigPaths = [][]string{{"mcp"}}
+// supplies them. A wildcard matches one named registry entry, so adding an
+// MCP server preserves other servers without composing its upstream settings
+// across sources. Other paths retain ordinary deep-merge behavior.
+var atomicConfigPaths = [][]string{{"mcp", "servers", "*"}}
 
 func mergeSource(dst, src map[string]any, prefix []string) {
 	for key, value := range src {
@@ -410,7 +410,7 @@ func isAtomicConfigPath(path []string) bool {
 		}
 		matches := true
 		for index := range path {
-			if path[index] != atomicPath[index] {
+			if atomicPath[index] != "*" && path[index] != atomicPath[index] {
 				matches = false
 				break
 			}
