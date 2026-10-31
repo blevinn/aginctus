@@ -866,21 +866,21 @@ func printGatewayUsage(w io.Writer) {
 
 // transitionHerdrClientCommand executes a validated lifecycle action.
 func transitionHerdrClientCommand(ctx context.Context, action string, stdout, stderr io.Writer, effective *config.Config) int {
-		spec, err := herdrclient.FromConfig(effective)
-		if err != nil {
-			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
-			return 1
-		}
-		if err := transitionHerdrClient(ctx, spec, action); err != nil {
-			fmt.Fprintf(stderr, "Herdr client %s: %v\n", action, err)
-			return 1
-		}
-		verb := "started"
-		if action == "stop" {
-			verb = "stopped"
-		}
-		fmt.Fprintf(stdout, "Herdr client %q: %s\n", spec.Name, verb)
-		return 0
+	spec, err := herdrclient.FromConfig(effective)
+	if err != nil {
+		fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
+		return 1
+	}
+	if err := transitionHerdrClient(ctx, spec, action); err != nil {
+		fmt.Fprintf(stderr, "Herdr client %s: %v\n", action, err)
+		return 1
+	}
+	verb := "started"
+	if action == "stop" {
+		verb = "stopped"
+	}
+	fmt.Fprintf(stdout, "Herdr client %q: %s\n", spec.Name, verb)
+	return 0
 }
 
 // executeHerdrClientOperation is called only from parsed Cobra leaves.
