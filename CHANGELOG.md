@@ -5,8 +5,6 @@ A release is not complete until its acceptance gates and release notes are appro
 
 ## [Unreleased]
 
-- No changes recorded since v0.1.0.
-
 ## [0.1.0]
 
 - Initial single-host operator-controlled NixOS/Incus Aginctus CLI and module, with owned Herdr and OpenCode deployment workflows.

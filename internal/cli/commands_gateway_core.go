@@ -115,7 +115,7 @@ func executeGatewayLifecycle(ctx context.Context, action string, force bool, std
 	}
 	switch action {
 	case "status":
-		return runGatewayStatus(ctx, args[1:], stdout, stderr, effective)
+		return runGatewayStatus(ctx, nil, stdout, stderr, effective)
 	case "remove":
 		if err := spec.Remove(ctx, force); err != nil {
 			fmt.Fprintf(stderr, "gateway cleanup: %v\n", err)
@@ -152,7 +152,6 @@ func executeGatewayLifecycle(ctx context.Context, action string, force bool, std
 	}
 }
 
-
 func addGatewayCoreCommands(
 	root *cobra.Command, stdout, stderr io.Writer,
 	load func() (*config.Config, error), status *int,
@@ -178,7 +177,7 @@ func addGatewayCoreCommands(
 		parent.AddCommand(cmd)
 	}
 	for _, action := range []struct {
-		name string
+		name    string
 		aliases []string
 	}{
 		{"status", nil}, {"apply", []string{"up"}}, {"remove", nil},
