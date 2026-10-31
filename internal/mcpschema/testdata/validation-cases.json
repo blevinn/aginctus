@@ -1,0 +1,289 @@
+{
+  "cases": [
+    {
+      "config": {
+        "servers": {
+          "docs": {
+            "transport": "sse"
+          }
+        }
+      },
+      "error": "mcp.servers.docs.transport: unsupported transport \"sse\", want \"streamable-http\" or \"stdio\"",
+      "name": "unknown-transport"
+    },
+    {
+      "config": {
+        "servers": {
+          "docs": {
+            "command": "/bin/x",
+            "headers": {},
+            "transport": "stdio"
+          }
+        }
+      },
+      "error": "mcp.servers.docs: unknown field \"headers\"",
+      "name": "unknown-field"
+    },
+    {
+      "config": {
+        "servers": {
+          "docs": {
+            "transport": "streamable-http"
+          }
+        }
+      },
+      "error": "mcp.servers.docs.url: is required for the \"streamable-http\" transport",
+      "name": "missing-url"
+    },
+    {
+      "config": {
+        "servers": {
+          "local": {
+            "command": "/bin/x",
+            "transport": "stdio",
+            "url": "https://example.com/mcp"
+          }
+        }
+      },
+      "error": "mcp.servers.local.url: is only valid for the \"streamable-http\" transport",
+      "name": "url-on-stdio"
+    },
+    {
+      "config": {
+        "servers": {
+          "docs": {
+            "credentialRef": "sk-live",
+            "transport": "streamable-http",
+            "url": "https://example.com/mcp"
+          }
+        }
+      },
+      "error": "mcp.servers.docs.credentialRef: must reference protected state, not credential material",
+      "name": "plaintext-credential-reference"
+    },
+    {
+      "config": {
+        "servers": {
+          "docs": {
+            "transport": "streamable-http",
+            "url": "https://example.com/mcp?token=abc"
+          }
+        }
+      },
+      "error": "mcp.servers.docs.url: must not carry credential material",
+      "name": "credential-query-parameter"
+    },
+    {
+      "config": {
+        "capabilities": {
+          "coding": {
+            "requires": [
+              "mcp-tools"
+            ]
+          }
+        },
+        "gateway": {
+          "enabled": true
+        },
+        "grants": {
+          "dev": {
+            "capability": "coding",
+            "servers": {
+              "missing": [
+                "search"
+              ]
+            }
+          }
+        },
+        "servers": {
+          "docs": {
+            "transport": "streamable-http",
+            "url": "https://example.com/mcp"
+          }
+        }
+      },
+      "error": "mcp.grants.dev.servers.missing: unknown MCP server",
+      "name": "unknown-grant-server"
+    },
+    {
+      "config": {
+        "capabilities": {
+          "coding": {
+            "requires": [
+              "mcp-tools"
+            ]
+          }
+        },
+        "gateway": {
+          "enabled": true
+        },
+        "grants": {
+          "dev": {
+            "capability": "coding",
+            "servers": {
+              "docs": [
+                "fetch"
+              ]
+            }
+          }
+        },
+        "servers": {
+          "docs": {
+            "allowedTools": [
+              "search"
+            ],
+            "transport": "streamable-http",
+            "url": "https://example.com/mcp"
+          }
+        }
+      },
+      "error": "mcp.grants.dev.servers.docs[0]: tool grant is outside the server tool allowlist",
+      "name": "tool-outside-server-allowlist"
+    },
+    {
+      "config": {
+        "gateway": {
+          "enabled": true
+        },
+        "grants": {
+          "dev": {
+            "servers": {
+              "docs": [
+                "search"
+              ]
+            }
+          }
+        },
+        "servers": {
+          "docs": {
+            "transport": "streamable-http",
+            "url": "https://example.com/mcp"
+          }
+        }
+      },
+      "error": "mcp.grants.dev.capability: is required when the workload holds MCP server grants",
+      "name": "missing-capability-profile"
+    },
+    {
+      "config": {
+        "gateway": {
+          "enabled": true
+        },
+        "grants": {
+          "dev": {
+            "capability": "missing",
+            "servers": {
+              "docs": [
+                "search"
+              ]
+            }
+          }
+        },
+        "servers": {
+          "docs": {
+            "transport": "streamable-http",
+            "url": "https://example.com/mcp"
+          }
+        }
+      },
+      "error": "mcp.grants.dev.capability: unknown capability profile \"missing\"",
+      "name": "unknown-capability-profile"
+    },
+    {
+      "config": {
+        "capabilities": {
+          "coding": {
+            "requires": [
+              "resources"
+            ]
+          }
+        },
+        "grants": {
+          "dev": {
+            "capability": "coding"
+          }
+        }
+      },
+      "error": "mcp.capabilities.coding.requires[0]: unsupported MCP capability \"resources\", it requires policy that is not implemented",
+      "name": "unsupported-capability"
+    },
+    {
+      "config": {
+        "capabilities": {
+          "coding": {
+            "requires": [
+              "provider-hosted-tools"
+            ]
+          }
+        },
+        "gateway": {
+          "enabled": true
+        },
+        "grants": {
+          "dev": {
+            "capability": "coding",
+            "servers": {
+              "docs": [
+                "search"
+              ]
+            }
+          }
+        },
+        "servers": {
+          "docs": {
+            "transport": "streamable-http",
+            "url": "https://example.com/mcp"
+          }
+        }
+      },
+      "error": "mcp.grants.dev.capability: capability profile \"coding\" must require \"mcp-tools\" when the workload holds MCP server grants",
+      "name": "capability-without-mcp-tools"
+    },
+    {
+      "config": {
+        "gateway": {
+          "enabled": true,
+          "requireAuthenticatedWorkload": false
+        },
+        "servers": {
+          "docs": {
+            "transport": "streamable-http",
+            "url": "https://example.com/mcp"
+          }
+        }
+      },
+      "error": "mcp.gateway.requireAuthenticatedWorkload: must remain enabled, the gateway must bind requests to an authenticated workload identity",
+      "name": "unauthenticated-workloads-allowed"
+    },
+    {
+      "config": {
+        "gateway": {
+          "upstreamTimeoutSeconds": 301
+        }
+      },
+      "error": "mcp.gateway.upstreamTimeoutSeconds: must be between 1 and 300",
+      "name": "upstream-timeout-out-of-range"
+    },
+    {
+      "config": {
+        "servers": {
+          "docs": {
+            "transport": "streamable-http",
+            "url": "https://example.com/mcp"
+          }
+        }
+      },
+      "error": "mcp.gateway.enabled: must be enabled to route the declared \"streamable-http\" servers",
+      "name": "remote-server-without-gateway-intent"
+    },
+    {
+      "config": {
+        "gateway": {
+          "enabled": true
+        }
+      },
+      "error": "mcp.gateway.enabled: requires at least one \"streamable-http\" server to route",
+      "name": "gateway-intent-without-remote-server"
+    }
+  ]
+}
