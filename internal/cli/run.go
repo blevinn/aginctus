@@ -114,6 +114,12 @@ func Run(
 		return runTestenv(ctx, commandArgs[1:], stdout, stderr)
 	}
 
+	// Migrate command families one at a time. Cobra validates the complete
+	// basic-command syntax before the configuration loader is consulted.
+	if commandArgs[0] == "config" || commandArgs[0] == "doctor" {
+		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
+	}
+
 	effective, err := configLoader.Load(options)
 	if err != nil {
 		fmt.Fprintf(stderr, "configuration: %v\n", err)

@@ -216,7 +216,10 @@ Existing `images update` and its systemd units are **not** redirected.
 No active workloads, gateway instances, persistent volumes, Linux
 bridges or NixOS/Home Manager owners are migrated by selecting a project.
 
-The earlier `operator project-plan --project NAME` is read-only;
+The earlier `operator project-plan --project NAME` and
+`operator project-ensure --project NAME --confirm-create` are referenced
+here as future v0.2 project-isolation surfaces; they are **not yet
+implemented** in the v0.1 CLI. `operator project-plan` is read-only;
 `operator project-ensure --project NAME --confirm-create` may create a
 fresh, explicitly selected **local** project, but does not move or
 manage resources. Full explicit project propagation remains in

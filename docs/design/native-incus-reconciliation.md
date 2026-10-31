@@ -36,7 +36,30 @@ or general-purpose controller is part of this migration.
 
 ## Resource and lifecycle model
 
-Initial scoped types: Incus projects, bridges/networks, images/fingerprints, storage volumes, instances and devices. Keep OCI acquisition separate until the feasibility spike chooses an implementation. Each resource has an Aginctus identity and ownership metadata, explicit desired fields, lifecycle target and dependencies. A missing resource in a selected plan does not imply deletion.
+Target scoped types: Incus projects, bridges/networks, images/fingerprints, storage volumes, instances and devices. Keep OCI metadata resolution separate from resource execution. Each resource has an Aginctus identity and ownership metadata, explicit desired fields, lifecycle target and dependencies. A missing resource in a selected plan does not imply deletion.
+
+The first implemented native vertical slice is existing-workload-only:
+`workload.Spec.NativeExistingIntent` produces an SDK-independent instance intent,
+`native.PlanExistingInstance` performs pure managed-field comparison, and an
+injectable local SDK reader validates and rechecks project/instance/image state.
+The scoped CLI dry-run consumes this model; static Apply rendering and legacy
+writes retain their separate contracts. No actor authorization or execution
+capability is carried by these observations or plans. Independent resource
+intents and multi-resource execution remain to be implemented.
+
+Native project provisioning implements the existing explicit operator
+create-only contract through the SDK. It requires confirmed nondefault scope
+and verified local transport, rechecks absence before an atomic create with
+initial ownership/features, rejects foreign/policy-drifted projects, and reports
+uncertain partial completion without rollback. This is not authority for
+controller activation, existing-project repair, workload writes or migration.
+
+For public gateway OCI images, `nativeoci.ResolvePublic` resolves and verifies
+bounded registry index/manifest/config metadata using ORAS. It keeps full
+manifest/config identity separate from Incus's layer-only fingerprint. Incus
+pulls the resulting immutable reference through the SDK; the operator does not
+unpack the image or require a daemon HTTPS listener. This is demonstrated in
+the disposable spike, not yet activated for production gateway lifecycle.
 
 For each selected resource: observe actual state, compare Aginctus-controlled fields, produce structured create/update/replace/delete/no-op actions, preflight the entire selected plan for ownership and safety, then apply in dependency order. Do not silently replace on immutable-field drift. Make storage retention and destructive actions explicit. Dry-run shares planning logic with execution and must not mutate.
 

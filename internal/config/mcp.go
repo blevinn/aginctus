@@ -12,9 +12,7 @@ import (
 // material into the MCP subtree.
 //
 // The MCP schema declares no such field, so a source that sets one is
-// rejected at the source boundary. The loader deep-merges objects, so a
-// later override that replaces part of a server declaration would otherwise
-// leave the forbidden field in the effective configuration.
+// rejected at the source boundary before its atomic subtree is merged.
 var mcpForbiddenFields = map[string]bool{
 	"api_key":       true,
 	"apikey":        true,

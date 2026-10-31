@@ -79,6 +79,23 @@ currently supported configuration or a release acceptance claim.
 - [Gateway inference smoke](gateway-inference-smoke.md) —
   read-only inference smoke for the gateway path.
 
+### Gateway documentation map
+
+Multiple docs cover the gateway/egress boundary from different angles.
+Use this map to pick the authoritative page for a given task:
+
+| Task | Authoritative doc | Status |
+| --- | --- | --- |
+| Overall gateway operator workflow | [gateway-operator-path.md](gateway-operator-path.md) | current procedure |
+| Egress bridge, OCI NIC, DHCP design | [gateway-egress-network.md](gateway-egress-network.md) | design + pilot |
+| Host firewalld egress policy and recovery | [gateway-firewalld-egress.md](gateway-firewalld-egress.md) | current procedure |
+| Management DHCP default-route suppression | [management-dhcp-gateway.md](management-dhcp-gateway.md) | separately approved pilot |
+| API-key provider registration/rotation | [gateway-api-key-pilot.md](gateway-api-key-pilot.md) | pilot |
+| Scoped workload key lifecycle | [gateway-workload-key-pilot.md](gateway-workload-key-pilot.md) | pilot |
+| Read-only inference smoke | [gateway-inference-smoke.md](gateway-inference-smoke.md) | pilot |
+| Selective Go client-header forwarding | [selective-go-forwarding.md](selective-go-forwarding.md) | pilot |
+| LiteLLM OCI egress rollout | [litellm-oci-egress-pilot.md](litellm-oci-egress-pilot.md) | pilot |
+
 ## Security and host policy
 
 - [Security controls and limitations](security.md) — implemented boundaries,
