@@ -11,7 +11,7 @@ import (
 // Operator diagnostics deliberately never use ambient or implicit project
 // selection. Offline and host-only operations reject configuration overrides.
 func addOperatorCommands(root *cobra.Command, stdout, stderr io.Writer,
-	load func() (*config.Config, error), status *int, options config.Options,
+	load func() (*config.Config, error), status *int, options *config.Options,
 ) {
 	operator := &cobra.Command{Use: "operator", Short: "Inspect operator and project authority"}
 	root.AddCommand(operator)
