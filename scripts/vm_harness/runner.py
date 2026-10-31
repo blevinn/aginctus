@@ -26,12 +26,13 @@ SCENARIOS = {
     "storage-network": "vm-harness-storage-network",
     "runtime-lifecycle": "vm-harness-runtime-lifecycle",
     "gateway-topology": "vm-harness-gateway-topology",
+    "native-oci": "vm-harness-native-oci",
     "synthetic-gateway": "vm-harness-synthetic-gateway",
     "synthetic-tool-gateway": "vm-harness-synthetic-tool-gateway",
     "opencode-tool-loopback": "vm-harness-opencode-tool-loopback",
     "ownership-recovery": "vm-harness-ownership-recovery",
 }
-NETWORKED_SCENARIOS = {"gateway-topology", "synthetic-gateway", "synthetic-tool-gateway"}
+NETWORKED_SCENARIOS = {"gateway-topology", "synthetic-gateway", "synthetic-tool-gateway", "native-oci"}
 # Explicit allowlist: do not propagate secrets, Incus remotes, Nix build hooks,
 # QEMU arguments, inherited integration flags or SSH agents to test processes.
 PASSTHROUGH = ("PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TERM")
