@@ -47,6 +47,13 @@ writes retain their separate contracts. No actor authorization or execution
 capability is carried by these observations or plans. Independent resource
 intents and multi-resource execution remain to be implemented.
 
+Native project provisioning implements the existing explicit operator
+create-only contract through the SDK. It requires confirmed nondefault scope
+and verified local transport, rechecks absence before an atomic create with
+initial ownership/features, rejects foreign/policy-drifted projects, and reports
+uncertain partial completion without rollback. This is not authority for
+controller activation, existing-project repair, workload writes or migration.
+
 For public gateway OCI images, `nativeoci.ResolvePublic` resolves and verifies
 bounded registry index/manifest/config metadata using ORAS. It keeps full
 manifest/config identity separate from Incus's layer-only fingerprint. Incus
