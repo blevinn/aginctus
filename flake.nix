@@ -495,6 +495,9 @@
         {
           nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
           home-manager-module = import ./nix/home-manager-module-check.nix { inherit self nixpkgs system; };
+          operator-settings-parity = import ./nix/operator-settings-parity-check.nix {
+            inherit self nixpkgs system;
+          };
           gateway-config-parity = import ./nix/gateway-config-parity-check.nix {
             inherit self nixpkgs system;
           };
