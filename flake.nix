@@ -351,6 +351,27 @@
           default = aginctusCli;
           # Expose exactly the runtime used by the workload image for contract tests.
           opencode-runtime = aginctusPinnedOpenCode;
+          # Test-only Go toolchain; retain the production Herdr/OpenCode launcher.
+          vm-harness-opencode-workload =
+            let
+              guest = opencodeWorkloadSystem.extendModules {
+                modules = [
+                  {
+                    environment.systemPackages = [
+                      pkgs.go
+                      (pkgs.writeShellScriptBin "aginctus-vm-guest-credentials" ''
+                        exec ${pkgs.python3}/bin/python3 ${./scripts/vm_harness/guest_credentials.py} "$@"
+                      '')
+                    ];
+                  }
+                ];
+              };
+            in
+            pkgs.runCommand "aginctus-full-stack-workload-image" { } ''
+              mkdir -p "$out"
+              ln -s ${guest.config.system.build.squashfs} "$out/rootfs"
+              ln -s ${guest.config.system.build.metadata} "$out/metadata"
+            '';
 
           oauth-gateway = pkgs.runCommand "aginctus-oauth-gateway-image" { } ''
             mkdir -p "$out"
@@ -420,6 +441,11 @@
           };
           vm-harness-opencode-tool-loopback = import ./nix/vm-harness/opencode-tool-loopback.nix {
             inherit self nixpkgs system;
+          };
+          vm-harness-full-stack = import ./nix/vm-harness/gateway-topology.nix {
+            inherit self nixpkgs system;
+            synthetic = true;
+            fullStack = true;
           };
           vm-harness-ownership-recovery = import ./nix/vm-harness/ownership-recovery.nix {
             inherit self nixpkgs system;
