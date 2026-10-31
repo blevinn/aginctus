@@ -1,11 +1,12 @@
 # Getting started on a technical host
 
-Aginctus controls Incus resources for a private Herdr/OpenCode environment and a LiteLLM inference gateway. This guide covers **installation, inspection and explicitly selected deployment**; it does not claim a successful live pilot. Read [security limitations](security.md) and check [v0.1 release acceptance](https://github.com/blevinn/aginctus/issues/118) before using real credentials or billable models.
+Aginctus controls Incus resources for a private Herdr/OpenCode environment and a LiteLLM inference gateway. This guide covers **installation, inspection and explicitly selected deployment**. The v0.1 pilot demonstrated genuine Herdr/OpenCode coding and private provider inference, but complete **fresh-host** deployment/smoke/cleanup/repeat was not performed and is deferred to [v0.2 #580](https://github.com/blevinn/aginctus/issues/580). Read [security limitations](security.md) and [v0.1 release acceptance](https://github.com/blevinn/aginctus/issues/118) before using real credentials or billable models.
 
 For the pinned release-candidate deployment, credential lifecycle, optional real
 coding smoke and independently checked cleanup, use the
 [v0.1 operator handoff](v0.1-deployment-acceptance.md). Its full fresh-host
-execution remains pending; existing pilot functional acceptance is separate.
+execution was **not validated for v0.1**; existing pilot functional acceptance
+is separate and must not be used as substitute evidence.
 
 ## Host prerequisites
 
