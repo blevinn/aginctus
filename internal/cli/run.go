@@ -116,6 +116,9 @@ func Run(
 
 	// Migrate command families one at a time. Cobra validates the complete
 	// basic-command syntax before the configuration loader is consulted.
+	if commandArgs[0] == "gateway" && isGatewayCoreCommand(commandArgs[1:]) {
+		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
+	}
 	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
 		commandArgs[0] == "apply" || commandArgs[0] == "remove" || commandArgs[0] == "status" ||
 		commandArgs[0] == "network" || commandArgs[0] == "herdr" || commandArgs[0] == "workload" {
@@ -378,6 +381,9 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 2 && args[0] == "credential-storage" {
+		return executeGatewayCredential(ctx, args[1], stdout, stderr, effective)
+	}
 	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "audit" && strings.HasPrefix(args[3], "--uplink-zone=") {
 		spec, err := gateway.FromConfig(effective)
 		if err != nil {
@@ -504,55 +510,6 @@ func runGateway(
 	if len(args) >= 2 && args[0] == "responses" && args[1] == "verify" {
 		return verifyGatewayResponsesStream(args[2:], stdout, stderr)
 	}
-	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "audit" {
-		id, err := effective.String("gateway.id")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway id: %v\n", err)
-			return 1
-		}
-		project, err := effective.String("gateway.compose.project")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway Compose project: %v\n", err)
-			return 1
-		}
-		pool, err := effective.String("gateway.credentials.storage.pool")
-		if err != nil {
-			fmt.Fprintf(stderr, "credential storage pool: %v\n", err)
-			return 1
-		}
-		spec := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
-		if err := auditGatewayCredentials(ctx, spec); err != nil {
-			fmt.Fprintf(stderr, "credential attachment audit: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "credential volume attachment: owned and exclusive to LiteLLM (metadata only; in-guest permissions, OAuth and runtime readiness not verified)\n")
-		return 0
-	}
-	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "attach" {
-		id, err := effective.String("gateway.id")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway id: %v\n", err)
-			return 1
-		}
-		project, err := effective.String("gateway.compose.project")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway Compose project: %v\n", err)
-			return 1
-		}
-		pool, err := effective.String("gateway.credentials.storage.pool")
-		if err != nil {
-			fmt.Fprintf(stderr, "credential storage pool: %v\n", err)
-			return 1
-		}
-		spec := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
-		if err := attachGatewayCredentials(ctx, spec); err != nil {
-			fmt.Fprintf(stderr, "credential attachment: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "private credential volume attached exclusively to LiteLLM in Compose project %q (OAuth not activated)\n", project)
-		return 0
-	}
-
 	if len(args) == 3 && args[0] == "model" && args[2] == "render" {
 		definition, err := renderRegisteredModel(args[1])
 		if err != nil {
@@ -747,88 +704,9 @@ func runGateway(
 		}
 		return 0
 	}
-	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
-		id, err := effective.String("gateway.id")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage gateway ID: %v\n", err)
-			return 1
-		}
-		project, err := effective.String("gateway.compose.project")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage Compose project: %v\n", err)
-			return 1
-		}
-		pool, err := effective.String("gateway.credentials.storage.pool")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage pool: %v\n", err)
-			return 1
-		}
-		a := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
-		if err := a.Validate(); err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage configuration: %v\n", err)
-			return 1
-		}
-		if err := ensureCredentialStorage(ctx, a); err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "gateway credential volume %q: ready in Compose project %q (attachment unchanged; no credentials imported)\n", a.VolumeName(), project)
-		return 0
-	}
-	if len(args) == 0 || len(args) > 2 {
-		printGatewayUsage(stderr)
-		return 2
-	}
-	if len(args) == 2 && (args[0] != "remove" || args[1] != "--force") {
-		printGatewayUsage(stderr)
-		return 2
-	}
-
-	spec, err := gateway.FromConfig(effective)
-	if err != nil {
-		fmt.Fprintf(stderr, "gateway configuration: %v\n", err)
-		return 1
-	}
-
-	switch args[0] {
-	case "status":
-		return runGatewayStatus(ctx, args[1:], stdout, stderr, effective)
-	case "remove":
-		if err := spec.Remove(ctx, len(args) == 2); err != nil {
-			fmt.Fprintf(stderr, "gateway cleanup: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "gateway %q: gateway instances removed (persistent volumes retained)\n", spec.ID)
-		return 0
-	case "apply", "up":
-		runtimeEnvironment, err := spec.InitializeRuntimeEnvironment()
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
-			return 1
-		}
-		if err := spec.Deploy(ctx, runtimeEnvironment); err != nil {
-			fmt.Fprintf(stderr, "gateway deployment: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "gateway %q: started (application readiness not verified)\n", spec.ID)
-		return 0
-	case "validate":
-		fmt.Fprintf(stdout, "gateway %q: configuration valid\n", spec.ID)
-		return 0
-	case "render":
-		rendered, err := spec.RenderCompose()
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway render: %v\n", err)
-			return 1
-		}
-		fmt.Fprint(stdout, rendered)
-		return 0
-	default:
-		printGatewayUsage(stderr)
-		return 2
-	}
+	printGatewayUsage(stderr)
+	return 2
 }
-
 func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
