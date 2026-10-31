@@ -118,7 +118,7 @@ func Run(
 	// basic-command syntax before the configuration loader is consulted.
 	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
 		commandArgs[0] == "apply" || commandArgs[0] == "remove" || commandArgs[0] == "status" ||
-		commandArgs[0] == "network" {
+		commandArgs[0] == "network" || commandArgs[0] == "herdr" {
 		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
 	}
 
@@ -142,8 +142,6 @@ func Run(
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
 	case "gateway":
 		return runGateway(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
-	case "herdr":
-		return runHerdr(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	case "workload":
 		return runWorkload(ctx, commandArgs[1:], stdout, stderr, effective)
 	default:
@@ -866,83 +864,31 @@ func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "Registration writes local metadata only; it does not authenticate or activate inference. Remove retains persistent volumes.")
 }
 
-func runHerdr(
-	ctx context.Context,
-	args []string,
-	stdout, stderr io.Writer,
-	incusClient IncusClient,
-	effective *config.Config,
-) int {
-	if len(args) == 0 {
-		return runHerdrConsole(ctx, nil, stdout, stderr, effective)
-	}
-	if args[0] == "authorize" {
-		return runHerdrAuthorize(ctx, args[1:], stdout, stderr, effective)
-	}
-	if args[0] == "pin-host" {
-		return runHerdrPinHost(ctx, args[1:], stdout, stderr, effective)
-	}
-	if args[0] == "register" {
-		return runHerdrRegister(ctx, args[1:], stdout, stderr, effective)
-	}
-	if args[0] != "client" {
-		printHerdrClientUsage(stderr)
-		return 2
-	}
-	args = args[1:]
-	if len(args) > 0 && args[0] == "status" {
-		if len(args) > 1 && (args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
-			return runScopedHerdrClientStatus(ctx, args[1:], stdout, stderr, effective)
-		}
-		return runHerdrClientStatus(ctx, args[1:], stdout, stderr, effective)
-	}
-	if len(args) > 0 && (args[0] == "start" || args[0] == "stop") {
-		if len(args) != 1 {
-			printHerdrClientUsage(stderr)
-			return 2
-		}
+// transitionHerdrClientCommand executes a validated lifecycle action.
+func transitionHerdrClientCommand(ctx context.Context, action string, stdout, stderr io.Writer, effective *config.Config) int {
 		spec, err := herdrclient.FromConfig(effective)
 		if err != nil {
 			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
 			return 1
 		}
-		if err := transitionHerdrClient(ctx, spec, args[0]); err != nil {
-			fmt.Fprintf(stderr, "Herdr client %s: %v\n", args[0], err)
+		if err := transitionHerdrClient(ctx, spec, action); err != nil {
+			fmt.Fprintf(stderr, "Herdr client %s: %v\n", action, err)
 			return 1
 		}
 		verb := "started"
-		if args[0] == "stop" {
+		if action == "stop" {
 			verb = "stopped"
 		}
 		fmt.Fprintf(stdout, "Herdr client %q: %s\n", spec.Name, verb)
 		return 0
-	}
-	if len(args) == 0 {
-		printHerdrClientUsage(stderr)
-		return 2
-	}
+}
 
-	options, err := parseNetworkOptions(args[1:])
-	if err != nil {
-		fmt.Fprintf(stderr, "herdr-client options: %v\n", err)
-		return 2
-	}
-
+// executeHerdrClientOperation is called only from parsed Cobra leaves.
+func executeHerdrClientOperation(ctx context.Context, operation string, options mutationOptions, stdout, stderr io.Writer, effective *config.Config) int {
 	spec, err := herdrclient.FromConfig(effective)
 	if err != nil {
 		fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
 		return 1
-	}
-
-	var operation string
-	switch args[0] {
-	case "apply", "ensure":
-		operation = "upsert"
-	case "remove", "teardown":
-		operation = "delete"
-	default:
-		printHerdrClientUsage(stderr)
-		return 2
 	}
 
 	err = executeHerdrClient(ctx, spec, herdrclient.Options{
