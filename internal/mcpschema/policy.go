@@ -9,11 +9,11 @@ import (
 // server.
 type EffectiveServer struct {
 	// Server is the declared server name.
-	Server string
+	Server string `json:"server"`
 	// Transport is the server's transport.
-	Transport Transport
+	Transport Transport `json:"transport"`
 	// Tools lists the authorized tool names, ordered.
-	Tools []string
+	Tools []string `json:"tools"`
 }
 
 // WorkloadPolicy is the effective policy for one workload.

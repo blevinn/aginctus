@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
+
+	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
 
 // This runner is deliberately restricted to read operations in runOperatorPreflight.
@@ -16,8 +18,6 @@ import (
 var inspectOperatorIncus = func(ctx context.Context, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, "incus", args...).Output()
 }
-
-var operatorProjectName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$`)
 
 func runOperatorPreflight(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) != 3 || args[0] != "preflight" ||
@@ -31,30 +31,38 @@ func runOperatorPreflight(ctx context.Context, args []string, stdout, stderr io.
 			return 2
 		}
 	}
-	if len(args) != 3 || args[0] != "preflight" || args[1] != "--project" ||
-		!operatorProjectName.MatchString(args[2]) {
+	if len(args) != 3 || args[0] != "preflight" || args[1] != "--project" {
 		fmt.Fprintln(stderr, "operator preflight: specify a valid explicit Incus project name")
 		return 2
 	}
 	project := args[2]
+	if _, err := incusscope.NewProjectScope(project); err != nil {
+		fmt.Fprintln(stderr, "operator preflight: specify a valid explicit nondefault Incus project name")
+		return 2
+	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	// Both probes are GET-only Incus CLI commands. Suppress raw CLI output
-	// on failure: remote errors may contain addresses, certificates, or tokens.
-	if _, err := inspectOperatorIncus(ctx, "info"); err != nil {
-		fmt.Fprintln(stderr, "Incus daemon: unavailable or operator access denied; check the selected remote and authorization (no sudo fallback)")
+	server, status := readOperatorAPI(ctx, "/1.0?project="+url.QueryEscape(project))
+	if status != operatorReadOK {
+		fmt.Fprintf(stderr, "Incus daemon: %s; check the selected remote, client installation and separately provisioned authorization (no sudo fallback)\n", status)
 		return 1
 	}
 	fmt.Fprintln(stdout, "Incus daemon: readable")
+	identity, trusted := inspectOperatorIdentity(ctx, server, project)
+	fmt.Fprintf(stdout, "Incus identity: %s\n", identity)
+	if !trusted || ctx.Err() != nil {
+		fmt.Fprintln(stderr, "operator identity is unauthenticated, inconsistent or unproven; ask the host administrator to verify the selected identity")
+		return 1
+	}
 
-	out, err := inspectOperatorIncus(ctx, "list", "--project", project, "--format", "json")
-	if err != nil {
-		fmt.Fprintf(stderr, "Incus project %q: cannot list instances; check project visibility and credentials\n", project)
+	out, status := readOperatorAPI(ctx, "/1.0/instances?project="+url.QueryEscape(project)+"&recursion=1")
+	if status != operatorReadOK {
+		fmt.Fprintf(stderr, "Incus project %q: %s; check project visibility and credentials\n", project, status)
 		return 1
 	}
 	var instances []json.RawMessage
-	if err := json.Unmarshal(out, &instances); err != nil {
+	if err := json.Unmarshal(out, &instances); err != nil || instances == nil {
 		fmt.Fprintf(stderr, "Incus project %q: invalid response from read-only instance list\n", project)
 		return 1
 	}
@@ -63,7 +71,7 @@ func runOperatorPreflight(ctx context.Context, args []string, stdout, stderr io.
 	// Project enumeration is an optional observation, not an authorization
 	// oracle. Restricted users can see only their permitted projects; a
 	// successful project read can never prove mutation or host authority.
-	out, err = inspectOperatorIncus(ctx, "project", "list", "--format", "json")
+	out, err := inspectOperatorIncus(ctx, "project", "list", "--format", "json")
 	if err != nil {
 		fmt.Fprintln(stdout, "Project enumeration: unavailable (scope cannot be inferred)")
 	} else {
@@ -75,6 +83,10 @@ func runOperatorPreflight(ctx context.Context, args []string, stdout, stderr io.
 		} else {
 			fmt.Fprintln(stdout, "Project enumeration: invalid response (scope cannot be inferred)")
 		}
+	}
+	if ctx.Err() != nil {
+		fmt.Fprintf(stderr, "operator preflight: %s; retry the read-only check after restoring daemon access\n", operatorReadFailure(ctx.Err()))
+		return 1
 	}
 	fmt.Fprintln(stdout, "Write permissions: unverified; no resource changes were attempted")
 	fmt.Fprintln(stdout, "Host bridge, firewall, pool and admin permissions: unverified; require separately approved host authorization")
