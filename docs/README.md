@@ -79,7 +79,7 @@ currently supported configuration or a release acceptance claim.
 ## Security and host policy
 
 - [Security controls and limitations](security.md) — implemented boundaries,
-  hermetic/VM validation scope, and outstanding live pilot acceptance.
+  hermetic/VM validation scope, accepted live pilot evidence and limits.
 - [Firewall host backends](firewall-host-backends.md) — iptables,
   nftables, and firewalld integration surfaces.
 - [LiteLLM firewalld egress](gateway-firewalld-egress.md) — fail-closed host policy, runtime grants and recovery procedures.
@@ -109,8 +109,9 @@ currently supported configuration or a release acceptance claim.
 
 ## Acceptance and validation
 
-- [v0.1 deployment and acceptance](v0.1-deployment-acceptance.md) — pinned fresh-host
-  procedure, manual coding smoke, repeat/cleanup contracts and human signoff gaps.
+- [v0.1 deployment and acceptance](v0.1-deployment-acceptance.md) — verified
+  live pilot evidence and the unrun fresh-host deploy/smoke/cleanup/repeat
+  procedure explicitly deferred to [v0.2 #580](https://github.com/blevinn/aginctus/issues/580).
 - [Unified test reporting](design/test-reporting.md) — implemented hermetic, VM, pilot and coverage views; planned local acceptance observations are tracked separately.
 - [Incus testenv VM image](testenv-incus-vm-image.md) — opt-in NixOS VM
   artifact for a dedicated, isolated test worker; not agent-executable yet.
@@ -132,6 +133,10 @@ currently supported configuration or a release acceptance claim.
   live OpenCode→LiteLLM acceptance and what stays unverified.
 
 ## Release tracking (current status)
+
+- [v0.1.0 release notes](releases/v0.1.0.md) — verified pilot behavior,
+  unverified fresh-host reproducibility, and accepted security limitations.
+
 
 GitHub release roll-ups, not old repository milestone narratives, own current
 scope, accepted evidence and status: [v0.1 / #118](https://github.com/blevinn/aginctus/issues/118),
