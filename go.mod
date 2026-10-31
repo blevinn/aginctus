@@ -8,6 +8,8 @@ require (
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/lxc/incus-compose v1.3.4
 	github.com/lxc/incus/v7 v7.3.0
+	github.com/opencontainers/go-digest v1.0.0
+	github.com/opencontainers/image-spec v1.1.1
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sys v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -48,8 +50,6 @@ require (
 	github.com/moby/sys/user v0.4.1 // indirect
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/muhlemmer/gu v0.3.1 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runtime-spec v1.3.0 // indirect
 	github.com/opencontainers/umoci v0.6.1-0.20251213054154-70fc5ee1f4df // indirect
 	github.com/pkg/errors v0.9.1 // indirect
