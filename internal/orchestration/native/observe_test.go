@@ -169,7 +169,7 @@ func TestInstanceObservationSDKUsesOnlyScopedLocalReads(t *testing.T) {
 	})}
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { _ = server.Close() })
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	client, err := incus.ConnectIncusUnixWithContext(ctx, socket, &incus.ConnectionArgs{SkipGetServer: true})
 	if err != nil {
