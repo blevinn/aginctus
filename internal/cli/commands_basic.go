@@ -25,11 +25,11 @@ func runBasicCobra(
 	root.CompletionOptions.DisableDefaultCmd = true
 
 	root.Version = Version
-	root.SetVersionTemplate(fmt.Sprintf("aginctus %s (revision %s)\\n", Version, buildRevision()))
+	root.SetVersionTemplate(fmt.Sprintf("aginctus %s (revision %s)\n", Version, buildRevision()))
 	root.AddCommand(&cobra.Command{
 		Use: "version", Short: "Print build provenance", Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			fmt.Fprintf(stdout, "aginctus %s (revision %s)\\n", Version, buildRevision())
+			fmt.Fprintf(stdout, "aginctus %s (revision %s)\n", Version, buildRevision())
 			return nil
 		},
 	})
