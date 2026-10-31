@@ -19,17 +19,18 @@ import time
 from pathlib import Path
 
 if __package__:
+    from . import evidence
     from . import synthetic_gateway_probe as gateway
     from .synthetic_responses import SyntheticServer
     from .tool_sequence import STEP_NAMES, ToolSequence, tool_arguments
 else:
+    import evidence
     import synthetic_gateway_probe as gateway
     from synthetic_responses import SyntheticServer
     from tool_sequence import STEP_NAMES, ToolSequence, tool_arguments
 
 ALIAS = "aginctus-go-pilot"  # Activates the packaged native-session header hook.
-PHASES = ("preflight", "open", "start", "prompt", "wait", "credential-check",
-          "gateway-evidence", "stop", "close")
+PHASES = evidence.PHASES
 FILES = {
     "go.mod": "module example.invalid/aginctus-full-stack\ngo 1.22\n",
     "calc.go": "package calc\n\nfunc Add(a, b int) int { return a - b }\n",
@@ -155,7 +156,8 @@ class InjectedFailure(Exception):
 
 
 class Adapter:
-    def __init__(self, base, identity, nonce, endpoint, scoped, upstream, master, guard):
+    def __init__(self, base, identity, nonce, endpoint, scoped, upstream, master, guard, outcomes=None):
+        self.outcomes = outcomes if outcomes is not None else evidence.Evidence()
         self.base, self.identity, self.nonce = base, identity, nonce
         self.endpoint, self.scoped, self.upstream = endpoint, scoped, upstream
         self.remote = "/home/agent/aginctus-acceptance/" + identity
@@ -171,6 +173,7 @@ class Adapter:
         })
 
     def phase(self, action, workspace, identity, prompt=None):
+        outcomes = getattr(self, "outcomes", None) or evidence.Evidence()
         if action not in PHASES or workspace != str(self.base) or identity != self.identity:
             raise gateway.Failure("invalid fixed synthetic adapter invocation")
         if action == "preflight":
@@ -194,14 +197,17 @@ class Adapter:
                            "fixture", self.remote, check=False)
             if before.returncode != 1 or "bad addition" not in before.stdout:
                 raise gateway.Failure("broken fixture did not independently fail its Go assertion")
+            outcomes.begin("workload_network")
             for mode, address in (("gateway", self.endpoint.removeprefix("http://").removesuffix(":4000")),
                                   ("direct", "1.1.1.1")):
                 result = json.loads(guest("aginctus-egress-probe", mode, address).stdout)
                 if result.get("status") != "pass":
                     raise gateway.Failure("workload TCP/IPv4 no-route probe failed")
+            outcomes.passed("workload_network")
         elif action in ("open", "start", "prompt", "wait", "stop"):
             self.lifecycle["phase"](action, workspace, identity, prompt)
             if action == "wait":
+                outcomes.begin("tool_transcript")
                 listing = json.loads(guest("opencode", "session", "list", "--format", "json", "--max-count", "16").stdout)
                 matching = [row.get("id") for row in listing if row.get("directory") == self.remote]
                 if (len(matching) != 1 or not isinstance(matching[0], str)
@@ -210,19 +216,25 @@ class Adapter:
                 self.session = matching[0]
                 transcript = json.loads(guest("opencode", "export", self.session).stdout)
                 verify_transcript(transcript, self.session, self.remote, self.nonce)
+                outcomes.passed("tool_transcript")
+                outcomes.begin("fixture_diff")
                 files = {}
                 for name in (*FILES, ".aginctus-tool-test-ok"):
                     path = self.remote + "/" + name
                     guest("sh", "-eu", "-c", 'test -f "$1"; test ! -L "$1"', "fixture", path)
                     files[name] = guest("cat", path).stdout
                 verify_files(files, self.nonce)
+                outcomes.passed("fixture_diff")
+                outcomes.begin("independent_test")
                 # Copy only the independently checked Go fixture into the outer
                 # disposable VM and test afresh, without trusting the agent's test.
                 for name in ("go.mod", "calc.go", "calc_test.go"):
                     (self.base / name).write_text(files[name])
                 command("sh", "-eu", "-c", 'cd "$1"; GOPROXY=off GOSUMDB=off go test ./...',
                         "independent-test", str(self.base))
+                outcomes.passed("independent_test")
         elif action == "credential-check":
+            outcomes.begin("credential_scope")
             guest("sh", "-eu", "-c", r'''
 dir=/var/lib/aginctus/opencode
 test "$(stat -c %a "$dir")" = 700
@@ -246,7 +258,9 @@ test ! -e /run/aginctus-vm-gateway-state
             denied(self.endpoint, "/v1/models", "synthetic-invalid-key")
             denied(self.endpoint, "/v1/responses", self.scoped,
                    {"model": "synthetic-forbidden", "input": "no inference", "stream": True})
+            outcomes.passed("credential_scope")
         elif action == "gateway-evidence":
+            outcomes.begin("gateway_correlation")
             observed = json.loads(gateway.request(self.upstream, "/_observed/" + self.nonce, gateway.TOKEN))
             if observed != {"count": 4}:
                 raise gateway.Failure("ordered upstream tool continuations/terminal response missing")
@@ -265,7 +279,7 @@ test ! -e /run/aginctus-vm-gateway-state
                     if attempt == 44:
                         raise
                     time.sleep(2)
-            print("gateway-observed:" + identity)
+            outcomes.passed("gateway_correlation")
         elif action == "close":
             if self.guard.baseline is None:
                 raise gateway.Failure("foreign baseline required before scoped close")
@@ -291,6 +305,8 @@ test ! -e /run/aginctus-vm-gateway-state
             # Fixed random run-owned path; root parent and unrelated runs survive.
             guest("rm", "-rf", "--", self.remote)
             guest("sh", "-eu", "-c", 'test ! -e "$1"; test ! -L "$1"', "fixture", self.remote)
+            return True
+        return False
 
     def inspect_foreign(self):
         self.guard.inspect()
@@ -299,6 +315,7 @@ test ! -e /run/aginctus-vm-gateway-state
 def exercise(adapter, *, fail_after_open=False):
     """Always attempt scoped stop/close and fixture removal after partial failure."""
     opened = started = False
+    outcomes = getattr(adapter, "outcomes", None) or evidence.Evidence()
     try:
         for phase in PHASES[:-2]:
             if phase == "open":
@@ -306,8 +323,10 @@ def exercise(adapter, *, fail_after_open=False):
             if phase == "start":
                 started = True
             prompt = "Inspect and fix Add; execute go test ./... using real tools. nonce=" + adapter.nonce
+            outcomes.begin(phase, "phases")
             adapter.phase(phase, str(adapter.base), adapter.identity,
                           prompt if phase == "prompt" else None)
+            outcomes.passed(phase, "phases")
             if phase == "open" and fail_after_open:
                 raise InjectedFailure()
     finally:
@@ -315,25 +334,33 @@ def exercise(adapter, *, fail_after_open=False):
         for phase, needed in (("stop", started), ("close", opened)):
             if needed:
                 try:
+                    outcomes.begin(phase, "phases")
                     adapter.phase(phase, str(adapter.base), adapter.identity)
+                    outcomes.passed(phase, "phases")
                 except (RuntimeError, ValueError, OSError, subprocess.SubprocessError, gateway.Failure):
                     failed = True
         try:
-            adapter.remove_fixture()
+            outcomes.begin("owned_fixture_removed")
+            removed = adapter.remove_fixture()
+            outcomes.record["gates"]["owned_fixture_removed"] = "pass" if removed else "not_verified"
         except (OSError, subprocess.SubprocessError, gateway.Failure):
             failed = True
         try:
+            outcomes.begin("foreign_workspaces_preserved")
             adapter.inspect_foreign()
+            outcomes.passed("foreign_workspaces_preserved")
         except (RuntimeError, ValueError, OSError, subprocess.SubprocessError, gateway.Failure):
             failed = True
         if failed:
             raise gateway.Failure("owned Herdr/fixture cleanup failed")
 
 
-def run():
+def run(outcomes=None):
+    outcomes = outcomes if outcomes is not None else evidence.Evidence()
     if (len(sys.argv) != 1 or not str(Path(__file__).resolve()).startswith("/nix/store/")
             or not Path("/etc/aginctus-test-oci").is_file()):
         raise gateway.Failure("full-stack requires the immutable disposable guest fixture")
+    outcomes.begin("synthetic_setup")
     management = gateway.network_ipv4("aginctus-mgmt")
     egress = gateway.network_ipv4("aginctus-egress")
     if management.network.overlaps(egress.network):
@@ -376,6 +403,7 @@ def run():
         if not isinstance(scoped, str) or not scoped or scoped == master:
             scoped = None
             raise gateway.Failure("fresh scoped workload credential unavailable")
+        outcomes.passed("synthetic_setup")
         with tempfile.TemporaryDirectory(prefix="aginctus-full-stack-") as temp:
             guard = ForeignWorkspaceGuard()
             # Real failure-path control: open another owned workspace, inject a
@@ -386,39 +414,49 @@ def run():
             fault_base = Path(temp) / fault_identity / "workspace"
             fault_base.mkdir(parents=True, mode=0o700)
             try:
+                outcomes.begin("failure_cleanup_control")
                 exercise(Adapter(fault_base, fault_identity, fault_nonce, endpoint,
                                  scoped, upstream, master, guard), fail_after_open=True)
             except InjectedFailure:
-                pass
+                outcomes.passed("failure_cleanup_control")
             else:
                 raise gateway.Failure("post-open failure-path control did not execute")
             base = Path(temp) / identity / "workspace"
             base.mkdir(parents=True, mode=0o700)
-            exercise(Adapter(base, identity, nonce, endpoint, scoped, upstream, master, guard))
+            exercise(Adapter(base, identity, nonce, endpoint, scoped, upstream, master, guard, outcomes))
     finally:
         # Attempt every teardown even when another one fails. Uncertain remote
         # mutation/revocation is a failure, with complete VM disposal still required.
         failed = False
         if scoped:
             try:
+                outcomes.begin("scoped_key_revoked")
                 gateway.request(endpoint, "/key/delete", master, {"keys": [scoped]})
                 denied(endpoint, "/v1/models", scoped)
+                outcomes.passed("scoped_key_revoked")
+                outcomes.begin("workload_key_absent")
                 guest("aginctus-vm-guest-credentials", "remove-key", agent=False,
                       data=json.dumps({"scoped": scoped}))
                 # Separate guest-root readback; removal's exit code is not proof.
                 guest("aginctus-vm-guest-credentials", "inspect-key-absent", agent=False, data="{}")
+                outcomes.passed("workload_key_absent")
             except (gateway.Failure, OSError, subprocess.SubprocessError):
                 failed = True
         if model_id:
             try:
+                outcomes.begin("model_removed")
                 gateway.request(endpoint, "/model/delete", master, {"id": model_id})
                 if ALIAS in gateway.model_ids(gateway.request(endpoint, "/v1/models", master)):
                     raise gateway.Failure("synthetic alias remains after removal")
+                outcomes.passed("model_removed")
             except (gateway.Failure, OSError, subprocess.SubprocessError):
                 failed = True
+        outcomes.begin("listener_stopped")
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+        if not thread.is_alive():
+            outcomes.passed("listener_stopped")
         if failed or thread.is_alive():
             raise gateway.Failure("synthetic gateway cleanup not confirmed")
     print(json.dumps({"profile": "synthetic_full_stack", "status": "pass",
@@ -427,9 +465,21 @@ def run():
                       "upstream_inference": "not_verified", "cleanup": "not_verified"}))
 
 
-if __name__ == "__main__":
+def main():
+    outcomes = evidence.Evidence()
+    publish = (str(Path(__file__).resolve()).startswith("/nix/store/")
+               and Path("/etc/aginctus-test-oci").is_file())
     try:
-        run()
+        run(outcomes)
     except (gateway.Failure, RuntimeError, ValueError, KeyError, OSError, subprocess.SubprocessError):
         print("FAIL: synthetic full-stack gate (details suppressed; no live inference)", file=sys.stderr)
-        raise SystemExit(1)
+        return 1
+    finally:
+        if publish:
+            evidence.GUEST_ROOT.mkdir(mode=0o700, exist_ok=True)
+            evidence.write_artifact(evidence.GUEST_ROOT, outcomes.record, "result.json")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

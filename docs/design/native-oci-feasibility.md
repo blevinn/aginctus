@@ -6,8 +6,8 @@ not activate native production writes or authorize existing-resource migration.
 
 ## Decision and evidence boundary
 
-Proceed with a daemon-side OCI acquisition prototype using the official SDK's
-`CreateImage` with an explicit project and an OCI pull source. This bypasses
+**Go for the supported public-image strategy:** use daemon-side OCI acquisition through the official SDK's
+`CreateImage` with an explicit project and an immutable OCI pull source. This bypasses
 Compose's cache project and HTTPS image relay. It does not require exporting or
 unpacking images in the operator process. Incus itself performs image conversion
 using its OCI implementation and daemon-side image tooling.
@@ -17,7 +17,23 @@ gateway images against a local-only Incus daemon. It checks repeated import,
 full fingerprint metadata, profile-free OCI initialization, application readiness,
 start/stop/removal, project isolation and PostgreSQL custom-volume preservation
 across explicit instance recreation on Btrfs. All credentials are synthetic.
-The VM has no production configuration, credentials, mounts or Incus connection.
+The VM has no production configuration, credentials, mounts or host Incus connection.
+
+`nativeoci.ResolvePublic` reads registry metadata using ORAS and anonymously
+negotiated registry bearer authentication. It requires a unique matching Linux
+platform in an index, independently validates the image config's platform,
+checks SHA-256 descriptor integrity and bounds metadata documents to 4 MiB.
+It returns the platform manifest digest, config digest, expected Incus layer
+fingerprint and runtime initialization metadata. Config values are excluded
+from serialized identity reports and upstream diagnostics are not propagated.
+All metadata and anonymous-token transport requires HTTPS; no ambient credential
+helpers are read. Context cancellation and request timeouts bound registry reads.
+
+The spike pulls both images by the resolved manifest digest and checks the
+actual daemon fingerprint against the independently computed layer fingerprint.
+Unit tests demonstrate config-only changes with equal Incus fingerprints but
+different manifest/config digests. ORAS is a narrow metadata dependency already
+present in the module graph, not a second resource orchestration backend.
 
 Run on a disposable KVM worker with registry access:
 
@@ -31,9 +47,10 @@ and guest marker are accidental-execution guards, not authentication or proof
 that an arbitrary host is disposable.
 
 This is an acquisition/initialization feasibility gate, not native gateway
-acceptance. The spike uses the current configured tags and no provider calls.
-It does not prove immutable resolution, private registry authentication,
-service-to-service networking, gateway secrets precedence, controller fencing,
+acceptance. The spike resolves the current configured tags once, then acquires
+by immutable digest, with no provider calls.
+It does not prove private registry authentication, config-collision-safe reuse
+of preexisting daemon image records, service-to-service networking, gateway secrets precedence, controller fencing,
 interrupted upgrades, or migration/rollback. The existing `gateway-topology`
 scenario continues to test the legacy production path.
 
@@ -105,8 +122,15 @@ DHCP default gateway. A project-scoped workload action may validate an attachmen
 but must not provision or repair that bridge. Only LiteLLM may receive the
 separately authorized egress attachment. Firewall policy is a separate authority.
 
-Before #154 is complete, validate immutable pulls and relevant OCI config/volume
-semantics and document any unsupported authentication. Before #158/#159, prove
+Private authenticated registries are not supported by `ResolvePublic`; no
+implicit credential-helper discovery or private acquisition fallback is provided.
+Before #154 is complete, finish the daemon config-only collision/cache policy
+and image-declared healthcheck/volume compatibility assessment. The remaining
+implementation effort is resource-specific: guarded import/alias ownership,
+explicit two-service startup/readiness and attachment/persistence policy. It
+does not require building a generic Compose executor.
+
+Before #158/#159, prove
 full synthetic gateway readiness/dependencies, negative isolation, owned image
 update/recreation, persistent state and credentials, cancellation/recovery and
 explicit v0.1 migration/rollback. Keep legacy drivers and the HTTPS doctor check
