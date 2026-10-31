@@ -105,6 +105,7 @@ nix develop -c just test-vm-runtime-lifecycle
 nix develop -c just test-vm-gateway-topology
 nix develop -c just test-vm-synthetic-gateway
 nix develop -c just test-vm-synthetic-tool-gateway
+nix --quiet develop --no-update-lock-file -c just test-vm-full-stack
 nix develop -c just test-vm-ownership-recovery
 nix develop -c just vm-debug
 ```
@@ -239,7 +240,269 @@ HTTP turns and key revocation. It cannot validate real guest tool actions
 because the function results are **explicitly fake**. The text-only
 `synthetic-gateway` scenario remains unchanged. This networked scenario
 is heavyweight, is not part of check-all, and requires a disposable KVM
-worker and OCI provisioning. Actual Herdr+OpenCode E2E remains #558.
+worker and OCI provisioning. The separate full-stack implementation below
+adds actual Herdr/OpenCode execution; its dedicated-worker acceptance remains
+an explicit gate.
+
+## Synthetic Herdr/OpenCode full-stack scenario (#558)
+
+`just test-vm-full-stack` selects the fixed `full-stack` registry entry and
+`vm-harness-full-stack` NixOS driver. It is opt-in, excluded from hermetic CI,
+and must run only on the dedicated, unprivileged x86_64 KVM worker described
+above. No suitable worker was used to accept this implementation. A passing
+hostless test or derivation evaluation does **not** establish a working E2E run.
+Existing topology acceptance is separate evidence and need not be rerun just
+to validate this scenario's hermetic changes.
+
+The scenario imports the [test-only OCI staging module](#test-only-immutable-oci-staging-interface-532),
+uses its native-platform immutable leaf digests, and checks staged aliases
+before and after real `gateway up`. After provisioning it installs guest-local
+IPv4/IPv6 outer-interface output/forward reject rules with packet counters.
+An attempted external packet during deployment or agent execution fails the test. Workload
+containers remain management-only; LiteLLM alone reaches the synthetic
+listener on the private egress bridge. No live provider is registered.
+
+Full-stack initializes a guest-local **20 GiB loopback Btrfs `default` pool**,
+using the explicit loop-pool pattern from `storage-network.nix`. All workload
+and gateway roots and custom volumes use that pool. The driver independently
+reads its driver, guest-local loop backing and cross-project volume inventory
+before the scenario and in a `finally` block after success or failure. Scoped
+workspace cleanup must preserve the existing storage inventory. This is
+pilot-representative Btrfs behavior, not real-device performance or deletion
+evidence: the pool, images, persistent volumes, possible snapshots and loop
+file remain for outer VM/disk disposal. No host pool is accessed or pruned.
+
+The real production Herdr/OpenCode workload image is extended **only for this
+test** with the pinned Go toolchain and immutable guest-root credential helper.
+Herdr client SSH identity creation,
+authorization, host-key pinning and machine registration happen inside the
+fresh disposable VM through the shipped helpers and CLI. No host credentials,
+host workspaces or ambient SSH agent are transported.
+
+`scripts/vm_harness/full_stack.py` owns a run-scoped fixture and in-process
+adapter with the existing nine phase names and workspace/run-ID arguments:
+
+```text
+preflight → open → start → prompt → wait → credential-check → gateway-evidence
+                                              ↘ stop → close
+```
+
+The existing mock/live shell dispatcher and live marker requirements are
+unchanged. This synthetic adapter never emits `upstream-inference-confirmed`.
+It does not install hooks into, enable, or authorize live acceptance.
+
+Required gates, each failing closed:
+
+- The deliberately broken Go fixture must fail its actual Go assertion first.
+- Before scoped workspace operations, an independent observer creates a foreign
+  sentinel workspace and snapshots the complete workspace-ID/label inventory,
+  including any unrelated existing workspaces. A separate real workspace
+  undergoes a fixed injected post-open failure, scoped close and independent
+  inventory comparison before the successful agent scenario starts. Both that
+  failure path and the agent path must restore the exact baseline inventory.
+  A missing/changed sentinel, changed unrelated entry or extra workspace fails.
+  Scoped cleanup never closes the sentinel or any unrelated baseline entry;
+  the sentinel remains until complete VM disposal.
+- Real Herdr creates the labeled workspace, starts the pinned OpenCode agent,
+  submits a nonce-bearing task and waits for done/idle. The trusted test
+  upstream requests `read`, `edit`, and `bash` in order; no fake tool results
+  are supplied by the harness.
+- Independent `opencode session list`/`export` readback must find exactly one
+  native session for that workspace, three completed tool parts with exact
+  call IDs/inputs, the terminal synthetic message and a stop finish. Raw
+  transcripts stay in guest-runner memory and are never printed or persisted.
+- Independent file reads must show exactly the expected source change,
+  unchanged module/test/config fixtures, and the nonce marker created by the
+  actual bash test command. A fresh Go test runs on checked copies in the
+  outer disposable VM, separately from the agent's test.
+- A fresh 15-minute virtual key is limited to the synthetic alias with a
+  budget and rate limit. Anonymous/invalid-key requests and an out-of-scope
+  model request must be denied; the scoped model listing must be exact.
+  Credential checks include private workload-key metadata and known provider
+  credential locations. The immutable guest-root helper receives the **actual
+  gateway master key and synthetic provider token over stdin only**. It
+  compares those bytes against every observed process's environment and argv,
+  the private key and exact `gateway.json`, mountinfo (including bind roots),
+  and regular files in the credential directory and known state/configuration
+  roots: `/var/lib/aginctus/state/{system,user}`, `/var/lib/herdr`,
+  `/home/agent/.config`, and `/home/agent/.local/share/opencode`. Known gateway
+  secret mounts are rejected. The scoped workload key is explicitly permitted.
+  No secret bytes, matching content, raw paths or process observations are
+  printed. Unreadable live process state, symlinked scan entries, unknown
+  non-regular files (except Herdr sockets), oversized observations and scan
+  limits fail closed. Limits are 4096 processes/scan entries, 1 MiB per process
+  field or mount inventory, 64 MiB per regular file and 256 MiB total file reads.
+  This is a bounded point-in-time observation by trusted guest root, not
+  exhaustive secret discovery or an attestation against a compromised guest.
+- Gateway-side PostgreSQL spend records must contain four distinct successful
+  native Responses request IDs, the fresh key's hash, the exact alias, and
+  the **same native session ID independently read from OpenCode**. The
+  runner's issuance associates that fresh key with this run; no prompt-only
+  run-ID attribution or fabricated native session is accepted. Missing schema
+  fields, delayed/unavailable logging or extra agent model requests fail.
+  Spend success labels alone are insufficient: the native transcript,
+  upstream ordered continuations and independently tested files are separate
+  required observations. This is synthetic correlation, not cryptographic
+  provenance or evidence of a billable provider response.
+- The workload must connect to the private gateway and independently report
+  `ENETUNREACH` for direct public IPv4. A separate LiteLLM external TCP attempt
+  must fail and increment the guest outer-interface forwarding-deny counter.
+  This is a narrow no-route/packet-control observation, not fleet-wide
+  credential-egress or arbitrary firewall-bypass acceptance.
+- Stop and owned close run after partial failures. Herdr inventory must confirm
+  workspace absence. The fixture is removed and its absence independently
+  read back. Key deletion must be followed by actual rejection and removal of
+  the matching revoked `workload-key`. Expected key bytes travel to the
+  guest-root removal helper only over stdin. The helper requires a non-symlink,
+  agent-owned mode-0600 regular file with one link in the private directory;
+  it compares exact bytes and rechecks the inode/content after capture into a
+  root-private sibling directory before unlinking. A rotated or unrelated key
+  is never deleted: a mismatching capture is restored without overwriting a
+  replacement, or retained for root recovery if another rotation blocks
+  restoration. Such uncertainty fails. A separate guest-root invocation
+  independently requires key-path absence, including no dangling symlink or
+  rotated replacement. Gateway configuration is retained. Model deletion
+  by alias absence, and the synthetic listener must stop. Failed teardown is
+  a failure, even after a passing task. An uncertain remote create still
+  requires destroying the entire disposable VM.
+
+Hostless validation, safe in the current multipurpose checkout:
+
+```sh
+nix --quiet develop --no-update-lock-file -c python3 -m unittest scripts.vm_harness.test_full_stack scripts.vm_harness.test_guest_credentials scripts.vm_harness.test_tool_sequence scripts.vm_harness.test_synthetic_responses scripts.vm_harness.test_runner -v
+nix --quiet develop --no-update-lock-file -c go test ./internal/testenv ./tests/oci-stage
+nix --quiet eval --no-update-lock-file .#vm-harness-full-stack.drvPath
+nix --quiet develop --no-update-lock-file -c just check report-json
+```
+
+Next operator gate, **only on a separately authorized dedicated KVM worker**:
+apply worker CPU/storage quotas, confirm no pilot credentials/routes/Incus
+privilege, then run the fixed command above. Preserve the private runner
+result with revision and lock hash, reviewed staging receipts, phase outcomes,
+and packet-counter observations. Inspect failures without sharing raw driver
+transcripts. The runner has a 15-minute total runtime deadline, including OCI
+staging; insufficient provisioning time is a failed gate, not a retry loop.
+Afterward independently verify complete QEMU VM/disk deletion on success and
+failure. Cache-miss/offline-pull failure acceptance and outer-worker disposal
+remain operator gates; staged alias presence alone does not prove either.
+
+The unchanged runner report records pass only from the complete scenario's
+exit status. Both `upstream_inference` and whole-environment `cleanup` remain
+`not_verified`, even when owned workspace/key/listener checks pass. The guest
+cannot attest its own outer disk deletion. No real provider/OAuth acceptance,
+autonomous reasoning quality, pilot deployment or live release sign-off is
+claimed.
+
+The staging helper's `c.WarnError(c.Done, ...)` reports connection-finalization
+errors as warnings rather than promoting them into its exit status. Neither
+its receipt nor the full-stack runner's generic pass establishes staging
+connection cleanup, storage cleanup or outer VM/disk removal. Those remain
+separate operator observations.
+
+## Test-only immutable OCI staging interface (#532)
+
+`nix/vm-harness/oci-staging.nix` is an explicit, additive guest module for
+dedicated-worker acceptance. Import it alongside `aginctus-host.nix` using
+`(import ./oci-staging.nix { inherit self system; })`. The opt-in `full-stack`
+scenario imports it and performs the provisioning/check calls below. The
+existing topology and synthetic transport scenarios retain their separate
+networked tag-based behavior.
+
+The sole input manifest, `tests/oci-stage/pins.json`, records anonymous registry
+verification on 2026-10-30 for the declared LiteLLM and PostgreSQL source tags.
+It includes immutable index, per-platform manifest, config, compressed-layer
+size and expected Incus fingerprint for Linux amd64 and arm64. Source tags are
+provenance only; neither verification nor staging resolves mutable tags.
+The module forces gateway settings to the native platform's **leaf digest**,
+so Compose and staging use exactly the same reference. arm64 pins are verified
+registry metadata, not evidence of arm64 VM boot support.
+
+Hostless validation (registry verification requires public HTTPS, but downloads
+only bounded metadata, no layers, and reads no registry credentials):
+
+```sh
+nix --quiet develop --no-update-lock-file -c go test ./tests/oci-stage ./internal/orchestration/drivers/compose
+nix --quiet develop --no-update-lock-file -c go run ./tests/oci-stage plan
+nix --quiet develop --no-update-lock-file -c go run ./tests/oci-stage verify
+nix --quiet develop --no-update-lock-file -c just check report-json
+```
+
+`verify` hashes the actual bytes returned by the registries, checks each leaf's
+membership in the pinned index, verifies config OS/architecture and layer sizes,
+and reproduces the pinned Incus Compose layer-digest fingerprint algorithm.
+No layer contents or signatures are authenticated by this metadata-only check;
+Incus must verify actual content during import. Registry deletion/rate limiting
+remains a provisioning failure, never permission to substitute a newer tag.
+
+Inside the **disposable guest only**, after module import and image build,
+with a fresh initialized Incus daemon, no external remotes/auth, and no live
+provider credentials:
+
+```sh
+incus admin init --auto --storage-backend dir
+incus config set core.https_address 127.0.0.1:8443
+test "$(incus config get core.https_address)" = 127.0.0.1:8443
+ss -lntp
+systemctl start aginctus-test-oci-stage.service
+oci-stage check
+# Integration boundary: enforce worker/guest external-egress denial here,
+# retain independently measured packet counters, then deploy and infer.
+XDG_STATE_HOME=/run/aginctus-vm-gateway-state aginctus --configuration-file /etc/aginctus/config.json gateway up
+oci-stage check
+```
+
+Do not run these guest commands on the operator host or pilot. In a NixOS
+driver, use `machine.succeed(...)` after `start_all()` and waiting for
+`incus.service`. The helper's marker is an accidental-use guard, not isolation
+from root. Its Unix connection uses the fixed guest Incus socket and ignores
+socket/remote environment overrides. The staging client replaces loaded Incus
+configuration with anonymous defaults before resolving sources. The service
+uses private empty Incus config directories. No provider model is registered
+and no provider credentials are supplied by this module.
+
+Staging refuses non-loopback HTTPS and foreign gateway projects, creates only
+the marked gateway project when missing, then uses the **locked Compose image
+resource implementation** to import directly into that project's isolated
+image store. The current driver does not configure a shared image cache;
+seeding a separate cache project would not satisfy its project-local lookup.
+Aliases use the library's exact digest-reference normalization. A read-only
+`check` uses only guest Incus GETs, refuses missing/wrong fingerprint or
+architecture and incomplete OCI properties, and cannot repair or pull images.
+The `oci.volumes` metadata marker is required because its absence permits the
+library's registry metadata fallback. A poisoned alias is rejected, not
+automatically replaced. Unit tests exercise negative integrity checks and the
+pinned Compose implementation consuming staged aliases with pull-never.
+
+Budget: two sequential native-platform imports, about 508 MB compressed on
+amd64 or 513 MB on arm64 (decimal); each image's metadata-verified layer total
+must be at most 512 MiB. Metadata reads are capped at 4 MiB per document. The
+helper has a ten-minute context deadline; the service adds an eleven-minute
+timeout, 1 GiB helper memory and one CPU equivalent. **These are not incusd
+download/retry/unpack quotas**: daemon-side operations can outlive client
+cancellation. Allocate at most two vCPUs, 8 GiB RAM and a 32 GiB disposable
+guest disk at the worker boundary, plus a worker storage quota, before running.
+Compressed sizes do not bound extracted images or Nix store usage. On success
+or failure destroy the complete disposable VM/disk; never prune pilot stores.
+Do not retry failed staging indefinitely. The service has no automatic boot
+activation or restart policy.
+
+Successful `verify`, `stage` and `check` emit a small JSON receipt with the
+manifest SHA-256, action and architecture, without registry tokens or provider
+payloads. Preserve the reviewed receipt with the source revision, lock hash,
+worker bounds, guest listener inspection, provisioning outcome and separate
+packet measurements. Error diagnostics and VM transcripts require review
+before sharing. `offlineInference` and `cleanup` remain `not_verified` even
+after a successful check: a present image is not proof that no remote pull was
+attempted, and a deadline is not proof of deletion.
+
+Remaining dedicated-worker acceptance: actually boot x86_64 KVM, stage the
+images, verify the only daemon TCP listener is loopback, deny and measure
+external registry traffic **after provisioning**, run the integrated synthetic
+inference stage with no provider secrets, demonstrate cache-miss failure under
+that denial, and independently verify VM/disk deletion. Do not label offline CI
+or packet-level isolation verified without those measurements. Issues #532,
+[#524](https://github.com/blevinn/aginctus/issues/524) and
+[#431](https://github.com/blevinn/aginctus/issues/431) remain open.
 
 ## Test-only immutable OCI staging interface (#532)
 
