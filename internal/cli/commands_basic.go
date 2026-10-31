@@ -83,8 +83,10 @@ func runBasicCobra(
 	doctor.Flags().BoolVar(&fix, "fix", false, "Configure missing loopback HTTPS listener")
 	root.AddCommand(doctor)
 
+	addAggregateCommands(root, stdout, stderr, load, &status)
+
 	if err := root.ExecuteContext(ctx); err != nil {
-		fmt.Fprintf(stderr, "%v\n", err)
+		fmt.Fprintf(stderr, "%v\nUsage: aginctus [global options] <command> [flags]\n", err)
 		return 2
 	}
 	return status
