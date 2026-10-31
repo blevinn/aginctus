@@ -13,6 +13,8 @@ import (
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/managementnetwork"
+	"github.com/blevinn/aginctus/internal/modelregistry"
+	"github.com/blevinn/aginctus/internal/providerregistry"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -116,6 +118,8 @@ func Run(
 		return runConfiguredImages(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "config":
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
+	case "gateway":
+		return runGateway(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", commandArgs[0])
 		printUsage(stderr)
@@ -345,7 +349,339 @@ var ensureCredentialStorage = gateway.EnsureCredentialVolume
 var attachGatewayCredentials = gateway.AttachCredentialVolume
 var auditGatewayCredentials = gateway.AuditCredentialAttachment
 
+func runGateway(
+	ctx context.Context,
+	args []string,
+	stdout, stderr io.Writer,
+	incusClient IncusClient,
+	effective *config.Config,
+) int {
+	if len(args) == 2 && args[0] == "credential-storage" {
+		return executeGatewayCredential(ctx, args[1], stdout, stderr, effective)
+	}
+	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "audit" && strings.HasPrefix(args[3], "--uplink-zone=") {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall configuration: %v\n", err)
+			return 1
+		}
+		audit, err := spec.AuditEgressFirewalldActivation(ctx, strings.TrimPrefix(args[3], "--uplink-zone="), gateway.SystemFirewalld)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall audit blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(audit))
+		return 0
+	}
+	if len(args) == 3 && args[0] == "egress" && args[1] == "firewall" && args[2] == "reload-parity" {
+		if err := gateway.CheckFirewalldReloadParity(ctx, gateway.SystemFirewalld); err != nil {
+			fmt.Fprintf(stderr, "firewalld reload parity blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "selected runtime/permanent firewalld state matches; global reload NOT approved or executed")
+		return 0
+	}
+	if len(args) >= 3 && args[0] == "egress" && args[1] == "firewall" &&
+		(args[2] == "stage" || args[2] == "unstage" || args[2] == "verify-staged") {
+		fmt.Fprintln(stderr, "permanent staging commands are retired: NixOS owns egress objects; use network firewall egress reconcile or revoke for runtime grants")
+		return 2
+	}
+	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "plan" && strings.HasPrefix(args[3], "--uplink-zone=") {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall configuration: %v\n", err)
+			return 1
+		}
+		plan, err := spec.PlanEgressFirewalld(strings.TrimPrefix(args[3], "--uplink-zone="))
+		if err != nil {
+			fmt.Fprintf(stderr, "egress firewall plan blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(plan))
+		return 0
+	}
+	if len(args) == 5 && args[0] == "egress" && args[1] == "dhcp" && args[2] == "apply" && strings.HasPrefix(args[3], "--ranges=") && args[4] == "--confirm-bridge-only" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress DHCP configuration: %v\n", err)
+			return 1
+		}
+		ranges := strings.TrimPrefix(args[3], "--ranges=")
+		if err := gateway.ApplyEgressDHCPMigration(ctx, spec, ranges, gatewayEgressQuery); err != nil {
+			fmt.Fprintf(stderr, "egress DHCP migration blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "owned egress bridge DHCP range updated; LiteLLM networking NOT reconciled")
+		return 0
+	}
+	if len(args) == 4 && args[0] == "egress" && args[1] == "dhcp" && args[2] == "plan" && strings.HasPrefix(args[3], "--ranges=") {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress DHCP migration configuration: %v\n", err)
+			return 1
+		}
+		plan, err := gateway.PlanEgressDHCPMigration(ctx, spec, strings.TrimPrefix(args[3], "--ranges="), gatewayEgressQuery)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress DHCP migration blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, plan)
+		return 0
+	}
+	if len(args) == 3 && args[0] == "egress" && args[1] == "reconcile" && args[2] == "--confirm-stopped-instance" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation configuration: %v\n", err)
+			return 1
+		}
+		if err := gateway.ReconcileStoppedEgressNICs(ctx, spec, gatewayEgressQuery); err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "LiteLLM NIC settings updated; instance remains stopped; inspect and start separately")
+		return 0
+	}
+	if len(args) == 3 && args[0] == "egress" && args[1] == "reconcile" && args[2] == "--dry-run" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation configuration: %v\n", err)
+			return 1
+		}
+		plan, err := gateway.PlanEgressReconciliation(ctx, spec, gatewayEgressQuery)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress reconciliation blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, plan)
+		return 0
+	}
+	if len(args) == 2 && args[0] == "egress" && args[1] == "audit" {
+		spec, err := gateway.FromConfig(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress audit configuration: %v\n", err)
+			return 1
+		}
+		if err := gateway.AuditEgressRuntime(ctx, spec, gatewayEgressQuery); err != nil {
+			fmt.Fprintf(stderr, "egress runtime audit blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, "LiteLLM NIC declarations verified (in-guest routes and upstream connectivity NOT verified)")
+		return 0
+	}
+	if len(args) == 2 && args[0] == "egress" && args[1] == "preflight" {
+		name, err := effective.String("gateway.egress.network.name")
+		if err != nil {
+			fmt.Fprintf(stderr, "egress configuration: %v\n", err)
+			return 1
+		}
+		candidate, err := gateway.EgressAddressPreflight(ctx, name)
+		if err != nil {
+			fmt.Fprintf(stderr, "egress preflight blocked: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(stdout, "egress candidate: %s (advisory only; NOT RESERVED, do not deploy without full inventory and atomic allocation)\n", candidate)
+		return 0
+	}
+	if len(args) >= 2 && args[0] == "responses" && args[1] == "verify" {
+		return verifyGatewayResponsesStream(args[2:], stdout, stderr)
+	}
+	if len(args) == 3 && args[0] == "model" && args[2] == "render" {
+		definition, err := renderRegisteredModel(args[1])
+		if err != nil {
+			fmt.Fprintf(stderr, "render registered model: %v\n", err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(definition))
+		fmt.Fprintln(stderr, "model definition rendered for review only; gateway routing and credentials remain inactive")
+		return 0
+	}
+	if len(args) > 0 && args[0] == "model" && (len(args) == 2 && args[1] == "list" || len(args) == 3 && args[2] == "show") {
+		path, err := modelregistry.DefaultPath()
+		if err != nil {
+			fmt.Fprintln(stderr, "resolve model registry: unavailable")
+			return 1
+		}
+		reg, err := modelregistry.Load(path)
+		if err != nil {
+			fmt.Fprintln(stderr, "read private model registry: invalid or inaccessible")
+			return 1
+		}
+		if args[1] == "list" {
+			for _, model := range reg.Models {
+				fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", model.Name, model.Source, model.Provider, "activation pending")
+			}
+			return 0
+		}
+		for _, model := range reg.Models {
+			if model.Name == args[1] {
+				fmt.Fprintf(stdout, "model %q: source %q via provider %q (authorization and activation pending)\n", model.Name, model.Source, model.Provider)
+				return 0
+			}
+		}
+		fmt.Fprintf(stderr, "model alias %q is not registered\n", args[1])
+		return 1
+	}
+	if len(args) > 0 && args[0] == "provider" && (len(args) == 2 && args[1] == "list" || len(args) == 3 && args[2] == "show") {
+		path, err := providerregistry.DefaultPath()
+		if err != nil {
+			fmt.Fprintf(stderr, "provider registry path: %v\n", err)
+			return 1
+		}
+		reg, err := providerregistry.Load(path)
+		if err != nil {
+			fmt.Fprintf(stderr, "read provider registry: %v\n", err)
+			return 1
+		}
+		if args[1] == "list" {
+			for _, p := range reg.Providers {
+				fmt.Fprintf(stdout, "%s\t%s\t%s\n", p.Alias, p.Type, "authentication pending")
+			}
+			return 0
+		}
+		for _, p := range reg.Providers {
+			if p.Alias == args[1] {
+				fmt.Fprintf(stdout, "provider %q (%s): registered locally (authentication pending)\n", p.Alias, p.Type)
+				return 0
+			}
+		}
+		fmt.Fprintf(stderr, "provider alias %q is not registered\n", args[1])
+		return 1
+	}
+	if len(args) > 0 && (args[0] == "provider" || args[0] == "model") {
+		if len(args) < 3 || args[2] != "register" {
+			printGatewayUsage(stderr)
+			return 2
+		}
+		kind, name := args[0], args[1]
+		provider, source, alias, dryRun := "", "", "", false
+		for _, arg := range args[3:] {
+			switch {
+			case arg == "--dry-run":
+				dryRun = true
+			case strings.HasPrefix(arg, "--alias=") && kind == "provider":
+				alias = strings.TrimPrefix(arg, "--alias=")
+			case strings.HasPrefix(arg, "--provider=") && kind == "model":
+				provider = strings.TrimPrefix(arg, "--provider=")
+			case strings.HasPrefix(arg, "--source=") && kind == "model":
+				source = strings.TrimPrefix(arg, "--source=")
+			default:
+				fmt.Fprintf(stderr, "unknown or invalid registration option %q\n", arg)
+				return 2
+			}
+		}
+		if kind == "provider" {
+			if alias == "" {
+				alias = name
+			}
+			var rendered []byte
+			var err error
+			switch name {
+			case "chatgpt":
+				rendered, err = gateway.ChatGPTProviderRegistration(alias)
+			case "opencode-go":
+				rendered, err = gateway.OpenCodeGoProviderRegistration(alias)
+			default:
+				fmt.Fprintln(stderr, "unsupported provider type")
+				return 2
+			}
+			if err != nil {
+				fmt.Fprintf(stderr, "gateway provider: %v\n", err)
+				return 2
+			}
+			if dryRun {
+				fmt.Fprintln(stdout, string(rendered))
+				return 0
+			}
+			path, err := providerregistry.DefaultPath()
+			if err != nil {
+				fmt.Fprintf(stderr, "provider registry path: %v\n", err)
+				return 1
+			}
+			changed, err := providerregistry.Register(path, providerregistry.Provider{Type: name, Alias: alias})
+			if err != nil {
+				fmt.Fprintf(stderr, "register provider: %v\n", err)
+				return 1
+			}
+			if changed {
+				fmt.Fprintf(stdout, "provider %q (%s): registered locally (authentication pending)\n", alias, name)
+			} else {
+				fmt.Fprintf(stdout, "provider %q (%s): already registered (authentication pending)\n", alias, name)
+			}
+			return 0
+		}
 
+		if source == "" {
+			source = name
+		}
+		if provider == "" && strings.HasPrefix(source, "chatgpt/") {
+			provider = "chatgpt"
+		}
+		if provider == "" {
+			fmt.Fprintln(stderr, "model registration requires --provider=ALIAS (or --source=chatgpt/...)")
+			return 2
+		}
+		path, err := providerregistry.DefaultPath()
+		if err != nil {
+			fmt.Fprintln(stderr, "cannot verify provider alias")
+			return 1
+		}
+		providers, err := providerregistry.Load(path)
+		if err != nil {
+			fmt.Fprintln(stderr, "cannot read private provider registry")
+			return 1
+		}
+		providerType := ""
+		for _, p := range providers.Providers {
+			if p.Alias == provider {
+				providerType = p.Type
+				break
+			}
+		}
+		if providerType == "" {
+			fmt.Fprintf(stderr, "model provider alias %q is not registered locally\n", provider)
+			if dryRun {
+				return 2
+			}
+			return 1
+		}
+		var rendered []byte
+		switch providerType {
+		case "chatgpt":
+			rendered, err = gateway.ChatGPTModelRegistration(name, source)
+		case "opencode-go":
+			rendered, err = gateway.OpenCodeGoModelRegistration(name, source)
+		default:
+			fmt.Fprintln(stderr, "unsupported model provider type")
+			return 2
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "invalid %s Responses model registration: %v\n", providerType, err)
+			return 2
+		}
+		if dryRun {
+			fmt.Fprintln(stdout, string(rendered))
+			return 0
+		}
+		modelPath, err := modelregistry.DefaultPath()
+		if err != nil {
+			fmt.Fprintln(stderr, "resolve model registry: unavailable")
+			return 1
+		}
+		changed, err := modelregistry.Register(modelPath, modelregistry.Model{Name: name, Provider: provider, Source: source})
+		if err != nil {
+			fmt.Fprintf(stderr, "register model: %v\n", err)
+			return 1
+		}
+		if changed {
+			fmt.Fprintf(stdout, "model %q: registered locally (authorization and activation pending)\n", name)
+		} else {
+			fmt.Fprintf(stdout, "model %q: already registered (authorization and activation pending)\n", name)
+		}
+		return 0
+	}
+	printGatewayUsage(stderr)
+	return 2
+}
 func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
@@ -381,21 +717,21 @@ func printGatewayUsage(w io.Writer) {
 
 // transitionHerdrClientCommand executes a validated lifecycle action.
 func transitionHerdrClientCommand(ctx context.Context, action string, stdout, stderr io.Writer, effective *config.Config) int {
-		spec, err := herdrclient.FromConfig(effective)
-		if err != nil {
-			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
-			return 1
-		}
-		if err := transitionHerdrClient(ctx, spec, action); err != nil {
-			fmt.Fprintf(stderr, "Herdr client %s: %v\n", action, err)
-			return 1
-		}
-		verb := "started"
-		if action == "stop" {
-			verb = "stopped"
-		}
-		fmt.Fprintf(stdout, "Herdr client %q: %s\n", spec.Name, verb)
-		return 0
+	spec, err := herdrclient.FromConfig(effective)
+	if err != nil {
+		fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
+		return 1
+	}
+	if err := transitionHerdrClient(ctx, spec, action); err != nil {
+		fmt.Fprintf(stderr, "Herdr client %s: %v\n", action, err)
+		return 1
+	}
+	verb := "started"
+	if action == "stop" {
+		verb = "stopped"
+	}
+	fmt.Fprintf(stdout, "Herdr client %q: %s\n", spec.Name, verb)
+	return 0
 }
 
 // executeHerdrClientOperation is called only from parsed Cobra leaves.
