@@ -262,8 +262,19 @@ An attempted external packet during deployment or agent execution fails the test
 containers remain management-only; LiteLLM alone reaches the synthetic
 listener on the private egress bridge. No live provider is registered.
 
+Full-stack initializes a guest-local **20 GiB loopback Btrfs `default` pool**,
+using the explicit loop-pool pattern from `storage-network.nix`. All workload
+and gateway roots and custom volumes use that pool. The driver independently
+reads its driver, guest-local loop backing and cross-project volume inventory
+before the scenario and in a `finally` block after success or failure. Scoped
+workspace cleanup must preserve the existing storage inventory. This is
+pilot-representative Btrfs behavior, not real-device performance or deletion
+evidence: the pool, images, persistent volumes, possible snapshots and loop
+file remain for outer VM/disk disposal. No host pool is accessed or pruned.
+
 The real production Herdr/OpenCode workload image is extended **only for this
-test** with the pinned Go toolchain. Herdr client SSH identity creation,
+test** with the pinned Go toolchain and immutable guest-root credential helper.
+Herdr client SSH identity creation,
 authorization, host-key pinning and machine registration happen inside the
 fresh disposable VM through the shipped helpers and CLI. No host credentials,
 host workspaces or ambient SSH agent are transported.
@@ -283,6 +294,15 @@ It does not install hooks into, enable, or authorize live acceptance.
 Required gates, each failing closed:
 
 - The deliberately broken Go fixture must fail its actual Go assertion first.
+- Before scoped workspace operations, an independent observer creates a foreign
+  sentinel workspace and snapshots the complete workspace-ID/label inventory,
+  including any unrelated existing workspaces. A separate real workspace
+  undergoes a fixed injected post-open failure, scoped close and independent
+  inventory comparison before the successful agent scenario starts. Both that
+  failure path and the agent path must restore the exact baseline inventory.
+  A missing/changed sentinel, changed unrelated entry or extra workspace fails.
+  Scoped cleanup never closes the sentinel or any unrelated baseline entry;
+  the sentinel remains until complete VM disposal.
 - Real Herdr creates the labeled workspace, starts the pinned OpenCode agent,
   submits a nonce-bearing task and waits for done/idle. The trusted test
   upstream requests `read`, `edit`, and `bash` in order; no fake tool results
@@ -298,8 +318,22 @@ Required gates, each failing closed:
 - A fresh 15-minute virtual key is limited to the synthetic alias with a
   budget and rate limit. Anonymous/invalid-key requests and an out-of-scope
   model request must be denied; the scoped model listing must be exact.
-  Credential checks cover private workload-key metadata and known provider
-  credential locations, not exhaustive secret discovery.
+  Credential checks include private workload-key metadata and known provider
+  credential locations. The immutable guest-root helper receives the **actual
+  gateway master key and synthetic provider token over stdin only**. It
+  compares those bytes against every observed process's environment and argv,
+  the private key and exact `gateway.json`, mountinfo (including bind roots),
+  and regular files in the credential directory and known state/configuration
+  roots: `/var/lib/aginctus/state/{system,user}`, `/var/lib/herdr`,
+  `/home/agent/.config`, and `/home/agent/.local/share/opencode`. Known gateway
+  secret mounts are rejected. The scoped workload key is explicitly permitted.
+  No secret bytes, matching content, raw paths or process observations are
+  printed. Unreadable live process state, symlinked scan entries, unknown
+  non-regular files (except Herdr sockets), oversized observations and scan
+  limits fail closed. Limits are 4096 processes/scan entries, 1 MiB per process
+  field or mount inventory, 64 MiB per regular file and 256 MiB total file reads.
+  This is a bounded point-in-time observation by trusted guest root, not
+  exhaustive secret discovery or an attestation against a compromised guest.
 - Gateway-side PostgreSQL spend records must contain four distinct successful
   native Responses request IDs, the fresh key's hash, the exact alias, and
   the **same native session ID independently read from OpenCode**. The
@@ -317,7 +351,17 @@ Required gates, each failing closed:
   credential-egress or arbitrary firewall-bypass acceptance.
 - Stop and owned close run after partial failures. Herdr inventory must confirm
   workspace absence. The fixture is removed and its absence independently
-  read back. Key deletion must be followed by actual rejection, model deletion
+  read back. Key deletion must be followed by actual rejection and removal of
+  the matching revoked `workload-key`. Expected key bytes travel to the
+  guest-root removal helper only over stdin. The helper requires a non-symlink,
+  agent-owned mode-0600 regular file with one link in the private directory;
+  it compares exact bytes and rechecks the inode/content after capture into a
+  root-private sibling directory before unlinking. A rotated or unrelated key
+  is never deleted: a mismatching capture is restored without overwriting a
+  replacement, or retained for root recovery if another rotation blocks
+  restoration. Such uncertainty fails. A separate guest-root invocation
+  independently requires key-path absence, including no dangling symlink or
+  rotated replacement. Gateway configuration is retained. Model deletion
   by alias absence, and the synthetic listener must stop. Failed teardown is
   a failure, even after a passing task. An uncertain remote create still
   requires destroying the entire disposable VM.
@@ -325,7 +369,7 @@ Required gates, each failing closed:
 Hostless validation, safe in the current multipurpose checkout:
 
 ```sh
-nix --quiet develop --no-update-lock-file -c python3 -m unittest scripts.vm_harness.test_full_stack scripts.vm_harness.test_tool_sequence scripts.vm_harness.test_synthetic_responses scripts.vm_harness.test_runner -v
+nix --quiet develop --no-update-lock-file -c python3 -m unittest scripts.vm_harness.test_full_stack scripts.vm_harness.test_guest_credentials scripts.vm_harness.test_tool_sequence scripts.vm_harness.test_synthetic_responses scripts.vm_harness.test_runner -v
 nix --quiet develop --no-update-lock-file -c go test ./internal/testenv ./tests/oci-stage
 nix --quiet eval --no-update-lock-file .#vm-harness-full-stack.drvPath
 nix --quiet develop --no-update-lock-file -c just check report-json
@@ -348,6 +392,12 @@ exit status. Both `upstream_inference` and whole-environment `cleanup` remain
 cannot attest its own outer disk deletion. No real provider/OAuth acceptance,
 autonomous reasoning quality, pilot deployment or live release sign-off is
 claimed.
+
+The staging helper's `c.WarnError(c.Done, ...)` reports connection-finalization
+errors as warnings rather than promoting them into its exit status. Neither
+its receipt nor the full-stack runner's generic pass establishes staging
+connection cleanup, storage cleanup or outer VM/disk removal. Those remain
+separate operator observations.
 
 ## Test-only immutable OCI staging interface (#532)
 

@@ -35,6 +35,11 @@ class FakeAdapter:
     def remove_fixture(self):
         self.calls.append("remove-fixture")
 
+    def inspect_foreign(self):
+        self.calls.append("inspect-foreign")
+        if self.fail == "inspect-foreign":
+            raise stack.gateway.Failure("foreign sentinel disappeared")
+
 
 class FullStackTests(unittest.TestCase):
     def test_embedded_guest_shell_programs_parse_without_execution(self):
@@ -52,7 +57,7 @@ class FullStackTests(unittest.TestCase):
     def test_real_phase_contract_and_scoped_cleanup(self):
         adapter = FakeAdapter()
         stack.exercise(adapter)
-        self.assertEqual(adapter.calls, [*stack.PHASES, "remove-fixture"])
+        self.assertEqual(adapter.calls, [*stack.PHASES, "remove-fixture", "inspect-foreign"])
 
     def test_each_gate_failure_fails_and_cleans_partial_work(self):
         for phase in stack.PHASES:
@@ -60,7 +65,7 @@ class FullStackTests(unittest.TestCase):
                 adapter = FakeAdapter(phase)
                 with self.assertRaises(stack.gateway.Failure):
                     stack.exercise(adapter)
-                self.assertEqual(adapter.calls[-1], "remove-fixture")
+                self.assertEqual(adapter.calls[-2:], ["remove-fixture", "inspect-foreign"])
                 if phase != "preflight":
                     self.assertIn("close", adapter.calls)
                 if phase not in ("preflight", "open"):
@@ -71,7 +76,70 @@ class FullStackTests(unittest.TestCase):
         adapter.remove_fixture = Mock(side_effect=stack.gateway.Failure("not absent"))
         with self.assertRaises(stack.gateway.Failure):
             stack.exercise(adapter)
-        self.assertEqual(adapter.calls[-2:], ["stop", "close"])
+        self.assertEqual(adapter.calls[-3:], ["stop", "close", "inspect-foreign"])
+
+    def test_fixed_runtime_fault_closes_only_owned_workspace_and_inspects_foreign(self):
+        adapter = FakeAdapter()
+        with self.assertRaises(stack.InjectedFailure):
+            stack.exercise(adapter, fail_after_open=True)
+        self.assertEqual(adapter.calls, ["preflight", "open", "close", "remove-fixture", "inspect-foreign"])
+        with self.assertRaises(stack.gateway.Failure):
+            stack.exercise(FakeAdapter("inspect-foreign"))
+
+    def test_foreign_sentinel_requires_independent_creation_and_unchanged_inventory(self):
+        before = {"existing": "unrelated-user-work"}
+        after = before | {"sentinel": "vm-foreign-sentinel-" + "a" * 16}
+        inventory = Mock(side_effect=[before, after, after, before])
+        invoke = Mock(return_value=json.dumps({"result": {"workspace": {"workspace_id": "sentinel"}}}))
+        guard = stack.ForeignWorkspaceGuard({"workspace_inventory": inventory, "invoke": invoke})
+        with patch.object(stack.secrets, "token_hex", return_value="a" * 16):
+            guard.establish()
+        guard.inspect()
+        with self.assertRaisesRegex(stack.gateway.Failure, "unrelated Herdr inventory changed"):
+            guard.inspect()
+        self.assertEqual(invoke.call_count, 1)
+        self.assertEqual(invoke.call_args.args[1:3], ("workspace", "create"))
+
+    def test_credential_gate_supplies_actual_secrets_only_to_guest_root_stdin(self):
+        adapter = stack.Adapter.__new__(stack.Adapter)
+        adapter.base, adapter.identity = FakeAdapter.base, FakeAdapter.identity
+        adapter.master, adapter.scoped = "actual-master-selector", "actual-scoped-selector"
+        adapter.endpoint = "http://10.77.0.2:4000"
+        with (patch.object(stack, "guest") as guest,
+              patch.object(stack.gateway, "request", return_value=json.dumps({"data": [{"id": stack.ALIAS}]})),
+              patch.object(stack, "denied") as denied,
+              contextlib.redirect_stdout(io.StringIO())):
+            adapter.phase("credential-check", str(adapter.base), adapter.identity)
+        audit = guest.call_args_list[-1]
+        self.assertEqual(audit.args, ("aginctus-vm-guest-credentials", "audit"))
+        self.assertIs(audit.kwargs["agent"], False)
+        payload = json.loads(audit.kwargs["data"])
+        self.assertEqual(payload["master"], adapter.master)
+        self.assertEqual(payload["provider"], stack.gateway.TOKEN)
+        self.assertEqual(payload["scoped"], adapter.scoped)
+        self.assertNotIn(adapter.master, repr(audit.args))
+        self.assertNotIn(stack.gateway.TOKEN, repr(audit.args))
+        self.assertEqual(denied.call_count, 3)
+
+    def test_scoped_close_cannot_delete_a_baseline_workspace_even_with_our_label(self):
+        for recorded in (True, False):
+            with self.subTest(recorded=recorded):
+                adapter = stack.Adapter.__new__(stack.Adapter)
+                adapter.base, adapter.identity = FakeAdapter.base, FakeAdapter.identity
+                adapter.guard = Mock(baseline={"foreign": adapter.identity})
+                path = Mock()
+                path.exists.return_value = recorded
+                invoke, phase = Mock(), Mock()
+                adapter.lifecycle = {
+                    "state_path": Mock(return_value=path),
+                    "load": Mock(return_value={"workspace_id": "foreign"}),
+                    "workspace_inventory": Mock(return_value={"foreign": adapter.identity}),
+                    "invoke": invoke, "phase": phase,
+                }
+                with self.assertRaises(stack.gateway.Failure):
+                    adapter.phase("close", str(adapter.base), adapter.identity)
+                invoke.assert_not_called()
+                phase.assert_not_called()
 
     def test_exact_diff_and_actual_tool_marker_required(self):
         files = dict(stack.FILES)
@@ -178,6 +246,8 @@ class FullStackTests(unittest.TestCase):
               patch.object(stack.gateway, "request", side_effect=request),
               patch.object(stack, "SyntheticServer", return_value=server),
               patch.object(stack.threading, "Thread", return_value=thread),
+              patch.object(stack, "ForeignWorkspaceGuard"),
+              patch.object(stack, "guest") as guest,
               patch.object(stack, "Adapter"),
               patch.object(stack, "exercise", side_effect=stack.gateway.Failure("task failed")),
               self.assertRaisesRegex(stack.gateway.Failure, "task failed")):
@@ -186,6 +256,11 @@ class FullStackTests(unittest.TestCase):
         self.assertEqual(calls[-1], "/v1/models")
         server.shutdown.assert_called_once()
         server.server_close.assert_called_once()
+        self.assertEqual([call.args for call in guest.call_args_list], [
+            ("aginctus-vm-guest-credentials", "remove-key"),
+            ("aginctus-vm-guest-credentials", "inspect-key-absent"),
+        ])
+        self.assertEqual(json.loads(guest.call_args_list[0].kwargs["data"]), {"scoped": "scoped-only"})
 
     def test_full_stack_driver_is_fixed_and_reporting_stays_synthetic(self):
         self.assertEqual(runner.build_arguments("full-stack", False)[-1], ".#vm-harness-full-stack.driver")

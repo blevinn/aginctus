@@ -355,7 +355,16 @@
           vm-harness-opencode-workload =
             let
               guest = opencodeWorkloadSystem.extendModules {
-                modules = [ { environment.systemPackages = [ pkgs.go ]; } ];
+                modules = [
+                  {
+                    environment.systemPackages = [
+                      pkgs.go
+                      (pkgs.writeShellScriptBin "aginctus-vm-guest-credentials" ''
+                        exec ${pkgs.python3}/bin/python3 ${./scripts/vm_harness/guest_credentials.py} "$@"
+                      '')
+                    ];
+                  }
+                ];
               };
             in
             pkgs.runCommand "aginctus-full-stack-workload-image" { } ''

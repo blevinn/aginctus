@@ -123,12 +123,44 @@ def verify_rows(rows, key_hash, session):
         raise gateway.Failure("ambiguous gateway-side tool-turn correlation")
 
 
+class ForeignWorkspaceGuard:
+    """Independent baseline retained across both failing and successful runs."""
+    def __init__(self, lifecycle=None):
+        self.lifecycle = lifecycle if lifecycle is not None else runpy.run_path(
+            str(Path(__file__).with_name("herdr-lifecycle.py")))
+        self.baseline = None
+
+    def establish(self):
+        if self.baseline is not None:
+            self.inspect()
+            return
+        before = self.lifecycle["workspace_inventory"]("aginctus-dev")
+        label = "vm-foreign-sentinel-" + secrets.token_hex(8)
+        response = json.loads(self.lifecycle["invoke"](
+            "aginctus-dev", "workspace", "create", "--cwd", "/home/agent",
+            "--label", label, "--no-focus"))
+        wid = response.get("result", {}).get("workspace", {}).get("workspace_id")
+        after = self.lifecycle["workspace_inventory"]("aginctus-dev")
+        if not isinstance(wid, str) or not wid or wid in before or after != dict(before, **{wid: label}):
+            raise gateway.Failure("independent foreign sentinel creation not confirmed")
+        self.baseline = after
+
+    def inspect(self):
+        if self.baseline is None or self.lifecycle["workspace_inventory"]("aginctus-dev") != self.baseline:
+            raise gateway.Failure("unrelated Herdr inventory changed during scoped cleanup")
+
+
+class InjectedFailure(Exception):
+    """Trusted, fixed post-open fault; never accepted as inference evidence."""
+
+
 class Adapter:
-    def __init__(self, base, identity, nonce, endpoint, scoped, upstream):
+    def __init__(self, base, identity, nonce, endpoint, scoped, upstream, master, guard):
         self.base, self.identity, self.nonce = base, identity, nonce
         self.endpoint, self.scoped, self.upstream = endpoint, scoped, upstream
         self.remote = "/home/agent/aginctus-acceptance/" + identity
-        self.lifecycle = runpy.run_path(str(Path(__file__).with_name("herdr-lifecycle.py")))
+        self.master, self.guard = master, guard
+        self.lifecycle = guard.lifecycle
         self.staged = False
         self.session = None
         os.environ.update({
@@ -147,6 +179,7 @@ class Adapter:
             for operation in ("authorize", "pin-host", "register"):
                 command("aginctus", "--configuration-file", "/etc/aginctus/config.json",
                         "herdr", operation, "dev")
+            self.guard.establish()
             guest("aginctus-opencode-gateway-provision", agent=False, data=json.dumps({
                 "endpoint": self.endpoint + "/v1", "model": ALIAS, "key": self.scoped,
             }))
@@ -203,6 +236,10 @@ for path in /home/agent/.aws/credentials /home/agent/.config/opencode/auth.json 
 done
 test ! -e /run/aginctus-vm-gateway-state
 ''')
+            guest("aginctus-vm-guest-credentials", "audit", agent=False, data=json.dumps({
+                "master": self.master, "provider": gateway.TOKEN, "scoped": self.scoped,
+                "endpoint": self.endpoint + "/v1", "model": ALIAS,
+            }))
             if gateway.model_ids(gateway.request(self.endpoint, "/v1/models", self.scoped)) != {ALIAS}:
                 raise gateway.Failure("workload model authorization scope mismatch")
             denied(self.endpoint, "/v1/models", None)
@@ -230,13 +267,18 @@ test ! -e /run/aginctus-vm-gateway-state
                     time.sleep(2)
             print("gateway-observed:" + identity)
         elif action == "close":
+            if self.guard.baseline is None:
+                raise gateway.Failure("foreign baseline required before scoped close")
             if self.lifecycle["state_path"](self.base).exists():
+                state = self.lifecycle["load"](self.base, identity)
+                if state["workspace_id"] in self.guard.baseline:
+                    raise gateway.Failure("refuse to close an unrelated baseline workspace")
                 self.lifecycle["phase"]("close", workspace, identity)
             else:
                 # An open that failed after remote creation may lack local state.
                 inventory = self.lifecycle["workspace_inventory"]("aginctus-dev")
                 matching = [wid for wid, label in inventory.items() if label == identity]
-                if len(matching) > 1:
+                if len(matching) > 1 or any(wid in self.guard.baseline for wid in matching):
                     raise gateway.Failure("ambiguous partially opened workspace")
                 for wid in matching:
                     self.lifecycle["invoke"]("aginctus-dev", "workspace", "close", wid)
@@ -250,8 +292,11 @@ test ! -e /run/aginctus-vm-gateway-state
             guest("rm", "-rf", "--", self.remote)
             guest("sh", "-eu", "-c", 'test ! -e "$1"; test ! -L "$1"', "fixture", self.remote)
 
+    def inspect_foreign(self):
+        self.guard.inspect()
 
-def exercise(adapter):
+
+def exercise(adapter, *, fail_after_open=False):
     """Always attempt scoped stop/close and fixture removal after partial failure."""
     opened = started = False
     try:
@@ -263,6 +308,8 @@ def exercise(adapter):
             prompt = "Inspect and fix Add; execute go test ./... using real tools. nonce=" + adapter.nonce
             adapter.phase(phase, str(adapter.base), adapter.identity,
                           prompt if phase == "prompt" else None)
+            if phase == "open" and fail_after_open:
+                raise InjectedFailure()
     finally:
         failed = False
         for phase, needed in (("stop", started), ("close", opened)):
@@ -274,6 +321,10 @@ def exercise(adapter):
         try:
             adapter.remove_fixture()
         except (OSError, subprocess.SubprocessError, gateway.Failure):
+            failed = True
+        try:
+            adapter.inspect_foreign()
+        except (RuntimeError, ValueError, OSError, subprocess.SubprocessError, gateway.Failure):
             failed = True
         if failed:
             raise gateway.Failure("owned Herdr/fixture cleanup failed")
@@ -326,9 +377,24 @@ def run():
             scoped = None
             raise gateway.Failure("fresh scoped workload credential unavailable")
         with tempfile.TemporaryDirectory(prefix="aginctus-full-stack-") as temp:
+            guard = ForeignWorkspaceGuard()
+            # Real failure-path control: open another owned workspace, inject a
+            # failure before agent startup, then require scoped close AND the
+            # independent foreign inventory to survive. No extra model turn.
+            fault_nonce = secrets.token_hex(4)
+            fault_identity = "aginctus-acceptance." + fault_nonce
+            fault_base = Path(temp) / fault_identity / "workspace"
+            fault_base.mkdir(parents=True, mode=0o700)
+            try:
+                exercise(Adapter(fault_base, fault_identity, fault_nonce, endpoint,
+                                 scoped, upstream, master, guard), fail_after_open=True)
+            except InjectedFailure:
+                pass
+            else:
+                raise gateway.Failure("post-open failure-path control did not execute")
             base = Path(temp) / identity / "workspace"
             base.mkdir(parents=True, mode=0o700)
-            exercise(Adapter(base, identity, nonce, endpoint, scoped, upstream))
+            exercise(Adapter(base, identity, nonce, endpoint, scoped, upstream, master, guard))
     finally:
         # Attempt every teardown even when another one fails. Uncertain remote
         # mutation/revocation is a failure, with complete VM disposal still required.
@@ -337,14 +403,18 @@ def run():
             try:
                 gateway.request(endpoint, "/key/delete", master, {"keys": [scoped]})
                 denied(endpoint, "/v1/models", scoped)
-            except gateway.Failure:
+                guest("aginctus-vm-guest-credentials", "remove-key", agent=False,
+                      data=json.dumps({"scoped": scoped}))
+                # Separate guest-root readback; removal's exit code is not proof.
+                guest("aginctus-vm-guest-credentials", "inspect-key-absent", agent=False, data="{}")
+            except (gateway.Failure, OSError, subprocess.SubprocessError):
                 failed = True
         if model_id:
             try:
                 gateway.request(endpoint, "/model/delete", master, {"id": model_id})
                 if ALIAS in gateway.model_ids(gateway.request(endpoint, "/v1/models", master)):
                     raise gateway.Failure("synthetic alias remains after removal")
-            except gateway.Failure:
+            except (gateway.Failure, OSError, subprocess.SubprocessError):
                 failed = True
         server.shutdown()
         server.server_close()
