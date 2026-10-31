@@ -31,27 +31,7 @@ let
   # The Go config loader treats these as runtime-only secrets, but the
   # freeform options layer would otherwise allow them into the world-readable
   # Nix store.
-  forbiddenGatewaySecrets = [
-    [
-      "gateway"
-      "postgres"
-      "password"
-    ]
-    [
-      "gateway"
-      "master"
-      "key"
-    ]
-    [
-      "gateway"
-      "salt"
-      "key"
-    ]
-  ];
-
-  configuredSecretPaths = builtins.filter (
-    path: lib.hasAttrByPath path cfg.settings
-  ) forbiddenGatewaySecrets;
+  configuredSecretPaths = import ./runtime-secret-paths.nix { inherit lib; } cfg.settings;
 
   validImageAlias =
     alias:
@@ -223,9 +203,7 @@ in
       }
       {
         assertion = configuredSecretPaths == [ ];
-        message = "services.aginctus.settings cannot contain runtime gateway secrets: ${
-          lib.concatStringsSep ", " (map (path: lib.concatStringsSep "." path) configuredSecretPaths)
-        }. Leave secrets unset to generate and persist protected runtime state; see docs/configuration.md.";
+        message = "services.aginctus.settings cannot contain runtime gateway secrets: ${lib.concatStringsSep ", " configuredSecretPaths}. Leave secrets unset to generate and persist protected runtime state; see docs/configuration.md.";
       }
       {
         assertion = builtins.all validImageAlias enabledImageAliases;
