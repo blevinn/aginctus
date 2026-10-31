@@ -1,0 +1,111 @@
+{
+  "firewall": {
+    "egress": {
+      "allowTailscaleRouting": true,
+      "uplinkZone": ""
+    },
+    "zone": "aginctus-dns"
+  },
+  "gateway": {
+    "compose": {
+      "project": "aginctus-gateway"
+    },
+    "id": "local",
+    "images": {
+      "litellm": "ghcr.io/berriai/litellm:v1.103.0",
+      "postgres": "docker.io/library/postgres:17-alpine"
+    },
+    "litellm": {
+      "forwardClientHeaders": false,
+      "selectiveGoForwarding": false
+    }
+  },
+  "incus": {
+    "management": {
+      "network": {
+        "ipv4": {
+          "address": "auto",
+          "dhcp": {
+            "gateway": "none"
+          },
+          "nat": false,
+          "routing": false
+        },
+        "ipv6": {
+          "address": "none"
+        },
+        "name": "aginctus-mgmt"
+      }
+    },
+    "project": "aginctus"
+  },
+  "infrastructure": {
+    "herdr": {
+      "image": {
+        "alias": "aginctus-herdr-client"
+      },
+      "name": "aginctus-herdr",
+      "storage": {
+        "pool": "default"
+      }
+    }
+  },
+  "mcp": {
+    "capabilities": {
+      "coding": {
+        "protocol": "responses",
+        "requires": [
+          "mcp-tools"
+        ]
+      }
+    },
+    "gateway": {
+      "enabled": true,
+      "requireAuthenticatedWorkload": true,
+      "upstreamTimeoutSeconds": 30
+    },
+    "grants": {
+      "dev": {
+        "capability": "coding",
+        "servers": {
+          "docs": [
+            "search"
+          ]
+        }
+      }
+    },
+    "servers": {
+      "docs": {
+        "allowedTools": [
+          "fetch",
+          "search"
+        ],
+        "credentialRef": "docs-token",
+        "transport": "streamable-http",
+        "url": "https://docs.example.com/mcp"
+      },
+      "local": {
+        "args": [],
+        "command": "/usr/bin/mcp-local",
+        "transport": "stdio"
+      }
+    }
+  },
+  "workloads": {
+    "dev": {
+      "image": {
+        "alias": "aginctus-opencode-workload"
+      },
+      "instance": {
+        "name": "aginctus-dev"
+      },
+      "isolation": "container",
+      "runtime": {
+        "type": "opencode"
+      },
+      "storage": {
+        "pool": "default"
+      }
+    }
+  }
+}

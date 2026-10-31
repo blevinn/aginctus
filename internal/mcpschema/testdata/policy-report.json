@@ -1,0 +1,58 @@
+{
+  "servers": [
+    {
+      "name": "docs",
+      "transport": "streamable-http",
+      "endpoint": "https://docs.example.com/mcp",
+      "command": "",
+      "hasCredentialReference": true,
+      "allowedTools": [
+        "fetch",
+        "search"
+      ]
+    },
+    {
+      "name": "local",
+      "transport": "stdio",
+      "endpoint": "",
+      "command": "/usr/bin/mcp-local",
+      "hasCredentialReference": false,
+      "allowedTools": null
+    }
+  ],
+  "workloads": [
+    {
+      "workload": "dev",
+      "capability": "coding",
+      "protocol": "responses",
+      "requires": [
+        "mcp-tools",
+        "provider-hosted-tools"
+      ],
+      "servers": [
+        {
+          "server": "docs",
+          "transport": "streamable-http",
+          "tools": [
+            "search"
+          ]
+        }
+      ]
+    },
+    {
+      "workload": "reader",
+      "capability": "coding",
+      "protocol": "responses",
+      "requires": [
+        "mcp-tools",
+        "provider-hosted-tools"
+      ],
+      "servers": []
+    }
+  ],
+  "gateway": {
+    "enabled": true,
+    "requireAuthenticatedWorkload": true,
+    "upstreamTimeoutSeconds": 45
+  }
+}
