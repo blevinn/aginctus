@@ -17,7 +17,7 @@ func isGatewayCoreCommand(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "status", "remove", "apply", "up", "validate", "render", "credential-storage":
+	case "status", "remove", "apply", "up", "validate", "render", "credential-storage", "provider", "model":
 		return true
 	default:
 		return false
@@ -155,7 +155,7 @@ func executeGatewayLifecycle(ctx context.Context, action string, force bool, std
 func addGatewayCoreCommands(
 	root *cobra.Command, stdout, stderr io.Writer,
 	load func() (*config.Config, error), status *int,
-) {
+) *cobra.Command {
 	gatewayCmd := &cobra.Command{Use: "gateway", Short: "Inspect and reconcile the AI gateway"}
 	root.AddCommand(gatewayCmd)
 	add := func(parent *cobra.Command, name string, aliases []string, flags func(*cobra.Command),
@@ -206,4 +206,5 @@ func addGatewayCoreCommands(
 			return executeGatewayCredential(cmd.Context(), verb, stdout, stderr, cfg)
 		})
 	}
+	return gatewayCmd
 }
