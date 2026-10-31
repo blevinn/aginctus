@@ -16,6 +16,8 @@ let
   cfg = config.programs.aginctus;
   jsonFormat = pkgs.formats.json { };
   knownSettingsOptions = import ./settings-options.nix { inherit lib jsonFormat; };
+  # Render the MCP subtree in the shape the Aginctus Go schema accepts.
+  mcpSettings = import ./mcp-settings.nix { inherit lib; };
   # Export the declared user CLI package, never credentials or environment.
   operatorPackageManifest = jsonFormat.generate "aginctus-user-package.json" {
     schema = 1;
@@ -82,11 +84,13 @@ in
           "programs.aginctus.settings cannot contain runtime gateway secrets: "
           + lib.concatStringsSep ", " configuredSecretPaths;
       }
-    ];
+    ]
+    ++ mcpSettings.assertions "programs.aginctus" cfg.settings.mcp;
 
     home.packages = [ cfg.package ];
     xdg.configFile."aginctus/operator-package.json".source = operatorPackageManifest;
-    xdg.configFile."aginctus/config.json".source =
-      jsonFormat.generate "aginctus-user-config.json" cfg.settings;
+    xdg.configFile."aginctus/config.json".source = jsonFormat.generate "aginctus-user-config.json" (
+      mcpSettings.renderSettings cfg.settings
+    );
   };
 }
