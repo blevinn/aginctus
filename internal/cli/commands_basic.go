@@ -77,6 +77,7 @@ func runBasicCobra(
 	addNetworkCommands(root, stdout, stderr, load, &status)
 	addHerdrCommands(root, stdout, stderr, load, &status)
 	addWorkloadCommands(root, stdout, stderr, load, &status)
+	addGatewayCoreCommands(root, stdout, stderr, load, &status)
 
 	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Fprintf(stderr, "%v\nUsage: aginctus [global options] <command> [flags]\n", err)
