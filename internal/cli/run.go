@@ -117,7 +117,8 @@ func Run(
 	// Migrate command families one at a time. Cobra validates the complete
 	// basic-command syntax before the configuration loader is consulted.
 	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
-		commandArgs[0] == "apply" || commandArgs[0] == "remove" || commandArgs[0] == "status" {
+		commandArgs[0] == "apply" || commandArgs[0] == "remove" || commandArgs[0] == "status" ||
+		commandArgs[0] == "network" {
 		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
 	}
 
@@ -139,8 +140,6 @@ func Run(
 		return runConfiguredImages(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "config":
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
-	case "network":
-		return runNetwork(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "gateway":
 		return runGateway(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
 	case "herdr":
@@ -309,52 +308,13 @@ func runConfig(args []string, stdout, stderr io.Writer, effective *config.Config
 	return 2
 }
 
-func runNetwork(
-	ctx context.Context,
-	args []string,
-	stdout, stderr io.Writer,
-	effective *config.Config,
-) int {
-	if len(args) == 0 {
-		printNetworkUsage(stderr)
-		return 2
-	}
-
-	if args[0] == "status" {
-		return runNetworkStatus(ctx, args[1:], stdout, stderr, effective)
-	}
-	if len(args) == 2 && args[0] == "firewall" && args[1] == "policy" {
-		return runNetworkFirewallPolicy(ctx, stdout, stderr, effective)
-	}
-	if len(args) == 2 && args[0] == "firewall" && args[1] == "reconcile" {
-		return runNetworkFirewallReconcile(ctx, stdout, stderr, effective)
-	}
-	if len(args) == 3 && args[0] == "firewall" && args[1] == "egress" && (args[2] == "reconcile" || args[2] == "revoke") {
-		return runNetworkFirewallEgress(ctx, stdout, stderr, effective, args[2] == "revoke")
-	}
-
-	action := args[0]
-	options, err := parseNetworkOptions(args[1:])
-	if err != nil {
-		fmt.Fprintf(stderr, "network options: %v\n", err)
-		return 2
-	}
-
+// executeNetworkOperation receives an operation selected by a Cobra leaf.
+// Only the network-domain reconciliation is performed here.
+func executeNetworkOperation(ctx context.Context, operation string, options mutationOptions, stdout, stderr io.Writer, effective *config.Config) int {
 	spec, err := managementnetwork.FromConfig(effective)
 	if err != nil {
 		fmt.Fprintf(stderr, "management network configuration: %v\n", err)
 		return 1
-	}
-
-	var operation string
-	switch action {
-	case "apply", "ensure":
-		operation = "upsert"
-	case "remove", "teardown":
-		operation = "delete"
-	default:
-		printNetworkUsage(stderr)
-		return 2
 	}
 
 	err = executeManagementNetwork(ctx, spec, managementnetwork.Options{
