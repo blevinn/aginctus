@@ -97,6 +97,73 @@ let
       !assertion.assertion
       && lib.hasPrefix "programs.aginctus.settings cannot contain runtime gateway secrets:" assertion.message
     ) candidate.assertions;
+  rejectedMCP =
+    candidate:
+    lib.any (
+      assertion: !assertion.assertion && lib.hasPrefix "programs.aginctus.settings.mcp." assertion.message
+    ) candidate.assertions;
+  withMCP = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      settings.mcp = {
+        servers.docs = {
+          transport = "streamable-http";
+          url = "https://docs.example.com/mcp";
+          credentialRef = "docs-token";
+          allowedTools = [
+            "fetch"
+            "search"
+          ];
+        };
+        servers.local = {
+          transport = "stdio";
+          command = "/usr/bin/mcp-local";
+        };
+        capabilities.coding = {
+          protocol = "responses";
+          requires = [ "mcp-tools" ];
+        };
+        grants.dev = {
+          capability = "coding";
+          servers.docs = [ "search" ];
+        };
+        gateway.enabled = true;
+      };
+    };
+  };
+  unauthenticatedGateway = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      settings.mcp.gateway = {
+        enabled = true;
+        requireAuthenticatedWorkload = false;
+      };
+    };
+  };
+  remoteWithoutURL = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      settings.mcp.servers.docs = {
+        transport = "streamable-http";
+      };
+    };
+  };
+  forbiddenCredentialField = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      settings.mcp.servers.docs = {
+        transport = "stdio";
+        command = "/bin/mcp-local";
+        headers = {
+          Authorization = "Bearer forbidden";
+        };
+      };
+    };
+  };
 in
 assert disabled.home.packages == [ ];
 assert disabled.xdg.configFile == { };
@@ -119,6 +186,21 @@ assert lib.hasInfix "aginctus-user-package.json" (
 assert !rejected enabled;
 assert rejected invalidNested;
 assert rejected invalidDotted;
+# The MCP subtree stays deny by default and never creates a grant.
+assert enabled.programs.aginctus.settings.mcp.gateway.enabled == false;
+assert enabled.programs.aginctus.settings.mcp.gateway.requireAuthenticatedWorkload;
+assert enabled.programs.aginctus.settings.mcp.servers == { };
+assert enabled.programs.aginctus.settings.mcp.grants == { };
+assert withMCP.programs.aginctus.settings.mcp.servers.docs.transport == "streamable-http";
+assert withMCP.programs.aginctus.settings.mcp.servers.docs.credentialRef == "docs-token";
+assert withMCP.programs.aginctus.settings.mcp.servers.local.command == "/usr/bin/mcp-local";
+assert withMCP.programs.aginctus.settings.mcp.grants.dev.servers.docs == [ "search" ];
+assert rejectedMCP unauthenticatedGateway;
+assert rejectedMCP remoteWithoutURL;
+# The MCP subtree is strict, so a credential-bearing field is an evaluation
+# error instead of a field in the generated user configuration.
+assert
+  !(builtins.tryEval forbiddenCredentialField.programs.aginctus.settings.mcp.servers.docs).success;
 pkgs.runCommand "aginctus-home-manager-operator-contract" { } ''
   touch "$out"
 ''
