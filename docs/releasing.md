@@ -2,9 +2,11 @@
 
 This is the **release operator runbook**, not proof that any Aginctus version is ready.
 The v0.1 acceptance checklist is [#118](https://github.com/blevinn/aginctus/issues/118).
-Its five functional criteria have live pilot evidence; the
-[deployment and acceptance handoff](v0.1-deployment-acceptance.md) distinguishes
-that evidence from pending fresh-host reproducibility and human risk decisions.
+Its five functional criteria have live pilot evidence. On 2026-10-31, the
+owner explicitly deferred the **unrun** fresh-host deployment/smoke/cleanup/repeat
+to [v0.2 #580](https://github.com/blevinn/aginctus/issues/580), rather than
+asserting it passed. The [deployment and acceptance handoff](v0.1-deployment-acceptance.md)
+distinguishes this limitation from the verified live pilot and accepted residual risks.
 Merging release tooling does not pass acceptance or authorize publication.
 
 ## Version and Git standards
