@@ -21,6 +21,9 @@ generally discoverable should be linked from this index.
   runtime state, ownership and trust boundaries.
 - [AI gateway](ai-gateway.md) — implemented LiteLLM model gateway and
   separately labeled future MCP/policy design.
+- [MCP configuration](mcp-configuration.md) — normalized MCP server
+  declarations, per-workload grants, capability model, credential rules
+  and the limits of declared policy.
 - [Declarative orchestration](orchestration.md) — current Jsonnet-generated
   plans and Apply/Compose integration.
 - [Orchestration streams](orchestration-streams.md) — plan stream
