@@ -23,6 +23,7 @@ let
     cp ${../../scripts/vm_harness/gateway_tool_transport.py} "$out/gateway_tool_transport.py"
     ${lib.optionalString fullStack ''
       cp ${../../scripts/vm_harness/full_stack.py} "$out/full_stack.py"
+      cp ${../../scripts/vm_harness/evidence.py} "$out/evidence.py"
       cp ${../../scripts/acceptance/herdr-lifecycle.py} "$out/herdr-lifecycle.py"
     ''}
   '';
@@ -238,40 +239,52 @@ pkgs.testers.runNixOSTest {
       ''
         storage_before = inspect_storage()
         assert storage_before, "full-stack must actually use the Btrfs pool"
+        driver_gates = dict.fromkeys(("storage_preserved", "external_traffic", "external_deny"), "not_verified")
         try:
             machine.succeed("aginctus-vm-synthetic-probe")
+            driver_gates["external_traffic"] = "fail"
+            rules = json.loads(machine.succeed("nft -j list table inet aginctus_full_stack"))["nftables"]
+            counters = [expr["counter"]["packets"] for row in rules if "rule" in row
+                        for expr in row["rule"]["expr"] if "counter" in expr]
+            assert len(counters) == 2 and sum(counters) == 0, "external traffic attempted during synthetic agent execution"
+            driver_gates["external_traffic"] = "pass"
+            # Narrow packet control, not fleet isolation or live inference.
+            driver_gates["external_deny"] = "fail"
+            def denied_packets():
+                rules = json.loads(machine.succeed("nft -j list chain inet aginctus_full_stack forward"))["nftables"]
+                return sum(expr["counter"]["packets"] for row in rules if "rule" in row
+                           for expr in row["rule"]["expr"] if "counter" in expr)
+            before = denied_packets()
+            machine.succeed(
+              "timeout 15 incus exec --disable-stdin --project aginctus-gateway litellm-1 -- python -c "
+              "\"import socket; s=socket.socket(); s.settimeout(3); "
+              "assert s.connect_ex(('1.1.1.1', 443)) != 0; s.close()\""
+            )
+            assert denied_packets() > before, "gateway external TCP attempt did not hit the deny counter"
+            machine.succeed("oci-stage check")
+            driver_gates["external_deny"] = "pass"
         finally:
-            storage_after = inspect_storage()
-            # Workspace/key cleanup is NOT volume, snapshot or loop-image removal.
-            # Retained workload/gateway state remains until outer VM/disk disposal.
-            assert {(v["project"], v["type"], v["name"]) for v in storage_before}.issubset(
-                {(v["project"], v["type"], v["name"]) for v in storage_after}
-            ), "scoped workspace cleanup unexpectedly removed retained storage"
-            print("NOTE: Btrfs pool/volumes retained; storage and outer-disk cleanup not verified")
+            try:
+                driver_gates["storage_preserved"] = "fail"
+                storage_after = inspect_storage()
+                # Preservation is NOT volume, snapshot or loop-image removal.
+                assert {(v["project"], v["type"], v["name"]) for v in storage_before}.issubset(
+                    {(v["project"], v["type"], v["name"]) for v in storage_after}
+                ), "scoped workspace cleanup unexpectedly removed retained storage"
+                driver_gates["storage_preserved"] = "pass"
+            finally:
+                # Fixed immutable reader emits only a bounded allowlisted record.
+                # Revalidate on the driver side; never copy raw guest files/logs.
+                contract = runpy.run_path("${syntheticSources}/evidence.py")
+                code, payload = machine.execute("${pkgs.python3}/bin/python3 ${syntheticSources}/evidence.py")
+                assert code == 0 and len(payload.encode()) <= contract["MAX_BYTES"], "guest evidence unavailable"
+                record = contract["normalize"](json.loads(payload))
+                record["gates"].update(driver_gates)
+                contract["write_artifact"](machine.out_dir, record)
       ''
     else
       lib.optionalString synthetic ''
         machine.succeed("aginctus-vm-synthetic-probe")
       ''
-  )
-  + lib.optionalString fullStack ''
-    rules = json.loads(machine.succeed("nft -j list table inet aginctus_full_stack"))["nftables"]
-    counters = [expr["counter"]["packets"] for row in rules if "rule" in row
-                for expr in row["rule"]["expr"] if "counter" in expr]
-    assert len(counters) == 2 and sum(counters) == 0, "external traffic attempted during synthetic agent execution"
-    # A routed gateway socket attempt must hit the independently installed
-    # outer-NIC deny rule. This is a narrow packet control, not fleet isolation.
-    def denied_packets():
-        rules = json.loads(machine.succeed("nft -j list chain inet aginctus_full_stack forward"))["nftables"]
-        return sum(expr["counter"]["packets"] for row in rules if "rule" in row
-                   for expr in row["rule"]["expr"] if "counter" in expr)
-    before = denied_packets()
-    machine.succeed(
-      "timeout 15 incus exec --disable-stdin --project aginctus-gateway litellm-1 -- python -c "
-      "\"import socket; s=socket.socket(); s.settimeout(3); "
-      "assert s.connect_ex(('1.1.1.1', 443)) != 0; s.close()\""
-    )
-    assert denied_packets() > before, "gateway external TCP attempt did not hit the deny counter"
-    machine.succeed("oci-stage check")
-  '';
+  );
 }

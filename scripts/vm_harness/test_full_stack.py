@@ -34,6 +34,7 @@ class FakeAdapter:
 
     def remove_fixture(self):
         self.calls.append("remove-fixture")
+        return True
 
     def inspect_foreign(self):
         self.calls.append("inspect-foreign")
@@ -42,6 +43,28 @@ class FakeAdapter:
 
 
 class FullStackTests(unittest.TestCase):
+    def test_guest_entrypoint_publishes_partial_evidence_on_failure_without_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "guest-evidence"
+
+            def fail(outcomes):
+                outcomes.passed("open", "phases")
+                outcomes.begin("prompt", "phases")
+                outcomes.passed("close", "phases")
+                raise stack.gateway.Failure("SECRET_CANARY")
+
+            with (patch.object(stack, "run", side_effect=fail),
+                  patch.object(stack.Path, "resolve", return_value=Path("/nix/store/fixture/full_stack.py")),
+                  patch.object(stack.Path, "is_file", return_value=True),
+                  patch.object(stack.evidence, "GUEST_ROOT", root),
+                  contextlib.redirect_stderr(io.StringIO()) as err):
+                self.assertEqual(stack.main(), 1)
+            result = stack.evidence.read_artifact(root, "result.json")
+            self.assertEqual(result["phases"]["prompt"], "fail")
+            self.assertEqual(result["phases"]["close"], "pass")
+            self.assertEqual(result["phases"]["wait"], "not_verified")
+            self.assertNotIn("CANARY", (root / "result.json").read_text() + err.getvalue())
+
     def test_embedded_guest_shell_programs_parse_without_execution(self):
         # Python linters cannot see shell syntax inside the adapter's strings.
         import ast
@@ -70,6 +93,32 @@ class FullStackTests(unittest.TestCase):
                     self.assertIn("close", adapter.calls)
                 if phase not in ("preflight", "open"):
                     self.assertIn("stop", adapter.calls)
+
+    def test_partial_phase_outcomes_survive_failure_and_cleanup_is_independent(self):
+        for phase in stack.PHASES:
+            with self.subTest(phase=phase):
+                adapter = FakeAdapter(phase)
+                adapter.outcomes = stack.evidence.Evidence()
+                with self.assertRaises(stack.gateway.Failure):
+                    stack.exercise(adapter)
+                record = adapter.outcomes.record
+                self.assertEqual(record["phases"][phase], "fail")
+                self.assertEqual(record["gates"]["owned_fixture_removed"], "pass")
+                self.assertEqual(record["gates"]["foreign_workspaces_preserved"], "pass")
+                if phase == "prompt":
+                    self.assertEqual(record["phases"]["open"], "pass")
+                    self.assertEqual(record["phases"]["wait"], "not_verified")
+                    self.assertEqual(record["phases"]["close"], "pass")
+                if phase == "stop":
+                    self.assertEqual(record["phases"]["close"], "pass")
+
+    def test_fixture_not_staged_is_not_a_removal_observation(self):
+        adapter = FakeAdapter("preflight")
+        adapter.outcomes = stack.evidence.Evidence()
+        adapter.remove_fixture = Mock(return_value=False)
+        with self.assertRaises(stack.gateway.Failure):
+            stack.exercise(adapter)
+        self.assertEqual(adapter.outcomes.record["gates"]["owned_fixture_removed"], "not_verified")
 
     def test_remove_failure_is_not_success(self):
         adapter = FakeAdapter()
@@ -217,6 +266,7 @@ class FullStackTests(unittest.TestCase):
 
     def test_real_cleanup_control_flow_revokes_key_and_model_even_after_task_failure(self):
         calls = []
+        outcomes = stack.evidence.Evidence()
         def request(_endpoint, path, token=None, body=None):
             calls.append(path)
             if path == "/v1/models" and token == "scoped-only":
@@ -251,7 +301,7 @@ class FullStackTests(unittest.TestCase):
               patch.object(stack, "Adapter"),
               patch.object(stack, "exercise", side_effect=stack.gateway.Failure("task failed")),
               self.assertRaisesRegex(stack.gateway.Failure, "task failed")):
-            stack.run()
+            stack.run(outcomes)
         self.assertLess(calls.index("/key/delete"), calls.index("/model/delete"))
         self.assertEqual(calls[-1], "/v1/models")
         server.shutdown.assert_called_once()
@@ -261,6 +311,11 @@ class FullStackTests(unittest.TestCase):
             ("aginctus-vm-guest-credentials", "inspect-key-absent"),
         ])
         self.assertEqual(json.loads(guest.call_args_list[0].kwargs["data"]), {"scoped": "scoped-only"})
+        for name in ("synthetic_setup", "scoped_key_revoked", "workload_key_absent",
+                     "model_removed", "listener_stopped"):
+            self.assertEqual(outcomes.record["gates"][name], "pass")
+        self.assertEqual(outcomes.record["gates"]["failure_cleanup_control"], "fail")
+        self.assertEqual(outcomes.record["phases"]["wait"], "not_verified")
 
     def test_full_stack_driver_is_fixed_and_reporting_stays_synthetic(self):
         self.assertEqual(runner.build_arguments("full-stack", False)[-1], ".#vm-harness-full-stack.driver")

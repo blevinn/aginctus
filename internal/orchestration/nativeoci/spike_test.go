@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
 	incus "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	agincus "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/orchestration/native"
 )
 
 // TestDaemonOCI deliberately requires a guest-only marker as well as explicit
@@ -56,9 +59,9 @@ func TestDaemonOCI(t *testing.T) {
 	if err := client.CreateStoragePoolVolume("spike", api.StorageVolumesPost{Name: "postgres-data", Type: "custom", StorageVolumePut: api.StorageVolumePut{Config: map[string]string{"security.shifted": "true"}}}); err != nil {
 		t.Fatal(err)
 	}
-	for _, image := range []struct{ name, registry, reference string }{
-		{"postgres", "https://docker.io", "library/postgres:17-alpine"},
-		{"litellm", "https://ghcr.io", "berriai/litellm:v1.103.0"},
+	for _, image := range []struct{ name, registry, repository, reference string }{
+		{"postgres", "docker.io", "library/postgres", "17-alpine"},
+		{"litellm", "ghcr.io", "berriai/litellm", "v1.103.0"},
 	} {
 		t.Run(image.name, func(t *testing.T) {
 			wait := func(op incus.Operation, err error) {
@@ -70,17 +73,24 @@ func TestDaemonOCI(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			resolved, err := ResolvePublic(ctx, Source{
+				Registry: image.registry, Repository: image.repository, Reference: image.reference,
+				Platform: ocispec.Platform{OS: "linux", Architecture: runtime.GOARCH},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
 			request := api.ImagesPost{Source: &api.ImagesPostSource{
 				Type: "image", Mode: "pull", ImageSource: api.ImageSource{
-					Protocol: "oci", Server: image.registry, Alias: image.reference,
+					Protocol: "oci", Server: "https://" + resolved.Registry, Alias: resolved.Repository + "@" + resolved.ManifestDigest,
 					ImageType: "container",
 				},
 			}}
 			op, err := client.CreateImage(request, nil)
 			wait(op, err)
 			fingerprint, _ := op.Get().Metadata["fingerprint"].(string)
-			if len(fingerprint) != 64 {
-				t.Fatal("missing full OCI fingerprint")
+			if fingerprint != resolved.IncusFingerprint {
+				t.Fatal("daemon OCI fingerprint differs from resolved immutable identity")
 			}
 			images, err := client.GetImages()
 			if err != nil {
@@ -97,7 +107,14 @@ func TestDaemonOCI(t *testing.T) {
 				t.Fatal("repeated pull changed image inventory")
 			}
 			name := image.name + "-spike"
-			config := map[string]string{"environment.AGINCTUS_SPIKE": "synthetic"}
+			alias := name + "-image"
+			if err := client.CreateImageAlias(api.ImageAliasesPost{ImageAliasesEntry: api.ImageAliasesEntry{Name: alias, ImageAliasesEntryPut: api.ImageAliasesEntryPut{Target: fingerprint}}}); err != nil {
+				t.Fatal(err)
+			}
+			config := map[string]string{
+				"environment.AGINCTUS_SPIKE": "synthetic", "user.aginctus.managed": "true",
+				"user.aginctus.resource": "workload", "user.aginctus.role": "agent-workload", "user.aginctus.workload": image.name,
+			}
 			if image.name == "postgres" {
 				config["environment.POSTGRES_PASSWORD"] = "disposable-synthetic-password"
 			}
@@ -122,6 +139,22 @@ func TestDaemonOCI(t *testing.T) {
 			state, _, err := client.GetInstanceState(name)
 			if err != nil || state.StatusCode != api.Running {
 				t.Fatal("OCI service did not remain running")
+			}
+			intent := native.InstanceIntent{
+				Identity: native.InstanceIdentity{Project: scope.Name, Name: name}, WorkloadID: image.name,
+				Type: "container", ImageAlias: alias, EnsureRunning: true, Config: config, Profiles: []string{}, Devices: devices,
+			}
+			for range 2 {
+				plan, err := native.PlanLocalExistingInstance(ctx, intent)
+				if err != nil || plan.Action != native.Unchanged || len(plan.Changes) != 0 || plan.WriteAuthorized {
+					t.Fatalf("native SDK no-op planning failed: %+v, %v", plan, err)
+				}
+			}
+			foreign := intent
+			foreign.WorkloadID = "foreign"
+			foreign.Config = map[string]string{"user.aginctus.managed": "true", "user.aginctus.resource": "workload", "user.aginctus.role": "agent-workload", "user.aginctus.workload": "foreign"}
+			if _, err := native.PlanLocalExistingInstance(ctx, foreign); err == nil {
+				t.Fatal("native planner accepted foreign workload identity")
 			}
 			probe := []string{"python", "-c", "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5).status == 200"}
 			if image.name == "postgres" {
