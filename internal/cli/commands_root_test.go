@@ -10,7 +10,7 @@ import (
 func TestCobraRootGlobalOptionsPreserveAliasesAndOrder(t *testing.T) {
 	loader := &fakeConfigLoader{}
 	var out, errors bytes.Buffer
-	args := []string{"--config=a.b=first", "--configure", "a.b=second", "config", "get", "a.b"}
+	args := []string{"--config=a.b=first", "--configure", "a.b=second", "config", "show"}
 	if code := Run(context.Background(), args, &out, &errors, nil, loader); code != 0 {
 		t.Fatalf("code=%d stderr=%q", code, errors.String())
 	}
