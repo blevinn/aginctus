@@ -128,10 +128,18 @@ their transports, opaque credential references, explicit per-workload server
 and tool grants, model and protocol capability requirements, and the central
 gateway MCP intent.
 
-It follows the ordinary precedence rules above. Because object keys merge
-recursively while arrays replace wholesale, a higher-precedence source
-narrows a granted tool list instead of extending it, and a `null` value
-withdraws an inherited declaration.
+The `mcp` subtree follows the ordinary source precedence but is atomic: a
+source that supplies it replaces the complete lower-priority MCP policy.
+Environment variables and repeated CLI overrides are grouped into one
+source overlay, so one source can construct a complete policy using several
+paths. Other configuration paths retain recursive object merging.
+
+An empty `mcp` object or `mcp: null` clears lower-priority MCP declarations.
+A partial higher-priority MCP policy does not inherit servers or grants from
+another store and is rejected if incomplete. In NixOS system operations, the
+explicit generated configuration is applied after user and environment
+sources, so a declared system MCP policy replaces ambient lower-priority MCP
+policy.
 
 The complete contract, including the credential rules, the effective grant
 semantics and the limits of declared policy, is documented in

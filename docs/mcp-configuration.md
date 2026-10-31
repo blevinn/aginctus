@@ -205,25 +205,30 @@ No plaintext upstream credential can enter declarative configuration.
 
 The same rules are enforced twice. The NixOS and Home Manager modules reject
 a credential-bearing field during evaluation, and the configuration loader
-rejects it at the source boundary, before any merge. The source boundary
-matters because the loader deep-merges objects: a later override that
-replaces part of a server declaration does not remove the other fields of the
-earlier one.
+rejects it at the source boundary before applying its merge policy.
 
 ## Merge and precedence behavior
 
-The MCP declaration uses the ordinary configuration precedence. The existing
-deep-merge behavior interacts with named servers and grants in three ways
-that matter:
+The MCP declaration follows the ordinary source precedence, but the `mcp`
+subtree is atomic. When a source supplies `mcp`, its complete value replaces
+the lower-priority MCP subtree; the loader never combines server registries,
+grants, capabilities or gateway intent across stores.
 
-| Declaration shape | Merge behavior | Consequence |
+| Source value | Merge behavior | Consequence |
 | --- | --- | --- |
-| Object, for example `mcp.servers.docs` | Merged field by field | A higher-precedence source that changes one field keeps the other fields of the lower-precedence declaration. Changing `transport` leaves the previous transport's field behind and fails validation until the whole declaration is restated. |
-| List, for example `mcp.grants.dev.servers.docs` | Replaced wholesale | A higher-precedence source narrows the granted tools; it cannot extend them by merging. An empty list revokes every tool of that server. |
-| `null` | Replaces the value | The revocation marker for `mcp.servers.<name>`, `mcp.capabilities.<name>`, `mcp.grants.<workload>` and `mcp.grants.<workload>.servers.<server>`. |
+| Complete `mcp` object | Replaces the complete subtree | A higher-priority policy cannot inherit an endpoint, server, grant or capability from a lower-priority store. |
+| `mcp: {}` or `mcp: null` | Replaces the subtree with deny-by-default | Clears all lower-priority MCP declarations. |
+| Partial `mcp` object | Replaces the complete subtree | Missing declarations are not inherited; effective validation rejects an incomplete policy. |
 
-An empty object cannot withdraw an inherited declaration, because the loader
-merges objects. Use `null` to withdraw one.
+Environment variables and repeated CLI overrides are collected into one
+source overlay before merging. A source can therefore construct a complete
+policy using several paths, but a partial higher-priority MCP overlay cannot
+silently retain lower-priority servers or grants.
+
+Atomicity does not change precedence: the highest-priority complete `mcp`
+value still wins. In NixOS system operations, the explicit generated config
+file is applied after user and environment sources, so its declared MCP
+policy replaces ambient lower-priority MCP policy.
 
 ## Declarative configuration
 
