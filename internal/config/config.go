@@ -159,11 +159,9 @@ func (l *Loader) Load(options Options) (*Config, error) {
 			return nil, fmt.Errorf("load command-line configuration file: %w", err)
 		}
 	}
-	for _, override := range options.Overrides {
-		if err := mergeOverride(values, override); err != nil {
-			// Never echo the raw override: it may contain a credential.
-			return nil, fmt.Errorf("apply command-line configuration: %w", err)
-		}
+	if err := mergeOverrides(values, options.Overrides); err != nil {
+		// Never echo the raw override: it may contain a credential.
+		return nil, fmt.Errorf("apply command-line configuration: %w", err)
 	}
 
 	selected := &Config{values: values}
@@ -287,11 +285,12 @@ func mergeJSON(dst map[string]any, data []byte) error {
 	if err := rejectMCPCredentialValues(nil, src); err != nil {
 		return err
 	}
-	mergeMaps(dst, src)
+	mergeSource(dst, src, nil)
 	return nil
 }
 
 func mergeEnvironment(dst map[string]any, environment []string) error {
+	overlay := map[string]any{}
 	for _, entry := range environment {
 		name, value, ok := strings.Cut(entry, "=")
 		if !ok || !strings.HasPrefix(name, EnvPrefix) {
@@ -307,19 +306,27 @@ func mergeEnvironment(dst map[string]any, environment []string) error {
 		if isRuntimeSecretPath(path) {
 			continue
 		}
-		if err := setPath(dst, path, parseValue(value)); err != nil {
+		if err := setPath(overlay, path, parseValue(value)); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
+	mergeSource(dst, overlay, nil)
 	return nil
 }
 
-func mergeOverride(dst map[string]any, override string) error {
-	path, value, ok := strings.Cut(override, "=")
-	if !ok {
-		return fmt.Errorf("expected path=value")
+func mergeOverrides(dst map[string]any, overrides []string) error {
+	overlay := map[string]any{}
+	for _, override := range overrides {
+		path, value, ok := strings.Cut(override, "=")
+		if !ok {
+			return fmt.Errorf("expected path=value")
+		}
+		if err := setPath(overlay, path, parseValue(value)); err != nil {
+			return err
+		}
 	}
-	return setPath(dst, path, parseValue(value))
+	mergeSource(dst, overlay, nil)
+	return nil
 }
 
 func parseValue(value string) any {
@@ -370,16 +377,46 @@ func splitPath(path string) ([]string, error) {
 	return parts, nil
 }
 
-func mergeMaps(dst, src map[string]any) {
+// Atomic configuration paths replace their complete subtree when a source
+// supplies them. This keeps policy registries from being assembled out of
+// unrelated lower-priority stores while preserving ordinary deep-merge
+// behavior everywhere else.
+var atomicConfigPaths = [][]string{{"mcp"}}
+
+func mergeSource(dst, src map[string]any, prefix []string) {
 	for key, value := range src {
+		path := append(append([]string(nil), prefix...), key)
+		if isAtomicConfigPath(path) {
+			dst[key] = cloneValue(value)
+			continue
+		}
 		srcMap, srcIsMap := value.(map[string]any)
 		dstMap, dstIsMap := dst[key].(map[string]any)
 		if srcIsMap && dstIsMap {
-			mergeMaps(dstMap, srcMap)
+			mergeSource(dstMap, srcMap, path)
 			continue
 		}
 		dst[key] = cloneValue(value)
 	}
+}
+
+func isAtomicConfigPath(path []string) bool {
+	for _, atomicPath := range atomicConfigPaths {
+		if len(path) != len(atomicPath) {
+			continue
+		}
+		matches := true
+		for index := range path {
+			if path[index] != atomicPath[index] {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneMap(src map[string]any) map[string]any {

@@ -86,20 +86,20 @@ func TestMCPConfigurationPrecedence(t *testing.T) {
 	userPath := filepath.Join(dir, "user.json")
 	explicitPath := filepath.Join(dir, "explicit.json")
 
-	server := func(endpoint string) string {
+	mcpPolicy := func(endpoint string) string {
 		return fmt.Sprintf(
-			`{"mcp":{"servers":{"docs":{"transport":"streamable-http","url":%q}},"gateway":{"enabled":true}}}`,
+			`{"servers":{"docs":{"transport":"streamable-http","url":%q}},"capabilities":{"coding":{"requires":["mcp-tools"]}},"grants":{"dev":{"capability":"coding","servers":{"docs":["search"]}}},"gateway":{"enabled":true}}`,
 			endpoint,
 		)
 	}
-	writeConfigFile(t, systemPath, server("https://system.example.com/mcp"))
-	writeConfigFile(t, userPath, server("https://user.example.com/mcp"))
-	writeConfigFile(t, explicitPath, server("https://explicit.example.com/mcp"))
+	writeConfigFile(t, systemPath, `{"mcp":`+mcpPolicy("https://system.example.com/mcp")+`}`)
+	writeConfigFile(t, userPath, `{"mcp":`+mcpPolicy("https://user.example.com/mcp")+`}`)
+	writeConfigFile(t, explicitPath, `{"mcp":`+mcpPolicy("https://explicit.example.com/mcp")+`}`)
 
 	loader := &Loader{
 		SystemPath:  systemPath,
 		UserPath:    userPath,
-		Environment: []string{"AGINCTUS_MCP_SERVERS_DOCS_URL=https://environment.example.com/mcp"},
+		Environment: []string{"AGINCTUS_MCP=" + mcpPolicy("https://environment.example.com/mcp")},
 	}
 
 	endpoint := func(t *testing.T, effective *Config) string {
@@ -125,7 +125,7 @@ func TestMCPConfigurationPrecedence(t *testing.T) {
 	}
 	effective = loadConfig(t, loader, Options{
 		ConfigurationFile: explicitPath,
-		Overrides:         []string{"mcp.servers.docs.url=https://override.example.com/mcp"},
+		Overrides:         []string{"mcp=" + mcpPolicy("https://override.example.com/mcp")},
 	})
 	if got := endpoint(t, effective); got != "https://override.example.com/mcp" {
 		t.Fatalf("override endpoint = %q", got)
@@ -260,80 +260,114 @@ func TestMCPCredentialFieldRejectedBeforeALaterOverride(t *testing.T) {
 	}
 }
 
-// The loader deep-merges objects and replaces lists. Documented merge
-// behavior for MCP declarations.
-func TestMCPDeepMergeSemantics(t *testing.T) {
+// MCP is an atomic configuration subtree. A source supplies the complete
+// policy and replaces lower-priority MCP policy, while ordinary settings
+// retain the loader's existing recursive object merge.
+func TestMCPAtomicSubtreeSemantics(t *testing.T) {
 	dir := t.TempDir()
 	systemPath := filepath.Join(dir, "system.json")
 	userPath := filepath.Join(dir, "user.json")
-	writeConfigFile(t, systemPath, `{
-		"mcp": {
-			"servers": {"docs": {"transport": "streamable-http", "url": "https://docs.example.com/mcp", "allowedTools": ["fetch", "search"]}},
-			"gateway": {"enabled": true}
-		}
-	}`)
-	writeConfigFile(t, userPath, `{
-		"mcp": {
-			"capabilities": {"coding": {"requires": ["mcp-tools"]}},
-			"grants": {"dev": {"capability": "coding", "servers": {"docs": ["search"]}}}
-		}
-	}`)
+	writeConfigFile(t, systemPath, `{"mcp":{
+		"servers":{
+			"docs":{"transport":"streamable-http","url":"https://system.example.com/mcp","allowedTools":["fetch","search"]},
+			"system-only":{"transport":"stdio","command":"/usr/bin/system-only"}
+		},
+		"capabilities":{"coding":{"requires":["mcp-tools"]}},
+		"grants":{"dev":{"capability":"coding","servers":{"docs":["search"]}}},
+		"gateway":{"enabled":true}
+	}}`)
+	writeConfigFile(t, userPath, `{"mcp":{
+		"servers":{"docs":{"transport":"streamable-http","url":"https://user.example.com/mcp","allowedTools":["fetch"]}},
+		"capabilities":{"personal":{"requires":["mcp-tools"]}},
+		"grants":{"dev":{"capability":"personal","servers":{"docs":["fetch"]}}},
+		"gateway":{"enabled":true}
+	}}`)
 
 	loader := &Loader{SystemPath: systemPath, UserPath: userPath}
 
-	// A map merges, so the server keeps the lower-precedence allowlist and
-	// the higher-precedence grant is added to it.
+	// The higher-precedence MCP subtree replaces the lower one as a unit:
+	// the endpoint and grants agree, and the lower-only server disappears.
 	effective := loadConfig(t, loader, Options{})
 	policy, err := effective.MCP()
 	if err != nil {
 		t.Fatalf("MCP() error = %v", err)
 	}
-	if !policy.Allows("dev", "docs", "search") {
-		t.Fatal("the merged grant was not authorized")
-	}
-	if policy.Allows("dev", "docs", "fetch") {
-		t.Fatal("a tool outside the workload grant was authorized")
-	}
-
-	// A list replaces wholesale, so a higher-precedence source narrows the
-	// granted tools instead of extending them.
-	effective = loadConfig(t, loader, Options{
-		Overrides: []string{`mcp.grants.dev.servers.docs=["fetch"]`},
-	})
-	policy, err = effective.MCP()
-	if err != nil {
-		t.Fatalf("MCP() error = %v", err)
-	}
 	if !policy.Allows("dev", "docs", "fetch") {
-		t.Fatal("the replaced tool list was not authorized")
+		t.Fatal("the replacement policy's grant was not authorized")
 	}
 	if policy.Allows("dev", "docs", "search") {
-		t.Fatal("the replaced tool list still authorized the previous tool")
+		t.Fatal("a tool from the lower-priority policy remained authorized")
+	}
+	if server, ok := policy.Server("docs"); !ok || server.URL != "https://user.example.com/mcp" {
+		t.Fatalf("effective endpoint = %+v, %v", server, ok)
+	}
+	if _, ok := policy.Server("system-only"); ok {
+		t.Fatal("a server from the lower-priority policy survived atomic replacement")
 	}
 
-	// An empty list revokes every tool of the granted server.
+	// Both null and an empty object replace the inherited subtree. Null
+	// selects the schema's deny-by-default state; an empty object does too.
 	effective = loadConfig(t, loader, Options{
-		Overrides: []string{`mcp.grants.dev.servers.docs=[]`},
+		Overrides: []string{"mcp=null"},
 	})
 	policy, err = effective.MCP()
 	if err != nil {
 		t.Fatalf("MCP() error = %v", err)
 	}
-	if policy.Allows("dev", "docs", "search") || policy.Allows("dev", "docs", "fetch") {
-		t.Fatal("an empty tool list still authorized a tool")
+	if len(policy.Servers()) != 0 || len(policy.Workloads()) != 0 {
+		t.Fatalf("a null MCP policy did not clear the inherited subtree: servers=%+v workloads=%+v", policy.Servers(), policy.Workloads())
 	}
-
-	// A null value withdraws an inherited declaration. An empty object
-	// cannot: the loader merges objects, so it keeps the inherited keys.
 	effective = loadConfig(t, loader, Options{
-		Overrides: []string{"mcp.grants.dev.servers.docs=null"},
+		Overrides: []string{"mcp={}"},
 	})
 	policy, err = effective.MCP()
 	if err != nil {
 		t.Fatalf("MCP() error = %v", err)
 	}
-	if policy.Allows("dev", "docs", "search") {
-		t.Fatal("a null grant still authorized a tool")
+	if len(policy.Servers()) != 0 || len(policy.Workloads()) != 0 {
+		t.Fatalf("an empty MCP object did not clear the inherited subtree: servers=%+v workloads=%+v", policy.Servers(), policy.Workloads())
+	}
+}
+
+func TestMCPAtomicSubtreeRequiresACompleteHigherPriorityPolicy(t *testing.T) {
+	systemPath := filepath.Join(t.TempDir(), "system.json")
+	writeConfigFile(t, systemPath, mcpRemoteServer)
+	loader := &Loader{
+		SystemPath: systemPath,
+		Environment: []string{
+			"AGINCTUS_MCP_SERVERS_DOCS_URL=https://replacement.example.com/mcp",
+		},
+	}
+	if _, err := loader.Load(Options{}); err == nil {
+		t.Fatal("a partial higher-priority MCP value merged into the lower-priority policy")
+	}
+}
+
+func TestMCPAtomicSubtreeGroupsCLIOverridesAndLeavesOtherSettingsRecursive(t *testing.T) {
+	systemPath := filepath.Join(t.TempDir(), "system.json")
+	writeConfigFile(t, systemPath, `{"firewall":{"zone":"system-zone"}}`)
+	loader := &Loader{SystemPath: systemPath}
+	effective := loadConfig(t, loader, Options{Overrides: []string{
+		"firewall.egress.uplinkZone=public-zone",
+		"mcp.servers.docs.transport=streamable-http",
+		"mcp.servers.docs.url=https://docs.example.com/mcp",
+		"mcp.capabilities.coding.requires=[\"mcp-tools\"]",
+		"mcp.grants.dev.capability=coding",
+		"mcp.grants.dev.servers.docs=[\"search\"]",
+		"mcp.gateway.enabled=true",
+	}})
+	if got, _ := effective.Get("firewall.zone"); got != "system-zone" {
+		t.Fatalf("ordinary object merge lost the lower-priority firewall zone: %#v", got)
+	}
+	if got, _ := effective.Get("firewall.egress.uplinkZone"); got != "public-zone" {
+		t.Fatalf("ordinary override was not applied: %#v", got)
+	}
+	policy, err := effective.MCP()
+	if err != nil {
+		t.Fatalf("MCP() error = %v", err)
+	}
+	if !policy.Allows("dev", "docs", "search") {
+		t.Fatal("grouped command-line overrides did not form a complete MCP policy")
 	}
 }
 
