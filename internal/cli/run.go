@@ -116,7 +116,8 @@ func Run(
 
 	// Migrate command families one at a time. Cobra validates the complete
 	// basic-command syntax before the configuration loader is consulted.
-	if commandArgs[0] == "config" || commandArgs[0] == "doctor" {
+	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
+		commandArgs[0] == "apply" || commandArgs[0] == "remove" || commandArgs[0] == "status" {
 		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
 	}
 
@@ -127,12 +128,6 @@ func Run(
 	}
 
 	switch commandArgs[0] {
-	case "remove":
-		return runAggregateRemove(ctx, commandArgs[1:], stdout, stderr, effective)
-	case "status":
-		return runAggregateStatus(ctx, commandArgs[1:], stdout, stderr, effective)
-	case "apply":
-		return runAggregateApply(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "doctor":
 		return runDoctor(ctx, commandArgs[1:], stdout, stderr, incusClient)
 	case "operator":
