@@ -72,6 +72,15 @@ As with `--config`, environment values are parsed as JSON when possible and othe
 
 ### Runtime gateway secrets
 
+The optional [SIWC contract integration](gateway-siwc.md) has its own explicit
+private state directory and does not accept OAuth tokens through this
+configuration system, environment secrets, or the native `chatgpt/` provider.
+Its public runtime settings select the delivered callback modules, rendered
+model configuration and private mounted state path. Use the runbook for
+single-worker ownership, scoped workload-key binding, explicit activation and
+limitations; no automatic SIWC deployment or whole-gateway reconciliation is
+implied by local enrollment.
+
 The gateway PostgreSQL password, LiteLLM master key, and LiteLLM salt key are **runtime-only** values, not Aginctus configuration settings. The paths `gateway.postgres.password`, `gateway.master.key`, and `gateway.salt.key` are rejected in all configuration files (system, user, and explicit CLI), `--config` overrides, and object-valued environment mappings, including nested JSON objects. This also applies when a prohibited key is set to `null`.
 
 The standalone environment variables `AGINCTUS_GATEWAY_POSTGRES_PASSWORD`, `AGINCTUS_GATEWAY_MASTER_KEY`, and `AGINCTUS_GATEWAY_SALT_KEY` remain available to the gateway's existing runtime secret-initialization mechanism. The configuration loader deliberately excludes these direct variables from `config show` and `config get`. Do not place their values into configuration files, NixOS `settings`, object-valued overrides, CLI arguments, `systemd.services.*.environment`, inline unit `Environment=`, or generated Nix files: Nix store and generated unit content are not secret stores. For NixOS reconciliation, leave these variables unset and use generated persistent state as described below. External pre-seeding integration is deferred; the module provides no secret-input option.

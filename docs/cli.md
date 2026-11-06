@@ -310,6 +310,21 @@ this plan's JSON as a machine authorization token.
 
 ## Commands that change state
 
+### SIWC ChatGPT plan usage
+
+`aginctus gateway siwc` exposes opt-in local `init`, `login`, `status`, `models`,
+`bind`, `unbind`, `render`, `export`, `receive`, and `logout`, with an explicit
+absolute `--state-dir`. `bundle DIRECTORY` delivers the public in-process
+LiteLLM extension sources into a new directory. These commands bypass host
+configuration loading and reject host configuration overrides. Enrollment and
+token operations never provision networks or Incus resources.
+
+See the [SIWC runbook](gateway-siwc.md) for exact command sequences, separate
+consent/account selection, protected storage and exclusive handoff, deployment,
+OpenCode profile, restart/logout and unverified live acceptance. `status` checks
+local state only; `models` performs an authenticated account-catalog request.
+The native `chatgpt/` registrations remain inert and are not SIWC registrations.
+
 | Surface | Side effect or prerequisite |
 | --- | --- |
 | `aginctus doctor --fix` | Configures the Incus HTTPS listener **only if absent**, using a loopback address |
