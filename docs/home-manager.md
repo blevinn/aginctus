@@ -46,9 +46,16 @@ and builds a standalone Home Manager generation in the outer Nix build, then
 activates it **as an unprivileged user** inside a disposable NixOS/Incus VM
 with no Incus authorization. Prebuilding is intentional: the VM is offline,
 so it cannot fetch build-time sources during a nested `home-manager build`.
-The test exercises the real Home Manager activation twice, checks the
-installed CLI/config and verifies no Incus mutations, but it does **not**
-execute the `home-manager build/switch` CLI inside the guest.
+The test exercises real Home Manager activation twice and a separate
+configuration-generation upgrade, checks the installed CLI/config and
+OS-observed package identity, rejects a mismatched package declaration and
+denied Incus access, and verifies unchanged Incus inventories on a disposable
+Btrfs-backed pool and Linux bridge. Starting/stopping a lingering user manager
+introduces no Aginctus services or timers, and synthetic protected host state
+remains unreadable to the operator and unchanged. It does **not** execute the
+`home-manager build/switch` CLI inside the guest or establish restricted/admin
+authorization, active-controller exclusion, firewall packet enforcement or
+credential migration/rollback acceptance.
 
 Run the heavyweight acceptance test explicitly:
 
