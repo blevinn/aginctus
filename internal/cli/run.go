@@ -118,7 +118,7 @@ func Run(
 	// basic-command syntax before the configuration loader is consulted.
 	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
 		commandArgs[0] == "apply" || commandArgs[0] == "remove" || commandArgs[0] == "status" ||
-		commandArgs[0] == "network" || commandArgs[0] == "herdr" {
+		commandArgs[0] == "network" || commandArgs[0] == "herdr" || commandArgs[0] == "workload" {
 		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
 	}
 
@@ -142,8 +142,6 @@ func Run(
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
 	case "gateway":
 		return runGateway(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
-	case "workload":
-		return runWorkload(ctx, commandArgs[1:], stdout, stderr, effective)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", commandArgs[0])
 		printUsage(stderr)
@@ -929,80 +927,11 @@ func printHerdrClientUsage(w io.Writer) {
 	fmt.Fprintln(w, "Status is read-only; bootstrap/lifecycle operations mutate unless --dry-run is explicitly supported above.")
 }
 
-func runWorkload(
-	ctx context.Context,
-	args []string,
-	stdout, stderr io.Writer,
-	effective *config.Config,
-) int {
-	if len(args) > 1 && args[0] == "gateway" && args[1] == "provision" {
-		return runWorkloadGatewayProvision(ctx, args[2:], stdout, stderr, effective)
-	}
-	if len(args) > 1 && args[0] == "apply" &&
-		(args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
-		return runScopedWorkloadApplyRender(ctx, args[1:], stdout, stderr, effective)
-	}
-	if len(args) > 1 && (args[0] == "start" || args[0] == "stop") &&
-		(args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
-		if args[0] == "start" {
-			return runScopedWorkloadStart(ctx, args[1:], stdout, stderr, effective)
-		}
-		return runScopedWorkloadStop(ctx, args[1:], stdout, stderr, effective)
-	}
-	if len(args) > 0 && args[0] == "status" {
-		if len(args) > 1 && (args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
-			return runScopedWorkloadStatus(ctx, args[1:], stdout, stderr, effective, false)
-		}
-		return runWorkloadStatus(ctx, args[1:], stdout, stderr, effective)
-	}
-	if len(args) > 0 && (args[0] == "ls" || args[0] == "list") {
-		if len(args) > 1 && (args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
-			return runScopedWorkloadStatus(ctx, args[1:], stdout, stderr, effective, true)
-		}
-		return runActiveWorkloadList(ctx, args[1:], stdout, stderr, effective)
-	}
-
-	if len(args) == 0 {
-		printWorkloadUsage(stderr)
-		return 2
-	}
-
-	// New grammar is "workload apply|remove [name]". Keep the historical
-	// "workload <name> ensure|teardown" form as a compatibility alias.
-	action := args[0]
-	var ids []string
-	var optionArgs []string
-	switch action {
-	case "apply", "remove", "start", "stop":
-		if len(args) > 1 && !strings.HasPrefix(args[1], "--") {
-			ids = []string{args[1]}
-			optionArgs = args[2:]
-		} else {
-			ids = workloadIDs(effective)
-			optionArgs = args[1:]
-		}
-	default:
-		if len(args) < 2 || (args[1] != "ensure" && args[1] != "teardown") {
-			printWorkloadUsage(stderr)
-			return 2
-		}
-		ids = []string{args[0]}
-		if args[1] == "ensure" {
-			action = "apply"
-		} else {
-			action = "remove"
-		}
-		optionArgs = args[2:]
-	}
-
-	if (action == "start" || action == "stop") && len(optionArgs) != 0 {
-		printWorkloadUsage(stderr)
-		return 2
-	}
-	options, err := parseNetworkOptions(optionArgs)
-	if err != nil {
-		fmt.Fprintf(stderr, "workload options: %v\n", err)
-		return 2
+// executeConfiguredWorkloads takes parsed actions and selected IDs, with an
+// empty selection preserving v0.1's 'all configured workloads' semantics.
+func executeConfiguredWorkloads(ctx context.Context, action string, ids []string, options mutationOptions, stdout, stderr io.Writer, effective *config.Config) int {
+	if len(ids) == 0 {
+		ids = workloadIDs(effective)
 	}
 	if len(ids) == 0 {
 		fmt.Fprintln(stderr, "no workloads are configured")
