@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,6 +34,14 @@ func TestGatewayAssetCommandsAndSelectors(t *testing.T) {
 	}
 	run("mcp", "apply", "--local", "--mcp", "search", "--config", `{"transport":"streamable-http","url":"https://tools.example.invalid/mcp"}`)
 	run("mcp", "show", "--local", "search")
+	run("provider", "apply", "chatgpt", "--provider", "local")
+	var listed struct {
+		Local     map[string]json.RawMessage `json:"local"`
+		Providers map[string]json.RawMessage `json:"providers"`
+	}
+	if err := json.Unmarshal([]byte(run("mcp", "list")), &listed); err != nil || listed.Local["search"] == nil || listed.Providers["local"] == nil {
+		t.Fatal("provider named local shadowed the local MCP namespace")
+	}
 	run("catalog", "apply", "work", "--config", `{"models":{"dev.coding":{"provider":"personal","name":"coding"}},"mcps":{"tools.search":{"local":true,"name":"search"}}}`)
 	if !strings.Contains(run("catalog", "show", "--catalog", "work", "--model=dev.coding"), "coding") {
 		t.Fatal("model filter lost selection")
