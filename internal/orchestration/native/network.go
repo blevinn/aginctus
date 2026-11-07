@@ -50,7 +50,9 @@ func keySatisfied(key, desired, observed string) bool {
 
 // NetworkAdoption is the explicit authorization to take over a network that
 // does not carry Aginctus ownership markers. It is never implied by a name
-// match and never granted by a dry run.
+// match and never granted by a dry run. It covers the ownership markers
+// only: it never waives the immutable DHCP announcement policy, and it
+// never authorizes the removal of a network of another type.
 type NetworkAdoption struct {
 	Authorized bool
 }
@@ -105,7 +107,10 @@ type NetworkObservation struct {
 	Name    string
 	Type    string
 	Project string
-	Config  map[string]string
+	// Description is an operator-owned writable field. Aginctus never
+	// manages it, so a reconcile must send it back unchanged.
+	Description string
+	Config      map[string]string
 }
 
 // NetworkPlan is the read-only outcome of comparing intent with observation.
@@ -169,12 +174,14 @@ func PlanNetwork(intent NetworkIntent, observed *NetworkObservation) (NetworkPla
 	if observed.Type != intent.Type {
 		return NetworkPlan{}, fmt.Errorf("existing network type cannot be changed in place")
 	}
-	if ownership == "owned" && !intent.Adopt.Authorized {
-		// The DHCP announcement policy is immutable. A bridge that still
-		// advertises a default route is not migrated by a reconcile.
-		if observed.Config[NetworkPolicyKey] != intent.Config[NetworkPolicyKey] {
-			return NetworkPlan{}, fmt.Errorf("existing network DHCP gateway policy differs")
-		}
+	// The DHCP announcement is immutable policy. Aginctus writes it only
+	// when it creates the bridge; an existing bridge must already carry
+	// the configured announcement. Adoption authorization covers the
+	// ownership markers only, so it never waives this policy: a bridge
+	// that advertises a default route is never rewritten or adopted
+	// implicitly.
+	if observed.Config[NetworkPolicyKey] != intent.Config[NetworkPolicyKey] {
+		return NetworkPlan{}, fmt.Errorf("existing network DHCP gateway policy differs")
 	}
 	plan.Changes = changedFields(desired, observed.Config)
 	if len(plan.Changes) > 0 {
@@ -199,6 +206,12 @@ func PlanNetworkRemoval(intent NetworkIntent, observed *NetworkObservation) (Net
 		return NetworkRemovalPlan{}, err
 	}
 	plan.Ownership = ownership
+	if observed.Type != intent.Type {
+		// This reconciler owns the management bridge and nothing else.
+		// A network of another type is never a removal target, even
+		// with explicit adoption authorization.
+		return NetworkRemovalPlan{}, fmt.Errorf("existing network type does not match the management bridge")
+	}
 	plan.Present = true
 	return plan, nil
 }
@@ -368,7 +381,9 @@ func EnsureNetworkWithClient(ctx context.Context, intent NetworkIntent, client N
 		}
 		// Only the managed keys that actually differ are written. Every
 		// other observed key belongs to Incus or the operator and is
-		// preserved verbatim.
+		// preserved verbatim. The Incus update replaces the whole
+		// writable network document, so the operator-owned description
+		// is sent back unchanged.
 		merged := maps.Clone(current.Config)
 		if merged == nil {
 			merged = map[string]string{}
@@ -378,7 +393,8 @@ func EnsureNetworkWithClient(ctx context.Context, intent NetworkIntent, client N
 				merged[key] = value
 			}
 		}
-		if err := client.UpdateNetwork(intent.Name, api.NetworkPut{Config: merged}, currentETag); err != nil {
+		request := api.NetworkPut{Config: merged, Description: current.Description}
+		if err := client.UpdateNetwork(intent.Name, request, currentETag); err != nil {
 			return result, &ReconcileError{Stage: "update", Mutated: true, Uncertain: true, cause: err}
 		}
 		result.Changed = true
@@ -415,16 +431,19 @@ func RemoveNetworkWithClient(ctx context.Context, intent NetworkIntent, client N
 		return NetworkResult{}, &ReconcileError{Stage: "planning", cause: err}
 	}
 	result := NetworkResult{Network: intent.Name, Action: plan.Action, Ownership: plan.Ownership}
-	if !plan.Present {
-		result.Verified = true
-		return result, nil
-	}
+	// Recheck at the mutation boundary. It also proves an absent bridge
+	// is still absent: a bridge that appeared after the first read is
+	// never reported as a verified absence.
 	current, currentETag, err := observeNetwork(ctx, client, intent.Name)
 	if err != nil {
 		return result, &ReconcileError{Stage: "mutation-boundary", cause: err}
 	}
 	if !sameObservation(observed, current) || etag != currentETag {
 		return result, &ReconcileError{Stage: "mutation-boundary", cause: fmt.Errorf("network changed during planning")}
+	}
+	if !plan.Present {
+		result.Verified = true
+		return result, nil
 	}
 	if err := ctx.Err(); err != nil {
 		return result, &ReconcileError{Stage: "cancellation", cause: err}
@@ -468,10 +487,11 @@ func observeNetwork(ctx context.Context, client NetworkClient, name string) (*Ne
 		return nil, "", fmt.Errorf("network observation unavailable")
 	}
 	return &NetworkObservation{
-		Name:    network.Name,
-		Type:    network.Type,
-		Project: network.Project,
-		Config:  maps.Clone(network.Config),
+		Name:        network.Name,
+		Type:        network.Type,
+		Project:     network.Project,
+		Description: network.Description,
+		Config:      maps.Clone(network.Config),
 	}, etag, nil
 }
 
@@ -497,6 +517,9 @@ func sameObservation(a, b *NetworkObservation) bool {
 		return a == nil && b == nil
 	}
 	if a.Name != b.Name || a.Type != b.Type || a.Project != b.Project {
+		return false
+	}
+	if a.Description != b.Description {
 		return false
 	}
 	return maps.Equal(a.Config, b.Config)

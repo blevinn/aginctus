@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"net/http"
 	"testing"
@@ -57,6 +58,11 @@ func (f *fakeNetworkClient) GetNetwork(name string) (*api.Network, string, error
 		changed.Config = maps.Clone(f.network.Config)
 		changed.Config["user.operator"] = "changed"
 		return &changed, "etag-2", nil
+	case "absent race":
+		if f.reads == 1 {
+			return nil, "", api.StatusErrorf(http.StatusNotFound, "not found")
+		}
+		return f.network, f.etag, nil
 	}
 	if f.network == nil {
 		return nil, "", api.StatusErrorf(http.StatusNotFound, "not found")
@@ -95,7 +101,11 @@ func (f *fakeNetworkClient) UpdateNetwork(name string, network api.NetworkPut, e
 	if f.mode == "update failure" {
 		return errors.New("sensitive transport failure")
 	}
-	f.network.Config = maps.Clone(network.Config)
+	// The Incus update replaces the whole writable network document.
+	f.network.NetworkPut = api.NetworkPut{
+		Config:      maps.Clone(network.Config),
+		Description: network.Description,
+	}
 	f.etag = "etag-updated"
 	if f.cancel != nil {
 		f.cancel()
@@ -234,7 +244,10 @@ func TestNativeNetworkReconcileRequiresExplicitAdoption(t *testing.T) {
 	intent := managementIntent(t)
 	foreign := &api.Network{
 		Name: intent.Name, Type: intent.Type, Project: intent.Scope.Project(),
-		NetworkPut: api.NetworkPut{Config: map[string]string{"ipv4.address": "10.0.0.1/24"}},
+		NetworkPut: api.NetworkPut{Config: map[string]string{
+			"ipv4.address":      "10.0.0.1/24",
+			"ipv4.dhcp.gateway": "none",
+		}},
 	}
 	fake := &fakeNetworkClient{scope: intent.Scope, network: foreign, etag: "etag-1"}
 	intent.Adopt = NetworkAdoption{Authorized: true}
@@ -270,6 +283,101 @@ func TestNativeNetworkReconcileRefusesImmutableDrift(t *testing.T) {
 				t.Fatalf("%s caused a mutation: %+v", mode, fake)
 			}
 		})
+	}
+}
+
+func TestNativeNetworkReconcilePreservesNetworkDescription(t *testing.T) {
+	intent := managementIntent(t)
+	existing := ownedNetwork(t, intent)
+	existing.Description = "operator supplied description"
+	existing.Config["ipv4.nat"] = "true"
+	fake := &fakeNetworkClient{scope: intent.Scope, network: existing, etag: "etag-1"}
+	result, err := EnsureNetworkWithClient(context.Background(), intent, fake)
+	if err != nil {
+		t.Fatalf("EnsureNetworkWithClient() error = %v", err)
+	}
+	if result.Action != Update || !result.Changed {
+		t.Fatalf("unexpected update result: %+v", result)
+	}
+	if fake.updated.Description != "operator supplied description" {
+		t.Fatalf("update did not preserve the network description: %q", fake.updated.Description)
+	}
+	if fake.network.Description != "operator supplied description" {
+		t.Fatalf("network description was lost: %q", fake.network.Description)
+	}
+}
+
+func TestNativeNetworkReconcileRefusesPolicyDriftEvenWithAdoption(t *testing.T) {
+	intent := managementIntent(t)
+	owned := ownedNetwork(t, intent)
+	owned.Config["ipv4.dhcp.gateway"] = "10.10.0.1"
+	foreign := &api.Network{
+		Name: intent.Name, Type: intent.Type, Project: intent.Scope.Project(),
+		NetworkPut: api.NetworkPut{Config: map[string]string{
+			"ipv4.address":      "10.0.0.1/24",
+			"ipv4.dhcp.gateway": "10.10.0.1",
+		}},
+	}
+	for name, observed := range map[string]*api.Network{"owned": owned, "foreign": foreign} {
+		t.Run(name, func(t *testing.T) {
+			authorized := managementIntent(t)
+			authorized.Adopt = NetworkAdoption{Authorized: true}
+			fake := &fakeNetworkClient{scope: authorized.Scope, network: observed, etag: "etag-1"}
+			_, err := EnsureNetworkWithClient(context.Background(), authorized, fake)
+			if err == nil {
+				t.Fatal("DHCP gateway policy drift was not refused")
+			}
+			if fake.creates != 0 || fake.updates != 0 || fake.deletes != 0 {
+				t.Fatalf("policy drift caused a mutation: %+v", fake)
+			}
+			var failure *ReconcileError
+			if !errors.As(err, &failure) || failure.Stage != "planning" {
+				t.Fatalf("unexpected failure report: %v", err)
+			}
+		})
+	}
+}
+
+func TestNativeNetworkRemovalRefusesMismatchedType(t *testing.T) {
+	intent := managementIntent(t)
+	existing := ownedNetwork(t, intent)
+	existing.Type = "macvlan"
+	for _, authorized := range []bool{false, true} {
+		t.Run(fmt.Sprintf("authorized=%t", authorized), func(t *testing.T) {
+			selected := managementIntent(t)
+			selected.Adopt = NetworkAdoption{Authorized: authorized}
+			fake := &fakeNetworkClient{scope: selected.Scope, network: existing, etag: "etag-1"}
+			_, err := RemoveNetworkWithClient(context.Background(), selected, fake)
+			if err == nil {
+				t.Fatal("removal of a network of another type was not refused")
+			}
+			if fake.deletes != 0 {
+				t.Fatalf("network of another type was deleted: %+v", fake)
+			}
+			var failure *ReconcileError
+			if !errors.As(err, &failure) || failure.Stage != "planning" {
+				t.Fatalf("unexpected failure report: %v", err)
+			}
+		})
+	}
+}
+
+func TestNativeNetworkRemovalDoesNotReportVerifiedAbsenceWhenBridgeAppears(t *testing.T) {
+	intent := managementIntent(t)
+	fake := &fakeNetworkClient{scope: intent.Scope, network: ownedNetwork(t, intent), etag: "etag-1", mode: "absent race"}
+	result, err := RemoveNetworkWithClient(context.Background(), intent, fake)
+	if err == nil {
+		t.Fatal("a bridge that appeared after the first read was reported as absent")
+	}
+	if result.Verified {
+		t.Fatalf("removal reported a verified absence: %+v", result)
+	}
+	if fake.deletes != 0 {
+		t.Fatalf("a bridge that appeared was deleted: %+v", fake)
+	}
+	var failure *ReconcileError
+	if !errors.As(err, &failure) || failure.Stage != "mutation-boundary" {
+		t.Fatalf("unexpected failure report: %v", err)
 	}
 }
 

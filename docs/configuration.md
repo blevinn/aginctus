@@ -226,8 +226,16 @@ and Home Manager (`programs.aginctus.settings.incus.management.network.backend`)
 Exactly one backend reconciles the bridge. The setting is read once per
 lifecycle operation and is shared by every plan that reconciles the bridge
 (`network ensure`, `network remove`, the aggregate plan, the Herdr client,
-the workload plan and the gateway deployment), so the legacy and native
-reconcilers never target the same bridge concurrently.
+the workload plan and the gateway deployment), so a single invocation never
+mixes the legacy and the native reconciler.
+
+That consistency is per invocation, not across processes. Aginctus holds no
+shared lock or lease on the bridge, so two concurrent invocations with
+different effective settings — for example one using the documented
+`--config=incus.management.network.backend=native` override — can still
+reconcile the same bridge at the same time. While the native backend is
+being trialled, do not run a legacy and a native reconcile against the same
+bridge concurrently.
 
 ```sh
 aginctus config get incus.management.network.backend
@@ -236,9 +244,15 @@ aginctus --config=incus.management.network.backend=native network ensure
 
 The native backend observes the bridge over the local Incus Unix socket,
 refuses a bridge that does not carry the Aginctus ownership markers
-unless `--force` explicitly authorizes adoption, treats the DHCP gateway
-announcement as immutable policy drift, preserves unmanaged Incus
-configuration keys, and never mutates anything during `--dry-run`.
+unless `--force` explicitly authorizes adoption, preserves unmanaged Incus
+configuration keys and the operator-supplied network description, and never
+mutates anything during `--dry-run`.
+
+The DHCP gateway announcement is immutable policy. Aginctus writes it only
+when it creates the bridge; an existing bridge must already carry the
+configured announcement, whether it is owned, foreign or being adopted.
+`--force` authorizes the ownership markers only: it never rewrites the
+announcement, and it never authorizes removing a network of another type.
 
 The backend is an opt-in transition control for
 [#153](https://github.com/blevinn/aginctus/issues/153) and
