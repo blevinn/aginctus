@@ -8,6 +8,7 @@ import (
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
+	nativedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/native"
 	"github.com/blevinn/aginctus/internal/statevolume"
 )
 
@@ -62,6 +63,10 @@ func (s Spec) Plan(operation string, force bool) (orchestration.Plan, error) {
 	if err != nil {
 		return orchestration.Plan{}, err
 	}
+	networkExtVars, err := s.Network.ExtVars("upsert", false)
+	if err != nil {
+		return orchestration.Plan{}, err
+	}
 	return generator.Evaluate(
 		`local ag = import 'aginctus/orchestration.libsonnet';
 local network = import 'aginctus/management-network.jsonnet';
@@ -81,16 +86,7 @@ local steps = if cfg.operation == 'delete'
 ag.orchestration('herdr-client', steps)`,
 		map[string]any{
 			"operation": operation,
-			"network": map[string]any{
-				"name":            s.Network.Name,
-				"ipv4Address":     s.Network.IPv4Address,
-				"ipv4Nat":         s.Network.IPv4NAT,
-				"ipv4Routing":     s.Network.IPv4Routing,
-				"ipv4DHCPGateway": s.Network.IPv4DHCPGateway,
-				"ipv6Address":     s.Network.IPv6Address,
-				"operation":       "upsert",
-				"force":           false, // Herdr force must not adopt the shared management network.
-			},
+			"network":   networkExtVars, // Herdr force must not adopt the shared management network.
 			"client": map[string]any{
 				"name":              s.Name,
 				"imageAlias":        s.ImageAlias,
@@ -112,6 +108,7 @@ func (s Spec) Execute(ctx context.Context, options Options) error {
 	// the Herdr instance. Dry-run and delete never create volumes.
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
 		"apply":        applydriver.New(),
+		"native":       nativedriver.NewDriver(),
 		"state-volume": statevolume.NewDriver(),
 	})
 	if _, err := engine.Execute(ctx, plan, orchestration.ExecuteOptions{DryRun: options.DryRun}); err != nil {

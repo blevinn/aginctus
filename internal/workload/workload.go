@@ -10,6 +10,7 @@ import (
 	"github.com/blevinn/aginctus/internal/managementnetwork"
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
+	nativedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/native"
 )
 
 type Spec struct {
@@ -106,6 +107,10 @@ func (s Spec) Plan(operation string, force bool) (orchestration.Plan, error) {
 	if err != nil {
 		return orchestration.Plan{}, err
 	}
+	networkExtVars, err := s.Network.ExtVars("upsert", false)
+	if err != nil {
+		return orchestration.Plan{}, err
+	}
 	return generator.Evaluate(
 		`local ag = import 'aginctus/orchestration.libsonnet';
 local network = import 'aginctus/management-network.jsonnet';
@@ -117,16 +122,8 @@ local steps = if cfg.operation == 'delete'
 ag.orchestration('workload-' + cfg.workload.id, steps)`,
 		map[string]any{
 			"operation": operation,
-			"network": map[string]any{
-				"name":            s.Network.Name,
-				"ipv4Address":     s.Network.IPv4Address,
-				"ipv4Nat":         s.Network.IPv4NAT,
-				"ipv4Routing":     s.Network.IPv4Routing,
-				"ipv4DHCPGateway": s.Network.IPv4DHCPGateway,
-				"ipv6Address":     s.Network.IPv6Address,
-				"operation":       "upsert",
-				"force":           false, // Workload force must not adopt the shared management network.
-			},
+			// Workload force must not adopt the shared management network.
+			"network": networkExtVars,
 			"workload": map[string]any{
 				"id":                s.ID,
 				"name":              s.Name,
@@ -152,6 +149,11 @@ ag.orchestration('workload-' + cfg.workload.id, steps)`,
 func (s Spec) PlanScopedExisting(scope incusscope.ProjectScope) (orchestration.Plan, error) {
 	if _, err := incusscope.NewProjectScope(scope.Name); err != nil {
 		return orchestration.Plan{}, err
+	}
+	if s.Network.Backend == managementnetwork.BackendNative {
+		// The scoped preview renders the legacy apply step. A native
+		// management-network backend has no equivalent preview yet.
+		return orchestration.Plan{}, fmt.Errorf("scoped workload preview requires the legacy management network backend")
 	}
 	plan, err := s.Plan("upsert", false)
 	if err != nil {
@@ -201,7 +203,8 @@ func (s Spec) Execute(ctx context.Context, options Options) error {
 		return err
 	}
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
-		"apply": applydriver.New(),
+		"apply":  applydriver.New(),
+		"native": nativedriver.NewDriver(),
 	})
 	if _, err := engine.Execute(ctx, plan, orchestration.ExecuteOptions{DryRun: options.DryRun}); err != nil {
 		return fmt.Errorf("workload %q orchestration: %w", s.ID, err)

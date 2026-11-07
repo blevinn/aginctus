@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
+	nativedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/native"
 )
 
 type applyStepConfig struct {
@@ -62,6 +63,7 @@ func TestPlanRequiresOwnershipByDefault(t *testing.T) {
 		IPv4NAT:     false,
 		IPv4Routing: false,
 		IPv6Address: "none",
+		Backend:     BackendLegacy,
 	}
 	plan, err := spec.Plan("upsert", false)
 	if err != nil {
@@ -97,7 +99,7 @@ func TestPlanRequiresOwnershipByDefault(t *testing.T) {
 }
 
 func TestPlanForceOmitsExistingResourceGuard(t *testing.T) {
-	spec := Spec{Name: "aginctus-mgmt", IPv6Address: "none"}
+	spec := Spec{Name: "aginctus-mgmt", IPv6Address: "none", Backend: BackendLegacy}
 	plan, err := spec.Plan("delete", true)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
@@ -116,12 +118,112 @@ func TestPlanForceOmitsExistingResourceGuard(t *testing.T) {
 }
 
 func TestDeleteRetainsOwnershipWithoutDHCPMigration(t *testing.T) {
-	plan, err := (Spec{Name: "aginctus-mgmt"}).Plan("delete", false)
+	plan, err := (Spec{Name: "aginctus-mgmt", Backend: BackendLegacy}).Plan("delete", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	guards := decodeApplyStepConfig(t, plan.Steps[0].Configuration).RequireExistingConfig
 	if len(guards) != 2 || guards["user.aginctus.managed"] != "true" || guards["user.aginctus.resource"] != "management-network" {
 		t.Fatalf("delete ownership guards = %#v", guards)
+	}
+}
+
+func TestConfiguredBackendSelection(t *testing.T) {
+	loader := &config.Loader{}
+	effective, err := loader.Load(config.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := FromConfig(effective)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.Backend != BackendLegacy {
+		t.Fatalf("default backend = %q, want %q", spec.Backend, BackendLegacy)
+	}
+
+	effective, err = loader.Load(config.Options{Overrides: []string{
+		"incus.management.network.backend=native",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err = FromConfig(effective)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.Backend != BackendNative {
+		t.Fatalf("selected backend = %q, want %q", spec.Backend, BackendNative)
+	}
+
+	effective, err = loader.Load(config.Options{Overrides: []string{
+		"incus.management.network.backend=compose",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := FromConfig(effective); err == nil {
+		t.Fatal("unsupported backend was accepted")
+	}
+}
+
+func TestNativeBackendSelectsTheNativeDriver(t *testing.T) {
+	spec := Spec{
+		Name: "aginctus-mgmt", IPv4Address: "10.42.0.1/24", IPv4NAT: false,
+		IPv4Routing: false, IPv6Address: "none", Backend: BackendNative,
+	}
+	plan, err := spec.Plan("upsert", false)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if len(plan.Steps) != 1 || plan.Steps[0].Driver != nativedriver.DriverName {
+		t.Fatalf("steps = %#v", plan.Steps)
+	}
+	var cfg nativedriver.Config
+	if err := json.Unmarshal(plan.Steps[0].Configuration, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Operation != "upsert" || cfg.Resource != "management-network" ||
+		cfg.Name != "aginctus-mgmt" || cfg.Type != "bridge" || cfg.Adopt {
+		t.Fatalf("native step configuration = %#v", cfg)
+	}
+	want := map[string]string{
+		"ipv4.address":      "10.42.0.1/24",
+		"ipv4.dhcp.gateway": "none",
+		"ipv4.nat":          "false",
+		"ipv4.routing":      "false",
+		"ipv6.address":      "none",
+	}
+	for key, value := range want {
+		if cfg.Config[key] != value {
+			t.Fatalf("managed key %q = %q, want %q", key, cfg.Config[key], value)
+		}
+	}
+	if len(cfg.Config) != len(want) {
+		t.Fatalf("native step manages unexpected keys: %#v", cfg.Config)
+	}
+}
+
+func TestNativeBackendCarriesExplicitAdoption(t *testing.T) {
+	spec := Spec{
+		Name: "aginctus-mgmt", IPv4Address: "auto", IPv6Address: "none",
+		Backend: BackendNative,
+	}
+	plan, err := spec.Plan("delete", true)
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	var cfg nativedriver.Config
+	if err := json.Unmarshal(plan.Steps[0].Configuration, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Operation != "delete" || !cfg.Adopt {
+		t.Fatalf("native step configuration = %#v", cfg)
+	}
+}
+
+func TestPlanRejectsUnknownBackend(t *testing.T) {
+	if _, err := (Spec{Name: "aginctus-mgmt", Backend: Backend("compose")}).Plan("upsert", false); err == nil {
+		t.Fatal("plan accepted an unknown backend")
 	}
 }

@@ -23,6 +23,7 @@
   "incus": {
     "management": {
       "network": {
+        "backend": "legacy",
         "ipv4": {
           "address": "auto",
           "dhcp": {

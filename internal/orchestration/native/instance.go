@@ -84,19 +84,6 @@ type InstanceObservation struct {
 	ImageFingerprint string
 }
 
-type Action string
-
-const (
-	Unchanged           Action = "unchanged"
-	Update              Action = "update"
-	ReplacementRequired Action = "replacement-required"
-)
-
-// FieldChange intentionally excludes values, hashes of secrets and SDK errors.
-type FieldChange struct {
-	Field string `json:"field"`
-}
-
 type InstancePlan struct {
 	Identity        InstanceIdentity `json:"identity"`
 	Action          Action           `json:"action"`

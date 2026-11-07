@@ -234,7 +234,8 @@ var defaults = map[string]any{
 		"project": incusscope.DefaultAginctusProject,
 		"management": map[string]any{
 			"network": map[string]any{
-				"name": "aginctus-mgmt",
+				"name":    "aginctus-mgmt",
+				"backend": "legacy",
 				"ipv4": map[string]any{
 					"address": "auto",
 					"nat":     false,

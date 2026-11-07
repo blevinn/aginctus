@@ -16,4 +16,5 @@
 
   apply(id, configuration):: self.step(id, 'apply', configuration),
   compose(id, configuration):: self.step(id, 'compose', configuration),
+  native(id, configuration):: self.step(id, 'native', configuration),
 }
