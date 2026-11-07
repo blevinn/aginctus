@@ -83,26 +83,6 @@ func Run(
 		return 0
 	}
 
-	// Offline-safe or read-only operator diagnostics must not load
-	// application config, read credentials or accept configuration overrides.
-	if len(commandArgs) > 1 && commandArgs[0] == "operator" &&
-		(commandArgs[1] == "units-audit" || commandArgs[1] == "package-audit" ||
-			commandArgs[1] == "project-plan" || commandArgs[1] == "project-ensure") {
-		if len(options.Overrides) != 0 || options.ConfigurationFile != "" {
-			fmt.Fprintf(stderr, "operator %s: configuration overrides are not supported\n", commandArgs[1])
-			return 2
-		}
-		switch commandArgs[1] {
-		case "units-audit":
-			return runOperatorUnitsAudit(ctx, commandArgs[2:], stdout, stderr)
-		case "package-audit":
-			return runOperatorPackageAudit(commandArgs[2:], stdout, stderr)
-		case "project-plan":
-			return runOperatorProjectPlan(ctx, commandArgs[2:], stdout, stderr)
-		default:
-			return runOperatorProjectEnsure(ctx, commandArgs[2:], stdout, stderr)
-		}
-	}
 
 	// The test environment does not consume pilot configuration or Incus.
 	// Dispatch before the normal host-facing config loader.
@@ -121,7 +101,7 @@ func Run(
 	}
 	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
 		commandArgs[0] == "apply" || commandArgs[0] == "remove" || commandArgs[0] == "status" ||
-		commandArgs[0] == "network" || commandArgs[0] == "herdr" || commandArgs[0] == "workload" {
+		commandArgs[0] == "network" || commandArgs[0] == "herdr" || commandArgs[0] == "workload" || commandArgs[0] == "operator" {
 		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
 	}
 
@@ -134,11 +114,6 @@ func Run(
 	switch commandArgs[0] {
 	case "doctor":
 		return runDoctor(ctx, commandArgs[1:], stdout, stderr, incusClient)
-	case "operator":
-		if len(commandArgs) > 1 && commandArgs[1] == "state-audit" {
-			return runOperatorStateAudit(commandArgs[1:], stdout, stderr, effective)
-		}
-		return runOperatorPreflight(ctx, commandArgs[1:], stdout, stderr)
 	case "images":
 		return runConfiguredImages(ctx, commandArgs[1:], stdout, stderr, effective)
 	case "config":
