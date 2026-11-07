@@ -70,6 +70,19 @@ sets `incus.management.network.name`.
 
 As with `--config`, environment values are parsed as JSON when possible and otherwise treated as strings.
 
+### Gateway providers and catalogs
+
+`gateway.providers` declares named instances of compiled plugins, with nonsecret
+`config` containing models, MCP endpoints and plugin-supported private state paths.
+`gateway.catalogs` selects those assets and explicitly mapped inherited aliases.
+The NixOS and Home Manager modules expose the same strict typed options under
+`settings.gateway`. Each named provider/catalog is replaced atomically across
+configuration sources. Inspection consumes declarations directly; it does not
+copy them into local registries or publish runtime routes. See
+[Gateway plugins, providers and catalogs](gateway-assets.md#declarative-nix-configuration)
+for the schema, ownership rules and examples. MCP grants remain under `mcp` and
+are not derived from catalog membership.
+
 ### Runtime gateway secrets
 
 The gateway PostgreSQL password, LiteLLM master key, and LiteLLM salt key are **runtime-only** values, not Aginctus configuration settings. The paths `gateway.postgres.password`, `gateway.master.key`, and `gateway.salt.key` are rejected in all configuration files (system, user, and explicit CLI), `--config` overrides, and object-valued environment mappings, including nested JSON objects. This also applies when a prohibited key is set to `null`.

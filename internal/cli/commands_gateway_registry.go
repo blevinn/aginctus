@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/gatewaycontrol"
 	"github.com/spf13/cobra"
 )
 
@@ -83,8 +82,8 @@ func addGatewayRegistryCommands(
 	models := &cobra.Command{Use: "model", Short: "Inspect and register model aliases"}
 	gateway.AddCommand(models)
 	var renderProvider string
-	render := add(models, "render NAME", cobra.ExactArgs(1), func(_ *cobra.Command, args []string, _ *config.Config) int {
-		store, err := gatewaycontrol.DefaultStore(gatewayPlugins())
+	render := add(models, "render NAME", cobra.ExactArgs(1), func(_ *cobra.Command, args []string, cfg *config.Config) int {
+		store, err := configuredGatewayStore(cfg)
 		var data []byte
 		if err == nil {
 			data, err = renderProviderModel(store, renderProvider, args[0])
@@ -116,5 +115,5 @@ func addGatewayRegistryCommands(
 	register.Flags().StringVar(&providerAliasName, "provider", "", "Registered provider alias")
 	register.Flags().StringVar(&source, "source", "", "Responses upstream model source")
 	register.Flags().BoolVar(&modelDryRun, "dry-run", false, "Validate without registry mutation")
-	addGatewayAssetCommands(gateway, providers, models, status, options)
+	addGatewayAssetCommands(gateway, providers, models, status, options, load)
 }

@@ -67,10 +67,16 @@ rec {
   # all, so an existing v0.1 configuration keeps its exact shape.
   renderSettings =
     settings:
+    let
+      withAssets = import ./gateway-asset-settings.nix {
+        inherit lib;
+        renderServer = server;
+      } settings;
+    in
     if settings.mcp == defaultMCP then
-      builtins.removeAttrs settings [ "mcp" ]
+      builtins.removeAttrs withAssets [ "mcp" ]
     else
-      settings // { mcp = renderMCP settings.mcp; };
+      withAssets // { mcp = renderMCP settings.mcp; };
 
   # Assertions that keep the rendered configuration consistent with the Go
   # schema. They fail the evaluation instead of producing a configuration

@@ -38,8 +38,9 @@ Commands accept either a positional name or its explicit selector flag; supplyin
 both is an error. Configuration is a strict JSON object, supplied with `--config`
 or `--config-file`, never both. Files must be regular non-symlink files, read with
 a 1 MiB bound. They carry public declarations and opaque credential references,
-not credentials. Global host configuration overrides do not apply to these local
-registry commands.
+not credentials. The normal host configuration sources also supply declarative
+providers and catalogs; local command configuration describes only the object
+being applied.
 
 ```sh
 aginctus gateway plugin list
@@ -157,6 +158,60 @@ Models in the legacy `models.json` registry are included in the provider view
 without copying state; a conflicting new source declaration is rejected. Applying
 provider configuration does not remove a legacy model registration. Existing
 deployment and workload-key commands retain their activation boundaries.
+
+## Declarative Nix configuration
+
+NixOS exposes providers and catalogs under `services.aginctus.settings.gateway`.
+Home Manager exposes the same typed schema under
+`programs.aginctus.settings.gateway`. Both render ordinary Aginctus configuration:
+
+```nix
+services.aginctus.settings = {
+  gateway.providers.go = {
+    plugin = "opencode-go";
+    config.models.coding.source = "openai/gpt-6-luna";
+  };
+  gateway.catalogs = {
+    base.models.coding = { provider = "go"; name = "coding"; };
+    workstation.inherits = [{
+      catalog = "base";
+      models.coding = "dev.coding";
+    }];
+  };
+};
+```
+
+Provider configuration supports `state_dir`, `models` and `mcps`, with plugin
+validation at use. `models` maps names to `source` and optional `display_name`.
+Provider `mcps` reuse the strict typed server options from `settings.mcp.servers`.
+Catalog `models`/`mcps` use the reference objects shown above; `inherits` has explicit
+source-to-exposed alias mappings. Compiled plugin availability, source support,
+state paths and the complete reference graph are validated before an asset
+operation. Nix evaluates the shared typed shape; it does not authenticate or
+discover upstream assets during evaluation.
+
+`settings.mcp.servers` supplies local MCP identities to catalogs. It retains all
+existing policy consistency checks and explicit grants. Provider-offered MCPs
+remain asset declarations, not additions to that policy. A catalog selection does
+not create a workload, grant a tool or enable a gateway endpoint.
+
+Inspection, model rendering and provider login read configuration directly; no
+registry import or activation service is needed. Configuration-owned names cannot
+be changed with local apply commands. A name collision with a local registry is
+an error; use distinct names rather than relying on shadowing. Local catalogs may
+select declared providers and inherit declared catalogs, but local writes never
+copy configuration-owned objects into mutable state. Removing configuration that
+a local catalog still references makes inspection fail until the reference is
+fixed.
+
+Ordinary source precedence applies. Each named `gateway.providers.<name>` and
+`gateway.catalogs.<name>` definition replaces atomically across sources, so a
+partial override cannot silently retain an old model selection or credential
+identity. Other named definitions remain. This is not source authority: a
+privileged runtime must select authoritative configuration explicitly, as with
+MCP policy. Private credentials remain outside configuration and the Nix store;
+the typed schema rejects credential-bearing fields, and the Go loader rejects
+credential fields before source merging. No secret is read during evaluation.
 
 ## OpenCode-Go provider instances
 
