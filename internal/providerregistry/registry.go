@@ -12,8 +12,9 @@ import (
 )
 
 type Provider struct {
-	Type  string `json:"provider"`
-	Alias string `json:"alias"`
+	Type   string           `json:"provider"`
+	Alias  string           `json:"alias"`
+	Config *json.RawMessage `json:"config,omitempty"`
 }
 type Registry struct {
 	Providers []Provider `json:"providers"`
@@ -22,7 +23,49 @@ type Registry struct {
 var safeAlias = regexp.MustCompile("^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
 func supportedType(providerType string) bool {
-	return providerType == "chatgpt" || providerType == "opencode-go"
+	// Storage accepts compiled-plugin identities; the control plane validates
+	// plugin availability and configuration before applying an instance.
+	return safeAlias.MatchString(providerType)
+}
+
+// Apply atomically replaces an instance of the same plugin. Changing plugin
+// identity requires a different provider name, preserving credential bindings.
+func Apply(path string, p Provider) error {
+	if !filepath.IsAbs(path) || !supportedType(p.Type) || !safeAlias.MatchString(p.Alias) {
+		return fmt.Errorf("invalid provider instance")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	lock, err := filestate.LockRegistry(path)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	reg, err := Load(path)
+	if err != nil {
+		return err
+	}
+	found := false
+	for i, existing := range reg.Providers {
+		if existing.Alias != p.Alias {
+			continue
+		}
+		if existing.Type != p.Type {
+			return fmt.Errorf("provider name already belongs to another plugin")
+		}
+		reg.Providers[i] = p
+		found = true
+		break
+	}
+	if !found {
+		reg.Providers = append(reg.Providers, p)
+	}
+	data, err := json.MarshalIndent(reg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return filestate.WritePrivateFile(path, append(data, '\n'))
 }
 
 // DefaultPath holds nonsecret provider identities in the current user's state.

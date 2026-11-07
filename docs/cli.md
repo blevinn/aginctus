@@ -310,6 +310,15 @@ this plan's JSON as a machine authorization token.
 
 ## Commands that change state
 
+### Gateway assets
+
+The Cobra `gateway plugin`, `provider`, `model`, `mcp` and `catalog` families
+inspect compiled plugins, apply named provider instances, select models/MCPs and
+resolve explicitly inherited/renamed catalogs. Use each family's `--help` for
+authoritative selectors and flags. See [Gateway assets](gateway-assets.md) for
+the object model, configuration schema, compatibility and authorization boundary.
+These local declarations do not deploy routes or grant workload access.
+
 | Surface | Side effect or prerequisite |
 | --- | --- |
 | `aginctus doctor --fix` | Configures the Incus HTTPS listener **only if absent**, using a loopback address |
