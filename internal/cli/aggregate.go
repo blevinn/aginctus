@@ -14,6 +14,7 @@ import (
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
+	nativedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/native"
 	"github.com/blevinn/aginctus/internal/statevolume"
 	"github.com/blevinn/aginctus/internal/workload"
 )
@@ -122,6 +123,7 @@ var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, ef
 	validator := orchestration.NewEngine(map[string]orchestration.Driver{
 		"apply":        applydriver.New(),
 		"compose":      composedriver.New(),
+		"native":       nativedriver.NewDriver(),
 		"state-volume": statevolume.NewDriver(),
 	})
 	if err := validator.Validate(plan, orchestration.ExecuteOptions{}); err != nil {
@@ -150,6 +152,7 @@ var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, ef
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
 		"apply":        applydriver.New(),
 		"compose":      composedriver.NewWithEnvironment(environment),
+		"native":       nativedriver.NewDriver(),
 		"state-volume": statevolume.NewDriver(),
 	})
 	_, err = engine.Execute(ctx, plan, orchestration.ExecuteOptions{})

@@ -146,6 +146,19 @@ rec {
       type = types.str;
       default = "aginctus-mgmt";
     };
+    backend = mkOption {
+      type = types.enum [
+        "legacy"
+        "native"
+      ];
+      default = "legacy";
+      description = ''
+        Reconciliation backend for the Aginctus management bridge. The
+        "legacy" backend drives the incus-apply driver. The "native" backend
+        uses the Aginctus-owned Incus SDK reconciler. Exactly one backend
+        reconciles the bridge at a time.
+      '';
+    };
     ipv4 = {
       address = mkOption {
         type = types.str;

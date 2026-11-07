@@ -94,3 +94,53 @@ func TestAssessProjectRejectsForeignAndDrift(t *testing.T) {
 		t.Errorf("unrelated project metadata: %s", got)
 	}
 }
+
+func TestHostSharedScopeIsExplicitAndNarrow(t *testing.T) {
+	if _, err := NewHostSharedScope(""); err == nil {
+		t.Error("accepted empty host-shared resource")
+	}
+	if _, err := NewHostSharedScope("instance"); err == nil {
+		t.Error("accepted a resource outside the host-shared allowlist")
+	}
+	scope, err := NewHostSharedScope("management-network")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scope.Project() != "default" {
+		t.Errorf("host-shared project = %q, want %q", scope.Project(), "default")
+	}
+	if scope.Resource() != "management-network" {
+		t.Errorf("host-shared resource = %q, want %q", scope.Resource(), "management-network")
+	}
+	want := map[string]string{
+		"user.aginctus.managed":  "true",
+		"user.aginctus.resource": "management-network",
+	}
+	if got := scope.Ownership(); !reflect.DeepEqual(got, want) {
+		t.Errorf("host-shared ownership = %v, want %v", got, want)
+	}
+}
+
+func TestHostSharedScopeOwnershipAssessment(t *testing.T) {
+	scope, err := NewHostSharedScope("management-network")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := scope.AssessOwnership(scope.Ownership()); got != HostOwned {
+		t.Errorf("owned resource = %s", got)
+	}
+	for _, pair := range [][2]string{
+		{"user.aginctus.managed", "false"},
+		{"user.aginctus.resource", "someone-else"},
+		{"user.aginctus.managed", ""},
+	} {
+		observed := scope.Ownership()
+		observed[pair[0]] = pair[1]
+		if got := scope.AssessOwnership(observed); got != HostForeign {
+			t.Errorf("foreign marker %s: got %s", pair[0], got)
+		}
+	}
+	if got := scope.AssessOwnership(nil); got != HostForeign {
+		t.Errorf("unmarked resource: got %s", got)
+	}
+}
