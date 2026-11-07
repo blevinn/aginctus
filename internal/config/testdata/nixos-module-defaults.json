@@ -20,11 +20,12 @@
       "selectiveGoForwarding": false
     }
   },
-  "incus": {
-    "project": "aginctus",
-    "management": {
-      "network": {
-        "ipv4": {
+    "incus": {
+      "project": "aginctus",
+      "management": {
+        "network": {
+          "backend": "legacy",
+          "ipv4": {
           "address": "auto",
           "nat": false,
           "routing": false,

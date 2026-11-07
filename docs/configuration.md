@@ -213,6 +213,39 @@ and reversible v0.1 migration in
 Until then, retain the existing project layout and avoid changing the
 operator's ambient Incus selection as a workaround.
 
+## Management network reconciliation backend
+
+`incus.management.network.backend` selects how the Aginctus management
+bridge is reconciled. It defaults to `legacy` in the Go config loader, the
+NixOS module (`services.aginctus.settings.incus.management.network.backend`)
+and Home Manager (`programs.aginctus.settings.incus.management.network.backend`).
+
+- `legacy` drives the existing `incus-apply` backend.
+- `native` drives the Aginctus-owned Incus SDK reconciler.
+
+Exactly one backend reconciles the bridge. The setting is read once per
+lifecycle operation and is shared by every plan that reconciles the bridge
+(`network ensure`, `network remove`, the aggregate plan, the Herdr client,
+the workload plan and the gateway deployment), so the legacy and native
+reconcilers never target the same bridge concurrently.
+
+```sh
+aginctus config get incus.management.network.backend
+aginctus --config=incus.management.network.backend=native network ensure
+```
+
+The native backend observes the bridge over the local Incus Unix socket,
+refuses a bridge that does not carry the Aginctus ownership markers
+unless `--force` explicitly authorizes adoption, treats the DHCP gateway
+announcement as immutable policy drift, preserves unmanaged Incus
+configuration keys, and never mutates anything during `--dry-run`.
+
+The backend is an opt-in transition control for
+[#153](https://github.com/blevinn/aginctus/issues/153) and
+[#157](https://github.com/blevinn/aginctus/issues/157). It does not migrate
+existing deployments, does not change the selected Incus project and does
+not grant additional operator privileges.
+
 ## Gateway egress DHCP input
 
 `gateway.egress.network.ipv4.dhcp` is optional. Omitting it preserves the

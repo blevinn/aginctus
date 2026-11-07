@@ -63,5 +63,53 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus network create aginctus-mgmt ipv4.address=none ipv6.address=none")
     machine.fail(f"{cli} network ensure")
     machine.succeed("incus network show aginctus-mgmt")
+
+    # The native Incus reconciler refuses the same colliding resource.
+    native_cli = f"{cli} --config=incus.management.network.backend=native"
+    machine.fail(f"{native_cli} network ensure")
+    machine.succeed("incus network show aginctus-mgmt")
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.address").strip() == "none"
+
+    # The native reconciler creates and converges the bridge without the
+    # incus-apply driver.
+    machine.succeed("incus network delete aginctus-mgmt")
+    machine.succeed(f"{native_cli} network ensure")
+    machine.succeed(f"{native_cli} network ensure")  # idempotent
+    assert machine.succeed("incus network get aginctus-mgmt user.aginctus.managed").strip() == "true"
+    assert machine.succeed("incus network get aginctus-mgmt user.aginctus.resource").strip() == "management-network"
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.nat").strip() == "false"
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.routing").strip() == "false"
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.dhcp.gateway").strip() == "none"
+    assert machine.succeed("incus network get aginctus-mgmt ipv6.address").strip() == "none"
+
+    # Unmanaged Incus configuration survives a native reconcile.
+    machine.succeed("incus network set aginctus-mgmt user.vendor-note=preserved")
+    machine.succeed(f"{native_cli} network ensure")
+    assert machine.succeed("incus network get aginctus-mgmt user.vendor-note").strip() == "preserved"
+
+    # A dry run plans the change without mutating it.
+    machine.succeed("incus network set aginctus-mgmt ipv4.nat=true")
+    machine.succeed(f"{native_cli} network ensure --dry-run")
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.nat").strip() == "true"
+    machine.succeed(f"{native_cli} network ensure")
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.nat").strip() == "false"
+
+    # A native removal deletes only the owned bridge.
+    machine.succeed(f"{native_cli} network teardown")
+    machine.fail("incus network show aginctus-mgmt")
+    machine.succeed("incus network show vm-foreign")
+
+    # Only an explicit adoption may take over a foreign bridge.
+    machine.succeed("incus network create aginctus-mgmt ipv4.address=auto ipv6.address=none")
+    machine.fail(f"{native_cli} network ensure")
+    machine.succeed("incus network show aginctus-mgmt")
+    machine.succeed(f"{native_cli} network ensure --force")
+    assert machine.succeed("incus network get aginctus-mgmt user.aginctus.managed").strip() == "true"
+    assert machine.succeed("incus network get aginctus-mgmt user.aginctus.resource").strip() == "management-network"
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.dhcp.gateway").strip() == "none"
+    assert machine.succeed("incus network get aginctus-mgmt ipv4.nat").strip() == "false"
+    machine.succeed(f"{native_cli} network teardown")
+    machine.fail("incus network show aginctus-mgmt")
+    machine.succeed("incus network show vm-foreign")
   '';
 }

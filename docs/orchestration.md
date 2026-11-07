@@ -1,6 +1,6 @@
 # Declarative orchestration design
 
-Status: implemented initial orchestration engine and direct Go Apply/Compose drivers for management-network, Herdr client, workload instance, and gateway deployment. Runtime-specific readiness, gateway credentials, and full guest bootstrap remain separate work.
+Status: implemented initial orchestration engine and direct Go Apply/Compose drivers for management-network, Herdr client, workload instance, and gateway deployment. The native Incus SDK driver reconciles the management-network bridge and is selected per deployment. Runtime-specific readiness, gateway credentials, and full guest bootstrap remain separate work.
 
 ## Goal
 
@@ -34,26 +34,27 @@ The orchestration engine should instead provide:
 Aginctus configuration / command
             |
             v
-trusted Jsonnet entrypoint
+ trusted Jsonnet entrypoint
   + embedded Aginctus libraries
             |
             v
-strict JSON orchestration plan
+ strict JSON orchestration plan
             |
             v
-plan validation
+ plan validation
             |
             v
-ordered executor
-      |             |
-      v             v
-  apply driver   compose driver
-      |             |
-      v             v
-incus-apply Go  incus-compose Go
-      \             /
-       \           /
-        Incus API
+ ordered executor
+      |             |             |
+      v             v             v
+  apply driver   compose driver  native driver
+      |             |             |
+      v             v             v
+ incus-apply Go  incus-compose Go  Aginctus Incus SDK reconciler
+      \             /                      |
+       \           /                       |
+        \         /                        |
+         Incus API <-----------------------/
 ```
 
 Jsonnet does not call Incus. Drivers do not evaluate Jsonnet. The executor does not interpret arbitrary driver-specific behavior beyond the typed step contracts.
@@ -216,6 +217,55 @@ The Aginctus adapter should remain narrow so changes in incus-compose do not lea
 
 Use the Go toolchain specified by the repository's current `go.mod` and Nix development shell. The selected dependencies are pinned in `go.mod`/`go.sum`; verify compatibility against those versions rather than inferring it from upstream development branches.
 
+## Native Incus driver
+
+The native driver reconciles Aginctus-owned Incus resources with the
+official Incus Go SDK. It replaces the Apply driver for the resources it
+supports, so the migration to native reconciliation does not require a
+second orchestration contract.
+
+The driver carries the typed intent of exactly one resource. The
+reconciler behind it owns the lifecycle:
+
+```text
+typed desired state
+        |
+        v
+observe actual state
+        |
+        v
+plan / diff
+        |
+        v
+validate ownership, scope and policy
+        |
+        v
+execute guarded mutations
+        |
+        v
+verify convergence
+```
+
+The current implementation reconciles the Aginctus management bridge. It
+is the only host-shared resource: Aginctus projects disable
+project-local networks, so the bridge lives in the Incus `default` project
+and is referenced by name from project-scoped instances. The reconciler
+therefore refuses any client that is not the local Incus Unix socket bound
+to that project, refuses a bridge that does not carry the Aginctus
+ownership markers unless adoption was explicitly authorized, treats the
+DHCP gateway announcement as immutable policy drift rather than a value to
+overwrite, writes only the managed configuration keys and preserves every
+other observed key, and re-reads the bridge at the mutation boundary and
+after the write.
+
+The driver supports dry-run: the planning path performs no mutation.
+Repeated reconciliation is idempotent, and a failed or uncertain write is
+reported as uncertain rather than as success or as a rollback.
+
+The management-network backend is selected with
+`incus.management.network.backend`. See
+[Configuration](configuration.md#management-network-reconciliation-backend).
+
 ## Execution semantics
 
 Execution is sequential and fail-fast.
@@ -349,3 +399,19 @@ reconciling existing resources. Ownership checks may be bypassed explicitly with
 `--force`, but immutable identity/type drift is still rejected rather than silently
 ignored. This keeps management-network bridge type and instance isolation semantics
 (container versus VM) separate from ownership adoption policy.
+
+### Native management-network reconciliation
+
+The native driver reconciles the management bridge with the Incus SDK. The
+`incus.management.network.backend` setting selects it; the legacy Apply
+driver remains available and is the default until the native path is proven
+against a disposable real Incus and the cutover in
+[#159](https://github.com/blevinn/aginctus/issues/159). Every plan that
+reconciles the bridge resolves the same setting, so the two backends never
+target the same bridge concurrently.
+
+The native path keeps the v0.1 command contract: `aginctus network ensure`
+and `aginctus network remove` keep their arguments, their output and their
+`--dry-run` and `--force` semantics. `--force` remains an explicit operator
+decision and now maps to explicit adoption authorization instead of disabling
+an ownership guard.

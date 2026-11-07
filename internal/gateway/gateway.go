@@ -21,9 +21,11 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/filestate"
+	"github.com/blevinn/aginctus/internal/managementnetwork"
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
+	nativedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/native"
 	gatewayassets "github.com/blevinn/aginctus/scripts/gateway"
 )
 
@@ -41,6 +43,7 @@ type Spec struct {
 	NetworkIPv4Routing        bool
 	NetworkIPv4DHCPGateway    string
 	NetworkIPv6Address        string
+	NetworkBackend            managementnetwork.Backend
 	LiteLLMImage              string
 	PostgresImage             string
 	ForwardClientHeaders      bool
@@ -126,6 +129,10 @@ func FromConfig(effective *config.Config) (Spec, error) {
 		return Spec{}, err
 	}
 	spec.NetworkIPv4Routing, err = effective.Bool("incus.management.network.ipv4.routing")
+	if err != nil {
+		return Spec{}, err
+	}
+	spec.NetworkBackend, err = managementnetwork.BackendFromConfig(effective)
 	if err != nil {
 		return Spec{}, err
 	}
@@ -423,25 +430,30 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 	if err != nil {
 		return orchestration.Plan{}, err
 	}
+	networkExtVars, err := managementnetwork.Spec{
+		Name:            s.Network,
+		IPv4Address:     s.NetworkIPv4Address,
+		IPv4NAT:         s.NetworkIPv4NAT,
+		IPv4Routing:     s.NetworkIPv4Routing,
+		IPv4DHCPGateway: s.NetworkIPv4DHCPGateway,
+		IPv6Address:     s.NetworkIPv6Address,
+		Backend:         s.NetworkBackend,
+	}.ExtVars("upsert", false)
+	if err != nil {
+		return orchestration.Plan{}, err
+	}
 	return generator.Evaluate(
 		"import 'aginctus/gateway.jsonnet'",
 		map[string]any{
-			"id":                   s.ID,
-			"egressNetwork":        s.EgressNetwork,
-			"egressIPv4Address":    s.EgressIPv4Address,
-			"egressBridgeIPv4CIDR": s.EgressBridgeIPv4CIDR,
-			"egressDHCPDisabled":   s.EgressDHCPDisabled,
-			"egressDHCPRanges":     s.EgressDHCPRanges,
-			"project":              s.Project,
-			"managementDNSIPv4":    s.ManagementDNSIPv4(),
-			"network": map[string]any{
-				"name":            s.Network,
-				"ipv4Address":     s.NetworkIPv4Address,
-				"ipv4Nat":         s.NetworkIPv4NAT,
-				"ipv4Routing":     s.NetworkIPv4Routing,
-				"ipv4DHCPGateway": s.NetworkIPv4DHCPGateway,
-				"ipv6Address":     s.NetworkIPv6Address,
-			},
+			"id":                            s.ID,
+			"egressNetwork":                 s.EgressNetwork,
+			"egressIPv4Address":             s.EgressIPv4Address,
+			"egressBridgeIPv4CIDR":          s.EgressBridgeIPv4CIDR,
+			"egressDHCPDisabled":            s.EgressDHCPDisabled,
+			"egressDHCPRanges":              s.EgressDHCPRanges,
+			"project":                       s.Project,
+			"managementDNSIPv4":             s.ManagementDNSIPv4(),
+			"network":                       networkExtVars,
 			"litellmImage":                  s.LiteLLMImage,
 			"postgresImage":                 s.PostgresImage,
 			"forwardClientHeaders":          s.HasClientHeaderForwarding(),
@@ -579,6 +591,7 @@ func (s Spec) Deploy(ctx context.Context, runtimeEnvironment map[string]string) 
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
 		"apply":   applydriver.New(),
 		"compose": composedriver.NewWithEnvironment(runtimeEnvironment),
+		"native":  nativedriver.NewDriver(),
 	})
 	if _, err := engine.Execute(ctx, plan, orchestration.ExecuteOptions{}); err != nil {
 		return fmt.Errorf("deploy gateway orchestration: %w", err)
