@@ -126,6 +126,23 @@ Renaming preserves the original provider/server identity and tool restrictions.
 Provider updates cannot remove models/MCPs still referenced by catalogs. Catalog
 updates validate the complete inheritance graph before writing.
 
+### Relationship to MCP policy
+
+The `mcp.servers`, `mcp.grants`, `mcp.capabilities` and `mcp.gateway` configuration
+contract owns declared MCP authorization policy, as documented in
+[the MCP configuration contract PR](https://github.com/blevinn/aginctus/pull/612).
+Asset declarations reuse its server schema, not its grants. A catalog alias is
+neither a policy server identity nor an authenticated workload identity. Renaming
+or inheriting an MCP does not copy grants, resolve credentials, enable routing or
+authorize invocation. A runtime adapter must retain the original server identity
+and enforce the workload's explicit tool grants and the server restriction.
+
+Provider-offered MCP servers are declarations of MCP endpoints. They are distinct
+from `provider-hosted-tools`, which the model provider executes outside the MCP
+gateway. Catalogs implement neither of those runtime paths. In particular,
+schema validation here does not imply that a remote server has the gateway intent
+required for inclusion in effective `mcp` policy.
+
 ## Persistence and compatibility
 
 State lives under `${XDG_STATE_HOME:-$HOME/.local/state}/aginctus/gateway/`.
