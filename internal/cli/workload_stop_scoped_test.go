@@ -4,31 +4,33 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/orchestration/native"
 )
 
 func stubScopedStopEnvironment(t *testing.T) (status *string, projectReads, instanceReads, unitReads, stops *int) {
 	t.Helper()
 	status, projectReads, instanceReads, unitReads, _ = stubScopedStartEnvironment(t)
 	*status = "Running"
-	originalStop, originalLegacy := stopScopedWorkloadIncus, runWorkloadIncus
+	originalStop, originalLegacy := transitionScopedWorkloadState, runWorkloadIncus
 	t.Cleanup(func() {
-		stopScopedWorkloadIncus, runWorkloadIncus = originalStop, originalLegacy
+		transitionScopedWorkloadState, runWorkloadIncus = originalStop, originalLegacy
 	})
 	runWorkloadIncus = func(context.Context, ...string) error {
 		t.Fatal("scoped stop attempted legacy default-project mutation")
 		return nil
 	}
 	calls := 0
-	stopScopedWorkloadIncus = func(_ context.Context, scope incusscope.ProjectScope, instance string) error {
+	transitionScopedWorkloadState = func(_ context.Context, intent native.InstanceLifecycleIntent) error {
 		calls++
-		if scope.Name != "aginctus" || instance != "aginctus-dev" {
-			t.Fatalf("unexpected scoped stop target: %q %q", scope.Name, instance)
+		if intent.Scope.Name != "aginctus" || intent.Name != "aginctus-dev" ||
+			intent.Resource != "workload" || intent.Role != "agent-workload" ||
+			intent.WorkloadID != "dev" || intent.State != native.InstanceStopped {
+			t.Fatalf("unexpected scoped stop target: %+v", intent)
 		}
 		*status = "Stopped"
 		return nil
@@ -44,11 +46,6 @@ func invokeScopedStop(t *testing.T, loader *config.Loader, arguments ...string) 
 }
 
 func TestScopedWorkloadStopExactArgsAndSingleTarget(t *testing.T) {
-	scope, _ := incusscope.NewProjectScope("aginctus")
-	want := []string{"--force-local", "--project", "aginctus", "stop", "aginctus-dev"}
-	if got := scopedWorkloadStopArgs(scope, "aginctus-dev"); !reflect.DeepEqual(got, want) {
-		t.Fatalf("unsafe scoped stop command: got=%q want=%q", got, want)
-	}
 	loader := scopedStartLoader()
 	state, projects, inventory, unitChecks, writes := stubScopedStopEnvironment(t)
 	code, out, stderr := invokeScopedStop(t, loader, "workload", "stop", "--project=aginctus", "dev", "--confirm-stop")
@@ -155,7 +152,7 @@ func TestScopedWorkloadStopUnverifiedPostflightAndDaemonFailure(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			loader := scopedStartLoader()
 			_, _, inventory, _, writes := stubScopedStopEnvironment(t)
-			stopScopedWorkloadIncus = func(context.Context, incusscope.ProjectScope, string) error {
+			transitionScopedWorkloadState = func(context.Context, native.InstanceLifecycleIntent) error {
 				*writes++
 				if mode == "daemon failure" {
 					return errors.New("sensitive daemon response")

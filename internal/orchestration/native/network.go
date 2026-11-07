@@ -6,7 +6,6 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-	"time"
 
 	incus "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
@@ -308,16 +307,7 @@ func connectLocalNetwork(ctx context.Context, intent NetworkIntent) (incus.Insta
 	if err := intent.Validate(); err != nil {
 		return nil, nil, err
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, nil, err
-	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	server, err := incus.ConnectIncusUnixWithContext(ctx, "", &incus.ConnectionArgs{SkipGetServer: true})
-	if err != nil {
-		cancel()
-		return nil, nil, observationFailure(ctx, "local Incus observation unavailable")
-	}
-	return server.UseProject(intent.Scope.Project()), cancel, nil
+	return connectLocal(ctx, intent.Scope.Project())
 }
 
 // EnsureNetworkWithClient reconciles one bridge: observe, plan, revalidate
