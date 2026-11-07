@@ -68,14 +68,7 @@ func addGatewayRegistryCommands(
 	var providerDryRun bool
 	providerRegister := add(providers, "register TYPE", cobra.ExactArgs(1),
 		func(cmd *cobra.Command, args []string, cfg *config.Config) int {
-			legacy := []string{"provider", args[0], "register"}
-			if cmd.Flags().Changed("alias") {
-				legacy = append(legacy, "--alias="+providerAlias)
-			}
-			if providerDryRun {
-				legacy = append(legacy, "--dry-run")
-			}
-			return runGateway(cmd.Context(), legacy, stdout, stderr, nil, cfg)
+			return executeGatewayRegistration("provider", args[0], "", "", providerAlias, providerDryRun, stdout, stderr)
 		})
 	providerRegister.Flags().StringVar(&providerAlias, "alias", "", "Local provider alias")
 	providerRegister.Flags().BoolVar(&providerDryRun, "dry-run", false, "Validate without registry mutation")
@@ -101,17 +94,7 @@ func addGatewayRegistryCommands(
 	var providerAliasName, source string
 	var modelDryRun bool
 	register := add(models, "register NAME", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string, cfg *config.Config) int {
-		legacy := []string{"model", args[0], "register"}
-		if cmd.Flags().Changed("provider") {
-			legacy = append(legacy, "--provider="+providerAliasName)
-		}
-		if cmd.Flags().Changed("source") {
-			legacy = append(legacy, "--source="+source)
-		}
-		if modelDryRun {
-			legacy = append(legacy, "--dry-run")
-		}
-		return runGateway(cmd.Context(), legacy, stdout, stderr, nil, cfg)
+		return executeGatewayRegistration("model", args[0], providerAliasName, source, "", modelDryRun, stdout, stderr)
 	})
 	register.Flags().StringVar(&providerAliasName, "provider", "", "Registered provider alias")
 	register.Flags().StringVar(&source, "source", "", "Responses upstream model source")
