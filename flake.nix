@@ -58,7 +58,15 @@
             subPackages = [ "./cmd/aginctus" ];
             nativeBuildInputs = [ pkgs.makeWrapper ];
             postInstall = ''
-              wrapProgram "$out/bin/aginctus" --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.incus ]}"
+              wrapProgram "$out/bin/aginctus" --prefix PATH : "${
+                pkgs.lib.makeBinPath [
+                  pkgs.incus
+                  (pkgs.python3.withPackages (ps: [
+                    ps.pyjwt
+                    ps.cryptography
+                  ]))
+                ]
+              }"
             '';
           };
           oauthGatewayDaemon = pkgs.buildGoModule {
@@ -190,6 +198,7 @@
             cp ${./guest/opencode/launch.py} $out/launch.py
             cp ${./guest/opencode/gateway_endpoint.py} $out/gateway_endpoint.py
             cp ${./guest/opencode/go_session_plugin.js} $out/go_session_plugin.js
+            cp ${./guest/opencode/siwc_plugin.js} $out/siwc_plugin.js
           '';
 
           # Scoped source patch for the flake-pinned CLI event-consumer join.
@@ -535,7 +544,11 @@
                 jq
                 just
                 nixfmt
-                (python3.withPackages (ps: [ ps.markdown-it-py ]))
+                (python3.withPackages (ps: [
+                  ps.markdown-it-py
+                  ps.pyjwt
+                  ps.cryptography
+                ]))
                 ruff
                 shellcheck
                 shfmt

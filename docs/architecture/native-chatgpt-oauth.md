@@ -1,6 +1,14 @@
-# Native LiteLLM ChatGPT OAuth gateway decision (v0.1)
+# ChatGPT subscription gateway architecture decision (v0.2)
 
-Status: accepted architecture, **integration not yet deployed**. Tracked in #187; supersedes unmerged #186 and the custom OpenAI inference daemon from #170. Keep LiteLLM as the sole workload-facing inference gateway and preserve v0.1's shared LiteLLM API key.
+> **SIWC contract option:** the current implementation is described in
+> [SIWC ChatGPT plan usage](../gateway-siwc.md). It uses Aginctus dynamic
+> registration and the public Responses endpoint, with an in-process LiteLLM
+> transport. The native Codex-device/backend path below remains inactive and
+> must not be confused with that implementation. The accepted update preserves
+> LiteLLM ingress, sole refresh ownership, consent and live acceptance gates;
+> it introduces no separate OAuth proxy or daemon. Live acceptance remains open.
+
+Current status: the documented SIWC implementation is opt-in, integrated in-process with LiteLLM, and has synthetic pinned-runtime acceptance. It is **not enabled on a deployed gateway**; live OpenAI enrollment, deployed guest ownership and real model/tool acceptance remain open under [#187](https://github.com/blevinn/aginctus/issues/187). Existing API-key providers and the v0.1 workload ingress remain available. The native Codex-device `chatgpt/` route described below is not an SIWC route and stays disabled.
 
 ## Superseded standalone-daemon prototype
 
@@ -14,7 +22,7 @@ from the accepted LiteLLM-native integration; don't deploy them as a shortcut
 around enrollment, exclusive refresh ownership, and live Responses acceptance.
 The earlier design discussion is preserved in Git history and issues #170/#171.
 
-## Verified upstream capabilities and remaining uncertainties
+## Historical native-provider findings (inactive)
 
 Aginctus pins `ghcr.io/berriai/litellm:v1.103.0`. The upstream GitHub tag `v1.103.0` includes `litellm/llms/chatgpt/authenticator.py` and the ChatGPT provider package:
 https://github.com/BerriAI/litellm/tree/v1.103.0/litellm/llms/chatgpt
@@ -43,7 +51,7 @@ After authenticated host handoff, LiteLLM is the sole refresh-token owner; host 
 
 It is **not enough** to mount arbitrary host authentication files or copy tokens into the volume. Establish a tested, permission-constrained, atomic import/refresh protocol or choose a documented LiteLLM-native device-flow enrollment process with exclusive ownership. The compatibility of the existing Aginctus host OAuth credential representation with LiteLLM's format is unverified.
 
-## v0.1 implementation checkpoints
+## Historical native-provider checkpoints (superseded)
 
 1. Add opt-in native ChatGPT Responses route to LiteLLM config; preserve current key providers and default behavior.
 2. Securely attach only the managed volume to LiteLLM with writable ownership and restart persistence. Validate Incus project/pool/device placement; no volume in PostgreSQL or workloads.

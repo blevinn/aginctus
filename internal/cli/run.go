@@ -104,6 +104,15 @@ func Run(
 		}
 	}
 
+	// SIWC is explicit local state work, independent of pilot configuration.
+	if len(commandArgs) >= 2 && commandArgs[0] == "gateway" && commandArgs[1] == "siwc" {
+		if len(options.Overrides) != 0 || options.ConfigurationFile != "" {
+			fmt.Fprintln(stderr, "SIWC uses an explicit private state directory, not host configuration overrides")
+			return 2
+		}
+		return runSIWC(ctx, commandArgs[2:], stdout, stderr)
+	}
+
 	// The test environment does not consume pilot configuration or Incus.
 	// Dispatch before the normal host-facing config loader.
 	if commandArgs[0] == "testenv" {
@@ -709,6 +718,15 @@ func runGateway(
 }
 func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
+	fmt.Fprintln(w, "SIWC (explicit local state; does not deploy or modify host networking):")
+	fmt.Fprintln(w, "       aginctus gateway siwc bundle DIRECTORY")
+	fmt.Fprintln(w, "       aginctus gateway siwc --state-dir DIRECTORY init|status|render")
+	fmt.Fprintln(w, "       aginctus gateway siwc --state-dir DIRECTORY login --account LABEL [--enable-plan]")
+	fmt.Fprintln(w, "       aginctus gateway siwc --state-dir DIRECTORY models|logout --account LABEL")
+	fmt.Fprintln(w, "       aginctus gateway siwc --state-dir DIRECTORY bind --account LABEL --route ALIAS --model MODEL --workload-key-file FILE --consent-connected-app --consent-background")
+	fmt.Fprintln(w, "       aginctus gateway siwc --state-dir DIRECTORY unbind --route ALIAS")
+	fmt.Fprintln(w, "       aginctus gateway siwc --state-dir DIRECTORY export --account LABEL --target-host-id ID --capsule FILE")
+	fmt.Fprintln(w, "       aginctus gateway siwc --state-dir DIRECTORY receive --capsule FILE")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
 	fmt.Fprintln(w, "       aginctus [global options] gateway up")
 	fmt.Fprintln(w, "       aginctus [global options] gateway apply")

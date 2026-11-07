@@ -88,6 +88,7 @@ Use this map to pick the authoritative page for a given task:
 | Host firewalld egress policy and recovery | [gateway-firewalld-egress.md](gateway-firewalld-egress.md) | current procedure |
 | Management DHCP default-route suppression | [management-dhcp-gateway.md](management-dhcp-gateway.md) | separately approved pilot |
 | API-key provider registration/rotation | [gateway-api-key-pilot.md](gateway-api-key-pilot.md) | pilot |
+| SIWC subscription enrollment, ownership transfer and Responses | [gateway-siwc.md](gateway-siwc.md) | opt-in implementation; live acceptance pending |
 | Scoped workload key lifecycle | [gateway-workload-key-pilot.md](gateway-workload-key-pilot.md) | pilot |
 | Read-only inference smoke | [gateway-inference-smoke.md](gateway-inference-smoke.md) | pilot |
 | Selective Go client-header forwarding | [selective-go-forwarding.md](selective-go-forwarding.md) | pilot |
