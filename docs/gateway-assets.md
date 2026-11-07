@@ -157,3 +157,19 @@ Models in the legacy `models.json` registry are included in the provider view
 without copying state; a conflicting new source declaration is rejected. Applying
 provider configuration does not remove a legacy model registration. Existing
 deployment and workload-key commands retain their activation boundaries.
+
+## OpenCode-Go provider instances
+
+The compiled `opencode-go` plugin owns source validation and nonsecret LiteLLM
+Responses rendering. Both legacy registrations and configured provider models use
+that renderer. For example, declare two independent instances with `provider apply
+opencode-go --provider NAME --config-file FILE` and inspect their models with
+`model list --provider NAME`. Render a declared route with `model render coding
+--provider NAME`. Without a provider selector, duplicate model names are rejected.
+
+Only the existing audited native Responses sources and fixed OpenCode-Go endpoint
+are supported. A declaration is not evidence of upstream availability. Rendering
+does not acquire an API key, log in, publish a route or change header forwarding.
+The [selective forwarding policy](selective-go-forwarding.md) remains a separate,
+explicit runtime control with its fixed route and header restrictions. It must
+not be widened merely because another provider instance or model is declared.

@@ -3,66 +3,49 @@ package cli
 import (
 	"fmt"
 
-	"github.com/blevinn/aginctus/internal/gateway"
-	"github.com/blevinn/aginctus/internal/modelregistry"
-	"github.com/blevinn/aginctus/internal/providerregistry"
+	"github.com/blevinn/aginctus/internal/gatewaycontrol"
 )
 
-// renderRegisteredModel resolves a stored nonsecret intent to a read-only
-// LiteLLM Responses model definition. It never touches gateway credentials.
+// Rendering delegates to the selected compiled plugin and never accesses keys.
 func renderRegisteredModel(name string) ([]byte, error) {
-	path, err := modelregistry.DefaultPath()
+	store, err := gatewaycontrol.DefaultStore(gatewayPlugins())
 	if err != nil {
-		return nil, fmt.Errorf("resolve local model registry: %w", err)
+		return nil, err
 	}
-	models, err := modelregistry.Load(path)
-	if err != nil {
-		return nil, fmt.Errorf("read private model registry: %w", err)
-	}
-	var selected *modelregistry.Model
-	for i := range models.Models {
-		if models.Models[i].Name == name {
-			selected = &models.Models[i]
-			break
-		}
-	}
-	if selected == nil {
-		return nil, fmt.Errorf("model alias %q is not registered locally", name)
-	}
+	return renderProviderModel(store, "", name)
+}
 
-	providerPath, err := providerregistry.DefaultPath()
+func renderProviderModel(store *gatewaycontrol.Store, provider, name string) ([]byte, error) {
+	providers, err := store.Providers()
 	if err != nil {
-		return nil, fmt.Errorf("resolve local provider registry: %w", err)
+		return nil, err
 	}
-	providers, err := providerregistry.Load(providerPath)
-	if err != nil {
-		return nil, fmt.Errorf("read private provider registry: %w", err)
-	}
-	var owner *providerregistry.Provider
-	nativeChatGPTOwners := 0
-	for i := range providers.Providers {
-		p := &providers.Providers[i]
-		if p.Type == "chatgpt" {
+	var owner gatewaycontrol.Provider
+	var model gatewaycontrol.Model
+	matches, nativeChatGPTOwners := 0, 0
+	for key, p := range providers {
+		if p.Plugin == "chatgpt" {
 			nativeChatGPTOwners++
 		}
-		if p.Alias == selected.Provider {
-			owner = p
+		if provider != "" && provider != key {
+			continue
+		}
+		if m, ok := p.Config.Models[name]; ok {
+			owner, model = p, m
+			model.Name = name
+			matches++
 		}
 	}
-	if owner == nil {
-		return nil, fmt.Errorf("registered model provider identity does not match any local provider")
+	if matches != 1 {
+		return nil, fmt.Errorf("model not registered or ambiguous; select its provider explicitly")
 	}
-	switch owner.Type {
-	case "chatgpt":
-		// Pinned LiteLLM uses one native CHATGPT_TOKEN_DIR/auth.json, not
-		// a per-model credential. Other provider types are independent.
-		if nativeChatGPTOwners != 1 {
-			return nil, fmt.Errorf("native ChatGPT rendering requires exactly one locally registered ChatGPT identity")
-		}
-		return gateway.ChatGPTModelRegistration(selected.Name, selected.Source)
-	case "opencode-go":
-		return gateway.OpenCodeGoModelRegistration(selected.Name, selected.Source)
-	default:
-		return nil, fmt.Errorf("unsupported model provider type")
+	// The native LiteLLM ChatGPT path has one shared token directory.
+	if owner.Plugin == "chatgpt" && nativeChatGPTOwners != 1 {
+		return nil, fmt.Errorf("native ChatGPT rendering requires exactly one locally registered ChatGPT identity")
 	}
+	plugin := store.Plugins[owner.Plugin]
+	if plugin.RenderModel == nil {
+		return nil, fmt.Errorf("this plugin does not implement model rendering")
+	}
+	return plugin.RenderModel(owner, model)
 }

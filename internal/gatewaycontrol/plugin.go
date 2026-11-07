@@ -48,33 +48,36 @@ type Plugin struct {
 	Validate        func(Configuration) error                           `json:"-"`
 	DiscoverModels  func(context.Context, Provider) ([]Model, error)    `json:"-"`
 	Login           func(context.Context, Provider, LoginOptions) error `json:"-"`
+	RenderModel     func(Provider, Model) ([]byte, error)               `json:"-"`
 }
 
 type Plugins map[string]Plugin
 
 func Builtins() Plugins {
-	result := Plugins{}
-	for _, name := range []string{"chatgpt", "opencode-go"} {
-		kind := name
-		result[name] = Plugin{Name: name, DefaultProvider: name, Description: "Local LiteLLM " + name + " declarations; authentication and activation are separate", Validate: func(c Configuration) error {
+	return Plugins{
+		"chatgpt":     registrationPlugin("chatgpt", gateway.ChatGPTModelRegistration),
+		"opencode-go": OpenCodeGoPlugin(),
+	}
+}
+
+func registrationPlugin(name string, render func(string, string) ([]byte, error)) Plugin {
+	return Plugin{Name: name, DefaultProvider: name,
+		Description: "Local LiteLLM " + name + " declarations; authentication and activation are separate",
+		Validate: func(c Configuration) error {
 			if c.StateDir != "" {
 				return fmt.Errorf("this plugin does not accept a state_dir")
 			}
-			for alias, m := range c.Models {
-				var err error
-				if kind == "chatgpt" {
-					_, err = gateway.ChatGPTModelRegistration(alias, m.Source)
-				} else {
-					_, err = gateway.OpenCodeGoModelRegistration(alias, m.Source)
-				}
-				if err != nil {
+			for alias, model := range c.Models {
+				if _, err := render(alias, model.Source); err != nil {
 					return fmt.Errorf("model source is incompatible with the selected plugin")
 				}
 			}
 			return nil
-		}}
+		},
+		RenderModel: func(_ Provider, model Model) ([]byte, error) {
+			return render(model.Name, model.Source)
+		},
 	}
-	return result
 }
 
 func (p Plugins) List() []Plugin {
