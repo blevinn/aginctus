@@ -42,7 +42,7 @@ func normalizeGatewayRegistryLegacyArgs(args []string) []string {
 
 func addGatewayRegistryCommands(
 	gateway *cobra.Command, stdout, stderr io.Writer,
-	load func() (*config.Config, error), status *int,
+	load func() (*config.Config, error), status *int, options config.Options,
 ) {
 	add := func(parent *cobra.Command, name string, argsRule cobra.PositionalArgs,
 		run func(*cobra.Command, []string, *config.Config) int,
@@ -62,12 +62,6 @@ func addGatewayRegistryCommands(
 	}
 	providers := &cobra.Command{Use: "provider", Short: "Inspect and register model provider aliases"}
 	gateway.AddCommand(providers)
-	add(providers, "list", cobra.NoArgs, func(cmd *cobra.Command, _ []string, cfg *config.Config) int {
-		return executeGatewayProviderRead("list", "", stdout, stderr)
-	})
-	add(providers, "show ALIAS", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string, cfg *config.Config) int {
-		return executeGatewayProviderRead("show", args[0], stdout, stderr)
-	})
 	var providerAlias string
 	var providerDryRun bool
 	providerRegister := add(providers, "register TYPE", cobra.ExactArgs(1),
@@ -79,12 +73,6 @@ func addGatewayRegistryCommands(
 
 	models := &cobra.Command{Use: "model", Short: "Inspect and register model aliases"}
 	gateway.AddCommand(models)
-	add(models, "list", cobra.NoArgs, func(cmd *cobra.Command, _ []string, cfg *config.Config) int {
-		return executeGatewayModelRead("list", "", stdout, stderr)
-	})
-	add(models, "show NAME", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string, cfg *config.Config) int {
-		return executeGatewayModelRead("show", args[0], stdout, stderr)
-	})
 	add(models, "render NAME", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string, cfg *config.Config) int {
 		return executeGatewayModelRead("render", args[0], stdout, stderr)
 	})
@@ -96,4 +84,5 @@ func addGatewayRegistryCommands(
 	register.Flags().StringVar(&providerAliasName, "provider", "", "Registered provider alias")
 	register.Flags().StringVar(&source, "source", "", "Responses upstream model source")
 	register.Flags().BoolVar(&modelDryRun, "dry-run", false, "Validate without registry mutation")
+	addGatewayAssetCommands(gateway, providers, models, status, options)
 }
