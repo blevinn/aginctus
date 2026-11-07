@@ -215,6 +215,7 @@ var auditGatewayCredentials = gateway.AuditCredentialAttachment
 
 
 func printGatewayUsage(w io.Writer) {
+	fmt.Fprintln(w, "Gateway assets: plugin/provider/model/mcp/catalog (Cobra help: aginctus gateway catalog --help).")
 	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
 	fmt.Fprintln(w, "       aginctus [global options] gateway up")
