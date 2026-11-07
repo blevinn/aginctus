@@ -16,6 +16,7 @@ import (
 type Store struct {
 	Directory string
 	Plugins   Plugins
+	Declared  Declarations
 }
 
 func DefaultStore(plugins Plugins) (*Store, error) {
@@ -47,6 +48,12 @@ func (s *Store) Providers() (map[string]Provider, error) {
 		}
 		result[p.Name] = p
 	}
+	for name, definition := range s.Declared.Providers {
+		if _, exists := result[name]; exists {
+			return nil, fmt.Errorf("provider name conflicts with configuration")
+		}
+		result[name] = Provider{Name: name, Plugin: definition.Plugin, Config: definition.Config}
+	}
 	if err := s.addLegacyModels(result); err != nil {
 		return nil, err
 	}
@@ -67,6 +74,11 @@ func (s *Store) addLegacyModels(result map[string]Provider) error {
 		if configured, exists := p.Config.Models[m.Name]; exists && configured.Source != m.Source {
 			return fmt.Errorf("model declaration conflicts with a legacy registration")
 		}
+		if _, declared := s.Declared.Providers[m.Provider]; declared {
+			if _, configured := p.Config.Models[m.Name]; !configured {
+				return fmt.Errorf("legacy registration cannot extend a configured provider")
+			}
+		}
 		if p.Config.Models == nil {
 			p.Config.Models = map[string]Model{}
 		}
@@ -80,7 +92,7 @@ func (s *Store) Assets() (Assets, error) {
 	empty := Assets{MCPs: map[string]json.RawMessage{}, Catalogs: map[string]Catalog{}}
 	data, err := filestate.ReadPrivateFile(filepath.Join(s.Directory, "assets.json"), 1<<20)
 	if errors.Is(err, os.ErrNotExist) {
-		return empty, nil
+		return s.mergeDeclaredAssets(empty)
 	}
 	if err != nil {
 		return empty, err
@@ -96,7 +108,7 @@ func (s *Store) Assets() (Assets, error) {
 			return empty, err
 		}
 	}
-	return empty, nil
+	return s.mergeDeclaredAssets(empty)
 }
 
 func (s *Store) update(action func(map[string]Provider, *Assets) error) error {
@@ -123,6 +135,9 @@ func (s *Store) update(action func(map[string]Provider, *Assets) error) error {
 }
 
 func (s *Store) ApplyProvider(p Provider) error {
+	if _, declared := s.Declared.Providers[p.Name]; declared {
+		return fmt.Errorf("provider is configuration-owned; edit its declaration")
+	}
 	if err := s.Plugins.Validate(p); err != nil {
 		return err
 	}
@@ -149,6 +164,9 @@ func (s *Store) ApplyProvider(p Provider) error {
 }
 
 func (s *Store) ApplyMCP(name string, data json.RawMessage) error {
+	if _, declared := s.Declared.MCPs[name]; declared {
+		return fmt.Errorf("MCP is configuration-owned; edit its declaration")
+	}
 	if err := ValidateMCP(name, data); err != nil {
 		return err
 	}
@@ -159,6 +177,9 @@ func (s *Store) ApplyMCP(name string, data json.RawMessage) error {
 }
 
 func (s *Store) ApplyCatalog(name string, catalog Catalog) error {
+	if _, declared := s.Declared.Catalogs[name]; declared {
+		return fmt.Errorf("catalog is configuration-owned; edit its declaration")
+	}
 	if !ValidName(name) {
 		return fmt.Errorf("invalid catalog name")
 	}
@@ -171,6 +192,13 @@ func (s *Store) ApplyCatalog(name string, catalog Catalog) error {
 func (s *Store) write(providers map[string]Provider, assets Assets) error {
 	if err := ValidateAssets(providers, assets); err != nil {
 		return err
+	}
+	// Validate the combined view, but persist only locally managed declarations.
+	for name := range s.Declared.Catalogs {
+		delete(assets.Catalogs, name)
+	}
+	for name := range s.Declared.MCPs {
+		delete(assets.MCPs, name)
 	}
 	data, err := json.MarshalIndent(assets, "", "  ")
 	if err != nil {

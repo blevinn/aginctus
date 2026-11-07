@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/gatewaycontrol"
 	"github.com/spf13/cobra"
 )
 
@@ -68,6 +67,16 @@ func addGatewayRegistryCommands(
 	var providerDryRun bool
 	providerRegister := add(providers, "register TYPE", cobra.ExactArgs(1),
 		func(cmd *cobra.Command, args []string, cfg *config.Config) int {
+			name := providerAlias
+			if name == "" {
+				name = args[0]
+			}
+			if !providerDryRun {
+				if err := checkGatewayProviderMutation(cfg, name); err != nil {
+					fmt.Fprintln(stderr, err)
+					return 1
+				}
+			}
 			return executeGatewayRegistration("provider", args[0], "", "", providerAlias, providerDryRun, stdout, stderr)
 		})
 	providerRegister.Flags().StringVar(&providerAlias, "alias", "", "Local provider alias")
@@ -76,8 +85,8 @@ func addGatewayRegistryCommands(
 	models := &cobra.Command{Use: "model", Short: "Inspect and register model aliases"}
 	gateway.AddCommand(models)
 	var renderProvider string
-	render := add(models, "render NAME", cobra.ExactArgs(1), func(_ *cobra.Command, args []string, _ *config.Config) int {
-		store, err := gatewaycontrol.DefaultStore(gatewayPlugins())
+	render := add(models, "render NAME", cobra.ExactArgs(1), func(_ *cobra.Command, args []string, cfg *config.Config) int {
+		store, err := configuredGatewayStore(cfg)
 		var data []byte
 		if err == nil {
 			data, err = renderProviderModel(store, renderProvider, args[0])
@@ -94,10 +103,20 @@ func addGatewayRegistryCommands(
 	var providerAliasName, source string
 	var modelDryRun bool
 	register := add(models, "register NAME", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string, cfg *config.Config) int {
+		name := providerAliasName
+		if name == "" {
+			name = "chatgpt"
+		}
+		if !modelDryRun {
+			if err := checkGatewayProviderMutation(cfg, name); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+		}
 		return executeGatewayRegistration("model", args[0], providerAliasName, source, "", modelDryRun, stdout, stderr)
 	})
 	register.Flags().StringVar(&providerAliasName, "provider", "", "Registered provider alias")
 	register.Flags().StringVar(&source, "source", "", "Responses upstream model source")
 	register.Flags().BoolVar(&modelDryRun, "dry-run", false, "Validate without registry mutation")
-	addGatewayAssetCommands(gateway, providers, models, status, options)
+	addGatewayAssetCommands(gateway, providers, models, status, options, load)
 }

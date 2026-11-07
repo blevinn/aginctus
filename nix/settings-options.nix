@@ -43,7 +43,7 @@ let
     value: builtins.match "[A-Za-z0-9][A-Za-z0-9_.-]{0,127}" value != null
   );
 in
-{
+rec {
   firewall.zone = mkOption {
     type = types.str;
     default = "aginctus-dns";
@@ -102,6 +102,10 @@ in
         x-* request headers to upstream providers.
       '';
     };
+  }
+  // import ./gateway-asset-options.nix {
+    inherit lib;
+    serverType = mcp.servers.type.nestedTypes.elemType;
   };
 
   infrastructure.herdr = {

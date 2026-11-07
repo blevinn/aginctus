@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/blevinn/aginctus/internal/config"
 )
 
 func TestGatewayAssetCommandsAndSelectors(t *testing.T) {
@@ -15,7 +17,7 @@ func TestGatewayAssetCommandsAndSelectors(t *testing.T) {
 	run := func(args ...string) string {
 		t.Helper()
 		var out, stderr bytes.Buffer
-		if code := Run(context.Background(), append([]string{"gateway"}, args...), &out, &stderr, nil, nil); code != 0 {
+		if code := Run(context.Background(), append([]string{"gateway"}, args...), &out, &stderr, nil, &config.Loader{}); code != 0 {
 			t.Fatalf("%v: %d %s", args, code, stderr.String())
 		}
 		return out.String()

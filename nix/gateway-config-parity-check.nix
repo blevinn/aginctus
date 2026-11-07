@@ -29,6 +29,43 @@ let
     incus.management.network.ipv4.address = "10.42.0.1/24";
   };
   moduleDefaults = configSource { };
+  assetSource = configSource {
+    gateway.providers.go = {
+      plugin = "opencode-go";
+      config = {
+        models.coding.source = "openai/gpt-6-luna";
+        mcps.search = {
+          transport = "streamable-http";
+          url = "https://tools.example.invalid/mcp";
+          allowedTools = [ "search" ];
+        };
+      };
+    };
+    gateway.catalogs = {
+      base = {
+        models.coding = {
+          provider = "go";
+          name = "coding";
+        };
+        mcps.docs = {
+          local = true;
+          name = "docs";
+        };
+      };
+      child.inherits = [
+        {
+          catalog = "base";
+          models.coding = "dev.coding";
+          mcps.docs = "tools.docs";
+        }
+      ];
+    };
+    mcp.servers.docs = {
+      transport = "stdio";
+      command = "/bin/docs";
+      allowedTools = [ "search" ];
+    };
+  };
   # A configured MCP subtree rendered by the typed module options. The Go
   # schema is authoritative, so the rendered source must resolve to the
   # policy the schema describes.
@@ -105,10 +142,12 @@ self.packages.${system}.aginctus.overrideAttrs (old: {
     export AGINCTUS_NIXOS_GATEWAY_FIXTURES=${fixtures}
     export AGINCTUS_NIXOS_MODULE_DEFAULTS=${moduleDefaults}
     export AGINCTUS_NIXOS_MCP_FIXTURES=${mcpFixture}
+    export AGINCTUS_NIXOS_ASSET_FIXTURE=${assetSource}
     unset AGINCTUS_INCUS_INTEGRATION AGINCTUS_INCUS_DISPOSABLE
     go test ./internal/gateway -run '^TestNixOSGatewayConfigParity$' -count=1 -v
     go test ./internal/config -run '^TestDefaultsMatchNixOSModule$' -count=1 -v
     go test ./internal/config -run '^TestNixOSMCPConfigParity$' -count=1 -v
+    go test ./internal/cli -run '^TestConfiguredGatewayAssets$' -count=1 -v
     runHook postCheck
   '';
   passthru = (old.passthru or { }) // {

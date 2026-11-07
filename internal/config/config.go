@@ -105,6 +105,9 @@ func isRuntimeSecretPath(path string) bool {
 // before any merge or assignment. It recognizes both nested JSON objects and
 // dotted JSON keys, irrespective of key case, without printing secret values.
 func rejectRuntimeSecretValues(path string, value any) error {
+	if err := rejectGatewayCredentialField(path); err != nil {
+		return err
+	}
 	if isRuntimeSecretPath(path) {
 		return fmt.Errorf("runtime gateway secret keys cannot be set through configuration")
 	}
@@ -384,7 +387,11 @@ func splitPath(path string) ([]string, error) {
 // supplies them. A wildcard matches one named registry entry, so adding an
 // MCP server preserves other servers without composing its upstream settings
 // across sources. Other paths retain ordinary deep-merge behavior.
-var atomicConfigPaths = [][]string{{"mcp", "servers", "*"}}
+var atomicConfigPaths = [][]string{
+	{"mcp", "servers", "*"},
+	{"gateway", "providers", "*"},
+	{"gateway", "catalogs", "*"},
+}
 
 func mergeSource(dst, src map[string]any, prefix []string) {
 	for key, value := range src {
