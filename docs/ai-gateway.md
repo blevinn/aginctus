@@ -2,6 +2,8 @@
 
 Status: agreed design direction; configuration validation, Compose rendering, and initial orchestration-backed deployment are implemented, while authentication, credential management, MCP policy, teardown/status, health, and backup/restore remain follow-up work.
 
+The MCP configuration contract — normalized server declarations, per-workload grants, capability requirements and credential rules — is implemented and documented separately in [MCP configuration](mcp-configuration.md). That contract states declared policy; the gateway runtime that would enforce it is follow-up work.
+
 ## Scope
 
 The MVP serves one operator through one gateway deployment. Aginctus manages an Incus Compose project containing LiteLLM, PostgreSQL, an authenticated entry point, and MCP gateway functionality. The entry point may be provided by a gateway component rather than a separate service. A separate MCP service is needed only if the selected LiteLLM release cannot satisfy the requirements below.

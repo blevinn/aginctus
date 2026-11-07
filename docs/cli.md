@@ -319,9 +319,10 @@ The compiled `openai-siwc` plugin is instantiated with `gateway provider apply`;
 `render`, `export`, `receive`, and `logout`. Catalog-based binding derives its
 provider, model and directory; direct administration uses an explicit absolute
 `--state-dir`. `bundle DIRECTORY` delivers the public in-process
-LiteLLM extension sources into a new directory. These commands bypass host
-configuration loading and reject host configuration overrides. Enrollment and
-token operations never provision networks or Incus resources.
+LiteLLM extension sources into a new directory. Provider operations and
+catalog-based binding consume normal host configuration. Other private-state
+administration bypasses host configuration loading and rejects host configuration
+overrides. Enrollment and token operations never provision networks or Incus resources.
 
 See the [SIWC runbook](gateway-siwc.md) for exact command sequences, separate
 consent/account selection, protected storage and exclusive handoff, deployment,
