@@ -38,8 +38,9 @@ Commands accept either a positional name or its explicit selector flag; supplyin
 both is an error. Configuration is a strict JSON object, supplied with `--config`
 or `--config-file`, never both. Files must be regular non-symlink files, read with
 a 1 MiB bound. They carry public declarations and opaque credential references,
-not credentials. Global host configuration overrides do not apply to these local
-registry commands.
+not credentials. The normal host configuration sources also supply declarative
+providers and catalogs; local command configuration describes only the object
+being applied.
 
 ```sh
 aginctus gateway plugin list
@@ -126,6 +127,23 @@ Renaming preserves the original provider/server identity and tool restrictions.
 Provider updates cannot remove models/MCPs still referenced by catalogs. Catalog
 updates validate the complete inheritance graph before writing.
 
+### Relationship to MCP policy
+
+The `mcp.servers`, `mcp.grants`, `mcp.capabilities` and `mcp.gateway` configuration
+contract owns declared MCP authorization policy, as documented in
+[the MCP configuration contract PR](https://github.com/blevinn/aginctus/pull/612).
+Asset declarations reuse its server schema, not its grants. A catalog alias is
+neither a policy server identity nor an authenticated workload identity. Renaming
+or inheriting an MCP does not copy grants, resolve credentials, enable routing or
+authorize invocation. A runtime adapter must retain the original server identity
+and enforce the workload's explicit tool grants and the server restriction.
+
+Provider-offered MCP servers are declarations of MCP endpoints. They are distinct
+from `provider-hosted-tools`, which the model provider executes outside the MCP
+gateway. Catalogs implement neither of those runtime paths. In particular,
+schema validation here does not imply that a remote server has the gateway intent
+required for inclusion in effective `mcp` policy.
+
 ## Persistence and compatibility
 
 State lives under `${XDG_STATE_HOME:-$HOME/.local/state}/aginctus/gateway/`.
@@ -140,3 +158,73 @@ Models in the legacy `models.json` registry are included in the provider view
 without copying state; a conflicting new source declaration is rejected. Applying
 provider configuration does not remove a legacy model registration. Existing
 deployment and workload-key commands retain their activation boundaries.
+
+## Declarative Nix configuration
+
+NixOS exposes providers and catalogs under `services.aginctus.settings.gateway`.
+Home Manager exposes the same typed schema under
+`programs.aginctus.settings.gateway`. Both render ordinary Aginctus configuration:
+
+```nix
+services.aginctus.settings = {
+  gateway.providers.go = {
+    plugin = "opencode-go";
+    config.models.coding.source = "openai/gpt-6-luna";
+  };
+  gateway.catalogs = {
+    base.models.coding = { provider = "go"; name = "coding"; };
+    workstation.inherits = [{
+      catalog = "base";
+      models.coding = "dev.coding";
+    }];
+  };
+};
+```
+
+Provider configuration supports `state_dir`, `models` and `mcps`, with plugin
+validation at use. `models` maps names to `source` and optional `display_name`.
+Provider `mcps` reuse the strict typed server options from `settings.mcp.servers`.
+Catalog `models`/`mcps` use the reference objects shown above; `inherits` has explicit
+source-to-exposed alias mappings. Compiled plugin availability, source support,
+state paths and the complete reference graph are validated before an asset
+operation. Nix evaluates the shared typed shape; it does not authenticate or
+discover upstream assets during evaluation.
+
+`settings.mcp.servers` supplies local MCP identities to catalogs. It retains all
+existing policy consistency checks and explicit grants. Provider-offered MCPs
+remain asset declarations, not additions to that policy. A catalog selection does
+not create a workload, grant a tool or enable a gateway endpoint.
+
+Inspection, model rendering and provider login read configuration directly; no
+registry import or activation service is needed. Configuration-owned names cannot
+be changed with local apply commands. A name collision with a local registry is
+an error; use distinct names rather than relying on shadowing. Local catalogs may
+select declared providers and inherit declared catalogs, but local writes never
+copy configuration-owned objects into mutable state. Removing configuration that
+a local catalog still references makes inspection fail until the reference is
+fixed.
+
+Ordinary source precedence applies. Each named `gateway.providers.<name>` and
+`gateway.catalogs.<name>` definition replaces atomically across sources, so a
+partial override cannot silently retain an old model selection or credential
+identity. Other named definitions remain. This is not source authority: a
+privileged runtime must select authoritative configuration explicitly, as with
+MCP policy. Private credentials remain outside configuration and the Nix store;
+the typed schema rejects credential-bearing fields, and the Go loader rejects
+credential fields before source merging. No secret is read during evaluation.
+
+## OpenCode-Go provider instances
+
+The compiled `opencode-go` plugin owns source validation and nonsecret LiteLLM
+Responses rendering. Both legacy registrations and configured provider models use
+that renderer. For example, declare two independent instances with `provider apply
+opencode-go --provider NAME --config-file FILE` and inspect their models with
+`model list --provider NAME`. Render a declared route with `model render coding
+--provider NAME`. Without a provider selector, duplicate model names are rejected.
+
+Only the existing audited native Responses sources and fixed OpenCode-Go endpoint
+are supported. A declaration is not evidence of upstream availability. Rendering
+does not acquire an API key, log in, publish a route or change header forwarding.
+The [selective forwarding policy](selective-go-forwarding.md) remains a separate,
+explicit runtime control with its fixed route and header restrictions. It must
+not be widened merely because another provider instance or model is declared.

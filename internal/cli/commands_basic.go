@@ -89,7 +89,8 @@ func runBasicCobra(
 	addWorkloadCommands(root, stdout, stderr, load, &status)
 	gatewayCmd := addGatewayCoreCommands(root, stdout, stderr, load, &status)
 	addGatewayRegistryCommands(gatewayCmd, stdout, stderr, load, &status, options)
-	addSIWCCommands(gatewayCmd, options, &status)
+	addSIWCCommands(gatewayCmd, options, &status, load)
+	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status)
 
 	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Fprintf(stderr, "%v\nUsage: aginctus [global options] <command> [flags]\n", err)

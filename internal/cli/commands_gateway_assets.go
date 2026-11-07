@@ -26,10 +26,11 @@ type gatewayAssetBuilder struct {
 	plugins gatewaycontrol.Plugins
 	status  *int
 	options config.Options
+	load    func() (*config.Config, error)
 }
 
-func addGatewayAssetCommands(gateway, providers, models *cobra.Command, status *int, options config.Options) {
-	b := gatewayAssetBuilder{plugins: gatewayPlugins(), status: status, options: options}
+func addGatewayAssetCommands(gateway, providers, models *cobra.Command, status *int, options config.Options, load func() (*config.Config, error)) {
+	b := gatewayAssetBuilder{plugins: gatewayPlugins(), status: status, options: options, load: load}
 	b.addPlugins(gateway)
 	b.addProviders(providers)
 	b.addModels(models)
@@ -39,12 +40,11 @@ func addGatewayAssetCommands(gateway, providers, models *cobra.Command, status *
 
 func (b gatewayAssetBuilder) add(parent *cobra.Command, use string, args cobra.PositionalArgs, action gatewayAction) *cobra.Command {
 	cmd := &cobra.Command{Use: use, Args: args, Run: func(cmd *cobra.Command, args []string) {
-		if len(b.options.Overrides) > 0 || b.options.ConfigurationFile != "" {
-			fmt.Fprintln(cmd.ErrOrStderr(), "gateway asset commands use local registries; use the command's --config or --config-file for declarations")
-			*b.status = 2
+		effective, err := b.load()
+		if err != nil {
 			return
 		}
-		store, err := gatewaycontrol.DefaultStore(b.plugins)
+		store, err := configuredGatewayStore(effective)
 		var result any
 		if err == nil {
 			result, err = action(cmd, args, store)

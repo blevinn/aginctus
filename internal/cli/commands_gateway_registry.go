@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/blevinn/aginctus/internal/config"
@@ -66,40 +67,56 @@ func addGatewayRegistryCommands(
 	var providerDryRun bool
 	providerRegister := add(providers, "register TYPE", cobra.ExactArgs(1),
 		func(cmd *cobra.Command, args []string, cfg *config.Config) int {
-			legacy := []string{"provider", args[0], "register"}
-			if cmd.Flags().Changed("alias") {
-				legacy = append(legacy, "--alias="+providerAlias)
+			name := providerAlias
+			if name == "" {
+				name = args[0]
 			}
-			if providerDryRun {
-				legacy = append(legacy, "--dry-run")
+			if !providerDryRun {
+				if err := checkGatewayProviderMutation(cfg, name); err != nil {
+					fmt.Fprintln(stderr, err)
+					return 1
+				}
 			}
-			return runGateway(cmd.Context(), legacy, stdout, stderr, nil, cfg)
+			return executeGatewayRegistration("provider", args[0], "", "", providerAlias, providerDryRun, stdout, stderr)
 		})
 	providerRegister.Flags().StringVar(&providerAlias, "alias", "", "Local provider alias")
 	providerRegister.Flags().BoolVar(&providerDryRun, "dry-run", false, "Validate without registry mutation")
 
 	models := &cobra.Command{Use: "model", Short: "Inspect and register model aliases"}
 	gateway.AddCommand(models)
-	add(models, "render NAME", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string, cfg *config.Config) int {
-		return runGateway(cmd.Context(), []string{"model", args[0], "render"}, stdout, stderr, nil, cfg)
+	var renderProvider string
+	render := add(models, "render NAME", cobra.ExactArgs(1), func(_ *cobra.Command, args []string, cfg *config.Config) int {
+		store, err := configuredGatewayStore(cfg)
+		var data []byte
+		if err == nil {
+			data, err = renderProviderModel(store, renderProvider, args[0])
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(data))
+		fmt.Fprintln(stderr, "model definition rendered for review only; gateway routing and credentials remain inactive")
+		return 0
 	})
+	render.Flags().StringVar(&renderProvider, "provider", "", "Provider instance offering the model")
 	var providerAliasName, source string
 	var modelDryRun bool
 	register := add(models, "register NAME", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string, cfg *config.Config) int {
-		legacy := []string{"model", args[0], "register"}
-		if cmd.Flags().Changed("provider") {
-			legacy = append(legacy, "--provider="+providerAliasName)
+		name := providerAliasName
+		if name == "" {
+			name = "chatgpt"
 		}
-		if cmd.Flags().Changed("source") {
-			legacy = append(legacy, "--source="+source)
+		if !modelDryRun {
+			if err := checkGatewayProviderMutation(cfg, name); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
 		}
-		if modelDryRun {
-			legacy = append(legacy, "--dry-run")
-		}
-		return runGateway(cmd.Context(), legacy, stdout, stderr, nil, cfg)
+		return executeGatewayRegistration("model", args[0], providerAliasName, source, "", modelDryRun, stdout, stderr)
 	})
 	register.Flags().StringVar(&providerAliasName, "provider", "", "Registered provider alias")
 	register.Flags().StringVar(&source, "source", "", "Responses upstream model source")
 	register.Flags().BoolVar(&modelDryRun, "dry-run", false, "Validate without registry mutation")
-	addGatewayAssetCommands(gateway, providers, models, status, options)
+	addGatewayAssetCommands(gateway, providers, models, status, options, load)
 }

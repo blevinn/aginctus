@@ -159,6 +159,50 @@ account's displayed model catalog. Declaring a catalog alone grants nothing.
 Explicit `--state-dir/--account/--model` binding remains available for private
 runtime administration; it cannot be combined with `--catalog`.
 
+### Nix-declared SIWC providers and catalogs
+
+The same instances and catalog selections can be declared in Nix instead of
+applied to local registries. Use the shared
+[declarative asset options](gateway-assets.md#declarative-nix-configuration) under
+`services.aginctus.settings` or Home Manager's `programs.aginctus.settings`:
+
+```nix
+services.aginctus.settings.gateway = {
+  providers.personal = {
+    plugin = "openai-siwc";
+    config = {
+      state_dir = "/home/OPERATOR/.local/state/aginctus/siwc";
+      models."ACCOUNT_CATALOG_SLUG".source = "ACCOUNT_CATALOG_SLUG";
+    };
+  };
+  catalogs.coding.models.siwc-coding = {
+    provider = "personal";
+    name = "ACCOUNT_CATALOG_SLUG";
+  };
+};
+```
+
+Replace the path and slug with the selected private directory and an exact
+authenticated account catalog slug. To discover slugs first, omit `models` and
+the catalog until after explicit login and provider-filtered model discovery.
+Do not also register the same names locally. Configuration contains no tokens
+and evaluation never enrolls an account or grants plan/background consent.
+
+Provider login and catalog binding consume the selected configuration directly:
+
+```sh
+aginctus --configuration-file /etc/aginctus/config.json gateway provider login --provider personal
+aginctus --configuration-file /etc/aginctus/config.json gateway siwc bind \
+  --catalog coding --route siwc-coding \
+  --workload-key-file /private/aginctus-workload-key \
+  --consent-connected-app --consent-background
+```
+
+Catalog binding derives the original provider/private-state identity, including
+through inherited aliases, and still rechecks account eligibility and consent.
+Other private administration commands keep explicit `--state-dir` selection and
+do not accept host configuration selectors.
+
 `render` emits only public LiteLLM configuration: Responses model aliases,
 placeholder credentials, the SIWC callback, and disabled retries/fallbacks.
 `bundle` writes the exact embedded `siwc.py` (runtime refresh/state support only)

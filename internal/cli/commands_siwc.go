@@ -13,11 +13,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// SIWC commands operate on explicit private local state, without host/Incus config.
-func addSIWCCommands(gateway *cobra.Command, options config.Options, status *int) {
-	group := &cobra.Command{Use: "siwc", Short: "Enroll and administer opt-in Sign in with ChatGPT", PersistentPreRunE: func(*cobra.Command, []string) error {
+// Private administration stays explicit; catalog binding reads host declarations.
+func addSIWCCommands(gateway *cobra.Command, options config.Options, status *int, load func() (*config.Config, error)) {
+	group := &cobra.Command{Use: "siwc", Short: "Enroll and administer opt-in Sign in with ChatGPT", PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		if len(options.Overrides) != 0 || options.ConfigurationFile != "" {
-			return fmt.Errorf("SIWC uses an explicit private state directory, not host configuration overrides")
+			catalog, _ := cmd.Flags().GetString("catalog")
+			if cmd.Name() != "bind" || catalog == "" {
+				return fmt.Errorf("SIWC private administration requires explicit state; host configuration is supported only for catalog binding")
+			}
 		}
 		return nil
 	}}
@@ -123,8 +126,15 @@ func addSIWCCommands(gateway *cobra.Command, options config.Options, status *int
 					return fmt.Errorf("--catalog cannot be combined with explicit --account, --model or --state-dir")
 				}
 			}
-			var err error
-			directory, err = resolveSIWCCatalogBinding(bindingCatalog, &binding)
+			effective, err := load()
+			if err != nil {
+				return err
+			}
+			store, err := configuredGatewayStore(effective)
+			if err != nil {
+				return err
+			}
+			directory, err = resolveSIWCCatalogBinding(store, bindingCatalog, &binding)
 			if err != nil {
 				return err
 			}
@@ -189,11 +199,7 @@ func addSIWCCommands(gateway *cobra.Command, options config.Options, status *int
 	}})
 }
 
-func resolveSIWCCatalogBinding(name string, binding *siwc.Binding) (string, error) {
-	store, err := gatewaycontrol.DefaultStore(gatewayPlugins())
-	if err != nil {
-		return "", err
-	}
+func resolveSIWCCatalogBinding(store *gatewaycontrol.Store, name string, binding *siwc.Binding) (string, error) {
 	providers, err := store.Providers()
 	if err != nil {
 		return "", err
