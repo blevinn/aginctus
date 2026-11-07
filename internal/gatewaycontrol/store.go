@@ -62,7 +62,7 @@ func (s *Store) addLegacyModels(result map[string]Provider) error {
 	for _, m := range models.Models {
 		p, ok := result[m.Provider]
 		if !ok {
-			return fmt.Errorf("legacy model references a missing provider")
+			return fmt.Errorf("legacy model provider identity does not match any declared provider")
 		}
 		if configured, exists := p.Config.Models[m.Name]; exists && configured.Source != m.Source {
 			return fmt.Errorf("model declaration conflicts with a legacy registration")

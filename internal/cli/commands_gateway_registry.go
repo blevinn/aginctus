@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/gatewaycontrol"
 	"github.com/spf13/cobra"
 )
 
@@ -80,9 +82,22 @@ func addGatewayRegistryCommands(
 
 	models := &cobra.Command{Use: "model", Short: "Inspect and register model aliases"}
 	gateway.AddCommand(models)
-	add(models, "render NAME", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string, cfg *config.Config) int {
-		return runGateway(cmd.Context(), []string{"model", args[0], "render"}, stdout, stderr, nil, cfg)
+	var renderProvider string
+	render := add(models, "render NAME", cobra.ExactArgs(1), func(_ *cobra.Command, args []string, _ *config.Config) int {
+		store, err := gatewaycontrol.DefaultStore(gatewayPlugins())
+		var data []byte
+		if err == nil {
+			data, err = renderProviderModel(store, renderProvider, args[0])
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		fmt.Fprintln(stdout, string(data))
+		fmt.Fprintln(stderr, "model definition rendered for review only; gateway routing and credentials remain inactive")
+		return 0
 	})
+	render.Flags().StringVar(&renderProvider, "provider", "", "Provider instance offering the model")
 	var providerAliasName, source string
 	var modelDryRun bool
 	register := add(models, "register NAME", cobra.ExactArgs(1), func(cmd *cobra.Command, args []string, cfg *config.Config) int {
