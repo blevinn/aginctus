@@ -272,6 +272,26 @@ MCP section at all, so an existing v0.1 configuration keeps its exact shape.
 
 ## Policy inspection
 
+### Relationship to gateway asset catalogs
+
+The [gateway plugin/catalog work](https://github.com/blevinn/aginctus/pull/619)
+reuses this server schema for local and provider-offered MCP declarations.
+An asset catalog selects and renames declarations; it does not create a policy
+server identity, copy a grant, resolve a credential reference or authorize a tool.
+`mcp.servers` remains the registry of original local policy server identities, and
+`mcp.grants` continues to name those identities, never exposed catalog aliases.
+A runtime adapter must retain the source identity and enforce the server tool
+restriction together with the authenticated workload's explicit grant.
+
+Provider-offered MCP endpoints are distinct from `provider-hosted-tools`:
+the former use the MCP declaration shape, while the latter execute at the model
+provider outside the MCP gateway. Neither catalog membership nor a valid provider
+declaration supplies runtime enforcement. Declarative providers and catalogs use
+the same configuration source precedence; source authority still requires an
+explicit privileged-runtime selection.
+
+### Redacted policy report
+
 `Policy.Report()` returns a deterministic, redacted view of the effective
 policy. The report states which servers are declared, which servers each
 workload may call, and with which tools. It never contains credential

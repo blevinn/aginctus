@@ -116,9 +116,12 @@ func Run(
 
 	// Migrate command families one at a time. Cobra validates the complete
 	// basic-command syntax before the configuration loader is consulted.
+	if commandArgs[0] == "gateway" {
+		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
+	}
 	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
 		commandArgs[0] == "apply" || commandArgs[0] == "remove" || commandArgs[0] == "status" ||
-		commandArgs[0] == "network" || commandArgs[0] == "herdr" {
+		commandArgs[0] == "network" || commandArgs[0] == "herdr" || commandArgs[0] == "workload" {
 		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
 	}
 
@@ -142,8 +145,6 @@ func Run(
 		return runConfig(commandArgs[1:], stdout, stderr, effective)
 	case "gateway":
 		return runGateway(ctx, commandArgs[1:], stdout, stderr, incusClient, effective)
-	case "workload":
-		return runWorkload(ctx, commandArgs[1:], stdout, stderr, effective)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", commandArgs[0])
 		printUsage(stderr)
@@ -380,6 +381,9 @@ func runGateway(
 	incusClient IncusClient,
 	effective *config.Config,
 ) int {
+	if len(args) == 2 && args[0] == "credential-storage" {
+		return executeGatewayCredential(ctx, args[1], stdout, stderr, effective)
+	}
 	if len(args) == 4 && args[0] == "egress" && args[1] == "firewall" && args[2] == "audit" && strings.HasPrefix(args[3], "--uplink-zone=") {
 		spec, err := gateway.FromConfig(effective)
 		if err != nil {
@@ -506,55 +510,6 @@ func runGateway(
 	if len(args) >= 2 && args[0] == "responses" && args[1] == "verify" {
 		return verifyGatewayResponsesStream(args[2:], stdout, stderr)
 	}
-	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "audit" {
-		id, err := effective.String("gateway.id")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway id: %v\n", err)
-			return 1
-		}
-		project, err := effective.String("gateway.compose.project")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway Compose project: %v\n", err)
-			return 1
-		}
-		pool, err := effective.String("gateway.credentials.storage.pool")
-		if err != nil {
-			fmt.Fprintf(stderr, "credential storage pool: %v\n", err)
-			return 1
-		}
-		spec := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
-		if err := auditGatewayCredentials(ctx, spec); err != nil {
-			fmt.Fprintf(stderr, "credential attachment audit: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "credential volume attachment: owned and exclusive to LiteLLM (metadata only; in-guest permissions, OAuth and runtime readiness not verified)\n")
-		return 0
-	}
-	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "attach" {
-		id, err := effective.String("gateway.id")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway id: %v\n", err)
-			return 1
-		}
-		project, err := effective.String("gateway.compose.project")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway Compose project: %v\n", err)
-			return 1
-		}
-		pool, err := effective.String("gateway.credentials.storage.pool")
-		if err != nil {
-			fmt.Fprintf(stderr, "credential storage pool: %v\n", err)
-			return 1
-		}
-		spec := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
-		if err := attachGatewayCredentials(ctx, spec); err != nil {
-			fmt.Fprintf(stderr, "credential attachment: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "private credential volume attached exclusively to LiteLLM in Compose project %q (OAuth not activated)\n", project)
-		return 0
-	}
-
 	if len(args) == 3 && args[0] == "model" && args[2] == "render" {
 		definition, err := renderRegisteredModel(args[1])
 		if err != nil {
@@ -749,88 +704,9 @@ func runGateway(
 		}
 		return 0
 	}
-	if len(args) == 2 && args[0] == "credential-storage" && args[1] == "ensure" {
-		id, err := effective.String("gateway.id")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage gateway ID: %v\n", err)
-			return 1
-		}
-		project, err := effective.String("gateway.compose.project")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage Compose project: %v\n", err)
-			return 1
-		}
-		pool, err := effective.String("gateway.credentials.storage.pool")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage pool: %v\n", err)
-			return 1
-		}
-		a := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
-		if err := a.Validate(); err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage configuration: %v\n", err)
-			return 1
-		}
-		if err := ensureCredentialStorage(ctx, a); err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "gateway credential volume %q: ready in Compose project %q (attachment unchanged; no credentials imported)\n", a.VolumeName(), project)
-		return 0
-	}
-	if len(args) == 0 || len(args) > 2 {
-		printGatewayUsage(stderr)
-		return 2
-	}
-	if len(args) == 2 && (args[0] != "remove" || args[1] != "--force") {
-		printGatewayUsage(stderr)
-		return 2
-	}
-
-	spec, err := gateway.FromConfig(effective)
-	if err != nil {
-		fmt.Fprintf(stderr, "gateway configuration: %v\n", err)
-		return 1
-	}
-
-	switch args[0] {
-	case "status":
-		return runGatewayStatus(ctx, args[1:], stdout, stderr, effective)
-	case "remove":
-		if err := spec.Remove(ctx, len(args) == 2); err != nil {
-			fmt.Fprintf(stderr, "gateway cleanup: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "gateway %q: gateway instances removed (persistent volumes retained)\n", spec.ID)
-		return 0
-	case "apply", "up":
-		runtimeEnvironment, err := spec.InitializeRuntimeEnvironment()
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
-			return 1
-		}
-		if err := spec.Deploy(ctx, runtimeEnvironment); err != nil {
-			fmt.Fprintf(stderr, "gateway deployment: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "gateway %q: started (application readiness not verified)\n", spec.ID)
-		return 0
-	case "validate":
-		fmt.Fprintf(stdout, "gateway %q: configuration valid\n", spec.ID)
-		return 0
-	case "render":
-		rendered, err := spec.RenderCompose()
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway render: %v\n", err)
-			return 1
-		}
-		fmt.Fprint(stdout, rendered)
-		return 0
-	default:
-		printGatewayUsage(stderr)
-		return 2
-	}
+	printGatewayUsage(stderr)
+	return 2
 }
-
 func printGatewayUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
 	fmt.Fprintln(w, "       aginctus [global options] gateway render")
@@ -929,80 +805,11 @@ func printHerdrClientUsage(w io.Writer) {
 	fmt.Fprintln(w, "Status is read-only; bootstrap/lifecycle operations mutate unless --dry-run is explicitly supported above.")
 }
 
-func runWorkload(
-	ctx context.Context,
-	args []string,
-	stdout, stderr io.Writer,
-	effective *config.Config,
-) int {
-	if len(args) > 1 && args[0] == "gateway" && args[1] == "provision" {
-		return runWorkloadGatewayProvision(ctx, args[2:], stdout, stderr, effective)
-	}
-	if len(args) > 1 && args[0] == "apply" &&
-		(args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
-		return runScopedWorkloadApplyRender(ctx, args[1:], stdout, stderr, effective)
-	}
-	if len(args) > 1 && (args[0] == "start" || args[0] == "stop") &&
-		(args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
-		if args[0] == "start" {
-			return runScopedWorkloadStart(ctx, args[1:], stdout, stderr, effective)
-		}
-		return runScopedWorkloadStop(ctx, args[1:], stdout, stderr, effective)
-	}
-	if len(args) > 0 && args[0] == "status" {
-		if len(args) > 1 && (args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
-			return runScopedWorkloadStatus(ctx, args[1:], stdout, stderr, effective, false)
-		}
-		return runWorkloadStatus(ctx, args[1:], stdout, stderr, effective)
-	}
-	if len(args) > 0 && (args[0] == "ls" || args[0] == "list") {
-		if len(args) > 1 && (args[1] == "--project" || strings.HasPrefix(args[1], "--project=")) {
-			return runScopedWorkloadStatus(ctx, args[1:], stdout, stderr, effective, true)
-		}
-		return runActiveWorkloadList(ctx, args[1:], stdout, stderr, effective)
-	}
-
-	if len(args) == 0 {
-		printWorkloadUsage(stderr)
-		return 2
-	}
-
-	// New grammar is "workload apply|remove [name]". Keep the historical
-	// "workload <name> ensure|teardown" form as a compatibility alias.
-	action := args[0]
-	var ids []string
-	var optionArgs []string
-	switch action {
-	case "apply", "remove", "start", "stop":
-		if len(args) > 1 && !strings.HasPrefix(args[1], "--") {
-			ids = []string{args[1]}
-			optionArgs = args[2:]
-		} else {
-			ids = workloadIDs(effective)
-			optionArgs = args[1:]
-		}
-	default:
-		if len(args) < 2 || (args[1] != "ensure" && args[1] != "teardown") {
-			printWorkloadUsage(stderr)
-			return 2
-		}
-		ids = []string{args[0]}
-		if args[1] == "ensure" {
-			action = "apply"
-		} else {
-			action = "remove"
-		}
-		optionArgs = args[2:]
-	}
-
-	if (action == "start" || action == "stop") && len(optionArgs) != 0 {
-		printWorkloadUsage(stderr)
-		return 2
-	}
-	options, err := parseNetworkOptions(optionArgs)
-	if err != nil {
-		fmt.Fprintf(stderr, "workload options: %v\n", err)
-		return 2
+// executeConfiguredWorkloads takes parsed actions and selected IDs, with an
+// empty selection preserving v0.1's 'all configured workloads' semantics.
+func executeConfiguredWorkloads(ctx context.Context, action string, ids []string, options mutationOptions, stdout, stderr io.Writer, effective *config.Config) int {
+	if len(ids) == 0 {
+		ids = workloadIDs(effective)
 	}
 	if len(ids) == 0 {
 		fmt.Fprintln(stderr, "no workloads are configured")
