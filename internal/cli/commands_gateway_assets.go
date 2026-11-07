@@ -203,7 +203,8 @@ func (b gatewayAssetBuilder) addMCPs(gateway *cobra.Command) {
 		if err != nil {
 			return nil, err
 		}
-		result := map[string]any{}
+		offered := map[string]map[string]json.RawMessage{}
+		result := map[string]any{"providers": offered}
 		if mcpProvider == "" {
 			result["local"] = assets.MCPs
 		}
@@ -214,7 +215,7 @@ func (b gatewayAssetBuilder) addMCPs(gateway *cobra.Command) {
 		}
 		for name, instance := range p {
 			if mcpProvider == "" || name == mcpProvider {
-				result[name] = instance.Config.MCPs
+				offered[name] = instance.Config.MCPs
 			}
 		}
 		return result, nil
