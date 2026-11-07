@@ -76,7 +76,7 @@ func TestProviderListAndShow(t *testing.T) {
 	check([]string{"provider", "personal", "show"}, "not registered", 1)
 	check([]string{"provider", "chatgpt", "register", "--alias=personal"}, "registered locally", 0)
 	check([]string{"provider", "list"}, "personal", 0)
-	check([]string{"provider", "personal", "show"}, "authentication pending", 0)
+	check([]string{"provider", "personal", "show"}, `"plugin": "chatgpt"`, 0)
 }
 
 func TestGatewayModelRegistryAndAliasPreflight(t *testing.T) {
@@ -94,14 +94,14 @@ func TestGatewayModelRegistryAndAliasPreflight(t *testing.T) {
 		}
 	}
 	check([]string{"model", "list"}, "", 0)
-	check([]string{"model", "coding", "show"}, "not registered", 1)
+	check([]string{"model", "coding", "show"}, "model missing or ambiguous", 1)
 	check([]string{"model", "coding", "register", "--source=chatgpt/sample", "--provider=personal"}, "not registered locally", 1)
 	check([]string{"provider", "chatgpt", "register", "--alias=personal"}, "registered locally", 0)
 	check([]string{"model", "coding", "register", "--source=chatgpt/sample", "--provider=personal", "--dry-run"}, "\"model_name\": \"coding\"", 0)
 	check([]string{"model", "coding", "register", "--source=chatgpt/sample", "--provider=personal"}, "authorization and activation pending", 0)
 	check([]string{"model", "coding", "register", "--source=chatgpt/sample", "--provider=personal"}, "already registered", 0)
-	check([]string{"model", "list"}, "coding\tchatgpt/sample\tpersonal", 0)
-	check([]string{"model", "coding", "show"}, "authorization and activation pending", 0)
+	check([]string{"model", "list"}, `"source": "chatgpt/sample"`, 0)
+	check([]string{"model", "coding", "show"}, `"source": "chatgpt/sample"`, 0)
 	check([]string{"model", "coding", "register", "--source=chatgpt/different", "--provider=personal"}, "another registration", 1)
 	check([]string{"model", "../escape", "register", "--source=chatgpt/sample", "--provider=personal"}, "invalid chatgpt", 2)
 	check([]string{"model", "wrong", "register", "--source=openai/model", "--provider=personal"}, "invalid chatgpt", 2)
@@ -123,16 +123,16 @@ func TestOpenCodeGoRegistrationOffline(t *testing.T) {
 		!strings.Contains(preview, "opencode-go") {
 		t.Fatalf("provider dry run: code=%d output=%q err=%q", code, preview, errs)
 	}
-	if code, out, errs := run("provider", "list"); code != 0 || out != "" {
+	if code, out, errs := run("provider", "list"); code != 0 || strings.Contains(out, `"go"`) {
 		t.Fatalf("dry run mutated provider registry: %d %q %q", code, out, errs)
 	}
 	if code, _, errs := run("provider", "opencode-go", "register", "--alias=go"); code != 0 {
 		t.Fatalf("provider registration: %d %q", code, errs)
 	}
-	if code, out, _ := run("provider", "list"); code != 0 || !strings.Contains(out, "go\topencode-go\t") {
+	if code, out, _ := run("provider", "list"); code != 0 || !strings.Contains(out, `"plugin": "opencode-go"`) {
 		t.Fatalf("provider list: %d %q", code, out)
 	}
-	if code, out, _ := run("provider", "go", "show"); code != 0 || !strings.Contains(out, "authentication pending") {
+	if code, out, _ := run("provider", "go", "show"); code != 0 || !strings.Contains(out, `"plugin": "opencode-go"`) {
 		t.Fatalf("provider show: %d %q", code, out)
 	}
 	for _, source := range []string{
@@ -144,7 +144,7 @@ func TestOpenCodeGoRegistrationOffline(t *testing.T) {
 			t.Fatalf("Go model %q dry-run: code=%d preview=%q err=%q", source, code, preview, errs)
 		}
 	}
-	if code, out, _ := run("model", "list"); code != 0 || out != "" {
+	if code, out, _ := run("model", "list"); code != 0 || strings.Contains(out, `"coding"`) {
 		t.Fatalf("dry-run mutated model registry: %d %q", code, out)
 	}
 	for _, tc := range []struct {
@@ -169,7 +169,7 @@ func TestOpenCodeGoRegistrationOffline(t *testing.T) {
 		!strings.Contains(out, "already registered") {
 		t.Fatalf("model idempotency: %d %q", code, out)
 	}
-	if code, out, _ := run("model", "coding", "show"); code != 0 || !strings.Contains(out, "openai/gpt-6-luna") {
+	if code, out, _ := run("model", "coding", "show"); code != 0 || !strings.Contains(out, `"source": "openai/gpt-6-luna"`) {
 		t.Fatalf("model show: %d %q", code, out)
 	}
 }

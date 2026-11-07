@@ -14,8 +14,11 @@ import (
 )
 
 // Private administration stays explicit; catalog binding reads host declarations.
-func addSIWCCommands(gateway *cobra.Command, options config.Options, status *int, load func() (*config.Config, error)) {
+func addSIWCCommands(gateway *cobra.Command, options *config.Options, status *int, load func() (*config.Config, error)) {
 	group := &cobra.Command{Use: "siwc", Short: "Enroll and administer opt-in Sign in with ChatGPT", PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+		if cmd.Root().PersistentFlags().Changed("configuration-file") && options.ConfigurationFile == "" {
+			return fmt.Errorf("--configuration-file requires a path")
+		}
 		if len(options.Overrides) != 0 || options.ConfigurationFile != "" {
 			catalog, _ := cmd.Flags().GetString("catalog")
 			if cmd.Name() != "bind" || catalog == "" {

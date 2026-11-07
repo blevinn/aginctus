@@ -74,12 +74,36 @@ func TestSIWCProviderInstancesAndCatalogBinding(t *testing.T) {
 
 func TestSIWCRejectsHostOverridesAndDocumentsCommands(t *testing.T) {
 	var out, stderr bytes.Buffer
-	if code := Run(context.Background(), []string{"--config", "gateway.id=foreign", "gateway", "siwc", "status"}, &out, &stderr, nil, nil); code != 2 {
-		t.Fatalf("host override: %d %s", code, stderr.String())
+	for _, args := range [][]string{
+		{"--config", "gateway.id=foreign", "gateway", "siwc", "status"},
+		{"gateway", "siwc", "status", "--config", "gateway.id=foreign"},
+		{"gateway", "siwc", "status", "--configuration-file", "/nonexistent/config.json"},
+	} {
+		out.Reset()
+		stderr.Reset()
+		if code := Run(context.Background(), args, &out, &stderr, nil, nil); code != 2 || !strings.Contains(stderr.String(), "private administration") {
+			t.Fatalf("host override %v: %d %s", args, code, stderr.String())
+		}
 	}
 	printGatewayUsage(&out)
 	if !strings.Contains(out.String(), "gateway siwc --help") {
 		t.Fatal("SIWC enrollment not discoverable")
+	}
+}
+
+func TestSIWCNestedHelpShowsCommandFlags(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		flag string
+	}{
+		{[]string{"gateway", "provider", "login", "--help"}, "--provider"},
+		{[]string{"help", "gateway", "provider", "login"}, "--enable-plan"},
+		{[]string{"gateway", "siwc", "bind", "--help"}, "--consent-background"},
+	} {
+		var out, errs bytes.Buffer
+		if code := Run(context.Background(), tc.args, &out, &errs, nil, nil); code != 0 || !strings.Contains(out.String(), tc.flag) {
+			t.Fatalf("nested help %v: %d %s %s", tc.args, code, out.String(), errs.String())
+		}
 	}
 }
 
@@ -104,6 +128,7 @@ func TestSIWCCobraHelpAndSyntaxDoNotTouchState(t *testing.T) {
 		{"help", "gateway", "provider", "login"},
 		{"gateway", "siwc", "logout", "--state-dir", dir},
 		{"gateway", "siwc", "status", "--state-dir", dir, "--unknown"},
+		{"gateway", "siwc", "status", "--state-dir", dir, "--configuration-file="},
 		{"gateway", "siwc", "status", "--state-dir", dir, "extra"},
 		{"gateway", "siwc", "logout", "--state-dir", dir, "--account", "../foreign"},
 	} {

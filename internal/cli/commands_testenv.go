@@ -12,7 +12,7 @@ import (
 // Parsing a VM command does not start a VM; only the explicit 'vm test'
 // leaf can call the established backend.
 func addTestenvCommands(root *cobra.Command, stdout, stderr io.Writer,
-	status *int, options config.Options,
+	status *int, options *config.Options,
 ) {
 	groupRun := func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
