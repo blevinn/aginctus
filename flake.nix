@@ -61,10 +61,6 @@
               wrapProgram "$out/bin/aginctus" --prefix PATH : "${
                 pkgs.lib.makeBinPath [
                   pkgs.incus
-                  (pkgs.python3.withPackages (ps: [
-                    ps.pyjwt
-                    ps.cryptography
-                  ]))
                 ]
               }"
             '';

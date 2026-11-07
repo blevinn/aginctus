@@ -30,10 +30,13 @@ or model-driven filesystem execution. Those remain release gates under
   is keyed by a local label and validated subject plus issued client ID; email
   is not an account/workspace key. Workspace policy, model eligibility and plan
   limits still apply. No automatic alternative billing or account fallback.
-- Linux is required for protected filesystem state and `flock`. The Nix package
-  and development shell include Python, PyJWT and cryptography. The LiteLLM
-  runtime must provide those dependencies and the verified LiteLLM `1.103.0`
-  extension APIs. The extension rejects other LiteLLM versions until verified.
+- Linux is required for protected filesystem state and `flock`. Enrollment and
+  administration are Go code built into `aginctus`, using Cobra commands and
+  flags (`aginctus gateway siwc --help`). These workflows require no Python
+  interpreter or Python packages. Python, PyJWT and cryptography are confined to
+  the in-process LiteLLM refresh/transport extension and test environment. The
+  LiteLLM runtime must provide those dependencies and the verified LiteLLM
+  `1.103.0` extension APIs. The extension rejects other versions until verified.
 - For gateway use, provision and audit the existing owned, exclusive credential
   volume and gateway-only egress through the
   [operator path](gateway-operator-path.md). This feature adds no network grants.
@@ -110,8 +113,9 @@ use `unbind --route siwc-coding`, then bind again after reviewing consent.
 
 `render` emits only public LiteLLM configuration: Responses model aliases,
 placeholder credentials, the SIWC callback, and disabled retries/fallbacks.
-`bundle` writes the exact embedded `siwc.py` and `litellm_siwc.py` sources into
-a **new** directory. Neither command deploys or enrolls anything. Preserve
+`bundle` writes the exact embedded `siwc.py` (runtime refresh/state support only)
+and `litellm_siwc.py` sources into a **new** directory. Neither command deploys
+or enrolls anything. Preserve
 existing ordinary provider configuration when incorporating this public config.
 
 The runtime checks LiteLLM's authenticated key identity before accepting a
@@ -131,15 +135,17 @@ aginctus gateway credential-storage audit
 
 Use the project's approved Incus administration procedure to deliver the two
 **public** bundle files and rendered config into an owned directory such as
-`/app/aginctus-siwc` in the verified `litellm-1` instance. The Python files must
-not be writable by workload users. Create a mode-0700 SIWC subdirectory inside
+`/app/aginctus-siwc` in the verified `litellm-1` instance. Also deliver the reviewed
+Go `aginctus` executable for the guest's architecture through that approved
+administration path; it is required for local state administration. The executable
+and Python files must not be writable by workload users. Create a mode-0700 SIWC subdirectory inside
 the audited private mount, owned by the actual LiteLLM worker UID/GID, for example
 `/var/lib/aginctus/chatgpt/siwc`. Do not use an arbitrary host bind mount.
 
 Before enabling the callback, run inside that guest **as the LiteLLM identity**:
 
 ```sh
-python /app/aginctus-siwc/siwc.py \
+aginctus gateway siwc \
   --state-dir /var/lib/aginctus/chatgpt/siwc init
 ```
 
@@ -160,7 +166,7 @@ Use a new destination filename in the protected guest directory. Then, inside
 the guest as the runtime identity:
 
 ```sh
-python /app/aginctus-siwc/siwc.py \
+aginctus gateway siwc \
   --state-dir /var/lib/aginctus/chatgpt/siwc receive \
   --capsule /var/lib/aginctus/chatgpt/siwc/handoff.json
 ```
@@ -221,7 +227,7 @@ Stop the SIWC-enabled LiteLLM owner before administrative mutation. To sign out
 inside the guest as its runtime identity:
 
 ```sh
-python /app/aginctus-siwc/siwc.py \
+aginctus gateway siwc \
   --state-dir /var/lib/aginctus/chatgpt/siwc logout --account personal
 ```
 
@@ -282,8 +288,10 @@ nix --quiet develop --no-update-lock-file -c go test ./...
 nix --quiet develop --no-update-lock-file -c just check all
 ```
 
-The standard suite includes deterministic signed-JWT/mock-provider lifecycle
-tests. The actual proxy suite requires an explicitly supplied environment with
+The standard suite includes Go signed-JWT/mock-provider enrollment, callback,
+binding, transfer, refresh and logout tests; Cobra help/validation and Python-free
+CLI tests; a cross-language state/lock compatibility probe; and Python tests of
+the LiteLLM refresh owner. The actual proxy suite requires an explicitly supplied environment with
 `litellm[proxy]==1.103.0` and its runtime dependencies, including Prisma. It uses
 synthetic OAuth responses and an injected HTTP mock, never real credentials:
 

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -33,26 +32,46 @@ func TestSIWCRejectsHostOverridesAndDocumentsCommands(t *testing.T) {
 		t.Fatalf("host override: %d %s", code, stderr.String())
 	}
 	printGatewayUsage(&out)
-	if !strings.Contains(out.String(), "gateway siwc --state-dir DIRECTORY login") {
+	if !strings.Contains(out.String(), "gateway siwc --help") {
 		t.Fatal("SIWC enrollment not discoverable")
 	}
 }
 
-func TestSIWCStateCommandsIgnoreWorkspacePythonModules(t *testing.T) {
-	if _, err := exec.LookPath("python3"); err != nil {
-		t.Skip("Python runtime is supplied by the development shell and packaged CLI")
-	}
+func TestSIWCStateCommandsNeedNoPythonOrHostConfiguration(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
-	if err := os.WriteFile(filepath.Join(dir, "argparse.py"), []byte("raise RuntimeError('workspace module imported')\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv("PATH", dir)
 	var out, stderr bytes.Buffer
-	args := []string{"--state-dir", filepath.Join(dir, "state"), "status"}
-	if code := runSIWC(context.Background(), args, &out, &stderr); code != 0 {
+	args := []string{"gateway", "siwc", "status", "--state-dir", filepath.Join(dir, "state")}
+	if code := Run(context.Background(), args, &out, &stderr, nil, nil); code != 0 {
 		t.Fatalf("isolated state inspection: %d %s", code, stderr.String())
 	}
 	if strings.TrimSpace(out.String()) != "{}" {
 		t.Fatal("unexpected initial state")
+	}
+}
+
+func TestSIWCCobraHelpAndSyntaxDoNotTouchState(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "absent")
+	for _, args := range [][]string{
+		{"gateway", "siwc", "--help"},
+		{"gateway", "siwc", "login", "--help"},
+		{"help", "gateway", "siwc", "login"},
+		{"gateway", "siwc", "login", "--state-dir", dir},
+		{"gateway", "siwc", "status", "--state-dir", dir, "--unknown"},
+		{"gateway", "siwc", "status", "--state-dir", dir, "extra"},
+		{"gateway", "siwc", "login", "--state-dir", dir, "--account", "../foreign"},
+	} {
+		var out, stderr bytes.Buffer
+		code := Run(context.Background(), args, &out, &stderr, nil, nil)
+		if args[len(args)-1] == "--help" || args[0] == "help" {
+			if code != 0 || !strings.Contains(out.String(), "Usage:") {
+				t.Fatalf("help: %d %s", code, stderr.String())
+			}
+		} else if code != 2 {
+			t.Fatalf("invalid syntax: %d %s", code, stderr.String())
+		}
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Fatal("help or invalid syntax touched state")
+		}
 	}
 }

@@ -23,14 +23,14 @@ var hook string
 var forwarding string
 
 //go:embed siwc.py
-var SIWCSource string
+var siwcRuntime string
 
 //go:embed litellm_siwc.py
 var siwcHook string
 
 // SIWCFiles is a separate opt-in bundle; the native chatgpt/ provider is unused.
 func SIWCFiles() map[string]string {
-	return map[string]string{"siwc.py": SIWCSource, "litellm_siwc.py": siwcHook}
+	return map[string]string{"siwc.py": siwcRuntime, "litellm_siwc.py": siwcHook}
 }
 
 // Files returns a new filename-to-raw-content map for public Compose configs.

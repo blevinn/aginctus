@@ -6,7 +6,6 @@ No real account, network endpoint override, or authentication bypass is used.
 
 import asyncio
 import importlib
-import io
 import json
 import os
 import socket
@@ -14,7 +13,6 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import siwc
@@ -35,12 +33,7 @@ class LiteLLMTest(unittest.TestCase):
                 store = siwc.Store(Path(root) / "state")
                 fake = FakeProvider()
                 owner = siwc.Owner(store, fake.provider)
-                siwc.login(owner, "personal", fake.browser, output=io.StringIO(), timeout=1)
-                workload_key = Path(root) / "key"
-                workload_key.write_text("sk-synthetic-workload")
-                workload_key.chmod(0o600)
-                siwc.configure(owner, SimpleNamespace(route="siwc-coding", account="personal", model="fixture-model",
-                               workload_key_file=str(workload_key), consent_connected_app=True, consent_background=True))
+                fake.seed(store, bind=True)
                 # The DB-free proxy fixture uses real master-key authentication.
                 # LiteLLM replaces that identity with a fixed nonsecret alias.
                 # Production `bind` accepts only the workload-key hash, never this alias.
