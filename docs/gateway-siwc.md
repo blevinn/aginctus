@@ -8,6 +8,13 @@ fixed client identity, device endpoints, credential cache, or ChatGPT's
 transport and credential owner run inside its process, with no extra daemon,
 listener, proxy, or workload provider token.
 
+SIWC is the compiled `openai-siwc` [gateway plugin](gateway-assets.md). Each named
+provider is one registration/account identity; its provider name is the private
+store account label. Use letters, digits, hyphen and underscore for SIWC provider
+names. Normal enrollment and model discovery use `gateway provider login` and
+`gateway model list --provider`, while `gateway siwc` holds the private-state
+administration, consented binding and exclusive-handoff operations.
+
 **Validation:** deterministic enrollment/lifecycle tests and a real pinned
 LiteLLM proxy with a synthetic signed OAuth provider exercise authenticated
 Responses, tool-call continuation, refresh and isolation. An optional real
@@ -56,12 +63,27 @@ workspace and backups. Its ancestors must be trusted operator-controlled paths.
 ```sh
 STATE="$HOME/.local/state/aginctus/siwc"
 aginctus gateway siwc --state-dir "$STATE" init
-aginctus gateway siwc --state-dir "$STATE" login --account personal
+aginctus gateway provider apply openai-siwc --provider personal \
+  --config-file /private/personal-siwc.json
+aginctus gateway provider login --provider personal
 aginctus gateway siwc --state-dir "$STATE" status
-aginctus gateway siwc --state-dir "$STATE" models --account personal
+aginctus gateway model list --provider personal
 ```
 
-`login` starts `127.0.0.1` on an available port at `/auth/callback`, then opens
+Create `/private/personal-siwc.json` with the exact absolute path used by `$STATE`:
+
+```json
+{"state_dir":"/home/OPERATOR/.local/state/aginctus/siwc"}
+```
+
+Replace the example path with your chosen private directory. Provider configuration
+is nonsecret and contains no tokens. `provider apply` only records the instance;
+it does not enroll or contact OpenAI. Multiple instances can use separate state
+directories or distinct account labels in one directory; identities never fall
+back between providers. An unqualified `provider login` is allowed only when
+exactly one provider instance exists.
+
+`provider login` starts `127.0.0.1` on an available port at `/auth/callback`, then opens
 the system browser and displays **Continue with ChatGPT**. Open the printed
 link on the same host if no graphical opener is available. New registration
 uses `dynamic_agent_client` with `agent_name_hint=Aginctus`; returning sign-in
@@ -80,7 +102,7 @@ If identity succeeds without `chatgpt.tokens.use.direct`, status reports plan
 usage disabled and inference is rejected. To explicitly request consent again:
 
 ```sh
-aginctus gateway siwc --state-dir "$STATE" login --account personal --enable-plan
+aginctus gateway provider login --provider personal --enable-plan
 ```
 
 This uses the documented `prompt=consent`, not undeployed `force_reconsent`.
@@ -96,9 +118,29 @@ LiteLLM workload key, scoped to this alias with the existing
 ingress key, **never** an OpenAI token. Both consent flags are intentional
 statements of the connected-application and background-use scope described above.
 
+Add the selected exact slug to the provider configuration, retaining its
+`state_dir`, then apply it again. SIWC provider model names are upstream slugs;
+workload-facing renaming belongs to a catalog:
+
+```json
+{
+  "state_dir":"/home/OPERATOR/.local/state/aginctus/siwc",
+  "models":{"ACCOUNT_CATALOG_SLUG":{"source":"ACCOUNT_CATALOG_SLUG"}}
+}
+```
+
+Create `/private/siwc-catalog.json` with the intended exposed alias:
+
+```json
+{"models":{"siwc-coding":{"provider":"personal","name":"ACCOUNT_CATALOG_SLUG"}}}
+```
+
 ```sh
-aginctus gateway siwc --state-dir "$STATE" bind \
-  --account personal --route siwc-coding --model ACCOUNT_CATALOG_SLUG \
+aginctus gateway provider apply openai-siwc --provider personal \
+  --config-file /private/personal-siwc.json
+aginctus gateway catalog apply coding --config-file /private/siwc-catalog.json
+aginctus gateway catalog show coding
+aginctus gateway siwc bind --catalog coding --route siwc-coding \
   --workload-key-file /private/aginctus-workload-key \
   --consent-connected-app --consent-background
 aginctus gateway siwc --state-dir "$STATE" render > /private/siwc-config.json
@@ -110,6 +152,12 @@ name is assumed. Aliases start with `siwc-` to select the packaged OpenCode
 request profile. The private binding records the issued client ID, validated
 subject, model and SHA-256 workload-key identity. It cannot be silently rebound;
 use `unbind --route siwc-coding`, then bind again after reviewing consent.
+Catalog binding resolves the original provider identity even through inherited
+renaming. It derives the private directory, account label and source slug rather
+than accepting conflicting caller overrides, then rechecks the authenticated
+account's displayed model catalog. Declaring a catalog alone grants nothing.
+Explicit `--state-dir/--account/--model` binding remains available for private
+runtime administration; it cannot be combined with `--catalog`.
 
 `render` emits only public LiteLLM configuration: Responses model aliases,
 placeholder credentials, the SIWC callback, and disabled retries/fallbacks.

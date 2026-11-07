@@ -312,9 +312,13 @@ this plan's JSON as a machine authorization token.
 
 ### SIWC ChatGPT plan usage
 
-`aginctus gateway siwc` exposes opt-in local `init`, `login`, `status`, `models`,
-`bind`, `unbind`, `render`, `export`, `receive`, and `logout`, with an explicit
-absolute `--state-dir`. `bundle DIRECTORY` delivers the public in-process
+The compiled `openai-siwc` plugin is instantiated with `gateway provider apply`;
+`gateway provider login --provider NAME` enrolls only that instance and
+`gateway model list --provider NAME` discovers its account's models.
+`aginctus gateway siwc` exposes private-state `init`, `status`, `bind`, `unbind`,
+`render`, `export`, `receive`, and `logout`. Catalog-based binding derives its
+provider, model and directory; direct administration uses an explicit absolute
+`--state-dir`. `bundle DIRECTORY` delivers the public in-process
 LiteLLM extension sources into a new directory. These commands bypass host
 configuration loading and reject host configuration overrides. Enrollment and
 token operations never provision networks or Incus resources.
@@ -322,8 +326,9 @@ token operations never provision networks or Incus resources.
 See the [SIWC runbook](gateway-siwc.md) for exact command sequences, separate
 consent/account selection, protected storage and exclusive handoff, deployment,
 OpenCode profile, restart/logout and unverified live acceptance. `status` checks
-local state only; `models` performs an authenticated account-catalog request.
+local state only; provider-filtered model discovery performs an authenticated account-catalog request.
 The native `chatgpt/` registrations remain inert and are not SIWC registrations.
+
 ### Gateway assets
 
 The Cobra `gateway plugin`, `provider`, `model`, `mcp` and `catalog` families

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/gatewaycontrol"
 	"github.com/blevinn/aginctus/internal/siwc"
 	gatewayassets "github.com/blevinn/aginctus/scripts/gateway"
 	"github.com/spf13/cobra"
@@ -80,22 +81,6 @@ func addSIWCCommands(gateway *cobra.Command, options config.Options, status *int
 		cmd.Flags().StringVar(account, "account", "", "Local account label")
 		_ = cmd.MarkFlagRequired("account")
 	}
-	var loginAccount string
-	var enablePlan bool
-	login := add("login", "Enroll in the browser using PKCE", func(cmd *cobra.Command, owner *siwc.Owner) error {
-		return owner.Login(cmd.Context(), loginAccount, siwc.LoginOptions{EnablePlan: enablePlan, Output: cmd.OutOrStdout()})
-	})
-	accountFlag(login, &loginAccount)
-	login.Flags().BoolVar(&enablePlan, "enable-plan", false, "Explicitly request plan-usage consent again")
-	var modelsAccount string
-	models := add("models", "List the account's displayed model catalog", func(cmd *cobra.Command, owner *siwc.Owner) error {
-		value, err := owner.Models(cmd.Context(), modelsAccount)
-		if err != nil {
-			return err
-		}
-		return writeJSON(cmd, value)
-	})
-	accountFlag(models, &modelsAccount)
 	var logoutAccount string
 	logout := add("logout", "Revoke the remote session and clear local tokens", func(cmd *cobra.Command, owner *siwc.Owner) error {
 		confirmed, err := owner.Logout(cmd.Context(), logoutAccount)
@@ -119,14 +104,34 @@ func addSIWCCommands(gateway *cobra.Command, options config.Options, status *int
 		fmt.Fprintln(cmd.OutOrStdout(), "SIWC route bound to the selected registration, model and workload key.")
 		return nil
 	})
-	accountFlag(bind, &binding.Account)
+	var bindingCatalog string
+	bind.Flags().StringVar(&binding.Account, "account", "", "Private account label (explicit-state administration)")
+	bind.Flags().StringVar(&bindingCatalog, "catalog", "", "Resolve this route's provider and model from a catalog")
 	bind.Flags().StringVar(&binding.Route, "route", "", "SIWC route alias (siwc- prefix)")
 	bind.Flags().StringVar(&binding.Model, "model", "", "Exact account catalog model slug")
 	bind.Flags().StringVar(&binding.WorkloadKeyFile, "workload-key-file", "", "Private LiteLLM workload key file")
 	bind.Flags().BoolVar(&binding.ConsentConnectedApp, "consent-connected-app", false, "Consent to connected Aginctus application use")
 	bind.Flags().BoolVar(&binding.ConsentBackground, "consent-background", false, "Consent to background use")
-	for _, flag := range []string{"route", "model", "workload-key-file"} {
+	for _, flag := range []string{"route", "workload-key-file"} {
 		_ = bind.MarkFlagRequired(flag)
+	}
+	validateBinding := bind.PreRunE
+	bind.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if bindingCatalog != "" {
+			for _, flag := range []string{"account", "model", "state-dir"} {
+				if cmd.Flags().Changed(flag) {
+					return fmt.Errorf("--catalog cannot be combined with explicit --account, --model or --state-dir")
+				}
+			}
+			var err error
+			directory, err = resolveSIWCCatalogBinding(bindingCatalog, &binding)
+			if err != nil {
+				return err
+			}
+		} else if binding.Account == "" || binding.Model == "" {
+			return fmt.Errorf("bind requires --catalog or explicit --state-dir, --account and --model")
+		}
+		return validateBinding(cmd, args)
 	}
 	var unbindRoute string
 	unbind := add("unbind", "Remove a route binding", func(cmd *cobra.Command, owner *siwc.Owner) error {
@@ -182,4 +187,34 @@ func addSIWCCommands(gateway *cobra.Command, options config.Options, status *int
 		}
 		fmt.Fprintln(cmd.OutOrStdout(), "SIWC public runtime bundle written; enrollment and activation are separate operations")
 	}})
+}
+
+func resolveSIWCCatalogBinding(name string, binding *siwc.Binding) (string, error) {
+	store, err := gatewaycontrol.DefaultStore(gatewayPlugins())
+	if err != nil {
+		return "", err
+	}
+	providers, err := store.Providers()
+	if err != nil {
+		return "", err
+	}
+	assets, err := store.Assets()
+	if err != nil {
+		return "", err
+	}
+	catalog, err := gatewaycontrol.Resolve(name, providers, assets)
+	if err != nil {
+		return "", err
+	}
+	asset, ok := catalog.Models[binding.Route]
+	if !ok {
+		return "", fmt.Errorf("route is not an exposed model in the selected catalog")
+	}
+	provider := providers[asset.Provider]
+	if provider.Plugin != "openai-siwc" {
+		return "", fmt.Errorf("selected catalog model does not belong to an openai-siwc provider")
+	}
+	binding.Account = provider.Name
+	binding.Model = provider.Config.Models[asset.Name].Source
+	return provider.Config.StateDir, nil
 }

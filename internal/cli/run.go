@@ -122,8 +122,7 @@ func Run(
 	if commandArgs[0] == "config" || commandArgs[0] == "doctor" ||
 		commandArgs[0] == "apply" || commandArgs[0] == "remove" || commandArgs[0] == "status" ||
 		commandArgs[0] == "network" || commandArgs[0] == "herdr" || commandArgs[0] == "workload" ||
-		(len(commandArgs) >= 2 && commandArgs[0] == "gateway" && commandArgs[1] == "siwc") ||
-		(len(commandArgs) >= 3 && commandArgs[0] == "help" && commandArgs[1] == "gateway" && commandArgs[2] == "siwc") {
+		(len(commandArgs) >= 3 && commandArgs[0] == "help" && commandArgs[1] == "gateway" && isGatewayCoreCommand(commandArgs[2:])) {
 		return runBasicCobra(ctx, commandArgs, stdout, stderr, incusClient, configLoader, options)
 	}
 
