@@ -13,9 +13,7 @@ import (
 )
 
 // SIWC commands operate on explicit private local state, without host/Incus config.
-func addSIWCCommands(root *cobra.Command, options config.Options, status *int) {
-	gateway := &cobra.Command{Use: "gateway", Short: "Manage the model gateway"}
-	root.AddCommand(gateway)
+func addSIWCCommands(gateway *cobra.Command, options config.Options, status *int) {
 	group := &cobra.Command{Use: "siwc", Short: "Enroll and administer opt-in Sign in with ChatGPT", PersistentPreRunE: func(*cobra.Command, []string) error {
 		if len(options.Overrides) != 0 || options.ConfigurationFile != "" {
 			return fmt.Errorf("SIWC uses an explicit private state directory, not host configuration overrides")

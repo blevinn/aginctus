@@ -324,6 +324,14 @@ consent/account selection, protected storage and exclusive handoff, deployment,
 OpenCode profile, restart/logout and unverified live acceptance. `status` checks
 local state only; `models` performs an authenticated account-catalog request.
 The native `chatgpt/` registrations remain inert and are not SIWC registrations.
+### Gateway assets
+
+The Cobra `gateway plugin`, `provider`, `model`, `mcp` and `catalog` families
+inspect compiled plugins, apply named provider instances, select models/MCPs and
+resolve explicitly inherited/renamed catalogs. Use each family's `--help` for
+authoritative selectors and flags. See [Gateway assets](gateway-assets.md) for
+the object model, configuration schema, compatibility and authorization boundary.
+These local declarations do not deploy routes or grant workload access.
 
 | Surface | Side effect or prerequisite |
 | --- | --- |

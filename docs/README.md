@@ -84,6 +84,7 @@ Use this map to pick the authoritative page for a given task:
 | Task | Authoritative doc | Status |
 | --- | --- | --- |
 | Overall gateway operator workflow | [gateway-operator-path.md](gateway-operator-path.md) | current procedure |
+| Compiled plugins, provider instances and model/MCP catalogs | [gateway-assets.md](gateway-assets.md) | local nonsecret declarations; no deployment or grants |
 | Egress bridge, OCI NIC, DHCP design | [gateway-egress-network.md](gateway-egress-network.md) | design + pilot |
 | Host firewalld egress policy and recovery | [gateway-firewalld-egress.md](gateway-firewalld-egress.md) | current procedure |
 | Management DHCP default-route suppression | [management-dhcp-gateway.md](management-dhcp-gateway.md) | separately approved pilot |
