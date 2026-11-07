@@ -46,6 +46,8 @@ func TestConfiguredGatewayAssets(t *testing.T) {
 	}
 	for _, args := range [][]string{
 		{"provider", "apply", "opencode-go", "--provider", "go"},
+		{"provider", "register", "opencode-go", "--alias", "go"},
+		{"model", "register", "another", "--provider", "go", "--source", "openai/grok-4.7"},
 		{"catalog", "apply", "base", "--config", `{}`},
 		{"mcp", "apply", "docs", "--config", `{"transport":"stdio","command":"/bin/other"}`},
 	} {
