@@ -10,14 +10,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Gateway command families are converted incrementally. Only core commands
-// are intercepted here; model/provider and egress remain on the legacy path.
+// Gateway command families registered in the Cobra tree are intercepted here.
 func isGatewayCoreCommand(args []string) bool {
 	if len(args) == 0 {
 		return false
 	}
 	switch args[0] {
-	case "status", "remove", "apply", "up", "validate", "render", "credential-storage", "provider", "model", "egress", "responses":
+	case "status", "remove", "apply", "up", "validate", "render", "credential-storage", "provider", "model", "plugin", "mcp", "catalog", "egress", "responses":
 		return true
 	default:
 		return false

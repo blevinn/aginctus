@@ -48,6 +48,32 @@ let
     }).config;
 
   disabled = evaluate { };
+  withAssets = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      settings.gateway = {
+        providers.go = {
+          plugin = "opencode-go";
+          config.models.coding.source = "openai/gpt-6-luna";
+        };
+        catalogs.dev.models.coding = {
+          provider = "go";
+          name = "coding";
+        };
+      };
+    };
+  };
+  assetCredential = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      settings.gateway.providers.go = {
+        plugin = "opencode-go";
+        config.api_key = "forbidden";
+      };
+    };
+  };
   enabled = evaluate {
     programs.aginctus = {
       enable = true;
@@ -166,6 +192,12 @@ let
   };
 in
 assert disabled.home.packages == [ ];
+assert
+  withAssets.programs.aginctus.settings.gateway.providers.go.config.models.coding.source
+  == "openai/gpt-6-luna";
+assert withAssets.programs.aginctus.settings.gateway.catalogs.dev.models.coding.provider == "go";
+assert
+  !(builtins.tryEval assetCredential.programs.aginctus.settings.gateway.providers.go.config).success;
 assert disabled.xdg.configFile == { };
 assert !(builtins.hasAttr "aginctus/operator-package.json" disabled.xdg.configFile);
 assert disabled.assertions == [ ];

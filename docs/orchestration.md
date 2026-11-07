@@ -425,11 +425,21 @@ The native driver reconciles the management bridge with the Incus SDK. The
 driver remains available and is the default until the native path is proven
 against a disposable real Incus and the cutover in
 [#159](https://github.com/blevinn/aginctus/issues/159). Every plan that
-reconciles the bridge resolves the same setting, so the two backends never
-target the same bridge concurrently.
+reconciles the bridge resolves the same setting, so one invocation never
+mixes the two backends. That consistency is per invocation: Aginctus holds
+no shared lock on the bridge, so concurrent invocations with different
+effective settings can still target the same bridge.
 
 The native path keeps the v0.1 command contract: `aginctus network ensure`
 and `aginctus network remove` keep their arguments, their output and their
 `--dry-run` and `--force` semantics. `--force` remains an explicit operator
 decision and now maps to explicit adoption authorization instead of disabling
 an ownership guard.
+
+Adoption authorization covers the ownership markers only. The DHCP gateway
+announcement is immutable policy: Aginctus writes it only when it creates
+the bridge, and an existing bridge must already carry the configured
+announcement, whether it is owned, foreign or being adopted. `--force`
+never rewrites the announcement, and a network of another type is never a
+removal target. A reconcile preserves unmanaged Incus configuration keys and
+the operator-supplied network description.

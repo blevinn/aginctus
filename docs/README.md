@@ -21,6 +21,9 @@ generally discoverable should be linked from this index.
   runtime state, ownership and trust boundaries.
 - [AI gateway](ai-gateway.md) — implemented LiteLLM model gateway and
   separately labeled future MCP/policy design.
+- [MCP configuration](mcp-configuration.md) — normalized MCP server
+  declarations, per-workload grants, capability model, credential rules
+  and the limits of declared policy.
 - [Declarative orchestration](orchestration.md) — current Jsonnet-generated
   plans and Apply/Compose integration.
 - [Orchestration streams](orchestration-streams.md) — plan stream
@@ -84,6 +87,7 @@ Use this map to pick the authoritative page for a given task:
 | Task | Authoritative doc | Status |
 | --- | --- | --- |
 | Overall gateway operator workflow | [gateway-operator-path.md](gateway-operator-path.md) | current procedure |
+| Compiled plugins, provider instances and model/MCP catalogs | [gateway-assets.md](gateway-assets.md) | local nonsecret declarations; no deployment or grants |
 | Egress bridge, OCI NIC, DHCP design | [gateway-egress-network.md](gateway-egress-network.md) | design + pilot |
 | Host firewalld egress policy and recovery | [gateway-firewalld-egress.md](gateway-firewalld-egress.md) | current procedure |
 | Management DHCP default-route suppression | [management-dhcp-gateway.md](management-dhcp-gateway.md) | separately approved pilot |

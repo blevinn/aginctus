@@ -68,7 +68,7 @@ func connectLocal(ctx context.Context, project string) (incus.InstanceServer, co
 	server, err := incus.ConnectIncusUnixWithContext(ctx, "", &incus.ConnectionArgs{SkipGetServer: true})
 	if err != nil {
 		cancel()
-		return nil, nil, fmt.Errorf("local Incus observation unavailable")
+		return nil, nil, observationFailure(ctx, "local Incus observation unavailable")
 	}
 	return server.UseProject(project), cancel, nil
 }

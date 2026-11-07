@@ -70,6 +70,19 @@ sets `incus.management.network.name`.
 
 As with `--config`, environment values are parsed as JSON when possible and otherwise treated as strings.
 
+### Gateway providers and catalogs
+
+`gateway.providers` declares named instances of compiled plugins, with nonsecret
+`config` containing models, MCP endpoints and plugin-supported private state paths.
+`gateway.catalogs` selects those assets and explicitly mapped inherited aliases.
+The NixOS and Home Manager modules expose the same strict typed options under
+`settings.gateway`. Each named provider/catalog is replaced atomically across
+configuration sources. Inspection consumes declarations directly; it does not
+copy them into local registries or publish runtime routes. See
+[Gateway plugins, providers and catalogs](gateway-assets.md#declarative-nix-configuration)
+for the schema, ownership rules and examples. MCP grants remain under `mcp` and
+are not derived from catalog membership.
+
 ### Runtime gateway secrets
 
 The gateway PostgreSQL password, LiteLLM master key, and LiteLLM salt key are **runtime-only** values, not Aginctus configuration settings. The paths `gateway.postgres.password`, `gateway.master.key`, and `gateway.salt.key` are rejected in all configuration files (system, user, and explicit CLI), `--config` overrides, and object-valued environment mappings, including nested JSON objects. This also applies when a prohibited key is set to `null`.
@@ -120,6 +133,34 @@ For example, a system file may define:
 ```
 
 and a user file may override only the name without repeating the rest of the object.
+
+## MCP declarations
+
+The `mcp` subtree holds the normalized MCP configuration: named servers and
+their transports, opaque credential references, explicit per-workload server
+and tool grants, model and protocol capability requirements, and the central
+gateway MCP intent.
+
+Each named server at `mcp.servers.<name>` is atomic: a source that supplies
+it replaces that server's complete lower-priority definition. Adding a new
+server preserves existing servers and grants. Other MCP objects follow the
+ordinary recursive merge and source precedence.
+Environment variables and repeated CLI overrides are grouped into one
+source overlay, so one source can construct a complete server using several
+paths.
+
+An empty `mcp` object leaves inherited entries unchanged; `mcp: null` clears
+the complete MCP policy. A partial server override does not inherit missing
+fields and is rejected if incomplete. Existing grants remain bound to server
+names. The generated NixOS configuration takes precedence over same-named
+ambient servers, but does not clear other ambient policy. A privileged gateway
+must select authoritative sources rather than trust a user-context merged
+configuration.
+
+The complete contract, including the credential rules, the effective grant
+semantics and the limits of declared policy, is documented in
+[MCP configuration](mcp-configuration.md). A configuration without an `mcp`
+key declares no MCP policy and authorizes nothing.
 
 ## Selected Incus project (v0.2 foundation)
 
@@ -226,8 +267,16 @@ and Home Manager (`programs.aginctus.settings.incus.management.network.backend`)
 Exactly one backend reconciles the bridge. The setting is read once per
 lifecycle operation and is shared by every plan that reconciles the bridge
 (`network ensure`, `network remove`, the aggregate plan, the Herdr client,
-the workload plan and the gateway deployment), so the legacy and native
-reconcilers never target the same bridge concurrently.
+the workload plan and the gateway deployment), so a single invocation never
+mixes the legacy and the native reconciler.
+
+That consistency is per invocation, not across processes. Aginctus holds no
+shared lock or lease on the bridge, so two concurrent invocations with
+different effective settings — for example one using the documented
+`--config=incus.management.network.backend=native` override — can still
+reconcile the same bridge at the same time. While the native backend is
+being trialled, do not run a legacy and a native reconcile against the same
+bridge concurrently.
 
 ```sh
 aginctus config get incus.management.network.backend
@@ -236,9 +285,15 @@ aginctus --config=incus.management.network.backend=native network ensure
 
 The native backend observes the bridge over the local Incus Unix socket,
 refuses a bridge that does not carry the Aginctus ownership markers
-unless `--force` explicitly authorizes adoption, treats the DHCP gateway
-announcement as immutable policy drift, preserves unmanaged Incus
-configuration keys, and never mutates anything during `--dry-run`.
+unless `--force` explicitly authorizes adoption, preserves unmanaged Incus
+configuration keys and the operator-supplied network description, and never
+mutates anything during `--dry-run`.
+
+The DHCP gateway announcement is immutable policy. Aginctus writes it only
+when it creates the bridge; an existing bridge must already carry the
+configured announcement, whether it is owned, foreign or being adopted.
+`--force` authorizes the ownership markers only: it never rewrites the
+announcement, and it never authorizes removing a network of another type.
 
 The backend is an opt-in transition control for
 [#153](https://github.com/blevinn/aginctus/issues/153) and
