@@ -142,3 +142,91 @@ for release signoff, or main post-merge failures for harmless skips.
 The repository administrator, not this code change, owns any eventual
 ruleset edits and optional cache credentials. This implementation does not
 write repository settings or inject secrets into untrusted PR jobs.
+
+
+## Operational hardening and required checks (#711)
+
+The core CI migration (#712–#715) has merged. As verified after #715,
+the protected \`main\` branch's active
+[ruleset 24431697](https://github.com/blevinn/aginctus/rules/24431697)
+requires the **single** GitHub Actions check
+\`hermetic validation (ubuntu)\`. The additive administrator change below
+does not modify workflow code, credentials, bypass policy, or branch targets.
+
+### Three required checks, with unchanged fail-closed Nix policy
+
+A repository administrator should edit the existing ruleset under
+**Settings → Rules → Rulesets → main**, keeping the existing check and
+adding these two independently observed GitHub Actions **job** contexts:
+
+| Exact check name | Role |
+| --- | --- |
+| \`hermetic validation (ubuntu)\` | Keep; fail-closed PR evidence aggregator |
+| \`go tests and staticcheck (ubuntu)\` | Add; always-run PR Go verification |
+| \`python shell and docs (ubuntu)\` | Add; always-run PR static and regression verification |
+
+When available, pin the source of each required check to **GitHub Actions**
+(the existing check uses integration ID \`15368\`). Preserve the current
+target (default branch), active enforcement, loose/strict freshness setting,
+review and squash-merge policy, non-fast-forward/deletion protections and
+bypass permissions. Save the changes atomically. Do **not** replace or
+disable the aggregate, or create a parallel ruleset.
+
+Do **not** directly require \`targeted Nix security contracts (ubuntu)\`:
+the job is conditionally skipped for genuinely docs-only PRs, and GitHub
+can regard conditionally skipped jobs as satisfying requirements. The
+required \`hermetic validation (ubuntu)\` aggregator checks the path
+classifier's result and insists on targeted Nix **success** whenever the
+classifier says Nix is required; invalid/missing classifier data fails.
+
+All three required names must appear on ordinary PRs targeting \`main\`.
+Their absence, failure, or cancellation must prevent merging. They are
+PR-only jobs and are correctly skipped on a protected \`main\` **push**;
+the comprehensive job, not the PR aggregate, runs after merge.
+
+### Verification immediately after the ruleset edit
+
+1. Read back the active ruleset; verify precisely the three names above,
+   GitHub Actions expected source, unchanged target, enforcement, bypass
+   and review settings. Record editor, UTC time and ruleset snapshot in
+   [#711](https://github.com/blevinn/aginctus/issues/711).
+2. On a current PR targeting \`main\`, inspect the checks and merge box.
+   All three required contexts must be reported. A failure in either fast
+   suite must block merge independently, and a required Nix failure must
+   make the aggregate fail.
+3. For a docs-only PR, require successful classification, both fast suites,
+   and aggregate; Nix may be explicitly skipped. For source/config/CI
+   changes, targeted Nix must be successful. Do not treat an unobserved
+   security contract as a pass.
+4. If any newly required check is missing, left \`Expected\`, or sourced
+   from the wrong integration, **remove only the two added names**.
+   Retain \`hermetic validation (ubuntu)\` and all other protections.
+   Correct the workflow/status-name mismatch before trying again.
+5. After merging a representative PR, confirm the independent
+   \`comprehensive hermetic regression (ubuntu)\` finishes with full
+   eight-suite Go/Python/Nix coverage, parity, packaging preview and
+   whitespace checks. An unverified or failing comprehensive run blocks
+   release signoff; PR gate success is not a substitute.
+
+### Run failure and recovery policy
+
+Every push to \`main\`, weekly schedule and explicit dispatch must produce
+an independently addressable comprehensive run. A failed, cancelled or
+timed-out comprehensive run requires an owner to inspect the failing step,
+record its commit and run URL, and either fix the source, rerun an identified
+transient infrastructure failure, or revert the offending merge. An abnormal
+post-merge run is **not** ordinary PR cancellation and must not be silently
+ignored. Escalate any unresolved failure before release tagging or approval.
+
+Maintain ongoing failure notifications (at least one monitored channel
+with an accountable owner and acknowledgement). Monitor the age of the
+latest \`main\` comprehensive run, not just its green PR predecessor. The
+GitHub Actions UI and notification subscriptions remain the operational
+source of truth. Do not expand untrusted PR workflow permissions or add
+external cache-publishing credentials to improve alerting.
+
+Tag-triggered \`release.yml\` still performs its own strict source and
+packaging validation, and will not publish on a failed validation job.
+No new cache infrastructure is authorized as part of #711. Performance
+baseline and cost sampling are separately tracked in
+[#710](https://github.com/blevinn/aginctus/issues/710).
