@@ -349,11 +349,18 @@
             subPackages = [ "./cmd/aginctus-testenv-sweep" ];
           };
           # Operator tooling is packaged independently from the public CLI.
+          testenv-worker-plan = pkgs.buildGoModule {
+            pname = "aginctus-testenv-worker-plan";
+            version = releaseVersion;
+            src = ./.;
+            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
+            subPackages = [ "./cmd/aginctus-testenv-worker-plan" ];
+          };
           testenv-worker-preflight = pkgs.buildGoModule {
             pname = "aginctus-testenv-worker-preflight";
             version = releaseVersion;
             src = ./.;
-            vendorHash = "sha256-nOdS1XPJCl/knG3nRUu8m+/AEpG9BmniQ3GT5/RXpP0=";
+            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
             subPackages = [ "./cmd/aginctus-testenv-worker-preflight" ];
           };
           # Explicit operator invocation only; not installed into any service.
@@ -361,7 +368,7 @@
             pname = "aginctus-testenv-acceptance";
             version = releaseVersion;
             src = ./.;
-            vendorHash = "sha256-nOdS1XPJCl/knG3nRUu8m+/AEpG9BmniQ3GT5/RXpP0=";
+            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
             subPackages = [ "./cmd/aginctus-testenv-acceptance" ];
             ldflags = [ "-X=main.revision=${self.rev or "source-${self.narHash}"}" ];
           };

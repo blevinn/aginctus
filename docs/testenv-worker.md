@@ -250,6 +250,148 @@ The authorization/service API and agent-facing mutations remain gated.
 
 ## Installed read-only image and pool gate
 
+### Offline bootstrap contract and drift planning
+
+The separately packaged `testenv-worker-plan` executable is installed by
+`aginctusTestenvWorker`. It is an **offline operator tool**, with no daemon
+connection, registry access, subprocess execution, signing key access, service
+or activation hook. It accepts bounded JSON on stdin and emits a deterministic
+plan. The ordinary agent CLI and MCP have no bootstrap interface.
+
+`IncusBootstrapContract` and `IncusBootstrapInventory` in
+`internal/testenv/incus_bootstrap.go` define the input schema. The project
+configuration in every plan comes directly from `IncusProjectPolicy("testenv")`:
+the fixed restricted project, aggregate quotas, nesting exception, blocked
+outer NIC/host devices/snapshots and private profiles have one policy authority.
+The contract pins the operator-reviewed complete outer pool configuration
+and full locally imported x86_64 VM image fingerprint. The outer pool remains
+`testenv`, ZFS or LVM, reporting 64–80 GiB; these observations do not prove
+effective storage quotas or independent physical backing.
+
+The inventory is a **quiescent initial bootstrap inventory**, not a runtime
+fleet inventory. It must represent the entire dedicated local daemon: all
+non-default projects, all pools, images, profiles, networks, volumes and
+instances. `default_project_empty` asserts the default project contains no
+resources except its empty default profile, which is listed separately.
+Only the restricted project, selected pool/image and empty `default` profiles
+are permitted. No networks, volumes, instances or other projects/images/pools
+are accepted, including otherwise legitimate signed runs. Do not run this
+initial-state validator against a worker serving runs or the lifecycle
+helper's foreign sentinel and interpret rejection as a repair instruction.
+
+All three readiness booleans require independent operator verification:
+
+- `marker_ready`: the existing regular root-owned disposable-worker marker
+  matches the runtime helper's checks.
+- `identity_ready`: the existing non-login `aginctus-testenv` account and its
+  dedicated-daemon-only authority match the installed recovery module.
+- `credential_ready`: the fixed private runtime file holds exactly 32 bytes,
+  is root-owned and owner-only, is outside the store/checkout/image/logs, and
+  is stable across reboots. The planner neither reads nor generates it.
+
+These input assertions and hashes are not authenticated measurements. A
+forged, stale or incomplete inventory can produce a misleading offline plan.
+Keep the contract and inventory operator-owned and outside agent-writable
+checkouts. Independently collect and review daemon state on the authorized
+worker; no live collector is implemented by this planner.
+
+For example, this **template is deliberately incomplete**. Substitute the
+reviewed fingerprints and physical source, and set readiness only after
+independent verification. Empty arrays are assertions of verified absence:
+
+```json
+{
+  "contract": {
+    "schema_version": 1,
+    "image_fingerprint": "<reviewed-full-64-lowercase-hex-fingerprint>",
+    "pool": {
+      "name": "testenv",
+      "driver": "zfs",
+      "config": {"source": "/dev/disk/by-id/OPERATOR-APPROVED-DEVICE"}
+    },
+    "pool_config_fingerprint": "<independently-reviewed-pool-config-hash>",
+    "existing_inventory_fingerprint": ""
+  },
+  "inventory": {
+    "complete": false,
+    "dedicated_local": false,
+    "socket": "/var/lib/incus/unix.socket",
+    "default_project_empty": false,
+    "marker_ready": false,
+    "identity_ready": false,
+    "credential_ready": false,
+    "projects": [],
+    "profiles": [{"project": "default", "name": "default", "config": {}, "devices": {}}],
+    "pools": [],
+    "images": [],
+    "networks": [],
+    "volumes": [],
+    "instances": []
+  }
+}
+```
+
+Existing pools use `{"metadata":{"name":...,"driver":...,"config":...},
+"status":"Created","total":...,"used":...}` with byte counts. Image entries
+use the existing `WorkerImageInspection` fields: `Fingerprint`, `Project`,
+`Type`, `Architecture`, `Public`, `AutoUpdate`, `Cached`, `RemoteSource`.
+Project entries use `name` and the complete `config` map. Profiles include
+both `default` and `aginctus-testenv` default profiles when that project exists.
+
+```sh
+planner=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-worker-plan)
+"$planner/bin/aginctus-testenv-worker-plan" --help
+# Offline input inspection only, no daemon contact:
+"$planner/bin/aginctus-testenv-worker-plan" --fingerprints < operator-input.json
+"$planner/bin/aginctus-testenv-worker-plan" < operator-input.json
+```
+
+Fingerprint output is always `inspection_only`. Independently review the
+underlying configuration before recording its candidate pool hash. Existing
+resources require a separately reviewed **complete inventory hash**, even if
+their names and configuration match. This records explicit initial-state
+approval, not ownership inferred from names. Never automatically pipe candidate
+hashes into the contract. Array order and runtime capacity/usage are included
+in the inventory hash; changed observations require renewed review. The pool
+configuration hash uses the installed preflight's encoding, excluding usage.
+
+Missing resources yield `plan_only`, with ordered operator obligations for
+pool provisioning, restricted project creation/empty-profile verification and
+local immutable image import. Fully matching reviewed state yields
+`offline_match`. Neither status admits lifecycle operations. Drift, incomplete
+credentials, unsafe profiles/devices/networks and unexpected or unreviewed
+resources yield `needs_operator_action` (exit 1), without partial steps or
+repair instructions. Malformed/oversized JSON or unsupported arguments exit 2.
+No raw pool configuration, inventory, credential or daemon diagnostics are
+printed. Project comparison is deliberately exact: extra daemon-normalized
+settings require explicit design review, not silent canonicalization/adoption.
+
+### Provisioner boundary and remaining design blockers
+
+No mutating bootstrap mechanism is implemented. Before a follow-up native
+provisioner can safely operate, the operator must choose and approve:
+
+1. The exact disposable ZFS/LVM backing device/dataset, capacity and effective
+   quota policy, including daemon-normalized config and proof that it is not
+   pilot/shared storage. A pool-config hash is not authorization to initialize
+   a disk, and a read-only resource query cannot establish safe disk ownership.
+2. A trusted bounded complete-daemon inventory collector and durable
+   provenance/approval receipt for partially completed bootstrap. This must
+   distinguish resources created by that invocation from matching foreign
+   resources after interruption. Re-read project, pool and image after each
+   permitted operation; uncertainty must stop without replacement or rollback.
+3. Operator-owned local image artifacts, their provenance and expected actual
+   Incus fingerprint before import, plus a safe policy for Incus-generated
+   default profiles and normalized project settings on the real daemon.
+
+The contract is a reviewable precursor, not a second worker configuration
+system. Future integration belongs in `aginctusTestenvWorker`, with explicit
+operator invocation and no routine-activation hook. The live installed
+preflight must be re-run before admitting a lifecycle operation; it is not an
+atomic authorization service. Independent recovery must not depend on image
+availability, the offline planner, or successful preflight. Existing recovery
+continues to perform its own project/ownership checks.
+
 `aginctusTestenvWorker` composes the existing recovery identity/timer with
 an operator-started `aginctus-testenv-preflight` service. It never initializes
 Incus, creates/adopts a project or pool, imports images, or grants agent
