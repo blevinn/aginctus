@@ -112,3 +112,105 @@ jobs:
           WHITESPACE_RESULT: ${{ steps.whitespace.outcome }}
         run: |
           python3 scripts/checks/ci_summary.py
+
+  # Advisory while the legacy required gate runs; #708 will convert the
+  # existing required context into a fail-closed aggregator.
+  go-fast:
+    name: go tests and staticcheck (ubuntu)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      AGINCTUS_INCUS_INTEGRATION: "0"
+      AGINCTUS_INCUS_DISPOSABLE: "NO"
+      AGINCTUS_ACCEPTANCE_LIVE: ""
+      AGINCTUS_ACCEPTANCE_LIVE_HOOKS: ""
+      ACCEPTANCE_TEST_FAIL: ""
+      GOFLAGS: ""
+      GOTOOLCHAIN: local
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: install pinned Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: populate Go modules
+        run: go mod download
+      - name: verify Go modules
+        env:
+          GOPROXY: "off"
+          GOSUMDB: "off"
+        run: go mod verify
+      - name: Go unit tests
+        env:
+          GOPROXY: "off"
+          GOSUMDB: "off"
+        run: go test ./...
+      - name: Go vet
+        env:
+          GOPROXY: "off"
+          GOSUMDB: "off"
+        run: go vet ./...
+      - name: Go staticcheck (same config as Nix check lint)
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        with:
+          version: v2.7.0
+          only-new-issues: false
+      - name: Markdown library for generated help validation
+        run: python3 -m pip install --disable-pip-version-check --user "markdown-it-py==4.0.0"
+      - name: Documented CLI examples (no command execution)
+        env:
+          GOPROXY: "off"
+          GOSUMDB: "off"
+        run: |
+          set -euo pipefail
+          go run ./cmd/aginctus help | python3 scripts/check_docs_examples.py
+
+  static-fast:
+    name: python shell and docs (ubuntu)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    env:
+      AGINCTUS_INCUS_INTEGRATION: "0"
+      AGINCTUS_INCUS_DISPOSABLE: "NO"
+      AGINCTUS_ACCEPTANCE_LIVE: ""
+      AGINCTUS_ACCEPTANCE_LIVE_HOOKS: ""
+      ACCEPTANCE_TEST_FAIL: ""
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: install pinned Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+      - name: install Python check tools
+        run: python3 -m pip install --disable-pip-version-check "markdown-it-py==4.0.0" "ruff==0.14.3"
+      - name: Ruff lint
+        run: ruff check .
+      - name: Python unit suites
+        run: |
+          set -euo pipefail
+          for path in scripts/vm_harness guest/opencode guest/ssh scripts/acceptance scripts/gateway tests; do
+            python3 -m unittest discover -s "$path" -p 'test_*.py' -v
+          done
+      - name: shellcheck
+        run: |
+          set -euo pipefail
+          command -v shellcheck
+          git ls-files -z -- '*.sh' | xargs -0 -r -n1 shellcheck
+      - name: shell parser check
+        run: |
+          set -euo pipefail
+          git ls-files -z -- '*.sh' | xargs -0 -r -n1 bash -n
+      - name: shell adapter tests (synthetic only)
+        run: |
+          set -euo pipefail
+          bash scripts/acceptance/opencode-test.sh
+          bash scripts/acceptance/opencode-live-adapter-test.sh
+      - name: local Markdown links
+        run: python3 scripts/check_markdown_links.py
