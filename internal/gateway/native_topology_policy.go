@@ -2,8 +2,9 @@ package gateway
 
 import (
 	"fmt"
-	"regexp"
+	"net/netip"
 	"reflect"
+	"regexp"
 )
 
 // Native image acquisition must resolve public tags to platform-specific
@@ -17,7 +18,8 @@ var nativeGatewayDigest = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]*@sha2
 // credentials, image identity/aliases, volume state, and mutation-time races.
 func (p NativeGatewayTopology) ValidateExecutionShape() error {
 	if p.Deployment == "" || p.Project == "" || p.Project == "default" ||
-		p.ManagementNetwork == "" || p.DatabaseVolume != "gateway-postgres" {
+		p.ManagementNetwork == "" || p.DatabaseVolume != "gateway-postgres" ||
+		p.EgressNetwork == p.ManagementNetwork {
 		return fmt.Errorf("native gateway requires an explicit nondefault project and managed database volume")
 	}
 	if len(p.Services) != 2 {
@@ -37,15 +39,20 @@ func (p NativeGatewayTopology) ValidateExecutionShape() error {
 	}
 	appNetworks := append([]NativeGatewayNetwork(nil), management...)
 	if p.EgressNetwork != "" {
-		if p.EgressNetwork == p.ManagementNetwork {
-			return fmt.Errorf("native gateway egress and management networks must differ")
+		if len(app.Networks) != 2 {
+			return fmt.Errorf("native gateway egress requires one explicit LiteLLM attachment")
 		}
-		appNetworks = append(appNetworks, NativeGatewayNetwork{Name:p.EgressNetwork})
-		// Fixed IPv4 addresses are retained here for later actor-authorized
-		// device reconciliation, never used to create host networks implicitly.
-		if len(app.Networks) == 2 {
-			appNetworks[1].IPv4Address = app.Networks[1].IPv4Address
+		address, err := netip.ParsePrefix(app.Networks[1].IPv4Address)
+		if err != nil || !address.Addr().Is4() || address.Addr().IsUnspecified() || address.Addr().IsMulticast() {
+			return fmt.Errorf("native gateway egress requires a valid unicast IPv4 attachment")
 		}
+		// Fixed IPv4 addresses are retained for later actor-authorized device
+		// reconciliation, never used to create host networks implicitly.
+		appNetworks = append(appNetworks, NativeGatewayNetwork{
+			Name: p.EgressNetwork, IPv4Address: fmt.Sprintf("%s/%d", address.Addr(), address.Bits()),
+		})
+	} else if len(app.Networks) != 1 {
+		return fmt.Errorf("native gateway without egress permits only management attachment")
 	}
 	if !reflect.DeepEqual(app.Networks, appNetworks) || app.Volume != "" ||
 		!reflect.DeepEqual(app.DependsOn, []string{"postgres"}) ||
