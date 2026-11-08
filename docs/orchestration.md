@@ -281,8 +281,9 @@ operation and verifies the reached state. It never creates, replaces or
 removes an instance, and a failed or unverified transition is reported as
 uncertain rather than as success.
 
-The stop transition keeps the graceful Incus CLI semantics: a 30 second grace
-period and no forced stop.
+The stop transition keeps the graceful Incus CLI semantics: no forced stop,
+no stored runtime state and no client-side timeout, so the Incus daemon
+applies the same shutdown grace period as `incus stop`.
 
 ## Execution semantics
 

@@ -148,6 +148,24 @@ func TestNativeInstanceLifecycleStopsOwnedInstance(t *testing.T) {
 	}
 }
 
+func TestNativeInstanceLifecycleKeepsIncusCLIStopSemantics(t *testing.T) {
+	// The Incus CLI sends no client-side timeout, so the daemon applies
+	// its own high shutdown timeout. A short timeout would force the
+	// instance down where the CLI waited for a graceful shutdown.
+	for _, state := range []InstanceState{InstanceStopped, InstanceRunning} {
+		t.Run(string(state), func(t *testing.T) {
+			intent := workloadLifecycleIntent(t, state)
+			request := intent.stateRequest()
+			if request.Timeout != instanceNoTimeout {
+				t.Fatalf("transition imposed a client-side timeout: %+v", request)
+			}
+			if request.Force || request.Stateful {
+				t.Fatalf("transition forced the instance or stored runtime state: %+v", request)
+			}
+		})
+	}
+}
+
 func TestNativeInstanceLifecycleIsIdempotent(t *testing.T) {
 	intent := workloadLifecycleIntent(t, InstanceRunning)
 	fake := &fakeInstanceClient{scope: intent.Scope, instance: ownedInstance(t, intent, "Running"), etag: "etag-1"}

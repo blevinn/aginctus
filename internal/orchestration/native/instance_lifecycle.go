@@ -23,10 +23,11 @@ const (
 	InstanceStopped InstanceState = "stopped"
 )
 
-// instanceStopTimeoutSeconds is the grace period of a graceful stop. It
-// matches the Incus CLI stop default, so the SDK transition keeps the
-// user-visible behaviour of the subprocess it replaces.
-const instanceStopTimeoutSeconds = 30
+// instanceNoTimeout requests no client-side timeout. It matches the Incus
+// CLI stop default, so the SDK transition keeps the user-visible behaviour
+// of the subprocess it replaces: the daemon applies its own high shutdown
+// timeout instead of forcing the instance after a short grace period.
+const instanceNoTimeout = -1
 
 // InstanceLifecycleIntent describes the required running state of one
 // Aginctus-owned instance. It never creates, replaces or removes an
@@ -237,12 +238,14 @@ func EnsureInstanceStateWithClient(
 }
 
 // stateRequest is the Incus state transition request for the required
-// state. The transition never forces a stop and never stores runtime state.
+// state. The transition never forces a stop, never stores runtime state and
+// never imposes a client-side timeout, so the daemon applies the same
+// shutdown grace period as the Incus CLI it replaces.
 func (intent InstanceLifecycleIntent) stateRequest() api.InstanceStatePut {
 	if intent.State == InstanceStopped {
-		return api.InstanceStatePut{Action: "stop", Timeout: instanceStopTimeoutSeconds, Force: false}
+		return api.InstanceStatePut{Action: "stop", Timeout: instanceNoTimeout, Force: false}
 	}
-	return api.InstanceStatePut{Action: "start", Timeout: -1, Force: false}
+	return api.InstanceStatePut{Action: "start", Timeout: instanceNoTimeout, Force: false}
 }
 
 // observeInstance reads one instance. Absence is proven by an explicit
