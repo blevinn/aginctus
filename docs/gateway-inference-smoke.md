@@ -1,6 +1,6 @@
-# Authenticated LiteLLM Responses smoke (#122)
+# Gateway: opt-in authenticated Responses smoke
 
-**Stage 5** of the [gateway operator decision path](gateway-operator-path.md#5-inference-evidence-and-operator-hold). This is a separately approved, potentially billable host-side provider check; it does not replace the [OpenCode agent acceptance path](acceptance-opencode.md). Confirm scoped-key revocation and independent upstream attribution, not merely a terminal local HTTP response.
+**Stage 5** of the [canonical gateway workflow](gateway-operator-path.md#5-inference-evidence-and-operator-hold). This is a separately approved, potentially billable host-side provider check; it does not replace the [OpenCode agent acceptance path](acceptance-opencode.md). Confirm scoped-key revocation and independent upstream attribution, not merely a terminal local HTTP response.
 
 This script is an **opt-in live provider request** from the trusted NixOS
 pilot host, not a synthetic #124 Herdr acceptance run. It uses only a
@@ -34,7 +34,7 @@ or upstream provider secret. It neither deploys nor repairs the gateway.
 - The test makes one small billable Responses inference request. Run only
   with an approved upstream model and spending authorization.
 
-## Pilot state is not a script precondition
+## Do not reuse historical pilot state
 
 Do not rely on historical instance IPs, registration attempts or model/key availability recorded in earlier PRs. Inspect the **current** gateway on the operator-approved host and follow [#257](https://github.com/blevinn/aginctus/issues/257) for egress readiness and [#122](https://github.com/blevinn/aginctus/issues/122) for permission to resume live/billable inference. Neither configured routes, issued scoped keys nor HTTP health checks prove a successful upstream request.
 

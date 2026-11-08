@@ -52,6 +52,7 @@ assert unit.wantedBy == [ ];
 assert builtins.elem self.packages.${system}.testenv-cli cfg.environment.systemPackages;
 assert !(cfg.systemd.services ? aginctus-testenv-bootstrap);
 assert unit.serviceConfig.User == "aginctus-testenv";
+assert lib.hasSuffix "/bin/aginctus-testenv worker preflight" unit.serviceConfig.ExecStart;
 assert unit.serviceConfig.RestrictAddressFamilies == [ "AF_UNIX" ];
 assert unit.serviceConfig.IPAddressDeny == "any";
 assert unit.serviceConfig.ProtectSystem == "strict";
