@@ -169,9 +169,20 @@ The existing NixOS module still creates and periodically reconciles the
 ownership-scoped DNS/DHCP host firewall policy. If egress enforcement is
 enabled on the host, it stays root-managed; it must not migrate to Home Manager.
 
-These system-option combinations already exist; the stack adds regression
-assertions to ensure disabling image and workload reconciliation does not
-also disable the host firewall integration.
+The `nixos-module` evaluation check compares this mode with enabled system
+lifecycle units for iptables-nft, NixOS-native nftables and firewalld (including
+opt-in egress). Only the image/reconcile services disappear: host firewall
+services and timers, effective INPUT integration, configuration, packages and
+root-only firewall state rules remain identical. The Home Manager evaluation
+check also verifies that user firewall settings emit only user package/config
+declarations, including when the user requests a permissive zone.
+
+The existing `firewall-iptables-integration`, `firewall-nixos-nft-integration`,
+`firewall-firewalld-integration` and `firewall-egress-bootstrap` disposable VM
+outputs exercise host-only packet policy, revocation and reload recovery.
+The iptables scenario uses a synthetic bridge/rule fixture because the NixOS
+Incus module requires nftables; it does not establish real Incus acceptance
+on iptables. Gateway egress enforcement requires firewalld and remains opt-in.
 
 ## What has not migrated
 

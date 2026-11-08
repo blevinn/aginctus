@@ -88,6 +88,17 @@ let
       settings.incus.project = "aginctus-user";
     };
   };
+  userPolicyIntent = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      settings.firewall = {
+        backend = "firewalld";
+        zone = "trusted";
+      };
+      settings.gateway.egress.network.name = "user-selected";
+    };
+  };
   invalidProjectDefault = evaluate {
     programs.aginctus = {
       enable = true;
@@ -202,6 +213,21 @@ assert disabled.xdg.configFile == { };
 assert !(builtins.hasAttr "aginctus/operator-package.json" disabled.xdg.configFile);
 assert disabled.assertions == [ ];
 assert enabled.home.packages == [ stub ];
+# Even permissive user CLI intent emits only user package/config declarations.
+# The fixture has no system policy options: a privileged output fails evaluation.
+assert userPolicyIntent.home.packages == [ stub ];
+assert
+  builtins.attrNames userPolicyIntent.xdg.configFile == [
+    "aginctus/config.json"
+    "aginctus/operator-package.json"
+  ];
+assert
+  builtins.attrNames userPolicyIntent == [
+    "assertions"
+    "home"
+    "programs"
+    "xdg"
+  ];
 assert enabled.programs.aginctus.settings.incus.management.network.name == "operator-test";
 assert enabled.programs.aginctus.settings.incus.project == "aginctus";
 assert alternateProject.programs.aginctus.settings.incus.project == "aginctus-user";
