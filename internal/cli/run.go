@@ -183,21 +183,6 @@ type mutationOptions struct {
 	Force  bool
 }
 
-func parseNetworkOptions(args []string) (mutationOptions, error) {
-	var options mutationOptions
-	for _, arg := range args {
-		switch arg {
-		case "--dry-run":
-			options.DryRun = true
-		case "--force":
-			options.Force = true
-		default:
-			return mutationOptions{}, fmt.Errorf("unknown option %q", arg)
-		}
-	}
-	return options, nil
-}
-
 func printNetworkUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: aginctus [global options] network apply [--dry-run] [--force]")
 	fmt.Fprintln(w, "       aginctus [global options] network remove [--dry-run] [--force]")
