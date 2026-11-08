@@ -32,26 +32,33 @@ let
     };
   operatorGeneration = makeGeneration "disposable-operator";
   upgradedGeneration = makeGeneration "upgraded-operator";
-  operatorFlake = pkgs.writeText "home-manager-operator-flake.nix" ''
-    {
-      inputs = {
-        generation = {
-          url = "path:${operatorGeneration.activationPackage}";
-          flake = false;
+  makeFlake =
+    generation:
+    pkgs.writeText "home-manager-operator-flake.nix" ''
+      {
+        inputs = {
+          generation = {
+            url = "path:${generation.activationPackage}";
+            flake = false;
+          };
+          news = {
+            url = "path:${generation.config.news.json.output}";
+            flake = false;
+          };
         };
-        news = {
-          url = "path:${operatorGeneration.config.news.json.output}";
-          flake = false;
+        outputs = { generation, news, ... }: {
+          homeConfigurations.operator = {
+            activationPackage = generation.outPath;
+            config.news.json.output = news.outPath;
+          };
         };
-      };
-      outputs = { generation, news, ... }: {
-        homeConfigurations.operator = {
-          activationPackage = generation.outPath;
-          config.news.json.output = news.outPath;
-        };
-      };
-    }
-  '';
+      }
+    '';
+  operatorFlake = makeFlake operatorGeneration;
+  upgradedFlake = makeFlake upgradedGeneration;
+  unmanagedConfig = pkgs.writeText "unmanaged-operator-config.json" (
+    builtins.toJSON { gateway.id = "unmanaged-operator"; }
+  );
   mismatchedManifest = pkgs.writeText "mismatched-operator-package.json" (
     builtins.toJSON {
       schema = 1;
@@ -130,8 +137,10 @@ pkgs.testers.runNixOSTest {
       operatorGeneration.activationPackage
       upgradedGeneration.activationPackage
       operatorFlake
+      upgradedFlake
       pkgs.home-manager
       operatorGeneration.config.news.json.output
+      upgradedGeneration.config.news.json.output
     ];
     environment.systemPackages = [
       pkgs.incus
@@ -235,9 +244,41 @@ pkgs.testers.runNixOSTest {
     assert status == 1 and "operator package declarations differ" in mismatch, "system/user declaration mismatch must fail safely"
     machine.succeed(operator + " rm -f " + manifest)
 
-    # Package/config generation switching does not imply resource reconciliation.
+    # The CLI selects its profile before activation; a file conflict must leave
+    # the active-generation GC root and unmanaged contents intact.
+    profile = "/home/operator/.local/state/nix/profiles/home-manager"
+    active_generation = "/home/operator/.local/state/home-manager/gcroots/current-home"
+    original_profile = machine.succeed(operator + " readlink -f " + profile).strip()
+    assert machine.succeed(operator + " readlink -f " + active_generation).strip() == "${operatorGeneration.activationPackage}"
+    machine.succeed(operator + " install -d -m 0700 /home/operator/upgraded-flake")
+    machine.succeed(operator + " cp ${upgradedFlake} /home/operator/upgraded-flake/flake.nix")
+    machine.succeed(operator + " nix --offline flake lock /home/operator/upgraded-flake", timeout=120)
+    upgraded_home_manager = operator + " " + home_manager + " --flake /home/operator/upgraded-flake#operator"
+    config = "/home/operator/.config/aginctus/config.json"
+    machine.succeed(operator + " rm -f " + config)
+    machine.succeed(operator + " cp ${unmanagedConfig} " + config)
+    conflicting_file = machine.succeed("sha256sum " + config)
+    status, failure = machine.execute(upgraded_home_manager + " switch 2>&1", timeout=600)
+    assert status != 0 and "would be clobbered" in failure, "unmanaged config must block activation"
+    assert machine.succeed("sha256sum " + config) == conflicting_file
+    machine.fail("test -L " + config)
+    assert machine.succeed(operator + " readlink -f " + profile).strip() != original_profile
+    assert machine.succeed(operator + " readlink -f " + active_generation).strip() == "${operatorGeneration.activationPackage}"
+    machine.succeed(cli + " config get gateway.id | grep -q unmanaged-operator")
+    machine.succeed(operator + " rm -f " + config)
+
+    # Retry after explicit conflict removal, then roll back using the recorded
+    # generation's activate script, as standalone Home Manager documents.
     upgrade = operator + " ${upgradedGeneration.activationPackage}/activate"
-    machine.succeed(upgrade, timeout=600)
+    machine.succeed(upgraded_home_manager + " switch", timeout=600)
+    machine.succeed(cli + " config get gateway.id | grep -q upgraded-operator")
+    assert machine.succeed(operator + " readlink -f " + active_generation).strip() == "${upgradedGeneration.activationPackage}"
+    machine.succeed(operator + " " + original_profile + "/activate", timeout=600)
+    assert machine.succeed(operator + " readlink -f " + profile).strip() == "${operatorGeneration.activationPackage}"
+    assert machine.succeed(operator + " readlink -f " + active_generation).strip() == "${operatorGeneration.activationPackage}"
+    machine.succeed(cli + " config get gateway.id | grep -q disposable-operator")
+    machine.succeed(cli + " operator package-audit --owner user")
+    machine.succeed(upgraded_home_manager + " switch", timeout=600)
     machine.succeed(cli + " config get gateway.id | grep -q upgraded-operator")
     machine.succeed(cli + " operator package-audit --owner user")
 
