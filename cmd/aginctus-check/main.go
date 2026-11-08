@@ -32,6 +32,10 @@ func execute(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "--verbose cannot be combined with --format json")
 		return 2
 	}
+	if *vmRunID != "" && *verbose {
+		fmt.Fprintln(stderr, "--verbose is unavailable for VM evidence")
+		return 2
+	}
 	root, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintln(stderr, "unable to resolve working directory")
@@ -42,10 +46,6 @@ func execute(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if *vmRunID != "" {
-		if *verbose {
-			fmt.Fprintln(stderr, "--verbose is unavailable for VM evidence")
-			return 2
-		}
 		vm, err := evidence.ReadVM(filepath.Join(root, ".vm-harness-results"), *vmRunID)
 		if err != nil {
 			vm = evidence.Unavailable()
