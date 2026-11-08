@@ -95,16 +95,22 @@ func updateFixture(t *testing.T) (InstanceIntent, *updateFake) {
 
 func TestNativeInstanceUpdatePreservesUnmanagedWritableData(t *testing.T) {
 	intent, fake := updateFixture(t)
+	fake.instance.Architecture = "x86_64"
+	fake.instance.Ephemeral = true
+	fake.instance.Stateful = true
 	beforeDevices := cloneDevices(map[string]map[string]string(fake.instance.Devices))
 	beforeProfiles := append([]string(nil), fake.instance.Profiles...)
+	beforeArchitecture := fake.instance.Architecture
 	result, err := UpdateInstanceWithClient(context.Background(), intent, fake)
 	if err != nil || !result.Changed || !result.Verified || fake.writes != 1 || fake.op.waits != 1 {
 		t.Fatalf("update failed: %+v %v", result, err)
 	}
 	if fake.put.Config["environment.UNMANAGED_SECRET"] != "sensitive-value" ||
 		!reflect.DeepEqual(map[string]map[string]string(fake.put.Devices), beforeDevices) || !slices.Equal(fake.put.Profiles, beforeProfiles) ||
+		fake.put.Architecture != beforeArchitecture || !fake.put.Ephemeral || !fake.put.Stateful ||
+		fake.instance.Architecture != beforeArchitecture || !fake.instance.Ephemeral || !fake.instance.Stateful ||
 		fake.instance.Status != "Running" || fake.instance.Type != intent.Type {
-		t.Fatalf("update did not preserve observed data: devices=%t profiles=%t status=%q type=%q", reflect.DeepEqual(map[string]map[string]string(fake.put.Devices), beforeDevices), reflect.DeepEqual(fake.put.Profiles, beforeProfiles), fake.instance.Status, fake.instance.Type)
+		t.Fatalf("update did not preserve observed data: devices=%t profiles=%t architecture=%q ephemeral=%t stateful=%t status=%q type=%q", reflect.DeepEqual(map[string]map[string]string(fake.put.Devices), beforeDevices), reflect.DeepEqual(fake.put.Profiles, beforeProfiles), fake.put.Architecture, fake.put.Ephemeral, fake.put.Stateful, fake.instance.Status, fake.instance.Type)
 	}
 	if fake.put.Config["user.aginctus.runtime"] != "new-runtime" || fake.put.Description != intent.Description {
 		t.Fatalf("explicit fields not applied: %+v", fake.put)

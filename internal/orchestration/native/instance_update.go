@@ -160,7 +160,15 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 	if err := ctx.Err(); err != nil {
 		return fail("cancellation", false, false, err)
 	}
-	put := api.InstancePut{Description: current.Description, Config: api.ConfigMap(maps.Clone(current.Config)), Devices: api.DevicesMap(cloneDevices(current.Devices)), Profiles: slices.Clone(current.Profiles)}
+	put := api.InstancePut{
+		Architecture: current.Architecture,
+		Description:  current.Description,
+		Config:       api.ConfigMap(maps.Clone(current.Config)),
+		Devices:      api.DevicesMap(cloneDevices(current.Devices)),
+		Ephemeral:    current.Ephemeral,
+		Profiles:     slices.Clone(current.Profiles),
+		Stateful:     current.Stateful,
+	}
 	for key, value := range intent.Config {
 		put.Config[key] = value
 	}
@@ -180,7 +188,8 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 	if err != nil {
 		return fail("verification", true, true, err)
 	}
-	if after.Description != intent.Description || after.Type != current.Type || after.Status != current.Status || !slices.Equal(after.Profiles, current.Profiles) ||
+	if after.Architecture != current.Architecture || after.Description != intent.Description || after.Type != current.Type ||
+		after.Ephemeral != current.Ephemeral || after.Stateful != current.Stateful || after.Status != current.Status || !slices.Equal(after.Profiles, current.Profiles) ||
 		!reflect.DeepEqual(after.Devices, current.Devices) {
 		return fail("verification", true, true, fmt.Errorf("instance update postcondition unverified"))
 	}
