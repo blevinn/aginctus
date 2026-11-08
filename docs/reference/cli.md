@@ -448,7 +448,7 @@ aginctus gateway render
 aginctus network apply --dry-run
 ```
 
-On a separately approved deployment, perform the relevant operations from [getting started](getting-started.md), then inspect runtime status. For Herdr use [managed machine registration](herdr-machine-registration.md); for approved gateway keys and authenticated smoke tests use the [gateway key workflow](gateway-workload-key-pilot.md) and [inference smoke](gateway-inference-smoke.md). Passing the above checks does **not** close the [v0.1 release gate](https://github.com/blevinn/aginctus/issues/118).
+On a separately approved deployment, perform the relevant operations from [getting started](../getting-started.md), then inspect runtime status. For Herdr use [managed machine registration](../operations/workloads/herdr-machine-registration.md); for approved gateway keys and authenticated smoke tests use the [gateway key workflow](../operations/gateway/gateway-workload-key-pilot.md) and [inference smoke](../operations/gateway/gateway-inference-smoke.md). Passing the above checks does **not** close the [v0.1 release gate](https://github.com/blevinn/aginctus/issues/118).
 
 ## Development and errors
 

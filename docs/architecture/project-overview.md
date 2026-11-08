@@ -2,7 +2,7 @@
 
 Aginctus provides a small, configurable agent lab on [Incus](https://linuxcontainers.org/incus/). Its current deliverable is a **single-host, CLI-operated** environment: a dedicated Herdr client, a managed OpenCode workload and a private LiteLLM/PostgreSQL gateway with an independently controlled egress path.
 
-The [current architecture](architecture.md) documents what is implemented. [Getting started](getting-started.md) gives the host prerequisites and safe inspection/deployment sequence. The [v0.1 release tracker](https://github.com/blevinn/aginctus/issues/118) records pilot acceptance separately from implemented code; do not assume that gateway provisioning or a Herdr session proves real upstream inference.
+The [current architecture](README.md) documents what is implemented. [Getting started](../getting-started.md) gives the host prerequisites and safe inspection/deployment sequence. The [v0.1 release tracker](https://github.com/blevinn/aginctus/issues/118) records pilot acceptance separately from implemented code; do not assume that gateway provisioning or a Herdr session proves real upstream inference.
 
 ## Design principles
 
@@ -16,10 +16,10 @@ The [current architecture](architecture.md) documents what is implemented. [Gett
 
 The Go CLI reconciles an isolated management bridge, Incus guests and Herdr client state, manages an explicit public-key authorization / pinned-host-key / machine-registration sequence, and can deploy a LiteLLM gateway alongside PostgreSQL. The NixOS module supplies declarative image and firewall integration; Incus resource reconciliation and gateway activation are separately opted in. The OpenCode launcher reads its approved LiteLLM alias and workload key at runtime rather than embedding secrets in an image.
 
-Operational details belong in the [architecture reference](architecture.md), [CLI guide](cli.md), [Herdr operations](herdr-machine-registration.md), [OpenCode workload](workloads/opencode.md), and [gateway guidance](ai-gateway.md). Actual end-to-end inference and isolation remain evidence-based acceptance gates.
+Operational details belong in the [architecture reference](README.md), [CLI guide](../reference/cli.md), [Herdr operations](../operations/workloads/herdr-machine-registration.md), [OpenCode workload](../operations/workloads/opencode.md), and [gateway guidance](gateway.md). Actual end-to-end inference and isolation remain evidence-based acceptance gates.
 
 ## Future direction (not current features)
 
-Aginctus may add a shared domain API, dashboard/TUI, multiple Incus projects, safe host workspace sharing, additional agent runtimes and aggregation shells, Kubernetes/remote execution, native Incus reconciliation, model-provider verification, and explicit MCP/tool authorization. These are milestone or design discussions, **not supported CLI commands or deployment guarantees**. The [native reconciliation ADR](adr/0002-native-incus-reconciliation.md) and [future design](design/native-incus-reconciliation.md) preserve decisions and open tradeoffs without documenting them as shipping behavior.
+Aginctus may add a shared domain API, dashboard/TUI, multiple Incus projects, safe host workspace sharing, additional agent runtimes and aggregation shells, Kubernetes/remote execution, native Incus reconciliation, model-provider verification, and explicit MCP/tool authorization. These are milestone or design discussions, **not supported CLI commands or deployment guarantees**. The [native reconciliation ADR](../adr/0002-native-incus-reconciliation.md) and [future design](../design/native-incus-reconciliation.md) preserve decisions and open tradeoffs without documenting them as shipping behavior.
 
 Aginctus is not intended to replace every Incus management operation, create a new agent protocol, or grant agents ambient host privileges. A management bridge is not a per-workload security boundary, and an implemented configuration path is not proof of a live approved inference transaction.

@@ -2,7 +2,7 @@
 
 Status: agreed design direction; configuration validation, Compose rendering, and initial orchestration-backed deployment are implemented, while authentication, credential management, MCP policy, teardown/status, health, and backup/restore remain follow-up work.
 
-The MCP configuration contract — normalized server declarations, per-workload grants, capability requirements and credential rules — is implemented and documented separately in [MCP configuration](mcp-configuration.md). That contract states declared policy; the gateway runtime that would enforce it is follow-up work.
+The MCP configuration contract — normalized server declarations, per-workload grants, capability requirements and credential rules — is implemented and documented separately in [MCP configuration](../reference/mcp-configuration.md). That contract states declared policy; the gateway runtime that would enforce it is follow-up work.
 
 ## Scope
 
@@ -14,7 +14,7 @@ The MVP includes workload identities, explicit model and MCP permissions, infere
 
 Multi-tenancy, multiple gateways, federation, a central control plane, high availability, local MCP subprocess execution, and an approval UI are outside this MVP. This gateway slice does not change the scope of the [v0.1 release scope](https://github.com/blevinn/aginctus/issues/118).
 
-The [locally hosted LLM proposal](design/local-llms.md) extends this direction with Aginctus-managed OpenAI-compatible inference servers inside Incus, backed by persistent model storage and the same identity/model-policy boundary. It is a proposed follow-up, not part of the implemented gateway slice.
+The [locally hosted LLM proposal](../design/local-llms.md) extends this direction with Aginctus-managed OpenAI-compatible inference servers inside Incus, backed by persistent model storage and the same identity/model-policy boundary. It is a proposed follow-up, not part of the implemented gateway slice.
 
 ## Initial implementation slice
 

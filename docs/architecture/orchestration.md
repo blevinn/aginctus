@@ -1,6 +1,6 @@
 # Orchestration engine and reconciliation boundaries
 
-**Status (current implementation, not a release acceptance claim):** The Jsonnet plan/validation/execution engine and Go Apply/Compose integration remain present for management-network, Herdr, workloads and gateway. A selectable native Incus SDK driver reconciles the management bridge; additional native project/instance primitives exist, but their presence does **not** mean the legacy drivers have been retired or the whole deployment has native parity. Runtime-specific readiness, migration, gateway credentials and guest bootstrap have separate verification gates. See [ADR 0002](adr/0002-native-incus-reconciliation.md) and the [active cutover design](design/native-incus-reconciliation.md).
+**Status (current implementation, not a release acceptance claim):** The Jsonnet plan/validation/execution engine and Go Apply/Compose integration remain present for management-network, Herdr, workloads and gateway. A selectable native Incus SDK driver reconciles the management bridge; additional native project/instance primitives exist, but their presence does **not** mean the legacy drivers have been retired or the whole deployment has native parity. Runtime-specific readiness, migration, gateway credentials and guest bootstrap have separate verification gates. See [ADR 0002](../adr/0002-native-incus-reconciliation.md) and the [active cutover design](../design/native-incus-reconciliation.md).
 
 ## Current contract and origins
 
@@ -264,7 +264,7 @@ reported as uncertain rather than as success or as a rollback.
 
 The management-network backend is selected with
 `incus.management.network.backend`. See
-[Configuration](configuration.md#management-network-reconciliation-backend).
+[Configuration](../reference/configuration.md#management-network-reconciliation-backend).
 
 ### Native instance lifecycle
 

@@ -362,7 +362,7 @@ disabled, otherwise omitted to retain Incus's enabled default) and
 ## Declarative client header forwarding
 
 For OpenCode Go native Responses, use the default-off
-[`gateway.litellm.selectiveGoForwarding` policy](selective-go-forwarding.md).
+[`gateway.litellm.selectiveGoForwarding` policy](../operations/gateway/selective-go-forwarding.md).
 It requires an immutable LiteLLM digest and rejects simultaneous stock global
 or nonempty model-group forwarding. The stock option below remains a
 compatibility interface; actual pinned transport auditing rejects it for Go
@@ -423,7 +423,7 @@ aginctus --config='gateway.litellm.forwardClientHeaders=["team/*"]' gateway rend
 
 A pilot that previously set `environment.CONFIG_FILE_PATH` directly in Incus
 must follow the manual-to-declarative migration and rollback criteria in
-[selective forwarding operations](selective-go-forwarding.md#migration-activation-and-rollback). Declaring this config is
+[selective forwarding operations](../operations/gateway/selective-go-forwarding.md#migration-activation-and-rollback). Declaring this config is
 not permission to reconcile a running gateway or make provider requests.
 
 ## Inspecting effective configuration
@@ -610,7 +610,7 @@ services.aginctus.firewall.enable = false;
 
 The full host example at the top of this document enables the
 firewall reconciler silently. See
-[`docs/firewall-host-backends.md`](firewall-host-backends.md) for the
+[`docs/firewall-host-backends.md`](../operations/host/firewall-host-backends.md) for the
 ownership contract and backend-specific caveats.
 
 The flake provides `packages.<system>.aginctus` (also `packages.<system>.default`) and the module selects that package by default. A consuming host can still override `services.aginctus.package` to pin or replace the CLI independently.
