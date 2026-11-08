@@ -27,7 +27,9 @@ func writeCobraHelp(cmd *cobra.Command, out io.Writer) {
 	var visit func(*cobra.Command)
 	visit = func(parent *cobra.Command) {
 		for _, child := range parent.Commands() {
-			if child.Hidden || !child.IsAvailableCommand() {
+			// Cobra installs the explicit help command as a special command:
+			// it is runnable but intentionally not an available operation.
+			if child.Hidden || (!child.IsAvailableCommand() && child.Name() != "help") {
 				continue
 			}
 			if child.Runnable() {

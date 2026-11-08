@@ -23,6 +23,7 @@ Subcommand syntax (derived from registered Cobra commands):
   aginctus network apply
       --dry-run   Show intended change without mutation
       --force     Permit supported replacement
+      -h, --help  Show help
   aginctus workload apply [NAME]
       --dry-run   Inspect without mutation
       --force     Permit supported replacement
@@ -86,6 +87,8 @@ class DocsChecksTest(unittest.TestCase):
         self.assertTrue(accepted("config get incus.management.network.name"))
         self.assertTrue(accepted("workload apply dev --dry-run"))
         self.assertTrue(accepted("network apply --dry-run"))
+        self.assertTrue(accepted("network apply -h"))
+        self.assertTrue(accepted("network apply --help"))
         self.assertFalse(accepted("gateway apply --dry-run"))
         self.assertFalse(accepted("workload apply dev --unsafe"))
         self.assertFalse(accepted("this-command-does-not-exist"))

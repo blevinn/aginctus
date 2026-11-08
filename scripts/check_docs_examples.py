@@ -45,10 +45,11 @@ def _flag_usage(line):
     """Read the flag name/type from the standard pflag FlagUsages format."""
     head = re.split(r"\s{2,}", line.strip(), maxsplit=1)[0]
     tokens = head.replace(",", " ").split()
-    for index, token in enumerate(tokens):
-        if token.startswith("--"):
-            return token, index + 1 < len(tokens)
-    return None
+    names = [token for token in tokens if token.startswith("-")]
+    if not names:
+        return None
+    value = any(not token.startswith("-") for token in tokens)
+    return names, value
 
 
 def patterns(help_text):
@@ -89,8 +90,10 @@ def patterns(help_text):
                 continue
             if current is not None and line.startswith("      "):
                 parsed = _flag_usage(line)
-                if parsed and parsed[0] != "--help":
-                    current.flags[parsed[0]] = parsed[1]
+                if parsed:
+                    names, takes_value = parsed
+                    for name in names:
+                        current.flags[name] = takes_value
                 continue
 
         # Accept older help fixtures for tests and branch-local compatibility.
@@ -138,7 +141,7 @@ def matches(example, shape):
     index = 0
     while index < len(example):
         value = example[index]
-        if not value.startswith("--"):
+        if not value.startswith("-") or value == "-":
             positional.append(value)
             index += 1
             continue
