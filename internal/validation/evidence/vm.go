@@ -239,16 +239,16 @@ func NormalizeVM(payload []byte, runID string) (Report, error) {
 	counts := map[string]int{"passed": 0, "failed": 0, "errors": 0}
 	counts[map[string]string{"pass": "passed", "fail": "failed"}[status]] = 1
 	report := Report{
-		"schema_version": 1,
-		"profile": "disposable_vm",
-		"status": status,
-		"summary": counts,
-		"results": []any{map[string]any{"id": "vm/" + scenario, "status": status, "exit_code": exitCode, "rerun": "just test-vm-" + scenario}},
-		"source": map[string]any{"kind": "vm_harness", "run_id": runID, "created_utc": instant.Format(time.RFC3339Nano), "git_revision": revision, "git_dirty": dirty, "flake_lock_sha256": lock},
-		"failure_stage": stage,
-		"verification_tier": vmTier,
+		"schema_version":     1,
+		"profile":            "disposable_vm",
+		"status":             status,
+		"summary":            counts,
+		"results":            []any{map[string]any{"id": "vm/" + scenario, "status": status, "exit_code": exitCode, "rerun": "just test-vm-" + scenario}},
+		"source":             map[string]any{"kind": "vm_harness", "run_id": runID, "created_utc": instant.Format(time.RFC3339Nano), "git_revision": revision, "git_dirty": dirty, "flake_lock_sha256": lock},
+		"failure_stage":      stage,
+		"verification_tier":  vmTier,
 		"upstream_inference": unverified,
-		"cleanup": unverified,
+		"cleanup":            unverified,
 	}
 	if full, ok := fields["full_stack"]; ok {
 		if scenario != "full-stack" {
@@ -268,9 +268,9 @@ func NormalizeVM(payload []byte, runID string) (Report, error) {
 func Unavailable() Report {
 	return Report{
 		"schema_version": 1, "profile": "disposable_vm", "status": "error",
-		"summary": map[string]int{"passed": 0, "failed": 0, "errors": 1},
-		"results": []any{map[string]any{"id": "vm/evidence", "status": "error", "exit_code": nil}},
-		"verification_tier": unverified,
+		"summary":            map[string]int{"passed": 0, "failed": 0, "errors": 1},
+		"results":            []any{map[string]any{"id": "vm/evidence", "status": "error", "exit_code": nil}},
+		"verification_tier":  unverified,
 		"upstream_inference": unverified, "cleanup": unverified,
 	}
 }
