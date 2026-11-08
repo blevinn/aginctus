@@ -118,14 +118,11 @@ func executeGatewayEgress(ctx context.Context, action, zone, ranges string,
 			fmt.Fprintf(stderr, "egress configuration: %v\n", err)
 			return 1
 		}
-		candidate, err := gateway.EgressAddressPreflight(ctx, name)
-		//lint:ignore SA4023 The preflight must return a denial for an unreserved candidate; retain the error gate for any future atomic allocator.
-		if err != nil {
-			fmt.Fprintf(stderr, "egress preflight blocked: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "egress candidate: %s (advisory only; NOT RESERVED, do not deploy without full inventory and atomic allocation)\n", candidate)
-		return 0
+		// Preflight can inspect a candidate but never reserve it. Reject even
+		// if a future implementation accidentally returns without an error.
+		_, err = gateway.EgressAddressPreflight(ctx, name)
+		fmt.Fprintf(stderr, "egress preflight blocked: %v\n", err)
+		return 1
 	default:
 		fmt.Fprintln(stderr, "unknown gateway egress operation")
 		return 2
