@@ -8,7 +8,7 @@ import (
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/gatewaycontrol"
-	"github.com/blevinn/aginctus/internal/siwc"
+	siwc "github.com/blevinn/aginctus/internal/plugins/openai-siwc"
 	"github.com/spf13/cobra"
 )
 

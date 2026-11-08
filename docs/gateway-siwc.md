@@ -148,7 +148,7 @@ tools, automatic retries and provider/account/billing fallback.
 
 ```sh
 nix --quiet develop --no-update-lock-file -c just check all
-nix --quiet develop --no-update-lock-file -c go test -race ./internal/siwc ./internal/gateway ./internal/cli ./internal/gatewaycontrol
+nix --quiet develop --no-update-lock-file -c go test -race ./internal/plugins/openai-siwc ./internal/gateway ./internal/cli ./internal/gatewaycontrol
 nix --quiet build --no-link .#aginctus .#opencode-workload
 ```
 
