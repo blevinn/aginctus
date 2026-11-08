@@ -1,6 +1,21 @@
-# Gateway and egress: operator decision path (#403)
+# Gateway operations: staged operator workflow
 
-This page is the **entry point** for operating the current Aginctus LiteLLM gateway. It orders the existing procedures without replacing their exact commands, ownership checks or fail-closed guards. The live pilot is **not signed off**: the [#122 authenticated inference gate](https://github.com/blevinn/aginctus/issues/122) and [#257 OCI egress acceptance](https://github.com/blevinn/aginctus/issues/257) remain open. Recheck those issues, current configuration and the actual pilot before a live change; historical addresses and observations in runbooks are **examples, not authoritative inventory**.
+This page is the **entry point** for operating the current Aginctus LiteLLM gateway. It is the **canonical decision sequence**: subordinate pages own the exact commands and domain-specific checks, but never authorize skipping an earlier gate. This overview does not grant permission to mutate the host, issue credentials or make billable inference requests. The live pilot is **not signed off**: the [#122 authenticated inference gate](https://github.com/blevinn/aginctus/issues/122) and [#257 OCI egress acceptance](https://github.com/blevinn/aginctus/issues/257) remain open. Recheck those issues, current configuration and the actual pilot before a live change; historical addresses and observations in runbooks are **examples, not authoritative inventory**.
+
+## Document ownership (avoid parallel runbooks)
+
+| Need | Authoritative source | Scope |
+| --- | --- | --- |
+| What order to operate or validate in | This workflow | Approval gates and proof limitations; **not** a command inventory |
+| Bridge/NIC design | [Egress network](gateway-egress-network.md) | Declarative topology/limitations, **not** a rollout instruction |
+| Host firewall runtime policy | [Host backends](firewall-host-backends.md) and [firewalld-specific procedure](gateway-firewalld-egress.md) | Actual host backend and conditional maintenance |
+| Exceptional OCI bridge migration | [OCI egress migration](litellm-oci-egress-pilot.md) | Opt-in migration and rollback, **not** routine inference setup |
+| Register model/provider | [API-key registration](gateway-api-key-pilot.md) | Current guarded registration commands, not OAuth bootstrap |
+| Create and revoke workload-scoped key | [Key lifecycle](gateway-workload-key-pilot.md) | Scoped token issuance and verified revocation |
+| Request live provider inference | [Responses smoke](gateway-inference-smoke.md) | Billable and separately authorized, not a hermetic acceptance test |
+| Whole-agent behavioral acceptance | [OpenCode acceptance](acceptance-opencode.md) | Distinct Herdr/task-level evidence |
+
+**Common gate:** Inspect actual Incus metadata and the current effective configuration without printing expanded instance configuration, provider secrets or bearer tokens. Observed network addresses are ephemeral. Plan/preview and explicit operator authorization remain separate from effectful execution. The linked procedure for the selected task supplies its own rollback and no-surprise mutation checks; never treat this index as permission to run it.
 
 ## Choose the next boundary
 
