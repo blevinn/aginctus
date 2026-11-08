@@ -1,51 +1,119 @@
-"""Check selected operator shell examples against real CLI help, without executing them.
+"""Validate operator shell examples against Cobra-generated help, never executing them.
 
-The caller supplies the output of `aginctus help` on stdin. Only lines starting
-with `aginctus ` inside shell fences of the canonical intro guides are checked.
-Commands in these guides are never run by this checker.
+The caller supplies `aginctus help` on stdin. That output includes a route
+inventory derived from registered Cobra commands and local flag metadata,
+rather than an independent hardcoded command/option table.
 """
 
 import argparse
 import re
 import shlex
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from markdown_it import MarkdownIt
 
 GUIDES = ("docs/getting-started.md", "docs/cli.md", "docs/herdr-machine-registration.md")
-HELP_LINE = re.compile(r"^\s*(?:Usage:\s*)?aginctus \[global options\] (.+)$")
-COMMAND_LINE = re.compile(r"^  ([a-z][^\n]*?)\s{2,}\S")
+GENERATED_MARKER = "Subcommand syntax (derived from registered Cobra commands):"
+GENERATED_ROUTE = re.compile(r"^  aginctus (.+)$")
+LEGACY_LINE = re.compile(r"^\s*(?:Usage:\s*)?aginctus \[global options\] (.+)$")
+LEGACY_COMMAND = re.compile(r"^  ([a-z][^\n]*?)\s{2,}\S")
 VARIABLE = re.compile(r"^(?:<[^>]+>|[A-Z][A-Z0-9_-]*|--[\w-]+=[A-Z][\w/-]*)$")
 
 
+@dataclass
+class CommandShape:
+    """One CLI path, its allowed local flags, and optional alias spellings."""
+
+    tokens: tuple[str, ...]
+    flags: dict[str, bool] = field(default_factory=dict)
+
+
+def _legacy_shape(tokens):
+    positional, flags = [], {}
+    for token in tokens:
+        if token.startswith("[--") and token.endswith("]"):
+            name, sep, _ = token[1:-1].partition("=")
+            flags[name] = bool(sep)
+        else:
+            positional.append(token)
+    return CommandShape(tuple(positional), flags)
+
+
+def _flag_usage(line):
+    """Read the flag name/type from the standard pflag FlagUsages format."""
+    head = re.split(r"\s{2,}", line.strip(), maxsplit=1)[0]
+    tokens = head.replace(",", " ").split()
+    for index, token in enumerate(tokens):
+        if token.startswith("--"):
+            return token, index + 1 < len(tokens)
+    return None
+
+
 def patterns(help_text):
-    """Get command shapes from the CLI's help; no duplicated syntax catalog."""
+    """Extract only registered CLI routes and their flags, never operations."""
     result = []
-    in_commands = False
+    in_generated = False
+    in_legacy_commands = False
+    current = None
     for line in help_text.splitlines():
-        if line.strip() == "Commands:":
-            in_commands = True
+        if line.strip() == GENERATED_MARKER:
+            in_generated, in_legacy_commands, current = True, False, None
             continue
-        if in_commands:
+
+        if in_generated:
+            match = GENERATED_ROUTE.match(line)
+            if match:
+                raw = match.group(1).split(" — ", 1)[0]
+                aliases = re.search(r"\(aliases: ([^)]+)\)", raw)
+                raw = raw.split("  (aliases:", 1)[0].strip()
+                tokens = tuple(raw.split())
+                if not tokens:
+                    current = None
+                    continue
+                current = CommandShape(tokens)
+                result.append(current)
+                # Alias variants share the exact same local flag metadata.
+                if aliases:
+                    for alias in aliases.group(1).split(","):
+                        alias = alias.strip()
+                        variant = list(tokens)
+                        commands = [
+                            index for index, part in enumerate(variant)
+                            if re.fullmatch(r"[a-z][a-z0-9-]*", part)
+                        ]
+                        if commands and alias:
+                            variant[commands[-1]] = alias
+                            result.append(CommandShape(tuple(variant), current.flags))
+                continue
+            if current is not None and line.startswith("      "):
+                parsed = _flag_usage(line)
+                if parsed and parsed[0] != "--help":
+                    current.flags[parsed[0]] = parsed[1]
+                continue
+
+        # Accept older help fixtures for tests and branch-local compatibility.
+        if line.strip() == "Commands:":
+            in_legacy_commands = True
+            continue
+        if in_legacy_commands:
             if not line.strip():
-                in_commands = False
+                in_legacy_commands = False
             else:
-                match = COMMAND_LINE.match(line)
-                if match:
-                    result.append(match.group(1).split())
-        match = HELP_LINE.match(line)
-        if match:
-            raw = re.split(r"\s{2,}(?:\(|$)", match.group(1), maxsplit=1)[0]
+                legacy = LEGACY_COMMAND.match(line)
+                if legacy:
+                    result.append(_legacy_shape(legacy.group(1).split()))
+        legacy = LEGACY_LINE.match(line)
+        if legacy:
+            raw = re.split(r"\s{2,}(?:\(|$)", legacy.group(1), maxsplit=1)[0]
             tokens = raw.split()
-            # The top-level generic <command> matches anything, so ignore it.
             if tokens != ["<command>"]:
-                result.append(tokens)
+                result.append(_legacy_shape(tokens))
     return result
 
 
-def matches(example, shape):
-    """Match help's optional positions/flags and named values, not shell behavior."""
+def _matches_positions(example, shape):
     if not shape:
         return not example
     raw = shape[0]
@@ -53,18 +121,43 @@ def matches(example, shape):
     token = raw[1:-1] if optional else raw
 
     def accepts(value):
-        if token.startswith("--") and "=" in token:
-            key, expected = token.split("=", 1)
-            return value.startswith(key + "=") and (
-                not VARIABLE.fullmatch(expected) or len(value) > len(key) + 1
-            )
-        if VARIABLE.fullmatch(token) or (optional and re.fullmatch(r"[a-z_]+", token)):
+        if VARIABLE.fullmatch(token) or (
+            optional and re.fullmatch(r"[a-z_][a-z0-9_-]*", token)
+        ):
             return bool(value) and not value.startswith("--")
         return value in token.split("|")
 
-    if optional and matches(example, shape[1:]):
+    if optional and _matches_positions(example, shape[1:]):
         return True
-    return bool(example) and accepts(example[0]) and matches(example[1:], shape[1:])
+    return bool(example) and accepts(example[0]) and _matches_positions(example[1:], shape[1:])
+
+
+def matches(example, shape):
+    """Validate the declared flags in any order, then match positionals."""
+    positional = []
+    index = 0
+    while index < len(example):
+        value = example[index]
+        if not value.startswith("--"):
+            positional.append(value)
+            index += 1
+            continue
+        flag, sep, argument = value.partition("=")
+        takes_value = shape.flags.get(flag)
+        if takes_value is None:
+            return False
+        if takes_value:
+            if sep:
+                if not argument:
+                    return False
+            else:
+                index += 1
+                if index >= len(example) or example[index].startswith("--"):
+                    return False
+        elif sep and argument not in ("true", "false"):
+            return False
+        index += 1
+    return _matches_positions(positional, shape.tokens)
 
 
 def examples(markdown):
