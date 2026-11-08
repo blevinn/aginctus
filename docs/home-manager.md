@@ -44,18 +44,60 @@ Home Manager (replace the username, home directory, and system):
 The opt-in `vmTests.x86_64-linux.home-manager-operator` output evaluates
 and builds a standalone Home Manager generation in the outer Nix build, then
 activates it **as an unprivileged user** inside a disposable NixOS/Incus VM
-with no Incus authorization. Prebuilding is intentional: the VM is offline,
+initially with no Incus authorization. Prebuilding is intentional: the VM is offline,
 so it cannot fetch build-time sources during a nested `home-manager build`.
 The test exercises real Home Manager activation twice and a separate
 configuration-generation upgrade, checks the installed CLI/config and
-OS-observed package identity, rejects a mismatched package declaration and
-denied Incus access, and verifies unchanged Incus inventories on a disposable
+OS-observed package identity, rejects mismatched system/user package declarations
+and denied Incus access, and verifies unchanged Incus inventories on a disposable
 Btrfs-backed pool and Linux bridge. Starting/stopping a lingering user manager
-introduces no Aginctus services or timers, and synthetic protected host state
-remains unreadable to the operator and unchanged. It does **not** execute the
-`home-manager build/switch` CLI inside the guest or establish restricted/admin
-authorization, active-controller exclusion, firewall packet enforcement or
-credential migration/rollback acceptance.
+introduces no Aginctus user services or timers. The host independently runs only
+root-managed DNS/DHCP and egress firewall services/timers; synthetic protected
+host state stays unreadable/unwritable to the operator and unchanged. User
+configuration requesting a trusted firewall zone does not alter host policy.
+
+The disposable administrator separately provisions two runtime TLS identities:
+
+- The restricted operator uses a project with `restricted=true` and
+  `features.networks=true`, and can inspect the selected `aginctus` project and its
+  profile fixture. Preflight still selects that exact project when ambient
+  `INCUS_PROJECT` names `foreign`. Foreign-project access and default-project
+  inspection are refused, as are default-profile writes, host bridge creation,
+  project creation and server configuration changes.
+- A separate broad administrator can inspect `aginctus` and `foreign` and
+  create/delete a fixture bridge as a positive control for the denied operation.
+  Preflight reports the unrestricted credential declaration separately from
+  effective capabilities and still leaves write permissions unverified.
+
+**Restriction limit:** Incus TLS authorization permits read-only access to
+certain default-project resources for inheritance. The test explicitly observes
+a readable default-project profile while its modification is denied. A successful
+empty instance list is also not proof of project access: enumeration can filter
+unauthorized objects. Strict default-resource metadata isolation is therefore
+**not established by restricted TLS credentials**. Do not treat this fixture as
+approval for a production authorization handoff.
+
+Project network configuration is also part of the boundary: a restricted TLS
+certificate alone is insufficient. With `features.networks=false` and no network
+access allowlist, bridge creation through the selected project can reach shared
+default-project networking. That configuration is not an accepted host/operator
+split. The acceptance fixture
+uses project-owned networks (`features.networks=true`), where Linux bridge
+creation is unavailable. Shared-network authorization needs separate review
+before any operator deployment.
+
+Denied writes and the administrator's positive control exist only in this VM
+fixture. Production preflight remains read-only. Reports are checked against
+runtime certificate/key contents before returning them to the test driver.
+Client configuration hashes stay unchanged across probes and reactivation;
+no ambient `incus project switch` occurs. DNS positive and host-port negative
+packet checks survive firewalld reload independently of the user manager.
+Egress is dormant/fail-closed here; active gateway grant acceptance remains in
+the separate firewall integration fixtures.
+
+The scenario does **not** execute the `home-manager build/switch` CLI inside the
+guest or establish image/workload write authorization, active-controller
+exclusion, credential migration/rollback or production cutover acceptance.
 
 Run the heavyweight acceptance test explicitly:
 
