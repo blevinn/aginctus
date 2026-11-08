@@ -65,74 +65,15 @@ registration neither synchronizes with LiteLLM nor authorizes an account or
 verifies network access; only the deliberately approved Python `--apply` path
 changes the live registry.
 
-## OpenCode Go compatibility note (not required for provider registration)
+## OpenCode Go: separate registration and forwarding contract
 
-The fixed `--provider opencode-go` registrar supports the reviewed Responses
-model allowlist. The [Go documentation](https://opencode.ai/v2/docs/console/go/)
-publishes the native route at
-`https://opencode.ai/inference/go/openai/v1/responses`. The registrar stores
-base `https://opencode.ai/inference/go/openai/v1`, a LiteLLM `openai/` model
-prefix, and `mode=responses`. Other protocols and arbitrary upstream URLs are
-not accepted by this registration path. Verify current account/model entitlement
-in the operator's console before selecting a model.
-
-The pilot alias is `aginctus-go-pilot`, with initial upstream candidate
-`openai/gpt-6-luna`; `opencode-go/gpt-6-luna` is a different client-side selector.
-Preview:
-
-```sh
-nix --quiet develop -c python3 scripts/gateway/register-openai-model.py \
-  --endpoint "$GATEWAY_ENDPOINT" --provider opencode-go \
-  --alias aginctus-go-pilot --source openai/gpt-6-luna
-```
-
-Do not re-register an existing alias just to test forwarding. Registration success
-establishes only the database route, not entitlement, upstream inference or
-session fidelity.
-
-## Selective Go forwarding acceptance (separate concern)
-
-Use [selective Go forwarding operations](selective-go-forwarding.md) for the
-default-off setting, embedded callback packaging, immutable image requirements,
-complete offline commands, delivery audit, migration and rollback.
-
-**Stock model-group/global forwarding is rejected for the Go pilot.** Actual
-pinned native Responses auditing observed unrelated metadata forwarding and loss
-of the original identifying UA. A model-group list is not a header allowlist.
-The selective policy preserves only native session and identifying UA, rejects
-malformed/missing identity before upstream execution and disallows Chat Completions
-for the approved alias. Both renderers declare exact embedded public artifacts;
-the OCI runtime provides pinned dependencies with a strict version guard.
-
-The synthetic acceptance exercises actual OpenCode, LiteLLM, local DB registration
-and restricted-key behavior, but does not deploy or verify the live pilot.
-Neither a unit-test pass nor a healthy proxy proves active callback loading or
-successful Go inference.
-
-### Stock forwarding negative-audit fixture
-
-The retained audit can reproduce the stock-policy failure without a provider.
-With the stock `ghcr.io/berriai/litellm:v1.103.0` image already cached, run:
-
-```sh
-policy=$(mktemp)
-trap 'rm -f "$policy"' EXIT
-printf '%s\n' '{"default":[{"type":"insecureAcceptAnything"}]}' > "$policy"
-nix --quiet shell nixpkgs#podman -c podman run \
-  --signature-policy "$policy" \
-  --pull=never --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
-  -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 -e PYTHONDONTWRITEBYTECODE=1 \
-  -v "$PWD:/probe:ro" --entrypoint /app/.venv/bin/python \
-  ghcr.io/berriai/litellm:v1.103.0 \
-  /probe/scripts/gateway/probe_pinned_litellm_responses.py \
-  /probe/deploy/litellm-go/model-group-forwarding.yaml --require-safe
-```
-
-Its expected nonzero strict verdict rejects unsafe forwarding, not transport
-functionality. The command-local Podman policy rejects other image references
-and does not verify publisher signatures; it is a test prerequisite, not a
-production trust policy. Use the digest-qualified packaged probes in the
-selective runbook for positive acceptance.
+The generic API-key registration workflow above does not authorize native
+OpenCode Go session forwarding. For the approved Go alias, use the
+[selective Go compatibility and negative-audit appendix](selective-go-forwarding.md#go-registrar-compatibility-and-stock-policy-negative-fixture), followed by
+that guide's explicit configuration, offline acceptance, delivery audit and
+rollback gates. Do not re-register a model just to test forwarding, and do not
+treat a stock model-group header configuration as equivalent to a selective
+allowlist.
 
 ## Operator-authorized live compatibility and cleanup gates
 

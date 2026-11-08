@@ -8,6 +8,64 @@ Fresh-host reproducibility and final release decisions remain separate from
 [#122](https://github.com/blevinn/aginctus/issues/122) and
 [#123](https://github.com/blevinn/aginctus/issues/123).
 
+This material belongs with selective native-Responses forwarding, not the
+general API-key registration procedure. The alias/model values below describe
+the historical Go pilot and must not be used as a default entitlement or
+re-registered merely to inspect the installed gateway. Confirm the current
+approved source/model and pinned runtime separately.
+
+## Go registrar compatibility and stock-policy negative fixture
+
+The fixed `--provider opencode-go` registrar supports the reviewed Responses
+model allowlist. The [Go documentation](https://opencode.ai/v2/docs/console/go/)
+publishes the native route at
+`https://opencode.ai/inference/go/openai/v1/responses`. The registrar stores
+base `https://opencode.ai/inference/go/openai/v1`, a LiteLLM `openai/` model
+prefix, and `mode=responses`. Other protocols and arbitrary upstream URLs are
+not accepted by this registration path. Verify current account/model entitlement
+in the operator's console before selecting a model.
+
+The pilot alias is `aginctus-go-pilot`, with initial upstream candidate
+`openai/gpt-6-luna`; `opencode-go/gpt-6-luna` is a different client-side selector.
+Preview:
+
+```sh
+nix --quiet develop -c python3 scripts/gateway/register-openai-model.py \
+  --endpoint "$GATEWAY_ENDPOINT" --provider opencode-go \
+  --alias aginctus-go-pilot --source openai/gpt-6-luna
+```
+
+Do not re-register an existing alias just to test forwarding. Registration success
+establishes only the database route, not entitlement, upstream inference or
+session fidelity.
+
+
+### Retained stock forwarding negative-audit fixture
+
+The retained audit can reproduce the stock-policy failure without a provider.
+With the stock `ghcr.io/berriai/litellm:v1.103.0` image already cached, run:
+
+```sh
+policy=$(mktemp)
+trap 'rm -f "$policy"' EXIT
+printf '%s\n' '{"default":[{"type":"insecureAcceptAnything"}]}' > "$policy"
+nix --quiet shell nixpkgs#podman -c podman run \
+  --signature-policy "$policy" \
+  --pull=never --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev \
+  -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 -e PYTHONDONTWRITEBYTECODE=1 \
+  -v "$PWD:/probe:ro" --entrypoint /app/.venv/bin/python \
+  ghcr.io/berriai/litellm:v1.103.0 \
+  /probe/scripts/gateway/probe_pinned_litellm_responses.py \
+  /probe/deploy/litellm-go/model-group-forwarding.yaml --require-safe
+```
+
+Its expected nonzero strict verdict rejects unsafe forwarding, not transport
+functionality. The command-local Podman policy rejects other image references
+and does not verify publisher signatures; it is a test prerequisite, not a
+production trust policy. Use the digest-qualified packaged probes in the
+selective runbook for positive acceptance.
+
+
 ## Policy and packaging
 
 The gateway requires a native `ses_...` conversation ID and the original
