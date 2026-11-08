@@ -171,8 +171,8 @@ func (c *failureCollector) parse(line string) {
 		if json.Unmarshal([]byte(line), &event) != nil || event.Action != "fail" {
 			return
 		}
-		if event.Package == "github.com/blevinn/aginctus" ||
-			strings.HasPrefix(event.Package, "github.com/blevinn/aginctus/") {
+		if caseID.MatchString(event.Test) && (event.Package == "github.com/blevinn/aginctus" ||
+			strings.HasPrefix(event.Package, "github.com/blevinn/aginctus/")) {
 			c.add(event.Package+":"+event.Test, "fail")
 		}
 	}

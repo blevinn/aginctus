@@ -58,7 +58,7 @@ func TestHermeticSuiteParity(t *testing.T) {
 		}
 		seen[suite.ID] = true
 		ids = append(ids, suite.ID)
-		pattern := regexp.MustCompile("(?m)^" + regexp.QuoteMeta(suite.Recipe) + `:[[:space:]]*$`)
+		pattern := regexp.MustCompile("(?m)^" + regexp.QuoteMeta(suite.Recipe) + `:(?:[[:space:]]|$)`)
 		if !pattern.MatchString(recipes) {
 			t.Fatalf("just check recipe %q is missing", suite.Recipe)
 		}
