@@ -523,7 +523,11 @@
                 jq
                 just
                 nixfmt
-                (python3.withPackages (ps: [ ps.markdown-it-py ]))
+                (python3.withPackages (ps: [
+                  ps.markdown-it-py
+                  ps.pyjwt
+                  ps.cryptography
+                ]))
                 ruff
                 shellcheck
                 shfmt
