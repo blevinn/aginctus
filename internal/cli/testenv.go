@@ -24,7 +24,7 @@ func runTestenv(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		return 0
 	}
 	if len(args) == 0 || args[0] != "vm" {
-		printTestenvUsage(stderr)
+		fmt.Fprintln(stderr, "invalid testenv invocation; see aginctus testenv --help")
 		return 2
 	}
 	if len(args) == 2 && args[1] == "policy" {
@@ -102,18 +102,7 @@ func runTestenv(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		}
 		return 0
 	}
-	printTestenvUsage(stderr)
+	fmt.Fprintln(stderr, "invalid testenv invocation; see aginctus testenv --help")
 	return 2
 }
 
-func printTestenvUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus testenv mcp  (stdio MCP 2026-07-28; read-only VM discovery)")
-	fmt.Fprintln(w, "Usage: aginctus testenv vm backend [incus]  (offline; planned provider)")
-	fmt.Fprintln(w, "       aginctus testenv vm policy  (offline; intended Incus project controls)")
-	fmt.Fprintln(w, "Usage: aginctus testenv vm list  (offline; no config or Incus)")
-	fmt.Fprintln(w, "       aginctus testenv vm plan SCENARIO  (read-only pinned target)")
-	fmt.Fprintln(w, "       aginctus testenv vm test SCENARIO  (opt-in heavyweight NixOS VM)")
-	fmt.Fprintln(w, "Batch test reuses the checkout Python runner/evidence. For trusted operators")
-	fmt.Fprintln(w, "on a dedicated unprivileged test worker ONLY; not an agent sandbox.")
-	fmt.Fprintln(w, "Persistent guest exec/reset/destroy and MCP execution tools are not implemented yet.")
-}

@@ -35,7 +35,10 @@ func addWorkloadCommands(
 	root *cobra.Command, stdout, stderr io.Writer,
 	load func() (*config.Config, error), status *int,
 ) {
-	workloads := &cobra.Command{Use: "workload", Short: "Manage configured workloads"}
+	workloads := &cobra.Command{
+		Use: "workload", Short: "Manage configured workloads",
+		Long: "Prefer action-first workload apply/remove NAME. The historical NAME ensure/teardown forms remain supported by a compatibility mapping. Local project-scoped transitions require an explicit project and a leaf-specific confirmation; previews do not authorize writes.",
+	}
 	root.AddCommand(workloads)
 	add := func(parent *cobra.Command, use string, aliases []string, argsRule cobra.PositionalArgs,
 		validate func(*cobra.Command, []string) error,

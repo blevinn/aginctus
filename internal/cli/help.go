@@ -3,73 +3,57 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
+
+	"github.com/spf13/cobra"
 )
 
-// Help is resolved before configuration loading so it remains usable offline.
-func runHelp(args []string, stdout, stderr io.Writer) (int, bool) {
-	var command string
-	switch {
-	case args[0] == "help":
-		if len(args) > 2 {
-			fmt.Fprintln(stderr, "Usage: aginctus help [command]")
-			return 2, true
-		}
-		if len(args) == 2 {
-			command = args[1]
-			if command == "--help" || command == "-h" {
-				command = "help"
-			}
-		}
-	case len(args) == 1 && (args[0] == "--help" || args[0] == "-h"):
-	case len(args) == 2 && (args[1] == "--help" || args[1] == "-h"):
-		command = args[0]
-	default:
-		return 0, false
+// writeCobraHelp renders syntax directly from the command/flag tree. No
+// separate command vocabulary or hand-maintained usage strings exist here.
+// Help never loads configuration, touches private registries or queries Incus.
+func writeCobraHelp(cmd *cobra.Command, out io.Writer) {
+	if cmd.Long != "" {
+		fmt.Fprintln(out, cmd.Long)
+		fmt.Fprintln(out)
 	}
-	switch command {
-	case "":
-		printUsage(stdout)
-	case "apply":
-		printApplyUsage(stdout)
-	case "gateway":
-		printGatewayUsage(stdout)
-	case "network":
-		printNetworkUsage(stdout)
-	case "herdr":
-		printHerdrClientUsage(stdout)
-	case "workload":
-		printWorkloadUsage(stdout)
-	case "images":
-		fmt.Fprintln(stdout, "Usage: aginctus [global options] images list|ls\n       aginctus [global options] images list|ls --project NAME (read-only; owned local project)\n       aginctus [global options] images import --project NAME ALIAS PATH --confirm-create (create-only; owned local project)\n       aginctus [global options] images owner-audit --project NAME --owner system|user ALIAS (read-only; NOT write authorization)\n       aginctus [global options] images import-owned --project NAME --owner system|user ALIAS PATH --confirm-create (create-only; NOT authority proof)\n       aginctus [global options] images replace-plan --project NAME --owner system|user ALIAS PATH (read-only; NEVER authorizes writes)\n       aginctus [global options] images update NAME PATH (legacy v0.1 project)")
-	case "config":
-		fmt.Fprintln(stdout, "Usage: aginctus [global options] config show\n       aginctus [global options] config get <path>")
-	case "testenv":
-		printTestenvUsage(stdout)
-	case "doctor":
-		fmt.Fprintln(stdout, "Usage: aginctus [global options] doctor [--fix]  (read-only unless --fix; may configure loopback HTTPS)")
-	case "operator":
-		fmt.Fprintln(stdout, "Usage: aginctus [global options] operator preflight --project NAME (read-only; write and host authority unverified)")
-		fmt.Fprintln(stdout, "       aginctus [global options] operator state-audit --owner system|user (read-only; no secret reads or migration)")
-		fmt.Fprintln(stdout, "       aginctus operator units-audit --owner system|user (read-only; current user's manager only; no config options)")
-		fmt.Fprintln(stdout, "       aginctus operator package-audit --owner system|user (read-only; declared Nix package parity)")
-		fmt.Fprintln(stdout, "       aginctus operator project-plan --project NAME (read-only; never ambient/default project)")
-		fmt.Fprintln(stdout, "       aginctus operator project-ensure --project NAME --confirm-create (local project create-only; explicit mutation)")
-	case "version":
-		fmt.Fprintln(stdout, "Usage: aginctus version|--version\nRevision: packaged clean Git commit or source-<content hash>; local Go VCS revision[-dirty], or unknown when unavailable (including go run). No timestamps.")
-	case "help":
-		fmt.Fprintln(stdout, "Usage: aginctus help [command]")
-	case "status", "remove":
-		fmt.Fprintf(stdout, "Usage: aginctus [global options] %s\n", command)
-	default:
-		fmt.Fprintf(stderr, "unknown help command %q\n", command)
-		return 2, true
+	fmt.Fprint(out, cmd.UsageString())
+	if cmd == cmd.Root() || !cmd.HasAvailableSubCommands() {
+		return
 	}
-	return 0, true
-}
 
-func printApplyUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] apply [--render | --from FILE | --from=FILE]")
-	fmt.Fprintln(w, "  apply deploys configured orchestration (mutation). --render prints a deterministic JSON plan (offline, no mutation).")
-	fmt.Fprintln(w, "  --from accepts a YAML/JSON multi-document orchestration stream in a regular file (not stdin or a symlink; at most 16 MiB).")
-	fmt.Fprintln(w, "  The complete stream is validated before execution; --from executes and mutates resources, it is not a preview.")
+	// Family help lists descendants so nested, guarded actions remain
+	// discoverable without a second manually maintained command inventory.
+	fmt.Fprintln(out, "\nSubcommand syntax (derived from registered Cobra commands):")
+	var visit func(*cobra.Command)
+	visit = func(parent *cobra.Command) {
+		for _, child := range parent.Commands() {
+			if child.Hidden || !child.IsAvailableCommand() || child.Name() == "help" {
+				continue
+			}
+			if child.Runnable() {
+				args := strings.TrimSpace(strings.TrimPrefix(child.Use, child.Name()))
+				line := child.CommandPath()
+				if args != "" {
+					line += " " + args
+				}
+				fmt.Fprintf(out, "  %s", line)
+				if len(child.Aliases) > 0 {
+					fmt.Fprintf(out, "  (aliases: %s)", strings.Join(child.Aliases, ", "))
+				}
+				if child.Short != "" {
+					fmt.Fprintf(out, " — %s", child.Short)
+				}
+				fmt.Fprintln(out)
+				if usage := strings.TrimSpace(child.LocalFlags().FlagUsages()); usage != "" {
+					for _, flagLine := range strings.Split(usage, "\n") {
+						if strings.TrimSpace(flagLine) != "" {
+							fmt.Fprintf(out, "      %s\n", strings.TrimSpace(flagLine))
+						}
+					}
+				}
+			}
+			visit(child)
+		}
+	}
+	visit(cmd)
 }
