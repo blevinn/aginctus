@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/blevinn/aginctus/internal/validation/runner"
 	"github.com/blevinn/aginctus/internal/validation/evidence"
+	"github.com/blevinn/aginctus/internal/validation/runner"
 )
 
 func execute(ctx context.Context, args []string, stdout, stderr io.Writer) int {
