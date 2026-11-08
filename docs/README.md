@@ -133,6 +133,8 @@ Use this map to pick the authoritative page for a given task:
 
 ## Acceptance and validation
 
+**Choose a tier first:** [Testing and acceptance overview](testing/README.md) — what each tier proves, required authority and safe next steps.
+
 - [v0.1 deployment and acceptance](v0.1-deployment-acceptance.md) — verified
   live pilot evidence and the unrun fresh-host deploy/smoke/cleanup/repeat
   procedure explicitly deferred to [v0.2 #580](https://github.com/blevinn/aginctus/issues/580).
