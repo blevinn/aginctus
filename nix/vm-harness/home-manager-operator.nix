@@ -384,6 +384,33 @@ pkgs.testers.runNixOSTest {
     machine.succeed("systemctl start aginctus-firewall-reconcile.service")
     packets()
 
+    # Mask both activation paths so preflight cannot restart Incus implicitly.
+    # User configuration switching must remain independent of daemon health.
+    client_credentials = machine.succeed("sha256sum /home/operator/.config/incus/client.key /home/operator/.config/incus/client.crt")
+    machine.succeed("systemctl mask --runtime --now incus.socket incus.service", timeout=60)
+    machine.fail("systemctl is-active --quiet incus.service")
+    unavailable = report(cli + " operator preflight --project aginctus", 1)
+    assert "unavailable-or-denied" in unavailable
+    machine.succeed(operator_home_manager + " switch", timeout=600)
+    machine.succeed(cli + " config get gateway.id | grep -q disposable-operator")
+    machine.succeed(upgraded_home_manager + " switch", timeout=600)
+    machine.succeed(cli + " config get gateway.id | grep -q upgraded-operator")
+    machine.succeed(cli + " operator package-audit --owner user")
+    machine.fail("systemctl is-active --quiet incus.service")
+    machine.fail(operator + " test -r /var/lib/aginctus/state/acceptance-sentinel")
+    machine.succeed("systemctl unmask --runtime incus.socket incus.service")
+    machine.succeed("systemctl start incus.socket incus.service", timeout=60)
+    machine.wait_for_unit("incus.service")
+    recovered = report(cli + " operator preflight --project aginctus", 0)
+    assert "restricted TLS credential; selected project declared permitted (writes unproven)" in recovered
+    assert machine.succeed("sha256sum /home/operator/.config/incus/client.key /home/operator/.config/incus/client.crt") == client_credentials
+    assert machine.succeed("sha256sum /home/operator/.config/incus/config.yml /home/administrator/.config/incus/config.yml") == client_config
+    machine.wait_until_succeeds("systemctl reset-failed aginctus-firewall-reconcile.service; systemctl start aginctus-firewall-reconcile.service", timeout=60)
+    # Incus recreates its bridge on clean shutdown/start. The synthetic peer
+    # is driver-owned, so reattach it rather than claiming workload recovery.
+    machine.succeed("ip link set guest-host master hm-mgmt; ip link set guest-host up")
+    packets()
+
     for command in inventories:
         assert machine.succeed(f"incus {command} --format json | jq -S .") == before[command], f"HM activation or user-manager lifecycle changed Incus {command}"
     assert machine.succeed("sha256sum /var/lib/aginctus/state/acceptance-sentinel; stat -c '%u:%g:%a' /var/lib/aginctus/state /var/lib/aginctus/state/acceptance-sentinel") == protected_before
