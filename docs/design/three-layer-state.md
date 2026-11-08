@@ -14,7 +14,7 @@ This document specifies the intended contract and sequencing. Command/API names 
                        |
            diff → explicitly promote (CAS)
                        |
-               DESIRED STATE SERVICE
+               ACCEPTED STATE SERVICE
            accepted revision + operation log
                        |
           pin revision → observe + plan
@@ -33,9 +33,29 @@ This document specifies the intended contract and sequencing. Command/API names 
 | Desired | One immutable, explicitly promoted revision per deployment | Authorized state-service CAS transaction | Live resource observation or secret storage |
 | Current | Incus/guest/runtime observations at a point in time | Manual changes, failures, approved reconciler writes | Accepted policy, ownership proof, operation history |
 
-A configuration source's precedence is preserved when building a candidate, but the *accepted* revision captures the normalized result. An environment variable changed after promotion cannot change the desired revision or the resources selected for reconciliation. A new client does not need the former client's config files or XDG directory to discover the accepted state.
+A configuration source's precedence is preserved when building a candidate, but the *accepted* revision captures the normalized result. An environment variable changed after promotion cannot change the accepted revision or the resources selected for reconciliation. A new client does not need the former client's config files or XDG directory to discover the accepted state.
 
 The stable deployment selector is **explicit**. It binds a deployment/profile ID to its intended Incus project and owner metadata; default Incus project, caller environment, resource names and ambient Incus remotes are never authority to infer a new target. This design accommodates the v0.2 single-deployment case and future v0.3 profiles (#199/#204). Do not assume host-shared bridges are in a tenant project: the existing native bridge exception and host authority remain in force.
+
+### System and user operational modes: one accepted deployment, scoped authority
+
+**Working proposal:** model NixOS/system and Home Manager/user as distinct **candidate producers and authorized projections** of the *same deployment's accepted state*, not as two mutually overwriting accepted-state stores. The accepted revision is globally coherent for the deployment, while each field/resource domain has one recorded lifecycle owner. A promotion may change only the caller's owned domains; the state service performs server-side partial-change validation, builds the new complete immutable revision from the previous accepted revision, and commits through CAS. Unchanged domains remain byte-for-byte stable; a conflict triggers a replan, never a silent last-writer-wins merge.
+
+| Mode | Candidate source and visibility | May accept/reconcile | Must not assume |
+| --- | --- | --- | --- |
+| **NixOS system** | Trusted `services.aginctus` declarations; privileged host configuration and nonsecret deployment view | Host-owned Aginctus resources and operator resources *only if explicitly system-owned* | Automatic authority over HM-owned runtime credentials, user's XDG overlay or a project's every resource |
+| **Home Manager user** | `programs.aginctus` nonsecret declarations and authorized project/user scope; sanitized host-capability status | Explicitly delegated operator-owned resources, given independently verified Incus API capabilities | Host firewall/bridge admin, unrestricted `incus-admin`, other users' state, or implicit sudo |
+| **Combined** | Two distinct candidates and filtered views of one accepted deployment | Each actor updates its own domain through scoped CAS; one lifecycle writer per resource | Two independent active accepted specifications for the same Incus object |
+
+In **NixOS-only** mode, system authority can own operator workloads/gateway as well as host-facing resources. In **HM-only** mode, project-scoped operator actions are possible only after an external administrator has established necessary host capabilities and delegated bounded Incus authority. In **combined** mode (preferred long-term), system authority supplies host network/firewall/storage prerequisites while HM runs only its explicitly delegated operator lifecycle. Shifting ownership between these modes requires a reviewed migration/handoff with writer quiescence and verification; changing effective UID or selecting a different XDG directory cannot switch ownership.
+
+The user-facing status view should distinguish **configured candidate** (specific to caller), **accepted spec** (one deployment authority, filtered by actor capability), and **current observations** (only what the actor can actually read). System mode may display nonsecret user-scope summary/health when authorized, but should not copy user token material; user mode may see a sanitized host-capability readiness/denial summary but not edit host policy. A hidden or unauthorized field is *not* evidence of equality or absence. State-service authorization is based on authenticated principal and explicit resource ownership, **not** solely a `--mode` flag, `sudo`, root EUID or Nix module location.
+
+**NixOS activation exception:** `nixos-rebuild switch` may still apply the host's own NixOS-managed firewall and Incus host-capability services; those belong to the host operating-system authority, **outside** Aginctus accepted-state reconciliation. Switching a NixOS or HM generation must not, by itself, promote Aginctus candidate configuration or reconcile its accepted Incus workload/gateway/project resources. A host policy change may invalidate or constrain an accepted Aginctus deployment and must surface as capability failure/current-state drift. Home Manager activation itself installs a CLI and nonsecret config; it neither takes over host policy nor implicitly deploys workloads.
+
+**Source hygiene:** do not feed untrusted user `AGINCTUS_*`, `--config`, user JSON or XDG state into a system-authoritative candidate for protected host fields. Conversely do not elevate a user's candidate into system-owned accepted fields by recursively merging it with `/etc/aginctus/config.json`. Implement an explicit scope-aware candidate projection, validate overlaps and reject conflicting system/user ownership before accepting or executing. Existing generic config precedence is retained for permitted caller-owned fields only.
+
+This approach deliberately avoids a second root-vs-user database and duplicate current-state controllers. The remaining work is to prove transport authentication and per-domain authorization in #696, candidate/source scoping in #694/#697, NixOS/HM ownership and handoff in #699/#700, and cross-mode negative tests in #701.
 
 ## 2. Two independent drift and mutation paths
 
@@ -92,7 +112,7 @@ A revision can be superseded but not edited. "Rollback" promotes a prior specifi
 
 **Logical responsibilities:** read active revisions, append immutable specs, authenticate and authorize promotions, enforce CAS/writer coordination, keep a redacted operation journal and retain metadata for recovery. State service is not responsible for reconciling infrastructure or issuing gateway/workload credentials.
 
-**Preferred initial topology:** a small dedicated Incus service instance and separately retained protected volume(s), isolated from untrusted workloads. One logical service per deployment is a useful initial isolation boundary; the interface must allow future topology changes (including multiple profiles or remote deployment) without treating any guest address as part of the desired-state identity. Decide physical project placement and private host↔service transport through a disposable Incus feasibility gate; never assume default-project access or a publicly reachable API. Do not grant the service Incus administrative socket access merely to store revisions.
+**Preferred initial topology:** a small dedicated Incus service instance and separately retained protected volume(s), isolated from untrusted workloads. One logical service per deployment is a useful initial isolation boundary; the interface must allow future topology changes (including multiple profiles or remote deployment) without treating any guest address as part of the accepted-state identity. Decide physical project placement and private host↔service transport through a disposable Incus feasibility gate; never assume default-project access or a publicly reachable API. Do not grant the service Incus administrative socket access merely to store revisions.
 
 **Store:** SQLite is an appropriate initial choice for a single-deployment, single-writer database with explicit transactional revision updates and journal durability. Specify durability mode, WAL checkpoint/consistent backup, schema upgrade/downgrade policy and recovery before activation. The authoritative volume must be retained independently of the ephemeral service image. Use fsync-equivalent and crash-test evidence, not an assumption that an Incus snapshot alone establishes recoverability.
 
@@ -131,7 +151,7 @@ A centralized state service is **not** a centralized vault.
 | Accepted nonsecret configuration and change history | State service | Import only after validated candidate/identity checks |
 | Resource ownership IDs, operations, last convergence evidence | State service | Explicit bounded migration; no indiscriminate import |
 | Gateway provider/catalog declarations | Configured candidate → accepted spec where declarative; runtime metadata separate | Audit existing XDG/system state for collisions (#496) |
-| Gateway PostgreSQL data, master/salt, LiteLLM OAuth refresh credentials | Dedicated protected runtime owner/volume | Preserve exclusivity, no copying into generic desired-state DB (#171) |
+| Gateway PostgreSQL data, master/salt, LiteLLM OAuth refresh credentials | Dedicated protected runtime owner/volume | Preserve exclusivity, no copying into generic accepted-state DB (#171) |
 | Herdr SSH identities and host trust | Existing protected owner until explicit narrowly scoped migration | No implicit rotation or cross-profile reuse (#204) |
 | Short-lived virtual keys and token values | Credential issuer/runtime owner | References, lifecycle and revocation metadata only; not spec values |
 
@@ -148,7 +168,7 @@ Possible user workflow; syntax is **illustrative and does not yet exist**:
 
 The exact names and compatibility strategy are defined in #697. Distinguish release/operational command semantics from historical aginctus apply behavior during migration.
 
-NixOS and Home Manager render typed configured candidates. Rebuilding or switching their module configuration **cannot automatically promote** the desired revision. Optional automatic desired→current reconciliation, if introduced, is independent, reads only the accepted revision and retains #437/#439/#440/#441 authority restrictions. No user-service fallback to privileged host policy, no implicit Incus default project, and no mixed-owner simultaneous writer.
+NixOS and Home Manager render **scope-filtered** typed configured candidates. Switching either module configuration **cannot automatically promote** the Aginctus accepted revision or deploy Aginctus-owned workloads; NixOS is still free to apply root-owned host firewall/host services under its own OS policy. Optional automatic accepted→current reconciliation, if introduced, is independent, reads only the accepted revision and retains #437/#439/#440/#441 authority restrictions. No user-service fallback to privileged host policy, no implicit Incus default project, and no mixed-owner simultaneous writer.
 
 A future remote client should be able to inspect accepted state and submit a candidate through authorized service APIs without requiring access to the original operator's filesystem. That is a portability property, not a v0.2 remote-multi-host feature promise.
 
