@@ -110,7 +110,9 @@ project enforcement, real-host isolation or complete storage reclamation.
 The `testenv-cli` package supplies the fixed
 `aginctus-testenv worker acceptance` command in the Nix store. It uses the same
 `IncusVMBackend`, signed handles, readiness probes, typed guest exec and
-destruction path as the worker library. It is never started by the recovery module, normal checks, public CLI or MCP.\nThe installed operator binary exposes this leaf, but only the explicitly\napproved dedicated worker invocation supplies the necessary admission inputs. Its commands and
+destruction path as the worker library. It is never started by the recovery module, normal checks, public CLI or MCP.
+The installed operator binary exposes this leaf, but only the explicitly
+approved dedicated worker invocation supplies the necessary admission inputs. Its commands and
 resource sizes cannot be overridden by a checkout manifest or guest input.
 
 ### Prerequisites and invocation
@@ -256,7 +258,10 @@ The unified operator-only `aginctus-testenv` command is installed by
 operator tools**, with no daemon connection, registry access, subprocess
 execution, signing key access, service or activation hook. They accept bounded
 JSON on stdin and emit deterministic plans or inspection-only fingerprints.
-The ordinary agent CLI and MCP have no bootstrap or privileged worker interface.\nThe installed worker also uses `worker preflight` and `worker sweep`;\n`worker acceptance` requires explicit operator invocation and is never\ninstalled as an automatic service.
+The ordinary agent CLI and MCP have no bootstrap or privileged worker interface.
+The installed worker also uses `worker preflight` and `worker sweep`;
+`worker acceptance` requires explicit operator invocation and is never
+installed as an automatic service.
 
 `IncusBootstrapContract` and `IncusBootstrapInventory` in
 `internal/testenv/incus_bootstrap.go` define the input schema. The project
