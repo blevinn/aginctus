@@ -64,10 +64,8 @@ func TestHermeticSuiteParity(t *testing.T) {
 		}
 	}
 	ci := readSource(t, "scripts/checks/ci_summary.py")
-	requireSame(t, "Python report suite IDs", quotedItems(manifestBody(t, report, "SUITES = (", "
-)")), ids)
-	requireSame(t, "CI summary suite IDs", quotedItems(manifestBody(t, ci, "EXPECTED_SUITES = (", "
-)")), ids)
+	requireSame(t, "Python report suite IDs", quotedItems(manifestBody(t, report, "SUITES = (", "\n)")), ids)
+	requireSame(t, "CI summary suite IDs", quotedItems(manifestBody(t, ci, "EXPECTED_SUITES = (", "\n)")), ids)
 }
 
 func TestVMScenarioParity(t *testing.T) {
@@ -76,9 +74,8 @@ func TestVMScenarioParity(t *testing.T) {
 	just := readSource(t, "justfile")
 	evidence := readSource(t, "scripts/checks/vm_evidence.py")
 
-	pythonScenarios := manifestBody(t, runner, "SCENARIOS = {", "
-}")
-	pattern := regexp.MustCompile(""([a-z0-9-]+)": "(vm-harness-[a-z0-9-]+)"")
+	pythonScenarios := manifestBody(t, runner, "SCENARIOS = {", "\n}")
+	pattern := regexp.MustCompile(`"([a-z0-9-]+)": "(vm-harness-[a-z0-9-]+)"`)
 	pythonTargets := make(map[string]string)
 	for _, match := range pattern.FindAllStringSubmatch(pythonScenarios, -1) {
 		if _, exists := pythonTargets[match[1]]; exists {
@@ -86,10 +83,8 @@ func TestVMScenarioParity(t *testing.T) {
 		}
 		pythonTargets[match[1]] = match[2]
 	}
-	networked := quotedItems(manifestBody(t, runner, "NETWORKED_SCENARIOS = {", "
-}"))
-	evidenceScenarios := quotedItems(manifestBody(t, evidence, "SCENARIOS = (", "
-)"))
+	networked := quotedItems(manifestBody(t, runner, "NETWORKED_SCENARIOS = {", "\n}"))
+	evidenceScenarios := quotedItems(manifestBody(t, evidence, "SCENARIOS = (", "\n)"))
 	var catalogNetworked, public []string
 	seen := make(map[string]bool)
 	for _, scenario := range VMScenarios() {
