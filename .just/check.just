@@ -102,11 +102,11 @@ report-json:
 # quote() prevents the operator-provided run ID becoming shell syntax.
 [no-cd]
 vm-report run_id:
-    @python3 scripts/checks/vm_evidence.py --format text {{quote(run_id)}}
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format text --vm-run-id {{quote(run_id)}}
 
 [no-cd]
 vm-report-json run_id:
-    @python3 scripts/checks/vm_evidence.py --format json {{quote(run_id)}}
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format json --vm-run-id {{quote(run_id)}}
 
 # Read one previously recorded operator-owned local acceptance result.
 # Does not invoke the acceptance harness, Herdr, Incus or any provider.

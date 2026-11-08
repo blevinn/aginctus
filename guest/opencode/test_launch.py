@@ -36,11 +36,14 @@ class Gateway(http.server.BaseHTTPRequestHandler):
 MOCK_CLIENT = """#!/usr/bin/env python3
 import json, os, urllib.request
 cfg = json.loads(os.environ['OPENCODE_CONFIG_CONTENT'])
-assert cfg['model'] in ('aginctus/test-model', 'aginctus/aginctus-go-pilot')
+assert cfg['model'] in ('aginctus/test-model', 'aginctus/aginctus-go-pilot', 'aginctus/siwc-coding')
 if cfg['model'] == 'aginctus/aginctus-go-pilot':
     assert len(cfg['plugin']) == 1
     assert cfg['plugin'][0].startswith('file://')
     assert cfg['plugin'][0].endswith('/go_session_plugin.js')
+elif cfg['model'] == 'aginctus/siwc-coding':
+    assert len(cfg['plugin']) == 1
+    assert cfg['plugin'][0].endswith('/siwc_plugin.js')
 else:
     assert 'plugin' not in cfg
 p = cfg['provider']['aginctus']
@@ -106,6 +109,17 @@ class LauncherTests(unittest.TestCase):
         result = self.launch()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(Gateway.calls), 1)
+
+    def test_siwc_alias_loads_packaged_request_profile(self):
+        self.configure(model="siwc-coding")
+        result = self.launch()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(Gateway.calls[0][2]["model"], "siwc-coding")
+
+    def test_siwc_alias_refuses_chat_completions(self):
+        self.configure(model="siwc-coding", protocol="chat-completions")
+        self.assertNotEqual(self.launch().returncode, 0)
+        self.assertEqual(Gateway.calls, [])
 
     def test_fail_closed_missing_key(self):
         self.key.unlink()
