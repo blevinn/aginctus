@@ -10,9 +10,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// runBasicCobra is the first vertical slice of the declarative command tree.
-// It deliberately constructs fresh commands and flags for every Run invocation.
-// Legacy command families remain on their existing dispatch path until migrated.
+// runBasicCobra constructs the authoritative Cobra command tree afresh for
+// every invocation. Only explicit legacy spelling translations precede this
+// parser; all command families are registered here and reuse shared services.
 func runBasicCobra(
 	ctx context.Context, args []string, stdout, stderr io.Writer,
 	incusClient IncusClient, loader ConfigLoader,
