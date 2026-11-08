@@ -114,7 +114,7 @@ class PinnedResponsesProbeTests(unittest.TestCase):
         self.assertIn('default = "ghcr.io/berriai/litellm:v1.103.0";',
                       gateway_settings)
         runbook = (repo_root / "docs/operations/gateway/" /
-                   "gateway-api-key-pilot.md").read_text(encoding="utf-8")
+                   "selective-go-forwarding.md").read_text(encoding="utf-8")
         self.assertIn("ghcr.io/berriai/litellm:v1.103.0", runbook)
         self.assertNotIn("ghcr.io/berriai/litellm:v1.103.0-stable", runbook)
 
