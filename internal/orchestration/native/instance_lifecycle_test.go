@@ -72,6 +72,12 @@ func (f *fakeInstanceClient) UpdateInstanceState(name string, state api.Instance
 	if f.mode == "transition failure" {
 		return nil, errors.New("sensitive transport failure")
 	}
+	if f.mode == "nil operation" {
+		return nil, nil
+	}
+	if f.mode == "ownership after transition" {
+		delete(f.instance.Config, "user.aginctus.workload")
+	}
 	if f.instance != nil {
 		switch state.Action {
 		case "start":
@@ -175,6 +181,38 @@ func TestNativeInstanceLifecycleIsIdempotent(t *testing.T) {
 	}
 	if result.Changed || !result.Verified || fake.transfers != 0 {
 		t.Fatalf("converged instance was transitioned: %+v, %+v", result, fake)
+	}
+}
+
+func TestLifecycleIdentityAndPostflightBoundaries(t *testing.T) {
+	for _, mode := range []string{"identity", "deployment", "empty ETag", "nil operation", "ownership after transition", "noop race"} {
+		t.Run(mode, func(t *testing.T) {
+			intent := workloadLifecycleIntent(t, InstanceRunning)
+			f := &fakeInstanceClient{scope: intent.Scope, instance: ownedInstance(t, intent, "Stopped"), etag: "etag-1", mode: mode}
+			switch mode {
+			case "identity":
+				f.instance.Project = "foreign"
+			case "deployment":
+				f.instance.Config["user.aginctus.deployment"] = "foreign"
+			case "empty ETag":
+				f.etag = ""
+			case "noop race":
+				f.instance.Status = "Running"
+				f.mode = "boundary race"
+			}
+			result, err := EnsureInstanceStateWithClient(context.Background(), intent, f)
+			if err == nil || result.Verified {
+				t.Fatalf("unsafe success: %+v %v", result, err)
+			}
+			if mode == "nil operation" || mode == "ownership after transition" {
+				var failure *ReconcileError
+				if !errors.As(err, &failure) || !failure.Uncertain || f.transfers != 1 {
+					t.Fatalf("lost uncertainty: %v", err)
+				}
+			} else if f.transfers != 0 {
+				t.Fatal("unsafe transition submitted")
+			}
+		})
 	}
 }
 
