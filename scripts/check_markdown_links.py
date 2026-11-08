@@ -84,36 +84,59 @@ def heading_ids(tokens):
 
 
 def check_index(root, names, md):
-    """Require discoverability for current docs; exempt future/internal archives."""
+    """Require every active doc to be reachable from the docs landing page.
+
+    A section README can own navigation for its subtree. Design, ADR, internal,
+    release and historical material remain discoverable by deliberate links,
+    but are not required to be on an operator path.
+    """
     # A standalone Markdown fixture with no docs/ tree needs no project index.
     if not any(name.startswith("docs/") for name in names):
         return []
-    index = root / "docs" / "README.md"
+    index_name = "docs/README.md"
+    index = root / index_name
     try:
-        parsed = md.parse(index.read_text(encoding="utf-8"))
+        index.read_text(encoding="utf-8")
     except OSError as exc:
-        return [f"docs/README.md: cannot read index: {exc}"]
+        return [f"{index_name}: cannot read index: {exc}"]
+
+    tracked = set(names)
     covered = set()
-    for block in parsed:
-        if block.type != "inline":
+    pending = [index_name]
+    while pending:
+        name = pending.pop()
+        if name in covered:
             continue
-        for token in block.children:
-            if token.type != "link_open":
+        covered.add(name)
+        source = root / name
+        try:
+            parsed = md.parse(source.read_text(encoding="utf-8"))
+        except OSError as exc:
+            return [f"{name}: cannot read linked index page: {exc}"]
+        for block in parsed:
+            if block.type != "inline":
                 continue
-            target = urlsplit(token.attrGet("href") or "")
-            if target.scheme or target.netloc or not target.path:
-                continue
-            resolved = (index.parent / unquote(target.path)).resolve()
-            if resolved.is_relative_to(root):
-                covered.add(resolved.relative_to(root).as_posix())
-    exceptions = {"adr", "design", "internal", "milestones", "releases"}
+            for token in block.children:
+                if token.type != "link_open":
+                    continue
+                target = urlsplit(token.attrGet("href") or "")
+                if target.scheme or target.netloc or not target.path:
+                    continue
+                resolved = (source.parent / unquote(target.path)).resolve()
+                if not resolved.is_relative_to(root):
+                    continue
+                linked = resolved.relative_to(root).as_posix()
+                if linked in tracked and linked not in covered:
+                    pending.append(linked)
+
+    exceptions = {"adr", "design", "internal", "milestones", "releases", "history"}
     required = sorted(
         name for name in names
-        if name.startswith("docs/") and name != "docs/README.md"
+        if name.startswith("docs/") and name != index_name
         and len(Path(name).parts) >= 2
         and not (len(Path(name).parts) > 2 and Path(name).parts[1] in exceptions)
     )
-    return [f"{name}: active doc not linked from docs/README.md"
+    return [f"{name}: active doc not reachable from docs/README.md"
             for name in required if name not in covered]
 
 
