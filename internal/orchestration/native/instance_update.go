@@ -108,6 +108,9 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 		if deployment := instance.Config["user.aginctus.deployment"]; deployment != "" && deployment != scope.Name {
 			return nil, "", "", fmt.Errorf("existing workload deployment mismatch")
 		}
+		if deployment, supplied := intent.Config["user.aginctus.deployment"]; supplied && instance.Config["user.aginctus.deployment"] != deployment {
+			return nil, "", "", fmt.Errorf("existing workload deployment marker is immutable")
+		}
 		if instance.Status != "Running" && instance.Status != "Stopped" {
 			return nil, "", "", fmt.Errorf("existing workload lifecycle unverified")
 		}
@@ -136,13 +139,9 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 	}
 	changed := intent.Description != before.Description
 	for key, value := range intent.Config {
-		if before.Config[key] != value {
+		if got, exists := before.Config[key]; !exists || got != value {
 			changed = true
 		}
-	}
-	if !changed {
-		result.Verified = true
-		return result, nil
 	}
 	current, currentETag, _, err := read()
 	if err != nil {
@@ -159,6 +158,10 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 	}
 	if err := ctx.Err(); err != nil {
 		return fail("cancellation", false, false, err)
+	}
+	if !changed {
+		result.Verified = true
+		return result, nil
 	}
 	put := api.InstancePut{
 		Architecture: current.Architecture,
@@ -184,6 +187,9 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 		return fail("operation", true, true, err)
 	}
 	result.Changed = true
+	if err := checkProject(); err != nil {
+		return fail("verification", true, true, err)
+	}
 	after, _, _, err := read()
 	if err != nil {
 		return fail("verification", true, true, err)
@@ -199,8 +205,10 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 		}
 	}
 	for key, value := range current.Config {
-		if _, explicit := intent.Config[key]; !explicit && after.Config[key] != value {
-			return fail("verification", true, true, fmt.Errorf("unspecified instance config changed"))
+		if _, explicit := intent.Config[key]; !explicit {
+			if got, exists := after.Config[key]; !exists || got != value {
+				return fail("verification", true, true, fmt.Errorf("unspecified instance config changed"))
+			}
 		}
 	}
 	result.Verified = true

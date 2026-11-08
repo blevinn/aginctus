@@ -63,6 +63,9 @@ func (f *updateFake) GetImage(fp string) (*api.Image, string, error) {
 func (f *updateFake) UpdateInstance(_ string, put api.InstancePut, etag string) (InstanceOperation, error) {
 	f.writes++
 	f.put = put
+	if etag != f.etag {
+		return nil, errors.New("incorrect ETag")
+	}
 	if f.mode == "submit failure" {
 		return nil, errors.New("submit failed")
 	}
@@ -75,6 +78,44 @@ func (f *updateFake) UpdateInstance(_ string, put api.InstancePut, etag string) 
 		f.op.err = context.Canceled
 	}
 	return f.op, nil
+}
+
+func TestNativeInstanceUpdateEmptyConfigPresence(t *testing.T) {
+	intent, fake := updateFixture(t)
+	fake.instance.Description = intent.Description
+	fake.instance.Config["user.aginctus.runtime"] = intent.Config["user.aginctus.runtime"]
+	intent.Config["user.explicit-empty"] = ""
+	result, err := UpdateInstanceWithClient(context.Background(), intent, fake)
+	if err != nil || !result.Changed || !result.Verified || fake.writes != 1 {
+		t.Fatalf("absent empty value was skipped: %+v %v", result, err)
+	}
+}
+
+func TestNativeInstanceUpdateNoopRechecksAndDeploymentIsImmutable(t *testing.T) {
+	for _, mode := range []string{"race", "project drift"} {
+		t.Run(mode, func(t *testing.T) {
+			intent, fake := updateFixture(t)
+			fake.instance.Description = intent.Description
+			fake.instance.Config["user.aginctus.runtime"] = intent.Config["user.aginctus.runtime"]
+			fake.mode = mode
+			result, err := UpdateInstanceWithClient(context.Background(), intent, fake)
+			if err == nil || result.Verified || fake.writes != 0 {
+				t.Fatalf("inconsistent no-op accepted: %+v %v", result, err)
+			}
+		})
+	}
+	for _, deployment := range []string{"", "other", "aginctus-test"} {
+		intent, fake := updateFixture(t)
+		delete(fake.instance.Config, "user.aginctus.deployment")
+		if deployment == "aginctus-test" {
+			deployment = intent.Identity.Project
+		}
+		intent.Config["user.aginctus.deployment"] = deployment
+		result, err := UpdateInstanceWithClient(context.Background(), intent, fake)
+		if err == nil || result.Verified || fake.writes != 0 {
+			t.Fatalf("deployment marker changed: %+v %v", result, err)
+		}
+	}
 }
 
 func updateFixture(t *testing.T) (InstanceIntent, *updateFake) {

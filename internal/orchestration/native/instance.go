@@ -56,6 +56,9 @@ func (intent InstanceIntent) Validate() error {
 	if _, reserved := intent.Config["volatile.base_image"]; reserved {
 		return fmt.Errorf("instance base image is selected by the verified image alias")
 	}
+	if deployment, supplied := intent.Config["user.aginctus.deployment"]; supplied && deployment != intent.Identity.Project {
+		return fmt.Errorf("instance deployment marker must match the selected project")
+	}
 	for name, device := range intent.Devices {
 		if !localName(name) || device["type"] == "" {
 			return fmt.Errorf("invalid managed device intent")
