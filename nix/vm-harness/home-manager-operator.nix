@@ -56,6 +56,12 @@ let
     '';
   operatorFlake = makeFlake operatorGeneration;
   upgradedFlake = makeFlake upgradedGeneration;
+  lifecycleUnitFixture = pkgs.writeText "operator-lifecycle-fixture.service" ''
+    [Unit]
+    Description=Harmless lifecycle diagnostic fixture
+    [Service]
+    ExecStart=${pkgs.coreutils}/bin/sleep infinity
+  '';
   unmanagedConfig = pkgs.writeText "unmanaged-operator-config.json" (
     builtins.toJSON { gateway.id = "unmanaged-operator"; }
   );
@@ -465,6 +471,36 @@ pkgs.testers.runNixOSTest {
     assert "User gateway credential metadata: present" in report(state_audit, 1)
     assert credential_metadata(system_gateway) == system_gateway_before
     assert credential_metadata(user_gateway) == user_gateway_before
+
+    # Harmless sleep units exercise the allowlisted lifecycle names in real
+    # managers. They do not reconcile resources or establish writer exclusion.
+    machine.succeed("loginctl enable-linger operator")
+    machine.wait_for_unit("user@1000.service")
+    user_systemctl = operator + " env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user"
+    unit_audit = operator + " env XDG_RUNTIME_DIR=/run/user/1000 /home/operator/.nix-profile/bin/aginctus operator units-audit --owner "
+    assert "No competing known lifecycle units" in report(unit_audit + "user", 0)
+    machine.succeed("cp ${lifecycleUnitFixture} /run/systemd/system/aginctus-reconcile.service; systemctl daemon-reload")
+    assert "aginctus-reconcile.service: system=installed user=absent" in report(unit_audit + "user", 1)
+    machine.succeed("systemctl start aginctus-reconcile.service")
+    assert "aginctus-reconcile.service: system=active user=absent" in report(unit_audit + "user", 1)
+    assert "No competing known lifecycle units" in report(unit_audit + "system", 0)
+    machine.succeed(operator + " install -d -m 0700 /home/operator/.config/systemd/user")
+    machine.succeed(operator + " cp ${lifecycleUnitFixture} /home/operator/.config/systemd/user/aginctus-reconcile.service")
+    machine.succeed(user_systemctl + " daemon-reload")
+    assert "aginctus-reconcile.service: system=active user=installed" in report(unit_audit + "system", 1)
+    machine.succeed(user_systemctl + " start aginctus-reconcile.service")
+    for owner in ["system", "user"]:
+        assert "aginctus-reconcile.service: system=active user=active" in report(unit_audit + owner, 1)
+    machine.succeed(user_systemctl + " stop aginctus-reconcile.service")
+    machine.succeed("systemctl stop aginctus-reconcile.service")
+    assert "aginctus-reconcile.service: system=installed user=installed" in report(unit_audit + "user", 1)
+    machine.succeed(operator + " rm -f /home/operator/.config/systemd/user/aginctus-reconcile.service")
+    machine.succeed(user_systemctl + " daemon-reload")
+    machine.succeed("rm -f /run/systemd/system/aginctus-reconcile.service; systemctl daemon-reload")
+    assert "No competing known lifecycle units" in report(unit_audit + "user", 0)
+    machine.succeed("loginctl disable-linger operator")
+    machine.succeed("systemctl stop user@1000.service")
+    assert "user=unverified" in report(unit_audit + "user", 1)
 
     for command in inventories:
         assert machine.succeed(f"incus {command} --format json | jq -S .") == before[command], f"HM activation or user-manager lifecycle changed Incus {command}"
