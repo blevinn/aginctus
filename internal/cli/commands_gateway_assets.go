@@ -10,10 +10,15 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gatewaycontrol"
+	"github.com/blevinn/aginctus/internal/siwc"
 	"github.com/spf13/cobra"
 )
 
-func gatewayPlugins() gatewaycontrol.Plugins { return gatewaycontrol.Builtins() }
+func gatewayPlugins() gatewaycontrol.Plugins {
+	plugins := gatewaycontrol.Builtins()
+	plugins["openai-siwc"] = siwc.Plugin()
+	return plugins
+}
 
 type gatewayAction func(*cobra.Command, []string, *gatewaycontrol.Store) (any, error)
 

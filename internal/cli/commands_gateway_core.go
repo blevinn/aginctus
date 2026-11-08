@@ -108,6 +108,9 @@ func executeGatewayCredential(ctx context.Context, action string, stdout, stderr
 
 func executeGatewayLifecycle(ctx context.Context, action string, force bool, stdout, stderr io.Writer, effective *config.Config) int {
 	spec, err := gateway.FromConfig(effective)
+	if err == nil && (action == "validate" || action == "render") {
+		spec, err = configuredGatewaySpec(effective)
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "gateway configuration: %v\n", err)
 		return 1
@@ -126,6 +129,11 @@ func executeGatewayLifecycle(ctx context.Context, action string, force bool, std
 		runtimeEnvironment, err := spec.InitializeRuntimeEnvironment()
 		if err != nil {
 			fmt.Fprintf(stderr, "gateway initialization: %v\n", err)
+			return 1
+		}
+		spec, err = configuredGatewaySpec(effective)
+		if err != nil {
+			fmt.Fprintf(stderr, "gateway configuration: %v\n", err)
 			return 1
 		}
 		if err := spec.Deploy(ctx, runtimeEnvironment); err != nil {
