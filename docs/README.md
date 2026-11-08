@@ -156,6 +156,10 @@ Use this map to pick the authoritative page for a given task:
 - [Acceptance: OpenCode live](acceptance-opencode-live.md) —
   live OpenCode→LiteLLM acceptance and what stays unverified.
 
+## Releases and historical evidence
+
+- [Historical operator handoffs and milestones](history/README.md) — useful provenance; not substitute current configuration, procedures, or release sign-off.
+
 ## Release tracking (current status)
 
 - [v0.1.0 release notes](releases/v0.1.0.md) — verified pilot behavior,
