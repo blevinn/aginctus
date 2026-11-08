@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/blevinn/aginctus/internal/config"
 	workloadcmd "github.com/blevinn/aginctus/internal/cli/commands/workload"
+	"github.com/blevinn/aginctus/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -28,23 +28,23 @@ func normalizeWorkloadLegacyArgs(args []string) []string {
 	default:
 		return args
 	}
-	mapped := append([]string{"workload", action, args[1]}, args[3:]...)
-	return mapped
+	return append([]string{"workload", action, args[1]}, args[3:]...)
 }
 
 func addWorkloadCommands(root *cobra.Command, stdout, stderr io.Writer,
 	load func() (*config.Config, error), status *int,
 ) {
 	workloadcmd.Register(root, stdout, stderr, load, status, workloadcmd.Handlers{
-		ScopedApply: runScopedWorkloadApplyRender,
-		ScopedStart: runScopedWorkloadStart,
-		ScopedStop: runScopedWorkloadStop,
+		ScopedApply:        runScopedWorkloadApplyRender,
+		ScopedApplyConfirm: runScopedWorkloadApplyConfirm,
+		ScopedStart:        runScopedWorkloadStart,
+		ScopedStop:         runScopedWorkloadStop,
 		Configured: func(ctx context.Context, action string, args []string, dryRun, force bool, out, errOut io.Writer, cfg *config.Config) int {
 			return executeConfiguredWorkloads(ctx, action, args, mutationOptions{DryRun: dryRun, Force: force}, out, errOut, cfg)
 		},
-		ScopedStatus: runScopedWorkloadStatus,
-		List: runActiveWorkloadList,
-		Status: runWorkloadStatus,
+		ScopedStatus:     runScopedWorkloadStatus,
+		List:             runActiveWorkloadList,
+		Status:           runWorkloadStatus,
 		GatewayProvision: runWorkloadGatewayProvision,
 	})
 }
