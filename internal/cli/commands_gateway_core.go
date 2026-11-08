@@ -10,6 +10,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Gateway command families registered in the Cobra tree are intercepted here.
+func isGatewayCoreCommand(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "status", "remove", "apply", "up", "validate", "render", "credential-storage", "provider", "model", "plugin", "mcp", "catalog", "egress", "responses":
+		return true
+	default:
+		return false
+	}
+}
+
 // executeGatewayCredential keeps the existing private-volume validation
 // and side-effect sequencing independent of CLI argument parsing.
 func executeGatewayCredential(ctx context.Context, action string, stdout, stderr io.Writer, effective *config.Config) int {
@@ -133,7 +146,7 @@ func executeGatewayLifecycle(ctx context.Context, action string, force bool, std
 		fmt.Fprint(stdout, rendered)
 		return 0
 	default:
-		printGatewayUsage(stderr)
+		fmt.Fprintln(stderr, "unsupported gateway lifecycle operation")
 		return 2
 	}
 }
@@ -142,9 +155,12 @@ func addGatewayCoreCommands(
 	root *cobra.Command, stdout, stderr io.Writer,
 	load func() (*config.Config, error), status *int,
 ) *cobra.Command {
-	gatewayCmd := &cobra.Command{Use: "gateway", Short: "Inspect and reconcile the AI gateway", Args: cobra.NoArgs}
-	gatewayCmd.RunE = func(_ *cobra.Command, _ []string) error {
-		printGatewayUsage(stderr)
+	gatewayCmd := &cobra.Command{
+		Use: "gateway", Short: "Inspect and reconcile the AI gateway", Args: cobra.NoArgs,
+		Long: "Gateway validate/render and plan/audit operations inspect intent or state, not authenticated inference. Provider/model registration writes local metadata only; it does not activate inference. Gateway removal preserves persistent volumes. Egress and DHCP mutations require their own explicit confirmation.",
+	}
+	gatewayCmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		fmt.Fprint(stderr, cmd.UsageString())
 		*status = 2
 		return nil
 	}

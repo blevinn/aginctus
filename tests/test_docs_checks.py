@@ -8,16 +8,30 @@ from markdown_it import MarkdownIt
 
 from scripts import check_docs_examples, check_markdown_links
 
-HELP = """Usage: aginctus [global options] <command>
+HELP = """Usage:
+  aginctus [command]
 
-Commands:
-  help [command]    Display command help
-  config get PATH  Read configuration
+Available Commands:
+  gateway     Inspect and reconcile gateway
+  network     Inspect management network
 
-Usage: aginctus [global options] gateway apply
-       aginctus [global options] gateway validate
-       aginctus [global options] network apply [--dry-run] [--force]
-       aginctus [global options] workload apply [name] [--dry-run] [--force]
+Subcommand syntax (derived from registered Cobra commands):
+  aginctus help [command]
+  aginctus config get PATH
+  aginctus gateway apply
+  aginctus gateway validate
+  aginctus network apply
+      --dry-run   Show intended change without mutation
+      --force     Permit supported replacement
+      -h, --help  Show help
+  aginctus workload apply [NAME]
+      --dry-run   Inspect without mutation
+      --force     Permit supported replacement
+  aginctus images list  (aliases: ls)
+      --project string   Explicit owned local project
+  aginctus images import ALIAS PATH
+      --project string   Explicit owned local project
+      --confirm-create   Confirm create-only import
 """
 
 
@@ -73,9 +87,16 @@ class DocsChecksTest(unittest.TestCase):
         self.assertTrue(accepted("config get incus.management.network.name"))
         self.assertTrue(accepted("workload apply dev --dry-run"))
         self.assertTrue(accepted("network apply --dry-run"))
+        self.assertTrue(accepted("network apply -h"))
+        self.assertTrue(accepted("network apply --help"))
         self.assertFalse(accepted("gateway apply --dry-run"))
         self.assertFalse(accepted("workload apply dev --unsafe"))
         self.assertFalse(accepted("this-command-does-not-exist"))
+        self.assertTrue(accepted("images ls --project=aginctus"))
+        self.assertTrue(accepted("images import --project aginctus target /tmp/build --confirm-create"))
+        self.assertFalse(accepted("images list --force"))
+        self.assertFalse(accepted("images import --project aginctus target /tmp/build --force"))
+        self.assertFalse(accepted("network apply --confirm-bridge-only"))
 
     def test_shell_fences_checked_without_execution(self):
         self.write("docs/cli.md", "# CLI\n```sh\naginctus gateway validate\naginctus gateway apply --dry-run\n```\n")

@@ -341,35 +341,13 @@
           opencodeWorkloadMetadata = opencodeWorkloadSystem.config.system.build.metadata;
         in
         {
-          testenv-sweep = pkgs.buildGoModule {
-            pname = "aginctus-testenv-sweep";
-            version = releaseVersion;
-            src = ./.;
-            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
-            subPackages = [ "./cmd/aginctus-testenv-sweep" ];
-          };
-          # Offline operator planning is separate from the public CLI and its daemon client.
+          # Separate operator-only CLI; never registered by aginctus/MCP.
           testenv-cli = pkgs.buildGoModule {
             pname = "aginctus-testenv";
             version = releaseVersion;
             src = ./.;
             vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
             subPackages = [ "./cmd/aginctus-testenv" ];
-          };
-          testenv-worker-preflight = pkgs.buildGoModule {
-            pname = "aginctus-testenv-worker-preflight";
-            version = releaseVersion;
-            src = ./.;
-            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
-            subPackages = [ "./cmd/aginctus-testenv-worker-preflight" ];
-          };
-          # Explicit operator invocation only; not installed into any service.
-          testenv-worker-acceptance = pkgs.buildGoModule {
-            pname = "aginctus-testenv-acceptance";
-            version = releaseVersion;
-            src = ./.;
-            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
-            subPackages = [ "./cmd/aginctus-testenv-acceptance" ];
             ldflags = [ "-X=main.revision=${self.rev or "source-${self.narHash}"}" ];
           };
           aginctus = aginctusCli;
