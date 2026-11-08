@@ -418,9 +418,6 @@ func TestUnsafeStateAndSanitizedDiagnostics(t *testing.T) {
 }
 
 func TestGoPythonStateAndLockCompatibility(t *testing.T) {
-	if _, err := os.Stat(filepath.Join("..", "..", "scripts", "gateway", "siwc.py")); os.IsNotExist(err) {
-		t.Skip("runtime interoperability is supplied by the next stack layer")
-	}
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("Python compatibility probe requires test environment")
@@ -465,9 +462,6 @@ with s.lock('runtime', timeout=0), s.lock():
 }
 
 func TestGoEnrollmentPythonRefreshGoLogout(t *testing.T) {
-	if _, err := os.Stat(filepath.Join("..", "..", "scripts", "gateway", "siwc.py")); os.IsNotExist(err) {
-		t.Skip("runtime interoperability is supplied by the next stack layer")
-	}
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("Python integration probe requires test environment")
