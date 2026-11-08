@@ -1,12 +1,12 @@
-# Declarative orchestration design
+# Orchestration engine and reconciliation boundaries
 
-Status: implemented initial orchestration engine and direct Go Apply/Compose drivers for management-network, Herdr client, workload instance, and gateway deployment. The native Incus SDK driver reconciles the management-network bridge and is selected per deployment. Runtime-specific readiness, gateway credentials, and full guest bootstrap remain separate work.
+**Status (current implementation, not a release acceptance claim):** The Jsonnet plan/validation/execution engine and Go Apply/Compose integration remain present for management-network, Herdr, workloads and gateway. A selectable native Incus SDK driver reconciles the management bridge; additional native project/instance primitives exist, but their presence does **not** mean the legacy drivers have been retired or the whole deployment has native parity. Runtime-specific readiness, migration, gateway credentials and guest bootstrap have separate verification gates. See [ADR 0002](adr/0002-native-incus-reconciliation.md) and the [active cutover design](design/native-incus-reconciliation.md).
 
-## Goal
+## Current contract and origins
 
-Replace Aginctus-specific imperative `ensure` flows with a small orchestration engine that evaluates trusted Jsonnet into a deterministic execution plan and then invokes Incus reconciliation libraries in sequence.
+The orchestration engine evaluates trusted Jsonnet into a deterministic execution plan, validates it and invokes selected reconciliation drivers. It began as a replacement for bespoke imperative `ensure` flows; this document retains that historical motivation while describing the current migration boundary.
 
-The first two execution drivers are:
+The original execution drivers, **still present while the native cutover is underway**, are:
 
 - `apply` for individual Incus resources through `incus-apply`;
 - `compose` for multi-service projects through `incus-compose`.
@@ -15,9 +15,9 @@ Aginctus must integrate both projects as Go modules. It must not shell out to ei
 
 This design intentionally separates the Aginctus orchestration contract from the configuration syntax of either underlying project. Incus Apply and Compose remain implementation drivers rather than the public Aginctus model.
 
-## Why change the current ensure model
+## Historical motivation for the engine
 
-The existing network and Herdr client commands prove the lifecycle semantics, ownership model, and configuration cascade, but each new resource currently adds bespoke reconciliation code.
+The early network and Herdr client commands demonstrated the lifecycle semantics, ownership model, and configuration cascade, but each new resource currently adds bespoke reconciliation code.
 
 That approach becomes expensive for agent workloads and the AI gateway, which need combinations of networks, instances, storage, and Compose projects.
 
@@ -396,7 +396,7 @@ Key requirements:
 - sanitize driver errors before displaying data that may contain credentials;
 - pin module versions through `go.mod` and `go.sum`.
 
-## Initial engine implementation
+## Initial engine implementation (historical implementation notes)
 
 The first implementation establishes the Aginctus-owned orchestration contract without replacing an existing lifecycle path:
 

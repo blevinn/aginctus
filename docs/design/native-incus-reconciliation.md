@@ -1,6 +1,6 @@
 # Native Incus reconciliation: staged migration design
 
-Status: **active v0.2 implementation**. Production execution still uses the legacy drivers. See [ADR 0002](../adr/0002-native-incus-reconciliation.md), [OCI feasibility](native-oci-feasibility.md) and [epic #153](https://github.com/blevinn/aginctus/issues/153).
+Status: **active v0.2 implementation**, not an accepted all-native production cutover. The selectable native management-network path exists, while Apply/Compose remain part of the current execution path until subsystem-specific parity and migration gates are met. See [ADR 0002](../adr/0002-native-incus-reconciliation.md), [OCI feasibility](native-oci-feasibility.md) and [epic #153](https://github.com/blevinn/aginctus/issues/153).
 
 ## Release guardrails
 
