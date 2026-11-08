@@ -58,9 +58,18 @@ type State struct {
 	Accounts map[string]*Record `json:"accounts"`
 	Routes   map[string]Route   `json:"routes"`
 	Received []string           `json:"received,omitempty"`
+	Consents map[string]Consent `json:"consents,omitempty"`
 }
 
-type Store struct{ Root string }
+type Consent struct {
+	ClientID string `json:"client_id"`
+	Subject  string `json:"sub"`
+}
+
+type Store struct {
+	Root   string
+	memory []byte
+}
 
 func OpenStore(root string) (*Store, error) {
 	if !filepath.IsAbs(root) || filepath.Clean(root) != root {
@@ -106,6 +115,10 @@ func privateRead(path string, limit int64) ([]byte, error) {
 }
 
 func (s *Store) lock(ctx context.Context, name string, timeout time.Duration) (func(), error) {
+	// A managed exchange is single-use and holds the gateway's admission lock.
+	if s.memory != nil {
+		return func() {}, ctx.Err()
+	}
 	path := filepath.Join(s.Root, name+".flock")
 	fd, err := unix.Open(path, unix.O_CREAT|unix.O_RDWR|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0600)
 	if err != nil {
@@ -175,11 +188,20 @@ func (state *State) validate() error {
 			return Error("Invalid persisted SIWC route binding")
 		}
 	}
+	for label, consent := range state.Consents {
+		record := state.Accounts[label]
+		if record == nil || consent.ClientID != record.ClientID || consent.Subject == "" || consent.Subject != record.Subject {
+			return Error("Invalid persisted SIWC consent identity")
+		}
+	}
 	return nil
 }
 
 func (s *Store) read() (*State, error) {
-	data, err := privateRead(filepath.Join(s.Root, "state.json"), maxState)
+	data, err := s.memory, error(nil)
+	if data == nil {
+		data, err = privateRead(filepath.Join(s.Root, "state.json"), maxState)
+	}
 	if errors.Is(err, os.ErrNotExist) {
 		return &State{Version: 1, HostID: uuid.New().URN(), Accounts: map[string]*Record{}, Routes: map[string]Route{}}, nil
 	}
@@ -198,6 +220,13 @@ func (s *Store) read() (*State, error) {
 
 func (s *Store) write(state *State) error {
 	if err := state.validate(); err != nil {
+		return err
+	}
+	if s.memory != nil {
+		data, err := json.Marshal(state)
+		if err == nil {
+			s.memory = data
+		}
 		return err
 	}
 	target := filepath.Join(s.Root, "state.json")
