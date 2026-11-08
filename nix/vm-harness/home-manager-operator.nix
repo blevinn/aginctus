@@ -392,6 +392,9 @@ pkgs.testers.runNixOSTest {
     # Mask both activation paths so preflight cannot restart Incus implicitly.
     # User configuration switching must remain independent of daemon health.
     client_credentials = machine.succeed("sha256sum /home/operator/.config/incus/client.key /home/operator/.config/incus/client.crt")
+    # Quiesce root timers to avoid their Requires=incus start jobs racing the
+    # fixture's administrative stop transaction; filtering rules stay installed.
+    machine.succeed("systemctl stop aginctus-firewall-reconcile.timer aginctus-egress-firewall.timer aginctus-firewall-reconcile.service aginctus-egress-firewall.service", timeout=60)
     machine.succeed("systemctl mask --runtime --now incus.socket incus.service", timeout=60)
     machine.fail("systemctl is-active --quiet incus.service")
     unavailable = report(cli + " operator preflight --project aginctus", 1)
@@ -406,6 +409,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("systemctl unmask --runtime incus.socket incus.service")
     machine.succeed("systemctl start incus.socket incus.service", timeout=60)
     machine.wait_for_unit("incus.service")
+    machine.succeed("systemctl start aginctus-firewall-reconcile.timer aginctus-egress-firewall.timer")
     recovered = report(cli + " operator preflight --project aginctus", 0)
     assert "restricted TLS credential; selected project declared permitted (writes unproven)" in recovered
     assert machine.succeed("sha256sum /home/operator/.config/incus/client.key /home/operator/.config/incus/client.crt") == client_credentials
