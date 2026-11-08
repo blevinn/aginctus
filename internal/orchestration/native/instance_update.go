@@ -139,7 +139,7 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 	}
 	changed := intent.Description != before.Description
 	for key, value := range intent.Config {
-		if got, exists := before.Config[key]; !exists || got != value {
+		if before.Config[key] != value {
 			changed = true
 		}
 	}
@@ -200,7 +200,7 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 		return fail("verification", true, true, fmt.Errorf("instance update postcondition unverified"))
 	}
 	for key, value := range intent.Config {
-		if got, exists := after.Config[key]; !exists || got != value {
+		if after.Config[key] != value {
 			return fail("verification", true, true, fmt.Errorf("instance update config unverified"))
 		}
 	}
