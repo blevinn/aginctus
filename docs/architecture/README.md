@@ -82,3 +82,14 @@ A public control-plane API, dashboard, Bubble Tea TUI, multiple independent Incu
 ## Verification boundary
 
 `just check-all`, rendering and read-only preflight validate offline contracts, not the pilot's live key scope, route, provider TLS, inference response, or model-directed file/test operation. The [v0.1 release checklist](https://github.com/blevinn/aginctus/issues/118) and its linked acceptance issues remain authoritative; a running container or HTTP 200 health check is insufficient. Consult [getting started](../getting-started.md) for non-mutating versus explicitly approved deployment commands.
+
+## Component references and transitional implementation
+
+- [Project scope and direction](project-overview.md) — long-term context, not an implemented API.
+- [Gateway architecture](gateway.md) — implemented and proposed credential/MCP boundaries, explicitly labeled.
+- [Orchestration engine and legacy/native drivers](orchestration.md) — current execution contracts and staged migration.
+- [Orchestration stream contract](orchestration-streams.md) — plan validation and step ownership.
+- [LiteLLM protected volume](litellm-private-volume.md) — persistent-state placement and trust boundary.
+- [Native ChatGPT OAuth decision](native-chatgpt-oauth.md) — accepted design, not permission to activate a deferred image.
+
+These are implementation/architecture references. Use [operator workflows](../operations/README.md) for authorized procedures and [test tiers](../testing/README.md) for evidence limitations.

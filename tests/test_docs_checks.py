@@ -77,6 +77,41 @@ class DocsChecksTest(unittest.TestCase):
         self.assertEqual(len(failures), 1)
         self.assertIn("docs/workloads/example.md", failures[0])
 
+    def test_section_indexes_can_discover_nested_active_pages(self):
+        self.write("docs/README.md", "# Docs\n[Operations](operations/README.md)\n")
+        self.write("docs/operations/README.md", "# Operations\n[Host](host/README.md)\n")
+        self.write("docs/operations/host/README.md", "# Host\n[Audit](audit.md)\n")
+        self.write("docs/operations/host/audit.md", "# Read-only audit\n")
+        names = [
+            "docs/README.md", "docs/operations/README.md",
+            "docs/operations/host/README.md", "docs/operations/host/audit.md",
+        ]
+        self.assertEqual(
+            check_markdown_links.check_index(self.root, names, MarkdownIt("commonmark")),
+            [],
+        )
+
+    def test_transitive_index_rejects_orphans_even_with_a_cycle(self):
+        self.write("docs/README.md", "# Docs\n[Ops](operations/README.md)\n")
+        self.write("docs/operations/README.md", "# Ops\n[Home](../README.md)\n")
+        self.write("docs/operations/host/unlinked.md", "# Orphan\n")
+        names = [
+            "docs/README.md", "docs/operations/README.md",
+            "docs/operations/host/unlinked.md",
+        ]
+        failures = check_markdown_links.check_index(self.root, names, MarkdownIt("commonmark"))
+        self.assertEqual(len(failures), 1)
+        self.assertIn("docs/operations/host/unlinked.md", failures[0])
+
+    def test_historical_pages_exempt_from_active_index(self):
+        self.write("docs/README.md", "# Docs\n")
+        self.write("docs/history/old-pilot.md", "# Historical evidence\n")
+        names = ["docs/README.md", "docs/history/old-pilot.md"]
+        self.assertEqual(
+            check_markdown_links.check_index(self.root, names, MarkdownIt("commonmark")),
+            [],
+        )
+
     def test_cli_help_shapes_prevent_unsafe_examples(self):
         shapes = check_docs_examples.patterns(HELP)
 

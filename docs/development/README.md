@@ -1,6 +1,6 @@
 # Development
 
-Aginctus uses Nix to provide a small, reproducible development environment.
+Aginctus uses Nix to provide a small, reproducible development environment. For release versioning, human sign-off and publication, use the separate [release process](releasing.md). For CLI behavior and the Incus trust boundary, use the [CLI reference](../reference/cli.md).
 
 ## Prerequisites
 

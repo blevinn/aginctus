@@ -75,3 +75,12 @@ A successful host-only smoke must still be followed by the separately authorized
 For each approved operation, record the observed software versions, sanitized resource identities, change approval, before/after ownership/NIC/route state, safe firewall results, provider outcome and run/request correlation, negative controls, and the explicitly verified key revocation result. Track changing live pilot observations in [#257](https://github.com/blevinn/aginctus/issues/257) and [#122](https://github.com/blevinn/aginctus/issues/122), not as permanent sample addresses here. Refer full-release claims to [#118](https://github.com/blevinn/aginctus/issues/118).
 
 Never publish secret-bearing command output, expanded instance configuration, upstream API or LiteLLM master/workload keys, OAuth state, raw request headers, or unredacted provider responses. For partial NIC/firewall updates, follow the **specific** rollback procedure in the runbook, inspect server state after uncertain timeouts, and never destroy unrelated Incus instances, PostgreSQL databases or credential volumes. An interrupted smoke must result in controlled key revocation/verification, not abandoned live credentials.
+
+## Supporting gateway contracts
+
+- [Management DHCP/default-route controls](management-dhcp-gateway.md) — separately authorized host/gateway route changes.
+- [Selective OpenCode Go forwarding](selective-go-forwarding.md) — explicit activation, read-only audit, rollback and test-only checks.
+- [Gateway assets and catalogs](../../reference/gateway-assets.md) — locally compiled declarations, not grants or deployment.
+- [MCP declarations](../../reference/mcp-configuration.md) — configuration and authorization limits.
+
+For host firewall policy see the [host operations index](../host/README.md). Legacy pilot filenames are retained for compatibility while their contents remain **task-specific**, not alternate permission paths.

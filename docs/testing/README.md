@@ -18,6 +18,11 @@ This page is the **canonical testing entry point** for Aginctus. Different test 
 3. **Do you need to know whether a deployed pilot is ready?** Begin at stage 2 read-only preflight; it does not authorize stage 3 or 4.
 4. **Do you need actual model/agent evidence?** Use the operator-held staged acceptance, explicitly authorize credentials and any billable request, record independent attribution and revocation evidence, and independently verify cleanup.
 
+## Further testenv and acceptance detail
+
+- [Testenv procedure index](testenv/README.md) — disposable nested VM, isolated worker and image authorization boundaries.
+- [OpenCode pinned runtime validation](acceptance/opencode-runtime-validation.md) — targeted runtime-specific control checks; not real model inference.
+
 ## Reference and historical evidence
 
 - [OpenCode staged acceptance](acceptance/README.md) owns the canonical operator decision sequence; the individual `acceptance-opencode-*.md` pages hold specialized commands.
