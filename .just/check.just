@@ -72,7 +72,8 @@ shell:
 
 [no-cd]
 nix:
-    nix --quiet flake check --no-build --no-update-lock-file
+    # Full flake check already evaluates the flake before building outputs.
+    # Avoid a duplicate full-tree evaluation pass in every CI run.
     nix --quiet flake check --no-update-lock-file
 
 # Offline local targets and heading fragments in tracked Markdown.
@@ -91,21 +92,21 @@ docs-examples:
 # echo so JSON mode emits exactly one machine-readable object.
 [no-cd]
 report:
-    @python3 scripts/checks/report.py --format text
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format text
 
 [no-cd]
 report-json:
-    @python3 scripts/checks/report.py --format json
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format json
 
 # Read-only, explicit VM evidence inspection. Never runs or discovers VMs.
 # quote() prevents the operator-provided run ID becoming shell syntax.
 [no-cd]
 vm-report run_id:
-    @python3 scripts/checks/vm_evidence.py --format text {{quote(run_id)}}
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format text --vm-run-id {{quote(run_id)}}
 
 [no-cd]
 vm-report-json run_id:
-    @python3 scripts/checks/vm_evidence.py --format json {{quote(run_id)}}
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format json --vm-run-id {{quote(run_id)}}
 
 # Read one previously recorded operator-owned local acceptance result.
 # Does not invoke the acceptance harness, Herdr, Incus or any provider.

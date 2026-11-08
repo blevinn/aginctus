@@ -9,6 +9,7 @@ generally discoverable should be linked from this index.
 - [Getting started](getting-started.md) — prerequisites, NixOS side effects, non-mutating inspection, and explicitly approved deployment.
 - [Home Manager operator integration](home-manager.md) — standalone user installation and coexistence with NixOS host firewall policy (v0.2).
 - [CLI operations](cli.md) — supported command families, mutation boundaries, dry-run and force semantics.
+- [Reference navigation](reference/README.md) — which page owns commands, configuration, security and gateway declarations.
 - [Operator Incus preflight](operator-preflight.md) — read-only, explicitly project-scoped access diagnostics and their limitations.
 - [Gateway state ownership audit](operator-state-audit.md) — metadata-only detection of system/user credential state collisions and unsafe permissions.
 - [Lifecycle unit ownership audit](operator-units-audit.md) — inspect competing system/current-user image and reconciler units without modification.
@@ -130,6 +131,8 @@ Use this map to pick the authoritative page for a given task:
 
 ## Acceptance and validation
 
+**Choose a tier first:** [Testing and acceptance overview](testing/README.md) — what each tier proves, required authority and safe next steps.
+
 - [v0.1 deployment and acceptance](v0.1-deployment-acceptance.md) — verified
   live pilot evidence and the unrun fresh-host deploy/smoke/cleanup/repeat
   procedure explicitly deferred to [v0.2 #580](https://github.com/blevinn/aginctus/issues/580).
@@ -152,6 +155,10 @@ Use this map to pick the authoritative page for a given task:
   read-only guest runtime configuration and key-file preflight (not inference).
 - [Acceptance: OpenCode live](acceptance-opencode-live.md) —
   live OpenCode→LiteLLM acceptance and what stays unverified.
+
+## Releases and historical evidence
+
+- [Historical operator handoffs and milestones](history/README.md) — useful provenance; not substitute current configuration, procedures, or release sign-off.
 
 ## Release tracking (current status)
 

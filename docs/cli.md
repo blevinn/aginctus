@@ -1,6 +1,50 @@
-# CLI operations guide
+# CLI reference: command effects and approval boundaries
 
 The installed `aginctus help` and `aginctus help <command>` are the source of truth for supported syntax. Help is available without loading the host's configuration. This guide explains **effects and boundaries**, not a duplicated flag-by-flag manual. Check [configuration precedence](configuration.md) and [security limitations](security.md) before provisioning.
+
+## Local daemon diagnostics and management bridge lifecycle
+
+These semantics are documented here (not in the development environment guide)
+because they control host-facing effects. Commands are examples, **not** an
+approval to modify a host. The installed Cobra help is authoritative for the
+exact command form at the checked-out revision.
+
+The initial `aginctus` CLI is written in Go. It uses the official Incus Go client to communicate directly with the local daemon API.
+
+Run it directly with:
+
+```sh
+go run ./cmd/aginctus help
+go run ./cmd/aginctus doctor
+```
+
+The `doctor` command connects directly to the local Incus daemon, reports its server version, and checks that `core.https_address` is an explicit **numeric loopback IP with a TCP port** (for example, `127.0.0.1:8443` or `[::1]:8443`). Wildcard, LAN, DNS-hostname, malformed, or missing listeners are not reported as healthy. Plain `doctor` never modifies Incus.
+
+Use `doctor --fix` only when the HTTPS address is **absent**: it binds `127.0.0.1:8443` for Incus image caching. If a listener is already configured to an unsafe or unrecognized address, including when `--fix` is given, Aginctus reports an error **without modifying** it; inspect the operator's connections and change `core.https_address` explicitly if appropriate. The check validates the configured bind value, not a live socket reachability probe or firewall exposure audit.
+
+The first mutating command is:
+
+```sh
+go run ./cmd/aginctus network ensure
+```
+
+It creates or reconciles the configured management bridge. Network name, addressing, NAT, routing, and IPv6 behavior come from the effective configuration; Aginctus ownership metadata remains an internal safety invariant.
+
+Use `--dry-run` to inspect the action without mutating Incus:
+
+```sh
+go run ./cmd/aginctus network ensure --dry-run
+go run ./cmd/aginctus network teardown --dry-run
+```
+
+Use `network teardown` to remove the configured management bridge:
+
+```sh
+go run ./cmd/aginctus network teardown
+```
+
+Both `ensure` and `teardown` accept `--force`. Without it, Aginctus refuses to mutate a same-named bridge that lacks Aginctus ownership metadata. With `--force`, Aginctus may adopt or delete that same-named Incus-managed bridge. `--force` does not allow Aginctus to reinterpret an unmanaged network or a different network type.
+
 
 ## Command discovery and compatibility
 
@@ -71,8 +115,8 @@ external diagnostics.
 
 The existing no-`--project` status and unflagged start/stop/apply/remove
 operations retain v0.1 behavior. The separately confirmed start/stop
-transitions below are the only opt-in scoped workload mutations; they do not
-migrate the pilot or enable project-scoped orchestration.
+transitions and confirmed existing-only apply below are opt-in scoped workload
+mutations. They do not migrate the pilot or activate a controller.
 
 ## Review an existing scoped workload apply (read-only)
 
@@ -130,10 +174,35 @@ Neither preview grants the authority to execute a scoped write. The native
 planner's observation can become stale immediately, and project selection alone
 cannot fence other Incus clients. The read-only reader exposes no SDK mutation
 methods. Static `--render` still describes the legacy Apply plan. Bare scoped
-`apply`, `--force` and other mutating forms remain rejected pending
-existing-only server-side enforcement, controller authorization and
-disposable-Incus acceptance (#200/#201/#437/#441/#443). No v0.1 apply
-semantics or pilot host state is changed.
+`apply`, `--force` and combining preview with confirmation remain rejected.
+
+## Reconcile one existing scoped workload (explicit mutation)
+
+On an approved disposable local environment, after inspecting the dry-run:
+
+```sh
+aginctus workload apply --project aginctus dev --confirm-apply
+```
+
+This updates the selected existing workload's managed scalar config and
+description, then ensures it is running through the native SDK. It requires the
+exact configured project, one configured ID, the cooperative project writer lease,
+and absent known system/current-user lifecycle controllers. Project, ownership,
+image identity and ETag are independently re-observed by the native primitives.
+No-op paths also re-observe. Missing instances fail closed, including if removed
+during execution; this path never falls back to creation or legacy Apply.
+Devices, profiles, storage and workspace attachments are retained; incompatible
+drift requires separate policy and is refused. There is no adoption, replacement,
+implicit deletion, network provisioning or controller activation. The API treats
+explicit empty scalar config values as clears, matching Incus normalization;
+omitted keys stay unmanaged. Configuration currently supplies runtime/ownership
+markers, not arbitrary user config overrides.
+
+Failure can leave completed config or start operations. Inspect the exact selected
+instance before retry; no rollback is attempted. Output contains identity/status
+only, without raw config or daemon diagnostics. The cooperative lease cannot fence
+independent Incus administrators. This is disposable-environment opt-in, not pilot
+migration or permission to activate a reconciler.
 
 ## Transition one existing scoped workload (explicit mutation)
 
