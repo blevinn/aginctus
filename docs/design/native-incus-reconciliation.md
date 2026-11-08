@@ -43,9 +43,17 @@ The first implemented native vertical slice is existing-workload-only:
 `native.PlanExistingInstance` performs pure managed-field comparison, and an
 injectable local SDK reader validates and rechecks project/instance/image state.
 The scoped CLI dry-run consumes this model; static Apply rendering and legacy
-writes retain their separate contracts. No actor authorization or execution
-capability is carried by these observations or plans. Independent resource
-intents and multi-resource execution remain to be implemented.
+writes retain their separate contracts. A native API slice can update only
+explicit scalar config keys and description on an existing verified owned
+instance. It builds the Incus writable update from a fresh observation, carries
+all devices and profiles forward unchanged, and guards submission with a fresh
+ETag-bound observation. Device/profile/type/image drift is not repaired by this
+operation; lifecycle transitions remain separate.
+Explicit empty config values clear the key, matching Incus normalization; omitted
+keys remain unmanaged. Description is always explicit, including an empty string.
+No actor authorization or execution capability is carried by observations or plans. Generic versioned
+resource schema work in #155 remains outstanding, as do independent resource
+intents and multi-resource execution.
 
 Native project provisioning implements the existing explicit operator
 create-only contract through the SDK. It requires confirmed nondefault scope
