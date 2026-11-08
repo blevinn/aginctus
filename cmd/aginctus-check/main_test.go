@@ -11,6 +11,7 @@ func TestRejectsUnsafeOrUnknownFlagsBeforeAnySuite(t *testing.T) {
 		{"--format", "json", "--verbose"},
 		{"--format", "xml"},
 		{"--vm-run-id", "invalid", "--verbose"},
+		{"--vm-run-id", "", "--verbose"},
 		{"--unknown"},
 		{"extra"},
 	} {
