@@ -38,6 +38,10 @@ class AuthenticationRequired(Error):
     pass
 
 
+class OwnerBusy(Error):
+    pass
+
+
 class PlanPermissionRequired(Error):
     pass
 
@@ -96,7 +100,7 @@ class Store:
                     break
                 except BlockingIOError:
                     if time.monotonic() >= deadline:
-                        raise Error("SIWC owner busy; retry apply or provider login after active requests finish") from None
+                        raise OwnerBusy("SIWC owner busy; retry apply or provider login after active requests finish") from None
                     time.sleep(0.05)
             if not os.path.samestat(info, path.lstat()):
                 raise Error("SIWC lock was replaced")

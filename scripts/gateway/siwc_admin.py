@@ -7,7 +7,7 @@ import stat
 import sys
 from pathlib import Path
 
-from siwc import MAX_STATE, Error, Store, private_read
+from siwc import MAX_STATE, Error, OwnerBusy, Store, private_read
 
 ROOT = Path("/var/lib/aginctus/chatgpt")
 
@@ -53,8 +53,17 @@ def open_runtime_store():
     return Store(directory)
 
 
-def exchange(store, source, destination):
+def exchange(store, source, destination, require_runtime=False):
     with store.lock("admin", timeout=30):
+        if require_runtime:
+            lease = store.lock("runtime", timeout=0)
+            try:
+                lease.__enter__()
+            except OwnerBusy:
+                pass
+            else:
+                lease.__exit__(None, None, None)
+                raise Error("Managed SIWC runtime is not ready; run gateway apply")
         store.accept_pending()
         current = private_read(store.root / "state.json")
         digest = hashlib.sha256(current).hexdigest()
@@ -76,7 +85,7 @@ def exchange(store, source, destination):
 
 if __name__ == "__main__":
     try:
-        exchange(open_runtime_store(), sys.stdin, sys.stdout)
+        exchange(open_runtime_store(), sys.stdin, sys.stdout, require_runtime=sys.argv[-1] != "prepare")
     except Exception:
         print("Managed SIWC operation failed; credentials were not printed to diagnostics", file=sys.stderr)
         sys.exit(1)

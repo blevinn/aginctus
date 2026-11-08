@@ -11,6 +11,16 @@ import siwc_admin
 
 
 class AdminTests(unittest.TestCase):
+    def test_login_requires_the_active_worker_lease(self):
+        with tempfile.TemporaryDirectory() as parent:
+            store = siwc.Store(Path(parent) / "credentials")
+            with self.assertRaises(siwc.Error):
+                siwc_admin.exchange(store, io.StringIO(""), io.StringIO(), require_runtime=True)
+            with store.lock("runtime", timeout=0):
+                output = io.StringIO()
+                siwc_admin.exchange(store, io.StringIO(""), output, require_runtime=True)
+                self.assertIn("state", json.loads(output.getvalue()))
+
     def test_exchange_commits_and_disconnect_preserves_registration(self):
         with tempfile.TemporaryDirectory() as parent:
             store = siwc.Store(Path(parent) / "credentials")
