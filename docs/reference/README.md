@@ -6,7 +6,8 @@ This section describes **current interfaces and invariants**. It is not a rollou
 | --- | --- | --- |
 | Which subcommand and flags actually exist? | [CLI effects](cli.md) | Installed `aginctus help` and Cobra command tests (not a copied parser manual) |
 | What does a command change, what is a dry-run, when is `--force` allowed? | [CLI effects](cli.md) | Guarded Go command semantics; explicit operator review required |
-| What are config keys, source precedence, module activation side effects and project selection semantics? | [Configuration](configuration.md) | Go loader + NixOS/Home Manager modules |
+| What are config keys, source precedence and project selection semantics? | [Configuration](configuration.md) | Go loader and typed config precedence |
+| What does enabling the NixOS module activate or reconcile? | [NixOS module](nixos-module.md) | Typed NixOS module and separately authorized host effects |
 | Which secrets and trust boundaries are enforced or remain unverified? | [Security](security.md) | Current code, observed acceptance evidence and release limitations |
 | Which gateway declaration/catalog shapes are supported? | [Gateway assets](gateway-assets.md) and [MCP configuration](mcp-configuration.md) | Local config compilation; declaration is not an active grant |
 | What does Herdr SSH identity own? | [SSH identity](ssh-credentials.md) | Managed identity contract; registration workflow is separately privileged |
