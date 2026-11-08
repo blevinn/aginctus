@@ -1,6 +1,6 @@
-# OpenCode acceptance: operator decision path (#124)
+# OpenCode acceptance: staged operator decision path
 
-This is the **entry point** for validating Aginctus → Herdr → OpenCode → private LiteLLM. Choose the least privileged check that answers your question; progress to the next stage only after reviewing its separate prerequisites and authorization. The original #124 tracking issue is closed, but that administrative state, a green mock, a gateway health response, and a read-only preflight **do not establish successful authenticated provider inference**. The [#122 provider-inference gate](https://github.com/blevinn/aginctus/issues/122), [#257 egress gate](https://github.com/blevinn/aginctus/issues/257), and [#118 release sign-off](https://github.com/blevinn/aginctus/issues/118) remain authoritative.
+For tier selection and evidence limitations across hermetic, VM, worker and live checks, start with the [testing overview](testing/README.md). This page is the **canonical staged operator decision path** for validating Aginctus → Herdr → OpenCode → private LiteLLM. Choose the least privileged check that answers your question; progress to the next stage only after reviewing its separate prerequisites and authorization. The original #124 tracking issue is closed, but that administrative state, a green mock, a gateway health response, and a read-only preflight **do not establish successful authenticated provider inference**. The [#122 provider-inference gate](https://github.com/blevinn/aginctus/issues/122), [#257 egress gate](https://github.com/blevinn/aginctus/issues/257), and [#118 release sign-off](https://github.com/blevinn/aginctus/issues/118) remain authoritative.
 
 ## Choose the evidence you need
 
