@@ -20,6 +20,8 @@ type InstanceIdentity struct {
 
 // InstanceIntent manages only explicitly supplied fields and device properties.
 // Extra observed config, devices and device properties are never removed.
+// Explicit empty config values clear keys, matching Incus normalization; omitted
+// keys are unmanaged. A nil map cannot satisfy required ownership markers.
 // ImageAlias is project-local; fingerprint resolution belongs to observation.
 // Native creation uses this intent only for create-if-absent. Existing-instance
 // reconciliation permits only explicit config keys and description.
@@ -147,7 +149,7 @@ func PlanExistingInstance(intent InstanceIntent, observed InstanceObservation) (
 		change("description", false)
 	}
 	for _, key := range slices.Sorted(maps.Keys(intent.Config)) {
-		if got, exists := observed.Config[key]; !exists || got != intent.Config[key] {
+		if observed.Config[key] != intent.Config[key] {
 			change("config."+key, false)
 		}
 	}
