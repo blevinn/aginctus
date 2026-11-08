@@ -33,7 +33,7 @@ func TestCollectorBoundsAndFailureCases(t *testing.T) {
 	payload := "{\"Action\":\"fail\",\"Package\":\"github.com/blevinn/aginctus/internal/test\",\"Test\":\"TestFail\"}\n"
 	_, _ = c.Write([]byte(payload + strings.Repeat("SENSITIVE", 1000) + "\n"))
 	for i := range 9 {
-		_, _ = c.Write([]byte(fmt.Sprintf("{\"Action\":\"fail\",\"Package\":\"github.com/blevinn/aginctus/internal/test\",\"Test\":\"TestFail%d\"}\n", i)))
+		_, _ = fmt.Fprintf(c, "{\"Action\":\"fail\",\"Package\":\"github.com/blevinn/aginctus/internal/test\",\"Test\":\"TestFail%d\"}\n", i)
 	}
 	if len(c.cases) != maxCases || !c.truncated {
 		t.Fatalf("want bounded cases and truncation, got %#v, truncated=%v", c.cases, c.truncated)
