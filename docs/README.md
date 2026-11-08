@@ -164,6 +164,8 @@ Use this map to pick the authoritative page for a given task:
 
 - [v0.1.0 release notes](releases/v0.1.0.md) — verified pilot behavior,
   unverified fresh-host reproducibility, and accepted security limitations.
+- [v0.2.0 working release notes](releases/v0.2.0.md) — merged development foundations,
+  WIP feature closeout, outstanding acceptance and release gates (not published).
 
 
 GitHub release roll-ups, not old repository milestone narratives, own current
