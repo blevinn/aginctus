@@ -35,7 +35,6 @@ class ValidationDispatchTests(unittest.TestCase):
             "python3 scripts/check_markdown_links.py",
             "go run ./cmd/aginctus help",
             "python3 scripts/check_docs_examples.py",
-            "nix --quiet flake check --no-build --no-update-lock-file",
             "nix --quiet flake check --no-update-lock-file",
         ]
         # Each suite stops at its own first failed command, but the reporter
