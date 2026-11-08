@@ -20,7 +20,7 @@ This page is the **canonical testing entry point** for Aginctus. Different test 
 
 ## Further testenv and acceptance detail
 
-- [Testenv procedure index](testenv/README.md) — disposable nested VM, isolated worker and image authorization boundaries.
+- [Testenv procedure index](testenv/README.md) and [VM scenario catalog](testenv/scenarios.md) — disposable nested VM, isolated worker, OCI staging and authorization boundaries.
 - [OpenCode pinned runtime validation](acceptance/opencode-runtime-validation.md) — targeted runtime-specific control checks; not real model inference.
 
 ## Reference and historical evidence
