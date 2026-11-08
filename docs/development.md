@@ -122,8 +122,7 @@ nix --quiet develop -c just check report-json
 ```
 
 Inside the development shell, use `just check all` or `just check ci`. They
-show one PASS/FAIL/ERROR line per suite and an aggregate summary. The runner
-continues through all eight safe suites even when an earlier suite fails;
+show one PASS/FAIL/ERROR line per suite and an aggregate summary. The Go hermetic runner (`cmd/aginctus-check`) continues through all eight safe suites even when an earlier suite fails;
 individual suites still stop on their own first failed subcommand. All
 failures cause a nonzero final exit status. The JSON recipe has the same
 coverage and failure behavior, without printing raw test output. Run
