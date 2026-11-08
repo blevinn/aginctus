@@ -201,6 +201,12 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check "markdown-it-py==4.0.0" "ruff==0.14.3"
       - name: Ruff lint
         run: ruff check .
+      # The Go coordinator regression suite executes real Just recipes in
+      # a disposable fixture; do not let an absent Just silently skip it.
+      - name: install pinned Just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: '1.46.0'
       - name: Python unit suites
         run: |
           set -euo pipefail
