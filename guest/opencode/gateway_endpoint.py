@@ -3,7 +3,7 @@
 Provision and launch share the endpoint, model-alias, and workload-key
 syntax contract through these helpers. Validation does not check network
 isolation, endpoint reachability, model availability, or key authorization.
-See ``docs/workloads/opencode.md`` for the guest runtime contract.
+See ``docs/operations/workloads/opencode.md`` for the guest runtime contract.
 """
 from urllib.parse import urlsplit
 
