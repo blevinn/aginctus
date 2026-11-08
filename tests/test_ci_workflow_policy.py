@@ -1,7 +1,7 @@
 """Static regressions for the GitHub Actions concurrency trust boundary."""
 
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
