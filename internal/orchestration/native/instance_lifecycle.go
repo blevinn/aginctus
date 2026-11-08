@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"strings"
+	"time"
 
 	incus "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
@@ -80,10 +81,11 @@ func (intent InstanceLifecycleIntent) markers() map[string]string {
 // InstanceLifecycleObservation is the observed state of one instance. It
 // carries no SDK types and confers no authority to write.
 type InstanceLifecycleObservation struct {
-	Name    string
-	Project string
-	Status  string
-	Config  map[string]string
+	Name      string
+	Project   string
+	Status    string
+	Config    map[string]string
+	CreatedAt time.Time
 }
 
 // reaches reports whether the observed instance already satisfies the
@@ -188,6 +190,11 @@ func EnsureInstanceStateWithClient(
 			Stage: "ownership", cause: fmt.Errorf("instance is absent"),
 		}
 	}
+	if observed.Name != intent.Name || observed.Project != intent.Scope.Name || etag == "" ||
+		(observed.Status != "Running" && observed.Status != "Stopped") ||
+		(observed.Config["user.aginctus.deployment"] != "" && observed.Config["user.aginctus.deployment"] != intent.Scope.Name) {
+		return InstanceLifecycleResult{}, &ReconcileError{Stage: "ownership", cause: fmt.Errorf("instance identity or lifecycle unverified")}
+	}
 	for key, want := range intent.markers() {
 		if observed.Config[key] != want {
 			return InstanceLifecycleResult{}, &ReconcileError{
@@ -196,10 +203,6 @@ func EnsureInstanceStateWithClient(
 		}
 	}
 	result := InstanceLifecycleResult{Instance: intent.Name, Project: intent.Scope.Name, State: intent.State}
-	if observed.reaches(intent.State) {
-		result.Verified = true
-		return result, nil
-	}
 	// Recheck at the mutation boundary: the instance may have been changed
 	// or removed between the observation and the transition.
 	current, currentETag, err := observeInstance(ctx, client, intent.Name)
@@ -214,23 +217,33 @@ func EnsureInstanceStateWithClient(
 	if err := ctx.Err(); err != nil {
 		return result, &ReconcileError{Stage: "cancellation", cause: err}
 	}
+	if observed.reaches(intent.State) {
+		result.Verified = true
+		return result, nil
+	}
 	operation, err := client.UpdateInstanceState(intent.Name, intent.stateRequest(), currentETag)
 	if err != nil {
 		return result, &ReconcileError{Stage: "transition", Mutated: true, Uncertain: true, cause: err}
 	}
-	if operation != nil {
-		if err := operation.WaitContext(ctx); err != nil {
-			return result, &ReconcileError{Stage: "transition", Mutated: true, Uncertain: true, cause: err}
-		}
+	if operation == nil {
+		return result, &ReconcileError{Stage: "transition", Mutated: true, Uncertain: true, cause: fmt.Errorf("transition operation unavailable")}
+	}
+	if err := operation.WaitContext(ctx); err != nil {
+		return result, &ReconcileError{Stage: "transition", Mutated: true, Uncertain: true, cause: err}
 	}
 	result.Changed = true
 	after, _, err := observeInstance(ctx, client, intent.Name)
 	if err != nil {
 		return result, &ReconcileError{Stage: "verification", Mutated: true, Uncertain: true, cause: err}
 	}
-	if after == nil || !after.reaches(intent.State) {
+	if after == nil || !after.reaches(intent.State) || after.Name != intent.Name || after.Project != intent.Scope.Name || !after.CreatedAt.Equal(observed.CreatedAt) || after.Config["user.aginctus.deployment"] != observed.Config["user.aginctus.deployment"] {
 		return result, &ReconcileError{
 			Stage: "verification", Mutated: true, Uncertain: true, cause: fmt.Errorf("instance did not reach the required state"),
+		}
+	}
+	for key, want := range intent.markers() {
+		if after.Config[key] != want {
+			return result, &ReconcileError{Stage: "verification", Mutated: true, Uncertain: true, cause: fmt.Errorf("instance ownership changed during transition")}
 		}
 	}
 	result.Verified = true
@@ -262,10 +275,11 @@ func observeInstance(ctx context.Context, client InstanceLifecycleClient, name s
 		return nil, "", fmt.Errorf("instance observation unavailable")
 	}
 	return &InstanceLifecycleObservation{
-		Name:    instance.Name,
-		Project: instance.Project,
-		Status:  instance.Status,
-		Config:  instance.Config,
+		Name:      instance.Name,
+		Project:   instance.Project,
+		Status:    instance.Status,
+		Config:    maps.Clone(instance.Config),
+		CreatedAt: instance.CreatedAt,
 	}, etag, nil
 }
 
@@ -274,7 +288,7 @@ func sameInstanceObservation(a, b *InstanceLifecycleObservation) bool {
 	if a == nil || b == nil {
 		return a == nil && b == nil
 	}
-	if a.Name != b.Name || a.Project != b.Project || a.Status != b.Status {
+	if a.Name != b.Name || a.Project != b.Project || a.Status != b.Status || !a.CreatedAt.Equal(b.CreatedAt) {
 		return false
 	}
 	return maps.Equal(a.Config, b.Config)
