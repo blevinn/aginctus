@@ -108,6 +108,18 @@ packet checks survive firewalld reload independently of the user manager.
 Egress is dormant/fail-closed here; active gateway grant acceptance remains in
 the separate firewall integration fixtures.
 
+The VM quiesces the host reconcile timers before administratively stopping and
+runtime-masking both the Incus service and socket, avoiding competing systemd
+start/stop jobs while leaving filtering rules installed. Restricted
+operator preflight fails while the daemon is unavailable; real Home Manager CLI
+switches to both configurations still succeed without restarting it. After the
+disposable administrator unmasks and starts Incus and restores the timers, the same restricted identity
+passes preflight. Client credentials/configuration and resource inventories stay
+unchanged, and DNS positive/host-port negative checks pass after host firewall
+reconciliation and test-driver reattachment of its synthetic peer to the recreated
+bridge. This tests clean daemon interruption, not workload recovery or a crash during an Incus
+write transaction.
+
 This exercises real guest CLI build and switch against the included local
 configuration. It does **not** establish image/workload write authorization,
 active-controller exclusion, credential migration/rollback or production
