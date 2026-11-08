@@ -72,7 +72,8 @@ shell:
 
 [no-cd]
 nix:
-    nix --quiet flake check --no-build --no-update-lock-file
+    # Full flake check already evaluates the flake before building outputs.
+    # Avoid a duplicate full-tree evaluation pass in every CI run.
     nix --quiet flake check --no-update-lock-file
 
 # Offline local targets and heading fragments in tracked Markdown.
