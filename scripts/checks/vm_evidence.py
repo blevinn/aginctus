@@ -31,6 +31,7 @@ SCENARIOS = (
     "full-stack",
     "opencode-tool-loopback",
     "ownership-recovery",
+    "native-instance",
 )
 RUN_ID = re.compile(r"[0-9a-f]{24}\Z")
 REVISION = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
