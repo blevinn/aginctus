@@ -50,6 +50,119 @@ let
     services.aginctus.reconcile.enable = false;
     services.aginctus.firewall.enable = true;
   };
+  # Compare identical host policy with and without system lifecycle ownership.
+  # Egress is supported only with firewalld; it is not implied on other backends.
+  hostOnlyBackends =
+    lib.mapAttrs
+      (
+        backend: backendModule:
+        let
+          host =
+            lifecycle:
+            evaluate {
+              config = lib.mkMerge [
+                backendModule
+                {
+                  services.aginctus.images.herdrClient.enable = lifecycle;
+                  services.aginctus.images.opencodeWorkload.enable = lifecycle;
+                  services.aginctus.reconcile.enable = lifecycle;
+                }
+              ];
+            };
+        in
+        {
+          enabled = host true;
+          disabled = host false;
+        }
+      )
+      {
+        iptables-nft = { };
+        nixos-nft = {
+          networking.nftables.enable = true;
+          networking.firewall.backend = "nftables";
+        };
+        firewalld = {
+          networking.nftables.enable = true;
+          services.firewalld.enable = true;
+          services.aginctus.firewall.egress.enable = true;
+          services.aginctus.settings.gateway.egress.network.name = "host-egress";
+        };
+      };
+  aginctusNames = attrs: builtins.filter (lib.hasPrefix "aginctus-") (builtins.attrNames attrs);
+  hostOnlyContract =
+    backend: pair:
+    let
+      cfg = pair.disabled;
+      original = pair.enabled;
+      firewall = cfg.systemd.services.aginctus-firewall-reconcile;
+      expectedUnits = [
+        "aginctus-firewall-reconcile"
+      ]
+      ++ lib.optional (backend == "firewalld") "aginctus-egress-firewall";
+    in
+    assert
+      lib.sort builtins.lessThan (aginctusNames cfg.systemd.services)
+      == lib.sort builtins.lessThan expectedUnits;
+    assert
+      lib.sort builtins.lessThan (aginctusNames cfg.systemd.timers)
+      == lib.sort builtins.lessThan expectedUnits;
+    assert lib.all (
+      name:
+      lib.all (field: cfg.systemd.services.${name}.${field} == original.systemd.services.${name}.${field})
+        [
+          "serviceConfig"
+          "after"
+          "wants"
+          "wantedBy"
+          "path"
+        ]
+      && cfg.systemd.timers.${name}.timerConfig == original.systemd.timers.${name}.timerConfig
+      && cfg.systemd.timers.${name}.wantedBy == original.systemd.timers.${name}.wantedBy
+    ) expectedUnits;
+    assert firewall.serviceConfig.User == "root";
+    assert firewall.serviceConfig.ProtectHome;
+    assert firewall.serviceConfig.NoNewPrivileges;
+    assert firewall.serviceConfig.Environment == [ "XDG_CONFIG_HOME=/var/empty" ];
+    assert lib.hasInfix
+      (builtins.unsafeDiscardStringContext "${stub}/bin/aginctus --configuration-file /nix/store/")
+      firewall.serviceConfig.ExecStart;
+    assert lib.hasInfix "firewall.backend=${backend}" firewall.serviceConfig.ExecStart;
+    assert lib.all (field: cfg.networking.firewall.${field} == original.networking.firewall.${field}) [
+      "enable"
+      "backend"
+      "extraCommands"
+      "extraStopCommands"
+      "extraInputRules"
+      "extraPackages"
+    ];
+    assert cfg.networking.nftables.tables == original.networking.nftables.tables;
+    assert
+      lib.mapAttrs (_: file: file.source) (
+        lib.filterAttrs (
+          name: _: lib.hasPrefix "aginctus/" name || lib.hasPrefix "firewalld/" name
+        ) cfg.environment.etc
+      ) == lib.mapAttrs (_: file: file.source) (
+        lib.filterAttrs (
+          name: _: lib.hasPrefix "aginctus/" name || lib.hasPrefix "firewalld/" name
+        ) original.environment.etc
+      );
+    assert cfg.environment.systemPackages == original.environment.systemPackages;
+    assert cfg.systemd.tmpfiles.rules == original.systemd.tmpfiles.rules;
+    assert failedAginctusAssertions cfg == [ ];
+    if backend != "firewalld" then
+      true
+    else
+      assert cfg.services.firewalld.settings == original.services.firewalld.settings;
+      assert
+        cfg.systemd.services.firewalld.reloadTriggers == original.systemd.services.firewalld.reloadTriggers;
+      assert cfg.systemd.services.aginctus-egress-firewall.serviceConfig.User == "root";
+      assert builtins.elem "d /var/lib/aginctus-firewall 0700 root root -" cfg.systemd.tmpfiles.rules;
+      assert lib.any (lib.hasPrefix "C /var/lib/aginctus-firewall/overrides.json 0600 root root - ")
+        cfg.systemd.tmpfiles.rules;
+      assert cfg.networking.nftables.flushRuleset == false;
+      assert lib.hasInfix "target=\"DROP\""
+        cfg.environment.etc."firewalld/zones/aginctus-egress.xml".text;
+      true;
   withForbiddenCredentials = evaluate {
     services.aginctus.settings.gateway = {
       postgres.password = "must-not-be-stored";
@@ -237,6 +350,9 @@ in
 # Operator-owned lifecycle may coexist with this existing minimal NixOS host
 # policy mode, but the system must not import image aliases or reconcile guests.
 assert hostOnly.services.aginctus.enable;
+assert lib.all (backend: hostOnlyContract backend hostOnlyBackends.${backend}) (
+  builtins.attrNames hostOnlyBackends
+);
 assert hostOnly.services.aginctus.firewall.enable;
 assert builtins.hasAttr "aginctus-firewall-reconcile" hostOnly.systemd.services;
 assert builtins.hasAttr "aginctus-firewall-reconcile" hostOnly.systemd.timers;
