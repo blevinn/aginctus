@@ -72,8 +72,8 @@ in
         Group = "aginctus-testenv";
         SupplementaryGroups = [ "incus-admin" ];
         ExecStart = "${
-          self.packages.${pkgs.stdenv.hostPlatform.system}.testenv-worker-preflight
-        }/bin/aginctus-testenv-worker-preflight";
+          self.packages.${pkgs.stdenv.hostPlatform.system}.testenv-cli
+        }/bin/aginctus-testenv worker preflight";
         LoadCredential = [ "policy-key:/var/lib/aginctus-testenv/worker-policy.key" ];
         Environment = [
           "AGINCTUS_TESTENV_WORKER_SOCKET=/var/lib/incus/unix.socket"
