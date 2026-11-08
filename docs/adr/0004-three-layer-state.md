@@ -1,4 +1,4 @@
-# ADR 0004: Separate configured, desired, and current state
+# ADR 0004: Separate configured, accepted, and current state
 
 - Status: Proposed (design review; not an implemented contract)
 - Date: 2026-11-08
@@ -22,10 +22,10 @@ Aginctus has **three distinct layers**:
 
 There are **two distinct reconciliation boundaries**:
 
-- **Configured → desired:** inspect a canonical, nonsecret diff and *explicitly promote* a validated candidate as a new immutable accepted revision. Promotion is a version-checked state transaction, not an Incus mutation.
-- **Desired → current:** use a pinned accepted revision to observe, diff, preflight and execute selected, authorized infrastructure changes using the native orchestration/reconciliation engine. This must not re-resolve deployment intent from ambient CLI parameters or environment. Infrastructure reconciliation never implicitly promotes a configured candidate.
+- **Configured → accepted:** inspect a canonical, nonsecret diff and *explicitly promote* a validated candidate as a new immutable accepted revision. Promotion is a version-checked state transaction, not an Incus mutation.
+- **Accepted → current:** use a pinned accepted revision to observe, diff, preflight and execute selected, authorized infrastructure changes using the native orchestration/reconciliation engine. This must not re-resolve deployment intent from ambient CLI parameters or environment. Infrastructure reconciliation never implicitly promotes a configured candidate.
 
-A NixOS or Home Manager switch, a change to an AGINCTUS_ environment variable, or a changed CLI parameter must not alter the Aginctus accepted revision or reconcile Aginctus-managed deployment resources by itself. NixOS may still activate *its own* root-owned host firewall/services outside this acceptance boundary. Manual operation is the initial default. Optional automatic **desired → current** reconciliation is independent of configuration promotion; automatic promotion is not introduced by this ADR.
+A NixOS or Home Manager switch, a change to an AGINCTUS_ environment variable, or a changed CLI parameter must not alter the Aginctus accepted revision or reconcile Aginctus-managed deployment resources by itself. NixOS may still activate *its own* root-owned host firewall/services outside this acceptance boundary. Manual operation is the initial default. Optional automatic **accepted → current** reconciliation is independent of configuration promotion; automatic promotion is not introduced by this ADR.
 
 ## Durable ownership boundary
 
@@ -47,7 +47,7 @@ The accepted-state service is one logical authority **per deployment**, not a ro
 - **Home Manager-only deployment:** user may inspect and, if separately authorized, own selected project-scoped operator resources; required host capabilities must preexist under an external host administrator. An absent or unverified host capability is not automatically created with sudo or an ambient Incus admin connection.
 - **Combined deployment (preferred):** NixOS remains authoritative for host capability/policy; Home Manager owns only the explicitly delegated operator portion. A resource has exactly one active lifecycle owner, with coordinated leases at shared-resource boundaries; competing system/user reconcilers fail closed.
 
-**Important scope limit:** `nixos-rebuild switch` legitimately applies NixOS-owned system and firewall configuration through the *NixOS* activation machinery. Aginctus cannot promise to freeze that external host policy behind its accepted-state promotion. The guarantee is that the switch **does not automatically accept a new Aginctus revision or reconcile Aginctus-managed deployment resources**. An HM switch changes its operator package and candidate config, not the running infrastructure; it never triggers privileged host policy. Host capability changes may independently cause observed drift or make a previously accepted deployment nonconvergent, which must be reported.
+**Important scope limit:** `nixos-rebuild switch` legitimately applies NixOS-owned system and firewall configuration through the *NixOS* activation machinery. Aginctus cannot promise to freeze that external host policy behind its accepted-state promotion. The **target guarantee after migration** is that the switch does not automatically accept a new Aginctus revision or reconcile Aginctus-managed deployment resources. Existing opt-in NixOS reconciliation units currently read effective configuration; they require explicit migration to obtain this guarantee. An HM switch changes its operator package and candidate config, not the running infrastructure; it never triggers privileged host policy. Host capability changes may independently cause observed drift or make a previously accepted deployment nonconvergent, which must be reported.
 
 **Views and access:** both contexts address the same selected deployment and accepted revision, but do not necessarily see the same detail. System mode can report host capabilities, shared-resource ownership, resource convergence and nonsecret user-scope health/summary only as authorized; user mode can inspect its accepted operator declarations and sanitized availability/health of required host capabilities, not host policy internals or another user's secrets. Current-state observation requires separate read capabilities and must distinguish *not authorized* from *not observable* from *no drift*. An `--owner` or `--mode` flag is only an explicit selector, never proof of authority; authenticated actor identity and state-service policy determine permission.
 
