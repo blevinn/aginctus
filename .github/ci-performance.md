@@ -88,3 +88,16 @@ schema. The existing `just check report-json` contract remains untouched.
 Evaluate native-vs-pinned-tool diagnostic differences before removing the
 legacy aggregate. Their failure must be treated as an actionable regression
 rather than overriding the legacy check's successful result.
+
+## Targeted Nix PR applicability (#708)
+
+`scripts/checks/ci_select.py` compares the PR base commit to the full PR
+merge checkout using a NUL-terminated Git diff with rename detection
+disabled. Only Markdown below `docs/` and the root `README.md` can exempt
+focused Nix security contract builds. Any other file, an empty diff,
+invalid SHA, failed Git command or invalid UTF-8 path requires Nix (and an
+invalid selector invocation independently fails). `changes` is always
+included in the eventual required gate. The dedicated Nix job is skipped
+only when the selector explicitly outputs `false`; 'skipped' is not a
+security attestation or a successful Nix run. Complete flake checks remain
+a separate post-merge/release obligation.
