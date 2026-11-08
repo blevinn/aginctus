@@ -44,7 +44,7 @@ class WorkflowConcurrencyTests(unittest.TestCase):
         self.assertIn("name: comprehensive hermetic regression (ubuntu)", workflow)
         self.assertIn("github.event_name != 'pull_request'", workflow)
         self.assertIn("schedule:", workflow)
-        self.assertIn("run: nix --quiet develop --no-update-lock-file -c just check report-json", workflow)
+        self.assertIn("nix --quiet develop --no-update-lock-file -c just check report-json", workflow)
 
     def test_required_status_name_is_preserved(self):
         self.assertIn("name: hermetic validation (ubuntu)", HERMETIC.read_text())
