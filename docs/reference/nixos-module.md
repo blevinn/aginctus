@@ -136,4 +136,3 @@ just test-nix
 `just test-nix` boots disposable QEMU guests: one runs a real Incus daemon and tests imports, idempotency, alias replacement, and failed import handling; another tests systemd reconciliation ordering and failure gating with a recording CLI. This is heavier than the evaluation-only flake checks. The runner does not connect to the host's Incus daemon. On a production host, review the generated systemd units and enable reconciliation only after reviewing the Incus resources it will mutate.
 
 **Scope boundary:** Changing an image alias does not replace existing running instances. Instance rollout, data migration, health checks, and instance-level rollback require a separate explicit upgrade policy and are not part of issue #67.
-
