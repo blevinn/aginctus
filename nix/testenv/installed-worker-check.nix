@@ -49,6 +49,8 @@ assert !(disabled.systemd.services ? aginctus-testenv-preflight);
 assert !(disabled.systemd.services ? aginctus-testenv-recovery);
 assert cfg.services.aginctusTestenvRecovery.enable;
 assert unit.wantedBy == [ ];
+assert builtins.elem self.packages.${system}.testenv-cli cfg.environment.systemPackages;
+assert !(cfg.systemd.services ? aginctus-testenv-bootstrap);
 assert unit.serviceConfig.User == "aginctus-testenv";
 assert unit.serviceConfig.RestrictAddressFamilies == [ "AF_UNIX" ];
 assert unit.serviceConfig.IPAddressDeny == "any";
@@ -57,6 +59,11 @@ assert
   unit.serviceConfig.LoadCredential == [ "policy-key:/var/lib/aginctus-testenv/worker-policy.key" ];
 assert
   !(builtins.elem "aginctus-testenv-preflight.service" cfg.systemd.services.aginctus-testenv-recovery.requires);
+assert
+  !(builtins.elem "aginctus-testenv-preflight.service" cfg.systemd.services.aginctus-testenv-recovery.wants);
+assert
+  !(builtins.elem "aginctus-testenv-preflight.service" cfg.systemd.services.aginctus-testenv-recovery.after);
+assert cfg.systemd.timers.aginctus-testenv-recovery.wantedBy == [ "timers.target" ];
 pkgs.runCommand "aginctus-testenv-installed-worker-policy" { } ''
   mkdir -p "$out"
   touch "$out/evaluation-only-no-runtime-proof"

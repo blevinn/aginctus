@@ -2,9 +2,6 @@ package testenv
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"os"
 	"time"
@@ -137,12 +134,10 @@ func checkIncusWorkerPreflight(ctx context.Context, backend *IncusVMBackend, cfg
 		return r, errors.New("worker pool reported capacity outside admitted range")
 	}
 	set("reported_pool_capacity", "pass")
-	data, err := json.Marshal(pool)
-	if err != nil || len(data) > 64*1024 {
+	r.PoolConfigFingerprint, err = BootstrapPoolConfigFingerprint(pool)
+	if err != nil {
 		return r, errors.New("worker pool metadata outside admitted bounds")
 	}
-	digest := sha256.Sum256(data)
-	r.PoolConfigFingerprint = hex.EncodeToString(digest[:])
 	if cfg.InspectPool {
 		r.Status = "inspection_only"
 		return r, nil
