@@ -92,6 +92,15 @@ class SmokeTests(unittest.TestCase):
             mod.run("http://10.0.0.9:4000", "coding", "master", "master", fake, marker)
         self.assertEqual(len(fake.calls), 5)
 
+    def test_siwc_smoke_uses_public_subscription_request_contract(self):
+        marker = "AGINCTUS_OK_TEST123"
+        fake = MockOpener(marker)
+        mod.run("http://10.0.0.9:4000", "coding", "good-workload", "master", fake, marker, siwc=True)
+        body = json.loads(fake.calls[-1].data)
+        self.assertEqual(body["input"], [{"role": "user", "content": "Return exactly this identifier, and nothing else: " + marker}])
+        self.assertEqual(set(body), {"model", "input", "stream", "store"})
+        self.assertIs(body["store"], False)
+
     def test_authorization_only_is_read_only_and_requires_exact_scope(self):
         marker = "AGINCTUS_OK_TEST123"
         fake = MockOpener(marker)
