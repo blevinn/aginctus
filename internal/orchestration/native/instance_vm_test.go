@@ -73,6 +73,9 @@ func TestNativeInstanceVMAcceptance(t *testing.T) {
 	if _, _, err := server.GetInstance(intent.Identity.Name); !api.StatusErrorCheck(err, 404) {
 		t.Fatal("dry-run created instance")
 	}
+	if _, err := ensureInstanceWithClient(ctx, intent, false, false, client); err == nil {
+		t.Fatal("existing-only mode accepted absence")
+	}
 	created, err := EnsureInstanceWithClient(ctx, intent, false, client)
 	if err != nil || !created.Created || !created.Verified {
 		t.Fatalf("create: %+v %v", created, err)
@@ -94,7 +97,7 @@ func TestNativeInstanceVMAcceptance(t *testing.T) {
 	if err != nil || preview.Plan.Action != Update || staleETag != previewETag || !reflect.DeepEqual(before, afterPreview) {
 		t.Fatal("dry-run mutated observed instance")
 	}
-	updated, err := EnsureInstanceWithClient(ctx, intent, false, client)
+	updated, err := ensureInstanceWithClient(ctx, intent, false, false, client)
 	if err != nil || !updated.Updated || !updated.Verified {
 		t.Fatalf("update: %+v %v", updated, err)
 	}
