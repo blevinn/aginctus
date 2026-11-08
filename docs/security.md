@@ -34,6 +34,15 @@ security audit, or production-readiness claim.
   file permissions, token refresh, account authorization, or OAuth safety.
   [Native ChatGPT OAuth](architecture/native-chatgpt-oauth.md) remains gated;
   neither volume attachment nor model registration activates verified inference.
+- **Managed SIWC:** [apply/login](gateway-siwc.md) derives model/key bindings
+  from configuration and records explicit connected-application/background
+  consent. The gateway owns tokens and rotating refresh; the host enrolls in
+  memory over audited authenticated Incus exec. Runtime UID/mount verification,
+  stream admission leases and atomic acknowledged publication protect credential
+  updates. No workload receives provider credentials, no host token cache is
+  persisted, and no network grants are added. Trusted host/Incus administrators
+  and reviewed gateway images remain inside this boundary. Synthetic tests do
+  not establish real account authorization or managed deployment acceptance.
 
 ## Validation boundary and remaining acceptance
 

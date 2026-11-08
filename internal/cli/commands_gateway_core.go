@@ -7,6 +7,8 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
+	"github.com/blevinn/aginctus/internal/gatewaycontrol"
+	"github.com/blevinn/aginctus/internal/siwc"
 	"github.com/spf13/cobra"
 )
 
@@ -139,6 +141,23 @@ func executeGatewayLifecycle(ctx context.Context, action string, force bool, std
 		if err := spec.Deploy(ctx, runtimeEnvironment); err != nil {
 			fmt.Fprintf(stderr, "gateway deployment: %v\n", err)
 			return 1
+		}
+		if spec.SIWCConfig != "" {
+			attachment, err := siwcAttachment(effective)
+			if err == nil {
+				err = prepareGatewaySIWC(ctx, attachment)
+			}
+			if err == nil {
+				var store *gatewaycontrol.Store
+				store, err = configuredGatewayStore(effective)
+				if err == nil {
+					_, err = runManagedSIWC(ctx, effective, store, siwc.Operation{Action: "sync"})
+				}
+			}
+			if err != nil {
+				fmt.Fprintf(stderr, "managed SIWC configuration: %v\n", err)
+				return 1
+			}
 		}
 		fmt.Fprintf(stdout, "gateway %q: started (application readiness not verified)\n", spec.ID)
 		return 0

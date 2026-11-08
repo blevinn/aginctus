@@ -71,6 +71,8 @@ currently supported configuration or a release acceptance claim.
   suppression, separately approved pilot migration, verification and rollback.
 - [Gateway API key pilot](gateway-api-key-pilot.md) — operator
   workflow for registering and rotating API-key providers.
+- [Managed Sign in with ChatGPT](gateway-siwc.md): configuration-driven apply,
+  browser login, gateway-owned credentials and consented workload routes.
 - [Selective OpenCode Go forwarding](selective-go-forwarding.md) — embedded
   callback delivery, explicit activation, offline protocol acceptance, read-only
   audit, migration/rollback, and separately authorized live acceptance.
@@ -92,6 +94,7 @@ Use this map to pick the authoritative page for a given task:
 | Host firewalld egress policy and recovery | [gateway-firewalld-egress.md](gateway-firewalld-egress.md) | current procedure |
 | Management DHCP default-route suppression | [management-dhcp-gateway.md](management-dhcp-gateway.md) | separately approved pilot |
 | API-key provider registration/rotation | [gateway-api-key-pilot.md](gateway-api-key-pilot.md) | pilot |
+| SIWC configuration, login and recovery | [gateway-siwc.md](gateway-siwc.md) | managed integration; live acceptance pending |
 | Scoped workload key lifecycle | [gateway-workload-key-pilot.md](gateway-workload-key-pilot.md) | pilot |
 | Read-only inference smoke | [gateway-inference-smoke.md](gateway-inference-smoke.md) | pilot |
 | Selective Go client-header forwarding | [selective-go-forwarding.md](selective-go-forwarding.md) | pilot |

@@ -28,6 +28,7 @@ func configuredGatewayStore(effective *config.Config) (*gatewaycontrol.Store, er
 	if err := store.Configure(providers, catalogs, mcps); err != nil {
 		return nil, err
 	}
+	configureSIWCOperations(store, effective)
 	return store, nil
 }
 

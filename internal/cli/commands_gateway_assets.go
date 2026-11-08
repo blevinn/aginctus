@@ -118,6 +118,7 @@ func (b gatewayAssetBuilder) addProviders(providers *cobra.Command) {
 	configFlags(applyProvider, &providerConfig, &providerFile, false)
 	var providerLogin string
 	var enablePlan bool
+	var consentApp, consentBackground bool
 	login := add(providers, "login [PROVIDER]", cobra.MaximumNArgs(1), func(cmd *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
 		name, err := selected(providerLogin, args)
 		if err != nil {
@@ -139,20 +140,41 @@ func (b gatewayAssetBuilder) addProviders(providers *cobra.Command) {
 		if err != nil {
 			return nil, err
 		}
-		plugin := plugins[p.Plugin]
+		plugin := s.Plugins[p.Plugin]
 		if plugin.Login == nil {
 			return nil, fmt.Errorf("this plugin does not implement interactive login")
 		}
-		return nil, plugin.Login(cmd.Context(), p, gatewaycontrol.LoginOptions{Output: cmd.OutOrStdout(), EnablePlan: enablePlan})
+		return nil, plugin.Login(cmd.Context(), p, gatewaycontrol.LoginOptions{Output: cmd.OutOrStdout(), EnablePlan: enablePlan, ConsentConnectedApp: consentApp, ConsentBackground: consentBackground})
 	})
 	login.Flags().StringVar(&providerLogin, "provider", "", "Provider instance to authenticate")
 	login.Flags().BoolVar(&enablePlan, "enable-plan", false, "Explicitly request plan-usage consent when supported")
+	login.Flags().BoolVar(&consentApp, "consent-connected-app", false, "Consent to connected Aginctus application use")
+	login.Flags().BoolVar(&consentBackground, "consent-background", false, "Consent to background use by the user's controlled runtime")
 	login.Args = func(cmd *cobra.Command, args []string) error {
 		if err := cobra.MaximumNArgs(1)(cmd, args); err != nil {
 			return err
 		}
 		_, err := selected(providerLogin, args)
 		return err
+	}
+	for _, action := range []string{"status", "logout"} {
+		var providerName string
+		command := add(providers, action+" [PROVIDER]", selectorArgs(&providerName), func(cmd *cobra.Command, args []string, store *gatewaycontrol.Store) (any, error) {
+			name, _ := selected(providerName, args)
+			provider, err := findProvider(store, name)
+			if err != nil {
+				return nil, err
+			}
+			plugin := store.Plugins[provider.Plugin]
+			if action == "status" && plugin.Status != nil {
+				return plugin.Status(cmd.Context(), provider)
+			}
+			if action == "logout" && plugin.Logout != nil {
+				return nil, plugin.Logout(cmd.Context(), provider)
+			}
+			return nil, fmt.Errorf("this plugin does not implement provider %s", action)
+		})
+		command.Flags().StringVar(&providerName, "provider", "", "Provider instance")
 	}
 }
 
