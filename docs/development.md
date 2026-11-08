@@ -40,41 +40,17 @@ The flake follows the stable `nixos-26.05` Nixpkgs branch. A committed `flake.lo
 
 ## CLI development
 
-The initial `aginctus` CLI is written in Go. It uses the official Incus Go client to communicate directly with the local daemon API.
-
-Run it directly with:
+The CLI is written in Go and uses the official Incus Go client. Discover the
+checked-out implementation without loading the host's effective configuration:
 
 ```sh
 go run ./cmd/aginctus help
-go run ./cmd/aginctus doctor
 ```
 
-The `doctor` command connects directly to the local Incus daemon, reports its server version, and checks that `core.https_address` is an explicit **numeric loopback IP with a TCP port** (for example, `127.0.0.1:8443` or `[::1]:8443`). Wildcard, LAN, DNS-hostname, malformed, or missing listeners are not reported as healthy. Plain `doctor` never modifies Incus.
-
-Use `doctor --fix` only when the HTTPS address is **absent**: it binds `127.0.0.1:8443` for Incus image caching. If a listener is already configured to an unsafe or unrecognized address, including when `--fix` is given, Aginctus reports an error **without modifying** it; inspect the operator's connections and change `core.https_address` explicitly if appropriate. The check validates the configured bind value, not a live socket reachability probe or firewall exposure audit.
-
-The first mutating command is:
-
-```sh
-go run ./cmd/aginctus network ensure
-```
-
-It creates or reconciles the configured management bridge. Network name, addressing, NAT, routing, and IPv6 behavior come from the effective configuration; Aginctus ownership metadata remains an internal safety invariant.
-
-Use `--dry-run` to inspect the action without mutating Incus:
-
-```sh
-go run ./cmd/aginctus network ensure --dry-run
-go run ./cmd/aginctus network teardown --dry-run
-```
-
-Use `network teardown` to remove the configured management bridge:
-
-```sh
-go run ./cmd/aginctus network teardown
-```
-
-Both `ensure` and `teardown` accept `--force`. Without it, Aginctus refuses to mutate a same-named bridge that lacks Aginctus ownership metadata. With `--force`, Aginctus may adopt or delete that same-named Incus-managed bridge. `--force` does not allow Aginctus to reinterpret an unmanaged network or a different network type.
+The [CLI operations reference](cli.md) owns current `doctor`, management-network
+lifecycle, `--dry-run` and `--force` semantics. Do not copy mutation
+examples from historical development notes without checking current help,
+configuration and operator authority.
 
 ## Herdr client image
 
