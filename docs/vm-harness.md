@@ -41,6 +41,21 @@ No real network isolation or quota is claimed by this runner alone. Existing
 
 ## Native CLI entrypoint (experimental)
 
+The `native-instance` scenario boots an isolated real Incus daemon, imports a
+minimal NixOS container image and exercises the native scoped-instance SDK APIs:
+create, config/description update, repeated ensure, start/stop, dry-run without
+writes, stale ETag refusal, attachment preservation, and unsafe drift rejection.
+Its storage volume and read-only workspace fixture exist only inside the VM.
+It does not activate a controller or verify production migration/actor authority.
+
+```sh
+nix --quiet develop -c python3 scripts/vm_harness/runner.py test native-instance
+```
+
+Requires an x86_64-linux KVM worker and sufficient disk space. The Go acceptance
+tests skip without both the explicit opt-in and the guest-only marker. Hermetic
+checks do not run the VM; a skipped Go test is not real-Incus acceptance.
+
 `aginctus testenv vm` is the new typed operator CLI. In this first increment,
 `list` and `plan` are offline and read-only, and `test` reuses **the existing
 Python batch runner and its evidence files**, selected by fixed scenario name:
