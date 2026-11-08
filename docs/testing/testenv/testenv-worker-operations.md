@@ -400,4 +400,3 @@ or report cleanup. Incomplete/unverified recovery must remain visible.
 The run-admission authorization layer and mutating CLI/MCP operations
 remain **disabled** pending #475/#479 acceptance. The batch NixOS
 test-driver remains independently available to operators.
-
