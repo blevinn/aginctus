@@ -40,11 +40,14 @@ func TestNativeGatewayExecutionShape(t *testing.T) {
 		"surprise secret": func(p *NativeGatewayTopology) {
 			p.Services[1].SecretEnvironment = append(p.Services[1].SecretEnvironment, "OTHER")
 		},
-		"network alias":            func(p *NativeGatewayTopology) { p.EgressNetwork = "mgmt" },
-		"malformed egress address": func(p *NativeGatewayTopology) { p.Services[1].Networks[1].IPv4Address = "not-an-address" },
-		"non-IPv4 egress address":  func(p *NativeGatewayTopology) { p.Services[1].Networks[1].IPv4Address = "2001:db8::1/64" },
-		"unrelated egress address": func(p *NativeGatewayTopology) { p.Services[1].Networks[1].IPv4Address = "0.0.0.0/0" },
-		"missing egress address":   func(p *NativeGatewayTopology) { p.Services[1].Networks[1].IPv4Address = "" },
+		"network alias":             func(p *NativeGatewayTopology) { p.EgressNetwork = "mgmt" },
+		"malformed egress address":  func(p *NativeGatewayTopology) { p.Services[1].Networks[1].IPv4Address = "not-an-address" },
+		"non-IPv4 egress address":   func(p *NativeGatewayTopology) { p.Services[1].Networks[1].IPv4Address = "2001:db8::1/64" },
+		"unrelated egress address":  func(p *NativeGatewayTopology) { p.Services[1].Networks[1].IPv4Address = "0.0.0.0/0" },
+		"egress network address":    func(p *NativeGatewayTopology) { p.Services[1].Networks[1].IPv4Address = "10.43.0.0/24" },
+		"egress broadcast address":  func(p *NativeGatewayTopology) { p.Services[1].Networks[1].IPv4Address = "10.43.0.255/24" },
+		"unsupported egress prefix": func(p *NativeGatewayTopology) { p.Services[1].Networks[1].IPv4Address = "10.43.0.12/31" },
+		"missing egress address":    func(p *NativeGatewayTopology) { p.Services[1].Networks[1].IPv4Address = "" },
 	}
 	for name, change := range tests {
 		t.Run(name, func(t *testing.T) {

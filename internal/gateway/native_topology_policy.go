@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net/netip"
 	"reflect"
@@ -43,8 +44,10 @@ func (p NativeGatewayTopology) ValidateExecutionShape() error {
 			return fmt.Errorf("native gateway egress requires one explicit LiteLLM attachment")
 		}
 		address, err := netip.ParsePrefix(app.Networks[1].IPv4Address)
-		if err != nil || !address.Addr().Is4() || address.Addr().IsUnspecified() || address.Addr().IsMulticast() {
-			return fmt.Errorf("native gateway egress requires a valid unicast IPv4 attachment")
+		if err != nil || !address.Addr().Is4() || address.Bits() < 16 || address.Bits() > 30 ||
+			!address.Addr().IsGlobalUnicast() || address.Addr() == address.Masked().Addr() ||
+			address.Addr() == lastIPv4Address(address.Masked()) {
+			return fmt.Errorf("native gateway egress requires a usable host IPv4 attachment")
 		}
 		// Fixed IPv4 addresses are retained for later actor-authorized device
 		// reconciliation, never used to create host networks implicitly.
@@ -62,4 +65,15 @@ func (p NativeGatewayTopology) ValidateExecutionShape() error {
 		return fmt.Errorf("native gateway application attachment or secret-reference contract mismatch")
 	}
 	return nil
+}
+
+func lastIPv4Address(prefix netip.Prefix) netip.Addr {
+	address := prefix.Masked().Addr().As4()
+	hostBits := uint(32 - prefix.Bits())
+	hostMask := uint32(0)
+	if hostBits != 0 {
+		hostMask = (uint32(1) << hostBits) - 1
+	}
+	binary.BigEndian.PutUint32(address[:], binary.BigEndian.Uint32(address[:])|hostMask)
+	return netip.AddrFrom4(address)
 }
