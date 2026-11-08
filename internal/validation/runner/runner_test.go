@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -120,5 +121,38 @@ func TestLaunchErrorsAreDistinct(t *testing.T) {
 		if r.Status != "error" || r.ExitCode != nil {
 			t.Fatalf("incorrect launch result: %#v", r)
 		}
+	}
+}
+
+func TestFailureParsingFragmentsAndUntrustedIdentifiers(t *testing.T) {
+	py := newFailureCollector("python")
+	_, _ = py.Write([]byte("FAIL: test_one (test_foo.Case."))
+	_, _ = py.Write([]byte("test_one)\n"))
+	_, _ = py.Write([]byte("FAIL: test_one (test_foo.Case.test_one)\n"))
+	_, _ = py.Write([]byte("ERROR: test_two (test_foo.Case.test_two)\n"))
+	_, _ = py.Write([]byte("FAIL: test_bad (something;BAD=SECRET)\n"))
+	_, _ = py.Write([]byte(strings.Repeat("SECRET_CANARY", maxLineBytes) + "\n"))
+	_, _ = py.Write([]byte("FAIL: test_three (test_foo.Case.test_three)\n"))
+	want := []FailureCase{
+		{ID: "test_foo.Case.test_one", Kind: "fail"},
+		{ID: "test_foo.Case.test_two", Kind: "error"},
+		{ID: "test_foo.Case.test_three", Kind: "fail"},
+	}
+	if !reflect.DeepEqual(py.cases, want) || py.truncated {
+		t.Fatalf("unittest failure parsing drifted: %#v", py.cases)
+	}
+	goCases := newFailureCollector("go")
+	events := []string{
+		"{\"Action\":\"output\",\"Package\":\"github.com/blevinn/aginctus/internal/cli\",\"Test\":\"TestOne\",\"Output\":\"SECRET_CANARY\"}",
+		"{\"Action\":\"fail\",\"Package\":\"github.com/blevinn/aginctus/internal/cli\"}",
+		"{\"Action\":\"fail\",\"Package\":\"github.com/blevinn/aginctus/internal/cli\",\"Test\":\"TestOne\"}",
+		"{\"Action\":\"fail\",\"Package\":\"github.com/other/project\",\"Test\":\"TestTwo\"}",
+		"{\"Action\":\"fail\",\"Package\":\"github.com/blevinn/aginctusbad\",\"Test\":\"TestThree\"}",
+	}
+	for _, line := range events {
+		_, _ = goCases.Write([]byte(line + "\n"))
+	}
+	if len(goCases.cases) != 1 || goCases.cases[0].ID != "github.com/blevinn/aginctus/internal/cli:TestOne" {
+		t.Fatalf("untrusted Go event was accepted: %#v", goCases.cases)
 	}
 }
