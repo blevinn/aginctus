@@ -17,7 +17,7 @@ func writeCobraHelp(cmd *cobra.Command, out io.Writer) {
 		fmt.Fprintln(out)
 	}
 	fmt.Fprint(out, cmd.UsageString())
-	if cmd == cmd.Root() || !cmd.HasAvailableSubCommands() {
+	if !cmd.HasAvailableSubCommands() {
 		return
 	}
 
@@ -27,7 +27,7 @@ func writeCobraHelp(cmd *cobra.Command, out io.Writer) {
 	var visit func(*cobra.Command)
 	visit = func(parent *cobra.Command) {
 		for _, child := range parent.Commands() {
-			if child.Hidden || !child.IsAvailableCommand() || child.Name() == "help" {
+			if child.Hidden || !child.IsAvailableCommand() {
 				continue
 			}
 			if child.Runnable() {
