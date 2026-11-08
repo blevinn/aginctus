@@ -10,19 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Gateway command families registered in the Cobra tree are intercepted here.
-func isGatewayCoreCommand(args []string) bool {
-	if len(args) == 0 {
-		return false
-	}
-	switch args[0] {
-	case "status", "remove", "apply", "up", "validate", "render", "credential-storage", "provider", "model", "plugin", "mcp", "catalog", "egress", "responses":
-		return true
-	default:
-		return false
-	}
-}
-
 // executeGatewayCredential keeps the existing private-volume validation
 // and side-effect sequencing independent of CLI argument parsing.
 func executeGatewayCredential(ctx context.Context, action string, stdout, stderr io.Writer, effective *config.Config) int {
