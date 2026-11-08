@@ -70,6 +70,12 @@ func (f *updateFake) UpdateInstance(_ string, put api.InstancePut, etag string) 
 		return nil, errors.New("submit failed")
 	}
 	f.instance = &api.Instance{Name: f.instance.Name, Project: f.instance.Project, Type: f.instance.Type, Status: f.instance.Status, InstancePut: put}
+	f.instance.Config = maps.Clone(put.Config)
+	for key, value := range f.instance.Config {
+		if value == "" {
+			delete(f.instance.Config, key)
+		}
+	}
 	f.op = &fakeInstanceOperation{}
 	if f.mode == "operation failure" {
 		f.op.err = errors.New("wait failed")
@@ -80,14 +86,22 @@ func (f *updateFake) UpdateInstance(_ string, put api.InstancePut, etag string) 
 	return f.op, nil
 }
 
-func TestNativeInstanceUpdateEmptyConfigPresence(t *testing.T) {
+func TestNativeInstanceUpdateEmptyConfigNormalization(t *testing.T) {
 	intent, fake := updateFixture(t)
 	fake.instance.Description = intent.Description
 	fake.instance.Config["user.aginctus.runtime"] = intent.Config["user.aginctus.runtime"]
 	intent.Config["user.explicit-empty"] = ""
 	result, err := UpdateInstanceWithClient(context.Background(), intent, fake)
+	if err != nil || result.Changed || !result.Verified || fake.writes != 0 {
+		t.Fatalf("absent empty value is not converged: %+v %v", result, err)
+	}
+	fake.instance.Config["user.explicit-empty"] = "clear-me"
+	result, err = UpdateInstanceWithClient(context.Background(), intent, fake)
 	if err != nil || !result.Changed || !result.Verified || fake.writes != 1 {
-		t.Fatalf("absent empty value was skipped: %+v %v", result, err)
+		t.Fatalf("explicit empty did not clear: %+v %v", result, err)
+	}
+	if _, exists := fake.instance.Config["user.explicit-empty"]; exists {
+		t.Fatal("fixture did not normalize empty config")
 	}
 }
 
