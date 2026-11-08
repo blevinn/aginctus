@@ -65,6 +65,10 @@ test-vm-storage-network:
 test-vm-runtime-lifecycle:
     python3 scripts/vm_harness/runner.py test runtime-lifecycle
 
+# Native scoped instance lifecycle against disposable Incus.
+test-vm-native-instance:
+    python3 scripts/vm_harness/runner.py test native-instance
+
 # Real LiteLLM/PostgreSQL OCI and Herdr/OpenCode topology (no model calls).
 # May need OCI registry access; use a disposable NixOS KVM worker only.
 test-vm-gateway-topology:

@@ -11,14 +11,15 @@ import (
 
 type Run func(context.Context, []string, io.Writer, io.Writer, *config.Config) int
 type Handlers struct {
-	ScopedApply Run
-	ScopedStart Run
-	ScopedStop Run
-	Configured func(context.Context, string, []string, bool, bool, io.Writer, io.Writer, *config.Config) int
-	ScopedStatus func(context.Context, []string, io.Writer, io.Writer, *config.Config, bool) int
-	List Run
-	Status Run
-	GatewayProvision Run
+	ScopedApply        Run
+	ScopedApplyConfirm Run
+	ScopedStart        Run
+	ScopedStop         Run
+	Configured         func(context.Context, string, []string, bool, bool, io.Writer, io.Writer, *config.Config) int
+	ScopedStatus       func(context.Context, []string, io.Writer, io.Writer, *config.Config, bool) int
+	List               Run
+	Status             Run
+	GatewayProvision   Run
 }
 
 func Register(
@@ -51,8 +52,14 @@ func Register(
 		var project string
 		validate := func(cmd *cobra.Command, args []string) error {
 			if action == "apply" && cmd.Flags().Changed("project") {
-				if len(args) != 1 || force || (render == dryRun) {
-					return fmt.Errorf("scoped apply requires one ID and exactly one of --render or --dry-run, without --force")
+				choices := 0
+				for _, chosen := range []bool{render, dryRun, confirm} {
+					if chosen {
+						choices++
+					}
+				}
+				if len(args) != 1 || force || choices != 1 {
+					return fmt.Errorf("scoped apply requires one ID and exactly one of --render, --dry-run or --confirm-apply, without --force")
 				}
 			} else if (action == "start" || action == "stop") && cmd.Flags().Changed("project") {
 				if len(args) != 1 || !confirm {
@@ -68,6 +75,9 @@ func Register(
 				if cmd.Flags().Changed("project") {
 					switch action {
 					case "apply":
+						if confirm {
+							return handlers.ScopedApplyConfirm(cmd.Context(), []string{"--project", project, args[0], "--confirm-apply"}, stdout, stderr, cfg)
+						}
 						preview := "--render"
 						if dryRun {
 							preview = "--dry-run"
@@ -89,6 +99,7 @@ func Register(
 			cmd.Flags().BoolVar(&force, "force", false, "Permit supported replacement")
 			cmd.Flags().StringVar(&project, "project", "", "Select an owned local project for an existing-workload preview")
 			cmd.Flags().BoolVar(&render, "render", false, "Render existing-workload plan without executing")
+			cmd.Flags().BoolVar(&confirm, "confirm-apply", false, "Confirm native config update and start of one existing scoped workload")
 		case "remove":
 			cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Inspect without mutation")
 			cmd.Flags().BoolVar(&force, "force", false, "Permit supported replacement")
