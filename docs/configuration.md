@@ -1,6 +1,6 @@
-# Configuration
+# Configuration reference: sources and host integration
 
-Aginctus configuration is assembled from multiple sources with deterministic precedence.
+Aginctus configuration is assembled from multiple sources with deterministic precedence. This page owns values, precedence, NixOS/Home Manager integration and their authority boundaries; [CLI operations](cli.md) owns command side effects, while installed `aginctus help` owns syntax.
 
 From highest priority to lowest:
 
