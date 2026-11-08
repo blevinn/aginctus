@@ -33,7 +33,7 @@ func VMScenarios() []Scenario {
 }
 
 func VMScenario(name string) (Scenario, error) {
-	for _, scenario := range vmScenarios {
+	for _, scenario := range VMScenarios() {
 		if name == scenario.Name {
 			return scenario, nil
 		}
