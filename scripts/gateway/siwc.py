@@ -349,9 +349,9 @@ class Owner:
             state = self.store.read()
             record = state["accounts"].get(valid_name(account))
             if not record or not record.get("refresh_token"):
-                raise AuthenticationRequired("SIWC account is signed out; stop the gateway and sign in again")
+                raise AuthenticationRequired("SIWC account is signed out; run gateway provider login")
             if record.get("refresh_pending"):
-                raise AuthenticationRequired("SIWC refresh outcome uncertain; stop the gateway and reauthorize")
+                raise AuthenticationRequired("SIWC refresh outcome uncertain; run gateway provider login")
             if DIRECT not in record.get("scopes", []):
                 raise PlanPermissionRequired("ChatGPT plan usage was not granted; explicitly enable it by signing in again")
             now = self.provider.clock()

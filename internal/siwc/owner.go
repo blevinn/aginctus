@@ -86,10 +86,10 @@ func (o *Owner) Status(ctx context.Context) (map[string]any, error) {
 func (o *Owner) access(ctx context.Context, state *State, account string) (string, error) {
 	record := state.Accounts[account]
 	if !ValidName(account) || record == nil || record.RefreshToken == "" {
-		return "", Error("SIWC account is signed out; stop the gateway and sign in again")
+		return "", Error("SIWC account is signed out; run gateway provider login")
 	}
 	if record.RefreshPending {
-		return "", Error("SIWC refresh outcome uncertain; stop the gateway and reauthorize")
+		return "", Error("SIWC refresh outcome uncertain; run gateway provider login")
 	}
 	if !slices.Contains(record.Scopes, Direct) {
 		return "", Error("ChatGPT plan usage was not granted; explicitly enable it by signing in again")
