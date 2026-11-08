@@ -19,6 +19,15 @@ class WorkflowConcurrencyTests(unittest.TestCase):
         )
         self.assertNotIn("cancel-in-progress: true", workflow)
 
+    def test_parallel_suites_do_not_require_nix_develop(self):
+        workflow = HERMETIC.read_text(encoding="utf-8")
+        for name in ("go-fast:", "static-fast:"):
+            self.assertIn("  " + name, workflow)
+        fast = workflow.split("  go-fast:", 1)[1]
+        self.assertNotIn("nix develop", fast)
+        self.assertIn("GOPROXY: \"off\"", fast)
+        self.assertIn("AGINCTUS_INCUS_INTEGRATION: \"0\"", fast)
+
     def test_required_status_name_is_preserved(self):
         self.assertIn("name: hermetic validation (ubuntu)", HERMETIC.read_text())
 
