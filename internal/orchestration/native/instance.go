@@ -22,7 +22,7 @@ type InstanceIdentity struct {
 // Extra observed config, devices and device properties are never removed.
 // ImageAlias is project-local; fingerprint resolution belongs to observation.
 // Native creation uses this intent only for create-if-absent. Existing-instance
-// updates, adoption, replacement and deletion remain unauthorized.
+// reconciliation permits only explicit config keys and description.
 type InstanceIntent struct {
 	Identity      InstanceIdentity
 	WorkloadID    string
