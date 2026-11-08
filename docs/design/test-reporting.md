@@ -142,6 +142,11 @@ independent observations. Signing local test results is not required.
 Only the known VM harness synthetic evidence format is supported;
 there is no generic free-form log importer.
 
+The default Just VM evidence viewer now uses the Go read-only adapter and the
+typed catalog; the Python VM evidence reader remains the independent source
+validator for existing coverage aggregation. Both must reject internal
+`native-oci` receipts, untrusted full-stack claims and unsafe file paths.
+
 ## Explicit read-only pilot preflight presentation (phase D2)
 
 An operator can intentionally invoke either of the existing stage-2
