@@ -194,7 +194,7 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 	if err != nil {
 		return fail("verification", true, true, err)
 	}
-	if after.Architecture != current.Architecture || after.Description != intent.Description || after.Type != current.Type ||
+	if !after.CreatedAt.Equal(current.CreatedAt) || after.Architecture != current.Architecture || after.Description != intent.Description || after.Type != current.Type ||
 		after.Ephemeral != current.Ephemeral || after.Stateful != current.Stateful || after.Status != current.Status || !slices.Equal(after.Profiles, current.Profiles) ||
 		!reflect.DeepEqual(after.Devices, current.Devices) {
 		return fail("verification", true, true, fmt.Errorf("instance update postcondition unverified"))
