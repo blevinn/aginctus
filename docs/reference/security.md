@@ -63,3 +63,7 @@ in plaintext inside the private bridge; see the [API-key pilot](../operations/ga
 Do not publish expanded Incus configuration, which can contain gateway secrets
 and database URLs. Live migration, credential use, and billable inference
 require separate operator authorization under the linked runbooks and gates.
+
+## Reporting vulnerabilities versus operational limitations
+
+This document describes **technical controls and limitations**; it is not a confidential security-disclosure policy. The maintainer-approved private reporting route and support expectations are tracked separately in [#626](https://github.com/blevinn/aginctus/issues/626). Until that policy is published and verified, do not infer a private intake route from a GitHub issue or post exploit details, credentials or tokens into public tickets. Human contribution/conduct guidance is tracked independently in [#627](https://github.com/blevinn/aginctus/issues/627).
