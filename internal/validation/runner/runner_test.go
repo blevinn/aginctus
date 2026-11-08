@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/blevinn/aginctus/internal/validation/catalog"
 )
 
 func TestSanitizeEnv(t *testing.T) {
@@ -154,5 +156,19 @@ func TestFailureParsingFragmentsAndUntrustedIdentifiers(t *testing.T) {
 	}
 	if len(goCases.cases) != 1 || goCases.cases[0].ID != "github.com/blevinn/aginctus/internal/cli:TestOne" {
 		t.Fatalf("untrusted Go event was accepted: %#v", goCases.cases)
+	}
+}
+
+func TestCanceledSuiteIsAnErrorNotAFailure(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "just")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result := runSuite(ctx, dir, catalog.HermeticSuites()[0], SanitizeEnv([]string{"PATH=" + dir}), false, nil)
+	if result.Status != "error" || result.ExitCode != nil {
+		t.Fatalf("canceled suite was not reported as an error: %#v", result)
 	}
 }
