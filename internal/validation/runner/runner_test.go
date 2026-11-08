@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,11 +32,11 @@ func TestCollectorBoundsAndFailureCases(t *testing.T) {
 	c := newFailureCollector("go")
 	payload := "{\"Action\":\"fail\",\"Package\":\"github.com/blevinn/aginctus/internal/test\",\"Test\":\"TestFail\"}\n"
 	_, _ = c.Write([]byte(payload + strings.Repeat("SENSITIVE", 1000) + "\n"))
-	for range 9 {
-		_, _ = c.Write([]byte(payload[:len(payload)-2] + "2\"}\n"))
+	for i := range 9 {
+		_, _ = c.Write([]byte(fmt.Sprintf("{\"Action\":\"fail\",\"Package\":\"github.com/blevinn/aginctus/internal/test\",\"Test\":\"TestFail%d\"}\n", i)))
 	}
-	if len(c.cases) != 2 {
-		t.Fatalf("want two distinct safe case IDs, got %#v", c.cases)
+	if len(c.cases) != maxCases || !c.truncated {
+		t.Fatalf("want bounded cases and truncation, got %#v, truncated=%v", c.cases, c.truncated)
 	}
 	if strings.Contains(strings.TrimSpace(string(c.line)), "SENSITIVE") {
 		t.Fatal("raw output retained")
@@ -74,7 +75,8 @@ exit 0
 	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	env := append(os.Environ(), "PATH="+dir+":"+os.Getenv("PATH"), "GOFLAGS=-run=^$",
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	env := append(os.Environ(), "GOFLAGS=-run=^$",
 		"AGINCTUS_ACCEPTANCE_LIVE=YES", "AGINCTUS_ACCEPTANCE_LIVE_HOOKS=/tmp/unsafe",
 		"AGINCTUS_INCUS_INTEGRATION=1", "AGINCTUS_INCUS_DISPOSABLE=YES")
 	report := Run(context.Background(), dir, env, false, nil)
@@ -93,8 +95,7 @@ exit 0
 	if err := WriteJSON(&output, report); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(output.String(), "SECRET_NEVER_IN_REPORT") || len(bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("
-"))) != 1 {
+	if strings.Contains(output.String(), "SECRET_NEVER_IN_REPORT") || len(bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n"))) != 1 {
 		t.Fatal("raw output or extra lines in machine report")
 	}
 	var parsed map[string]any
@@ -109,6 +110,7 @@ exit 0
 
 func TestLaunchErrorsAreDistinct(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("PATH", dir)
 	env := []string{"PATH=" + dir}
 	report := Run(context.Background(), dir, env, false, nil)
 	if report.Summary.Errors != 8 || report.Status != "fail" {

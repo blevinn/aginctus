@@ -118,10 +118,9 @@ func newFailureCollector(suite string) *failureCollector {
 // output cannot make the collector retain full lines or copy logs to JSON.
 func (c *failureCollector) Write(data []byte) (int, error) {
 	for _, b := range data {
-		if b == '
-' {
+		if b == '\n' {
 			if !c.discard {
-				c.parse(strings.TrimSuffix(string(c.line), ""))
+				c.parse(strings.TrimSuffix(string(c.line), "\r"))
 			}
 			c.line = c.line[:0]
 			c.discard = false
@@ -249,14 +248,12 @@ func WriteJSON(output io.Writer, report Report) error {
 
 func WriteText(output io.Writer, report Report) error {
 	for _, item := range report.Results {
-		if _, err := fmt.Fprintf(output, "%-5s  %-16s  %7.1fs
-",
+		if _, err := fmt.Fprintf(output, "%-5s  %-16s  %7.1fs\n",
 			strings.ToUpper(item.Status), item.ID, float64(item.DurationMS)/1000); err != nil {
 			return err
 		}
 		for _, failure := range item.FailedCases {
-			if _, err := fmt.Fprintf(output, "         %s: %s
-", strings.ToUpper(failure.Kind), failure.ID); err != nil {
+			if _, err := fmt.Fprintf(output, "         %s: %s\n", strings.ToUpper(failure.Kind), failure.ID); err != nil {
 				return err
 			}
 		}
@@ -266,16 +263,14 @@ func WriteText(output io.Writer, report Report) error {
 			}
 		}
 	}
-	_, err := fmt.Fprintf(output, "Hermetic: %d passed, %d failed, %d errors
-",
+	_, err := fmt.Fprintf(output, "Hermetic: %d passed, %d failed, %d errors\n",
 		report.Summary.Passed, report.Summary.Failed, report.Summary.Errors)
 	if err != nil {
 		return err
 	}
 	for _, item := range report.Results {
 		if item.Status != "pass" {
-			if _, err := fmt.Fprintf(output, "  To diagnose %s: %s
-", item.ID, item.Rerun); err != nil {
+			if _, err := fmt.Fprintf(output, "  To diagnose %s: %s\n", item.ID, item.Rerun); err != nil {
 				return err
 			}
 		}
