@@ -22,7 +22,7 @@ The Nix development-shell startup banner is sent to stderr, so
 
 Both commands execute the same explicitly allowlisted safe `just check` suites:
 `go`, `lint`, `python`, `shell-tests`, `shell`, `markdown`, `docs-examples`, and
-`nix`. The adapter runs all eight even when an earlier suite fails, so it reports
+`nix`. The Go coordinator runs all eight even when an earlier suite fails, so it reports
 all observed failures rather than masking later checks. Each child runs with the
 existing `just check ci` safety overrides: real Incus and live acceptance opt-ins
 disabled, caller-supplied Go test flags cleared, offline Go module resolution,
@@ -31,7 +31,7 @@ and no automatic Go toolchain selection. Nix may still fetch pinned inputs.
 Interactive output is one PASS/FAIL/ERROR line with a duration for each suite,
 followed by counts. It does **not** print raw child output by default. A failing
 suite prints a fixed diagnostic rerun command; run `just check <suite>` for native
-diagnostics. `python3 scripts/checks/report.py --verbose` explicitly streams raw
+diagnostics. `go run ./cmd/aginctus-check --verbose` explicitly streams raw
 local output, which may be sensitive and must not be pasted indiscriminately.
 
 `just check report-json` writes **one JSON object on stdout**, even when a
@@ -53,6 +53,12 @@ messages, environment variable values, provider traffic, or credentials**.
 A failed test's exact native diagnostics require explicit rerun. Machine output
 is suitable for pasting as a compact status snapshot, not as a substitute for
 collecting approved diagnostic evidence. The adapter does not store raw logs.
+
+The developer/CI interface is now implemented in Go (`cmd/aginctus-check`) and
+uses the typed catalog. `scripts/checks/report.py` remains a non-default
+compatibility implementation during migration. The existing Python schema
+validator and CI Markdown presentation remain in place for independent
+validation of the emitted JSON v1 contract.
 
 ## Standard validation and CI adoption
 
