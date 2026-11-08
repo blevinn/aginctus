@@ -98,6 +98,11 @@ func TestNormalizeVMFailsClosedOnInvalidClaims(t *testing.T) {
 	if _, err := NormalizeVM(fixture(id), strings.Repeat("c", 24)); err == nil {
 		t.Fatal("accepted mismatched run selector")
 	}
+	for _, selector := range []string{"", "../" + id, strings.Repeat("Z", 24)} {
+		if _, err := ReadVM(t.TempDir(), selector); err == nil {
+			t.Fatalf("accepted invalid run selector %q", selector)
+		}
+	}
 }
 
 func TestPrivateVMReadRefusesSymlinksAndPublicFiles(t *testing.T) {
