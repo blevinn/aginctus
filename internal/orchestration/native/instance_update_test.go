@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	incus "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
@@ -69,7 +70,10 @@ func (f *updateFake) UpdateInstance(_ string, put api.InstancePut, etag string) 
 	if f.mode == "submit failure" {
 		return nil, errors.New("submit failed")
 	}
-	f.instance = &api.Instance{Name: f.instance.Name, Project: f.instance.Project, Type: f.instance.Type, Status: f.instance.Status, InstancePut: put}
+	f.instance = &api.Instance{Name: f.instance.Name, Project: f.instance.Project, Type: f.instance.Type, Status: f.instance.Status, CreatedAt: f.instance.CreatedAt, InstancePut: put}
+	if f.mode == "recreated" {
+		f.instance.CreatedAt = f.instance.CreatedAt.Add(time.Second)
+	}
 	f.instance.Config = maps.Clone(put.Config)
 	for key, value := range f.instance.Config {
 		if value == "" {
@@ -180,7 +184,7 @@ func TestNativeInstanceUpdateIsIdempotentAndFailsClosed(t *testing.T) {
 	if err != nil || !result.Verified || result.Changed || fake.writes != 0 {
 		t.Fatalf("no-op update mutated: %+v %v", result, err)
 	}
-	for _, mode := range []string{"race", "foreign", "project drift", "submit failure", "operation failure", "operation cancel", "after failure"} {
+	for _, mode := range []string{"race", "foreign", "project drift", "submit failure", "operation failure", "operation cancel", "after failure", "recreated"} {
 		t.Run(mode, func(t *testing.T) {
 			intent, fake := updateFixture(t)
 			fake.mode = mode
