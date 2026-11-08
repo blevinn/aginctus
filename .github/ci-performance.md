@@ -71,3 +71,20 @@ hit/miss, cancellation reason and number of runner-minutes consumed.
 Target <=5-minute median and <=8-minute p90 for ordinary PRs, allowing
 security-sensitive Nix changes a longer documented path. Report both
 cold and warm runs; never use a single fastest run as a performance claim.
+
+## Parallel baseline stage (#707)
+
+The `go-fast` and `static-fast` jobs run independently of the existing
+required `hermetic validation (ubuntu)` job during migration. Both use
+fixed tools (SHA-pinned setup actions and pinned Python/linter versions).
+Go modules are downloaded only during an explicit preparation step;
+subsequent Go tests, vet and docs examples run with GOPROXY/GOSUMDB off.
+These jobs do not use the Nix development shell and must not execute host,
+Incus, KVM or provider acceptance paths. The old Nix-backed aggregate
+continues to run and remains authoritative until #708/#709 migration.
+
+The new jobs intentionally use regular GitHub step logs, not the machine JSON
+schema. The existing `just check report-json` contract remains untouched.
+Evaluate native-vs-pinned-tool diagnostic differences before removing the
+legacy aggregate. Their failure must be treated as an actionable regression
+rather than overriding the legacy check's successful result.
