@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/blevinn/aginctus/internal/validation/catalog"
 )
 
 // Scenario is one of the pinned, explicitly opt-in NixOS VM test derivations.
@@ -19,20 +21,15 @@ type Scenario struct {
 	Description string `json:"description"`
 }
 
-var vmScenarios = []Scenario{
-	{Name: "smoke", Target: "vm-harness-smoke", Description: "Real guest Incus and Herdr image smoke"},
-	{Name: "storage-network", Target: "vm-harness-storage-network", Description: "Guest-local Btrfs storage and management bridge"},
-	{Name: "runtime-lifecycle", Target: "vm-harness-runtime-lifecycle", Description: "Real Herdr/OpenCode provisioning and reconciliation"},
-	{Name: "gateway-topology", Target: "vm-harness-gateway-topology", Description: "Real guest-local LiteLLM/Postgres and Herdr/OpenCode topology (OCI pulls required; no inference)"},
-	{Name: "synthetic-gateway", Target: "vm-harness-synthetic-gateway", Description: "Real guest LiteLLM/Postgres with scoped-key synthetic Responses upstream (no agent tool proof)"},
-	{Name: "synthetic-tool-gateway", Target: "vm-harness-synthetic-tool-gateway", Description: "Four fake-result Responses tool turns through real LiteLLM (no tool execution)"},
-	{Name: "full-stack", Target: "vm-harness-full-stack", Description: "Real Herdr/OpenCode read/edit/bash through a scoped synthetic gateway (dedicated KVM worker only; no live provider)"},
-	{Name: "opencode-tool-loopback", Target: "vm-harness-opencode-tool-loopback", Description: "Guest-isolated pinned OpenCode executing scripted read/edit/Go test tools (no Herdr/gateway)"},
-	{Name: "ownership-recovery", Target: "vm-harness-ownership-recovery", Description: "Foreign resource denial and guest daemon recovery"},
-}
-
+// VM discovery is a projection of the typed catalog; Nix buildability alone
+// never authorizes public VM discovery or execution.
 func VMScenarios() []Scenario {
-	return append([]Scenario(nil), vmScenarios...)
+	all := catalog.PublicVMScenarios()
+	result := make([]Scenario, 0, len(all))
+	for _, scenario := range all {
+		result = append(result, Scenario{Name: scenario.Name, Target: scenario.Target, Description: scenario.Description})
+	}
+	return result
 }
 
 func VMScenario(name string) (Scenario, error) {
