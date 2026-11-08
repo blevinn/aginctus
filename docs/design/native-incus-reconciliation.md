@@ -1,6 +1,6 @@
 # Native Incus reconciliation: staged migration design
 
-Status: **active v0.2 implementation**. Production execution still uses the legacy drivers. See [ADR 0002](../adr/0002-native-incus-reconciliation.md), [OCI feasibility](native-oci-feasibility.md) and [epic #153](https://github.com/blevinn/aginctus/issues/153).
+Status: **active v0.2 implementation**, not an accepted all-native production cutover. The selectable native management-network path exists, while Apply/Compose remain part of the current execution path until subsystem-specific parity and migration gates are met. See [ADR 0002](../adr/0002-native-incus-reconciliation.md), [OCI feasibility](native-oci-feasibility.md) and [epic #153](https://github.com/blevinn/aginctus/issues/153).
 
 ## Release guardrails
 
@@ -54,6 +54,13 @@ keys remain unmanaged. Description is always explicit, including an empty string
 No actor authorization or execution capability is carried by observations or plans. Generic versioned
 resource schema work in #155 remains outstanding, as do independent resource
 intents and multi-resource execution.
+`native.EnsureLocalInstance` composes create-if-absent, scalar update and optional
+start for one explicit instance intent. Its dry-run uses the same typed planner
+without submitting operations. False `EnsureRunning` preserves lifecycle state;
+stop remains explicit. Each stage revalidates independently and stops on failure,
+retaining completed-stage results without rollback. Callers must establish actor
+authority and writer exclusion separately; the API does not activate controllers
+or authorize a production migration.
 
 Native project provisioning implements the existing explicit operator
 create-only contract through the SDK. It requires confirmed nondefault scope

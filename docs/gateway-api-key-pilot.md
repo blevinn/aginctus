@@ -1,6 +1,6 @@
-# Pilot API-key model registration (issue #122)
+# Gateway: API-key provider/model registration
 
-**Stage 3** of the [gateway operator decision path](gateway-operator-path.md#3-register-an-authorized-upstream).
+**Stage 3** of the [canonical gateway workflow](gateway-operator-path.md#3-register-an-authorized-upstream).
 This is opt-in model registration, not inference or permission to rebuild an
 existing gateway. Complete read-only network/isolation verification before
 separately approving registry changes.
@@ -65,7 +65,7 @@ registration neither synchronizes with LiteLLM nor authorizes an account or
 verifies network access; only the deliberately approved Python `--apply` path
 changes the live registry.
 
-## OpenCode Go pilot: native Responses endpoint
+## OpenCode Go compatibility note (not required for provider registration)
 
 The fixed `--provider opencode-go` registrar supports the reviewed Responses
 model allowlist. The [Go documentation](https://opencode.ai/v2/docs/console/go/)
@@ -90,7 +90,7 @@ Do not re-register an existing alias just to test forwarding. Registration succe
 establishes only the database route, not entitlement, upstream inference or
 session fidelity.
 
-## Selective Go forwarding and offline acceptance
+## Selective Go forwarding acceptance (separate concern)
 
 Use [selective Go forwarding operations](selective-go-forwarding.md) for the
 default-off setting, embedded callback packaging, immutable image requirements,
@@ -134,7 +134,7 @@ and does not verify publisher signatures; it is a test prerequisite, not a
 production trust policy. Use the digest-qualified packaged probes in the
 selective runbook for positive acceptance.
 
-## Required live compatibility and cleanup gates
+## Operator-authorized live compatibility and cleanup gates
 
 After separate deployment and spending authorization, use the
 [restricted workload-key procedure](gateway-workload-key-pilot.md), then the
