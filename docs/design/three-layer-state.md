@@ -30,7 +30,7 @@ This document specifies the intended contract and sequencing. Command/API names 
 | Layer | Authority | Typical change | Not a substitute for |
 | --- | --- | --- | --- |
 | Configured | Invoking user/module's input candidate | Nix evaluation, JSON, AGINCTUS_ env, flags | Accepted deployment configuration |
-| Desired | One immutable, explicitly promoted revision per deployment | Authorized state-service CAS transaction | Live resource observation or secret storage |
+| Accepted | One immutable, explicitly promoted revision per deployment | Authorized state-service CAS transaction | Live resource observation or secret storage |
 | Current | Incus/guest/runtime observations at a point in time | Manual changes, failures, approved reconciler writes | Accepted policy, ownership proof, operation history |
 
 A configuration source's precedence is preserved when building a candidate, but the *accepted* revision captures the normalized result. An environment variable changed after promotion cannot change the accepted revision or the resources selected for reconciliation. A new client does not need the former client's config files or XDG directory to discover the accepted state.
@@ -51,7 +51,7 @@ In **NixOS-only** mode, system authority can own operator workloads/gateway as w
 
 The user-facing status view should distinguish **configured candidate** (specific to caller), **accepted spec** (one deployment authority, filtered by actor capability), and **current observations** (only what the actor can actually read). System mode may display nonsecret user-scope summary/health when authorized, but should not copy user token material; user mode may see a sanitized host-capability readiness/denial summary but not edit host policy. A hidden or unauthorized field is *not* evidence of equality or absence. State-service authorization is based on authenticated principal and explicit resource ownership, **not** solely a `--mode` flag, `sudo`, root EUID or Nix module location.
 
-**NixOS activation exception:** `nixos-rebuild switch` may still apply the host's own NixOS-managed firewall and Incus host-capability services; those belong to the host operating-system authority, **outside** Aginctus accepted-state reconciliation. Switching a NixOS or HM generation must not, by itself, promote Aginctus candidate configuration or reconcile its accepted Incus workload/gateway/project resources. A host policy change may invalidate or constrain an accepted Aginctus deployment and must surface as capability failure/current-state drift. Home Manager activation itself installs a CLI and nonsecret config; it neither takes over host policy nor implicitly deploys workloads.
+**NixOS activation exception:** `nixos-rebuild switch` may still apply the host's own NixOS-managed firewall and Incus host-capability services; those belong to the host operating-system authority, **outside** Aginctus accepted-state reconciliation. Under this **proposed migration target**, switching a NixOS or HM generation must not, by itself, promote Aginctus candidate configuration or reconcile its accepted Incus workload/gateway/project resources. Existing NixOS opt-in reconciliation units still consume effective configuration today and must be explicitly migrated; this is not a claim that current installations already have the new behavior. A host policy change may invalidate or constrain an accepted Aginctus deployment and must surface as capability failure/current-state drift. Home Manager activation itself installs a CLI and nonsecret config; it neither takes over host policy nor implicitly deploys workloads.
 
 **Source hygiene:** do not feed untrusted user `AGINCTUS_*`, `--config`, user JSON or XDG state into a system-authoritative candidate for protected host fields. Conversely do not elevate a user's candidate into system-owned accepted fields by recursively merging it with `/etc/aginctus/config.json`. Implement an explicit scope-aware candidate projection, validate overlaps and reject conflicting system/user ownership before accepting or executing. Existing generic config precedence is retained for permitted caller-owned fields only.
 
@@ -59,7 +59,7 @@ This approach deliberately avoids a second root-vs-user database and duplicate c
 
 ## 2. Two independent drift and mutation paths
 
-### A. Configured → desired (promotion)
+### A. Configured → accepted (promotion)
 
 1. Resolve all current configuration precedence layers for an explicit deployment selector, without mutating Incus or initializing runtime secrets.
 2. Validate the candidate's resource scope, ownership-relevant identities, schema, referenced resources, secret-reference syntax and migration constraints.
@@ -70,7 +70,7 @@ This approach deliberately avoids a second root-vs-user database and duplicate c
 
 An invalid candidate, unresolvable artifact, ambiguous credential reference or incompatible schema cannot be silently promoted. Secret material itself must not be required to render public plan output; credential *availability* is checked under the appropriate runtime owner/operation at execution time.
 
-### B. Desired → current (infrastructure reconciliation)
+### B. Accepted → current (infrastructure reconciliation)
 
 1. Authorize actor, fixed deployment identity and exact Incus project/host-shared resource scope; pin accepted revision R and acquire required writer exclusion/fencing.
 2. Compile R into existing typed resource intent / restricted Jsonnet where applicable. **No reread of deployment values from ambient environment.** Non-deployment connection/authentication parameters remain separately authorized.
@@ -83,7 +83,7 @@ The accepted revision is not a claim of convergence. One revision may remain act
 
 ### Comparison examples
 
-| Trigger | Configured ↔ desired | Desired ↔ current | Automatic mutation |
+| Trigger | Configured ↔ accepted | Accepted ↔ current | Automatic mutation |
 | --- | --- | --- | --- |
 | Change AGINCTUS_* gateway setting after successful promotion | Drift | None unless resources have independently drifted | None |
 | Nix switch changes declared workload image | Drift | None against existing accepted image | None |
@@ -161,8 +161,8 @@ Private volumes need proper mount/UID permissions, backup and authentication. In
 
 Possible user workflow; syntax is **illustrative and does not yet exist**:
 
-    aginctus desired plan            # configured vs accepted: non-mutating
-    aginctus desired apply           # explicitly CAS-promote candidate only
+    aginctus accepted plan            # configured vs accepted: non-mutating
+    aginctus accepted apply           # explicitly CAS-promote candidate only
     aginctus reconcile plan          # accepted vs current: non-mutating
     aginctus reconcile apply         # separately authorized infrastructure convergence
 
