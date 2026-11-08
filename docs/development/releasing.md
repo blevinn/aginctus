@@ -5,7 +5,7 @@ The v0.1 acceptance checklist is [#118](https://github.com/blevinn/aginctus/issu
 Its five functional criteria have live pilot evidence. On 2026-10-31, the
 owner explicitly deferred the **unrun** fresh-host deployment/smoke/cleanup/repeat
 to [v0.2 #580](https://github.com/blevinn/aginctus/issues/580), rather than
-asserting it passed. The [deployment and acceptance handoff](v0.1-deployment-acceptance.md)
+asserting it passed. The [deployment and acceptance handoff](../history/v0.1-deployment-acceptance.md)
 distinguishes this limitation from the verified live pilot and accepted residual risks.
 Merging release tooling does not pass acceptance or authorize publication.
 
@@ -30,7 +30,7 @@ Merging release tooling does not pass acceptance or authorize publication.
   administrative controls.
 - Keep `CHANGELOG.md` sections `## [X.Y.Z]` and reviewed
   `docs/releases/vX.Y.Z.md` notes in the release PR. Use
-  [release note template](releases/TEMPLATE.md). The release workflow requires
+  [release note template](../releases/TEMPLATE.md). The release workflow requires
   all three to agree for a tagged version.
 - Do not include private pilot addresses, keys, tokens or credentials in notes,
   command output, CI logs or release assets.
@@ -39,7 +39,7 @@ Merging release tooling does not pass acceptance or authorize publication.
 
 1. Confirm the target milestone and the release roll-up issue's acceptance
    checklist. The human owner must sign off any live pilot/inference evidence
-   and deferred risks. See [development validation tiers](development.md#validation-tiers).
+   and deferred risks. See [development validation tiers](README.md#validation-tiers).
 2. From current `main`, open `chore/release-vX.Y.Z`. Set
    `internal/cli/VERSION` to `X.Y.Z` (or `X.Y.Z-rc.N`); promote reviewed
    release notes from the template to `docs/releases/vX.Y.Z.md`;

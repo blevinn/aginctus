@@ -1,8 +1,8 @@
 # Home Manager operator integration (v0.2 stack)
 
 Status: **CLI-only standalone Home Manager integration merged** (#448); disposable VM validation and authorized user lifecycle support remain incremental v0.2 work.
-See [design](design/home-manager-operator.md), [#426](https://github.com/blevinn/aginctus/issues/426)
-and [NixOS configuration](configuration.md#nixos-module). This does **not**
+See [design](../../design/home-manager-operator.md), [#426](https://github.com/blevinn/aginctus/issues/426)
+and [NixOS configuration](../../reference/configuration.md#nixos-module). This does **not**
 replace the v0.1 pilot activation/runbooks.
 
 ## Standalone Home Manager: CLI and user configuration only

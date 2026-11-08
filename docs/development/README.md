@@ -47,7 +47,7 @@ checked-out implementation without loading the host's effective configuration:
 go run ./cmd/aginctus help
 ```
 
-The [CLI operations reference](cli.md) owns current `doctor`, management-network
+The [CLI operations reference](../reference/cli.md) owns current `doctor`, management-network
 lifecycle, `--dry-run` and `--force` semantics. Do not copy mutation
 examples from historical development notes without checking current help,
 configuration and operator authority.
@@ -294,11 +294,11 @@ the integration opt-in variables before running `check-all`.
 
 Live pilot, authentication, key/model registration, and inference helpers are
 operator commands, not hermetic suites. Their prerequisites and exact invocations
-are in [OpenCode acceptance](acceptance-opencode.md),
-[live adapters](acceptance-opencode-live.md),
-[Herdr acceptance](acceptance-opencode-herdr.md),
-[workload-key pilot](gateway-workload-key-pilot.md), and
-[inference smoke](gateway-inference-smoke.md). Review those runbooks and obtain
+are in [OpenCode acceptance](../testing/acceptance/README.md),
+[live adapters](../testing/acceptance/acceptance-opencode-live.md),
+[Herdr acceptance](../testing/acceptance/acceptance-opencode-herdr.md),
+[workload-key pilot](../operations/gateway/gateway-workload-key-pilot.md), and
+[inference smoke](../operations/gateway/gateway-inference-smoke.md). Review those runbooks and obtain
 explicit authorization for the disposable topology, credentials and possible
 billable inference before running them. No image import/update, CLI `doctor`,
 firewall reconciliation, guest provisioning or live preflight is part of

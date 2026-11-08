@@ -19,7 +19,7 @@ or `catalog --help` under the same `aginctus gateway` prefix for syntax.
 - A **model** belongs to a provider. The same model name may occur at multiple
   providers; a show operation must identify its provider when ambiguous.
 - An **MCP** is a local declaration or a provider-offered server declaration.
-  Both use the existing [MCP schema](../internal/mcpschema/schema.go), including credential
+  Both use the existing [MCP schema](../../internal/mcpschema/schema.go), including credential
   references, transport validation and tool restrictions. Applying a local MCP
   never starts its command, connects to its URL or grants tools to a workload.
 - A **catalog** selects provider models and local/provider MCPs under exposed
@@ -30,7 +30,7 @@ Catalogs are declarations suitable for reviewing a workload's intended surface.
 They do not publish LiteLLM routes, issue keys, install workload configuration or
 replace the existing authenticated workload/MCP grant policy. Deployment and
 authorization remain separate operations under the
-[gateway operator path](gateway-operator-path.md).
+[gateway operator path](../operations/gateway/README.md).
 
 ## Instantiate and inspect a provider
 
@@ -225,6 +225,6 @@ opencode-go --provider NAME --config-file FILE` and inspect their models with
 Only the existing audited native Responses sources and fixed OpenCode-Go endpoint
 are supported. A declaration is not evidence of upstream availability. Rendering
 does not acquire an API key, log in, publish a route or change header forwarding.
-The [selective forwarding policy](selective-go-forwarding.md) remains a separate,
+The [selective forwarding policy](../operations/gateway/selective-go-forwarding.md) remains a separate,
 explicit runtime control with its fixed route and header restrictions. It must
 not be widened merely because another provider instance or model is declared.

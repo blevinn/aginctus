@@ -340,5 +340,5 @@ Two further boundaries follow from the design:
   configuration generation.
 - [#167](https://github.com/blevinn/aginctus/issues/167) — segmented
   networking for MCP access.
-- [AI gateway design](ai-gateway.md) — the wider gateway design and the
+- [AI gateway design](../architecture/gateway.md) — the wider gateway design and the
   authority boundaries it assumes.

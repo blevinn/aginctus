@@ -1,6 +1,6 @@
 # Herdr SSH identity and trust contract
 
-This page is the **implemented v0.1 guest-helper contract** behind the [Herdr operator workflow](herdr-machine-registration.md). It is not a proposed SSH CA, a general credential rotation service or a claim that an arbitrary Linux guest is supported. The [Herdr client topology ADR](adr/0001-herdr-client-topology.md) explains the durable design decision.
+This page is the **implemented v0.1 guest-helper contract** behind the [Herdr operator workflow](../operations/workloads/herdr-machine-registration.md). It is not a proposed SSH CA, a general credential rotation service or a claim that an arbitrary Linux guest is supported. The [Herdr client topology ADR](../adr/0001-herdr-client-topology.md) explains the durable design decision.
 
 ## Trust and material flow
 
@@ -26,7 +26,7 @@ The client's private key never crosses into host files, rendered plans, Nix stor
 
 `inspect` exits **3** when the managed item is absent; other errors indicate invalid commands, ownership/permissions or inconsistent state. Avoid piping raw error streams to shared logs. Do not call mutating helpers manually on unowned instances; `aginctus herdr authorize/pin-host/register` validate host-side ownership and are the supported operator path.
 
-The client stores `/var/lib/aginctus/ssh/identities/<generation>/id_ed25519` (root-owned `0600`) and public metadata in a protected manifest. The persistent system-state volume binds its `ssh/` directory onto `/var/lib/aginctus/ssh` and `herdr/` onto `/var/lib/herdr`. The [volume contract](herdr-persistent-state-volumes.md) describes the mount requirements and reset hazards.
+The client stores `/var/lib/aginctus/ssh/identities/<generation>/id_ed25519` (root-owned `0600`) and public metadata in a protected manifest. The persistent system-state volume binds its `ssh/` directory onto `/var/lib/aginctus/ssh` and `herdr/` onto `/var/lib/herdr`. The [volume contract](../operations/workloads/herdr-persistent-state-volumes.md) describes the mount requirements and reset hazards.
 
 The workload's `/var/lib/aginctus/ssh/authorized_keys/agent` is an Aginctus-owned public-key file, **separate from** `~agent/.ssh/authorized_keys`. Its sshd configuration consults both, preserving unrelated administrator access. The client pins host trust in `/var/lib/aginctus/ssh/trust/known_hosts` and stores a verified machine alias at `/var/lib/aginctus/ssh/machines/<instance>.conf`.
 
@@ -40,4 +40,4 @@ Managed SSH enforces the selected identity, `IdentitiesOnly`, no agent, `BatchMo
 - Automatic private-key rotation, two-generation rollout, per-workload client identities, self-service host-key replacement, incidence-aware rebootstrap, remote machine cleanup and reliable trust repair on workload recreation are **not implemented**. Do not follow hypothetical rotation state-machine designs from old PRs as operational steps.
 - Workload authorization is scoped to the non-root `agent` user; once authenticated that user can run its own agent and Herdr processes. Shared management-L2 access is not workload-to-workload segmentation. Incus admin and Herdr client compromise are security-relevant.
 
-Never copy the private key to the Incus host, weaken host verification, replace a pinned key after a mismatch, or treat `herdr client teardown` as successful credential revocation. For practical validation and approved operations use the [canonical runbook](herdr-machine-registration.md).
+Never copy the private key to the Incus host, weaken host verification, replace a pinned key after a mismatch, or treat `herdr client teardown` as successful credential revocation. For practical validation and approved operations use the [canonical runbook](../operations/workloads/herdr-machine-registration.md).
