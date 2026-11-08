@@ -152,10 +152,3 @@ func TestCatalogReturnsDefensiveCopies(t *testing.T) {
 		t.Fatal("VM catalog shared mutable backing array")
 	}
 }
-
-func TestMismatchIsDetected(t *testing.T) {
-	expected := []string{"go", "python"}
-	if slices.Equal([]string{"go", "python", "new-untested-suite"}, expected) {
-		t.Fatal("new manifest entry escaped parity detection")
-	}
-}
