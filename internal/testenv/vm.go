@@ -23,6 +23,7 @@ var vmScenarios = []Scenario{
 	{Name: "smoke", Target: "vm-harness-smoke", Description: "Real guest Incus and Herdr image smoke"},
 	{Name: "storage-network", Target: "vm-harness-storage-network", Description: "Guest-local Btrfs storage and management bridge"},
 	{Name: "runtime-lifecycle", Target: "vm-harness-runtime-lifecycle", Description: "Real Herdr/OpenCode provisioning and reconciliation"},
+	{Name: "native-instance", Target: "vm-harness-native-instance", Description: "Native scoped create/config/start-stop and dry-run against disposable Incus"},
 	{Name: "gateway-topology", Target: "vm-harness-gateway-topology", Description: "Real guest-local LiteLLM/Postgres and Herdr/OpenCode topology (OCI pulls required; no inference)"},
 	{Name: "synthetic-gateway", Target: "vm-harness-synthetic-gateway", Description: "Real guest LiteLLM/Postgres with scoped-key synthetic Responses upstream (no agent tool proof)"},
 	{Name: "synthetic-tool-gateway", Target: "vm-harness-synthetic-tool-gateway", Description: "Four fake-result Responses tool turns through real LiteLLM (no tool execution)"},
