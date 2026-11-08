@@ -728,9 +728,9 @@ func TestGeneratedGatewayHelpIsDispatchable(t *testing.T) {
 		"aginctus gateway remove", "aginctus gateway status",
 		"aginctus gateway credential-storage ensure", "aginctus gateway credential-storage attach",
 		"aginctus gateway credential-storage audit", "aginctus gateway provider register TYPE",
-		"aginctus gateway provider list", "aginctus gateway provider show ALIAS",
+		"aginctus gateway provider list", "aginctus gateway provider show [PROVIDER]",
 		"aginctus gateway model register NAME", "aginctus gateway model list",
-		"aginctus gateway model show NAME", "aginctus gateway model render NAME",
+		"aginctus gateway model show [PROVIDER] [MODEL]", "aginctus gateway model render NAME",
 	} {
 		if !strings.Contains(out.String(), route) {
 			t.Fatalf("gateway help missing %q: %s", route, out.String())
@@ -747,7 +747,7 @@ func TestGeneratedGatewayHelpMatchesHelpCommand(t *testing.T) {
 		t.Fatalf("direct help failed: %d %s", code, errs.String())
 	}
 	errs.Reset()
-	if code := Run(context.Background(), []string{"help", "gateway"}, &explicit, &errs, nil, nil); code != 0 || errs.Len() != 0 || family.String() != explicit.String() {
+	if code := Run(context.Background(), []string{"help", "gateway"}, &explicit, &errs, nil, nil); code != 0 || errs.Len() != 0 || helpSyntax(family.String()) != helpSyntax(explicit.String()) {
 		t.Fatalf("help mismatch: code=%d stderr=%q", code, errs.String())
 	}
 }

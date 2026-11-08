@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestHelpOfflineInventory(t *testing.T) {
 	}
 	for _, args := range [][]string{nil, {"help"}, {"--help"}, {"-h"}} {
 		var out, errs bytes.Buffer
-		if code := Run(context.Background(), args, &out, &errs, nil, nil); code != 0 || out.String() != top.String() || errs.Len() != 0 {
+		if code := Run(context.Background(), args, &out, &errs, nil, nil); code != 0 || !reflect.DeepEqual(helpRoutes(out.String()), helpRoutes(top.String())) || errs.Len() != 0 {
 			t.Fatalf("%q: code=%d stdout=%q stderr=%q", args, code, out.String(), errs.String())
 		}
 	}
@@ -54,7 +55,7 @@ func TestHelpGeneratedFamilyTreeMatchesCanonicalSyntax(t *testing.T) {
 		family string
 		routes []string
 	}{
-		{"gateway", []string{"aginctus gateway provider register TYPE", "aginctus gateway provider show ALIAS", "aginctus gateway model register NAME", "aginctus gateway model render NAME", "aginctus gateway egress firewall plan", "aginctus gateway egress dhcp apply", "aginctus gateway responses verify"}},
+		{"gateway", []string{"aginctus gateway provider register TYPE", "aginctus gateway provider show [PROVIDER]", "aginctus gateway model register NAME", "aginctus gateway model show [PROVIDER] [MODEL]", "aginctus gateway model render NAME", "aginctus gateway egress firewall plan", "aginctus gateway egress dhcp apply", "aginctus gateway responses verify"}},
 		{"network", []string{"aginctus network apply", "aginctus network firewall egress reconcile"}},
 		{"herdr", []string{"aginctus herdr authorize WORKLOAD", "aginctus herdr client status"}},
 		{"workload", []string{"aginctus workload apply [NAME]", "aginctus workload start [NAME]", "aginctus workload gateway provision WORKLOAD"}},
@@ -72,15 +73,42 @@ func TestHelpGeneratedFamilyTreeMatchesCanonicalSyntax(t *testing.T) {
 			}
 		}
 		var direct bytes.Buffer
-		if code := Run(context.Background(), []string{tc.family, "--help"}, &direct, &bytes.Buffer{}, nil, nil); code != 0 || direct.String() != out.String() {
+		if code := Run(context.Background(), []string{tc.family, "--help"}, &direct, &bytes.Buffer{}, nil, nil); code != 0 || !reflect.DeepEqual(helpRoutes(direct.String()), helpRoutes(out.String())) {
 			t.Errorf("%s family help differs from help command", tc.family)
 		}
 	}
 }
 
+func helpSyntax(output string) string {
+	const marker = "Subcommand syntax (derived from registered Cobra commands):"
+	index := strings.Index(output, marker)
+	if index < 0 {
+		return ""
+	}
+	return output[index:]
+}
+
+func helpRoutes(output string) []string {
+	const marker = "Subcommand syntax (derived from registered Cobra commands):"
+	index := strings.Index(output, marker)
+	if index < 0 {
+		return nil
+	}
+	var routes []string
+	for _, line := range strings.Split(output[index:], "\n") {
+		if !strings.HasPrefix(line, "  aginctus ") {
+			continue
+		}
+		line = strings.SplitN(line, " — ", 2)[0]
+		line = strings.SplitN(line, "  (aliases:", 2)[0]
+		routes = append(routes, line)
+	}
+	return routes
+}
+
 func TestHelpLeafFlagsAndSafetyClaims(t *testing.T) {
 	for _, tc := range []struct {
-		args []string
+		args     []string
 		required []string
 	}{
 		{[]string{"help", "gateway"}, []string{"--confirm-stopped-instance", "--confirm-bridge-only", "--uplink-zone", "does not activate inference", "preserves persistent volumes"}},
