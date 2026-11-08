@@ -41,8 +41,8 @@ external diagnostics.
 
 The existing no-`--project` status and unflagged start/stop/apply/remove
 operations retain v0.1 behavior. The separately confirmed start/stop
-transitions below are the only opt-in scoped workload mutations; they do not
-migrate the pilot or enable project-scoped orchestration.
+transitions and confirmed existing-only apply below are opt-in scoped workload
+mutations. They do not migrate the pilot or activate a controller.
 
 ## Review an existing scoped workload apply (read-only)
 
@@ -100,10 +100,35 @@ Neither preview grants the authority to execute a scoped write. The native
 planner's observation can become stale immediately, and project selection alone
 cannot fence other Incus clients. The read-only reader exposes no SDK mutation
 methods. Static `--render` still describes the legacy Apply plan. Bare scoped
-`apply`, `--force` and other mutating forms remain rejected pending
-existing-only server-side enforcement, controller authorization and
-disposable-Incus acceptance (#200/#201/#437/#441/#443). No v0.1 apply
-semantics or pilot host state is changed.
+`apply`, `--force` and combining preview with confirmation remain rejected.
+
+## Reconcile one existing scoped workload (explicit mutation)
+
+On an approved disposable local environment, after inspecting the dry-run:
+
+```sh
+aginctus workload apply --project aginctus dev --confirm-apply
+```
+
+This updates the selected existing workload's managed scalar config and
+description, then ensures it is running through the native SDK. It requires the
+exact configured project, one configured ID, the cooperative project writer lease,
+and absent known system/current-user lifecycle controllers. Project, ownership,
+image identity and ETag are independently re-observed by the native primitives.
+No-op paths also re-observe. Missing instances fail closed, including if removed
+during execution; this path never falls back to creation or legacy Apply.
+Devices, profiles, storage and workspace attachments are retained; incompatible
+drift requires separate policy and is refused. There is no adoption, replacement,
+implicit deletion, network provisioning or controller activation. The API treats
+explicit empty scalar config values as clears, matching Incus normalization;
+omitted keys stay unmanaged. Configuration currently supplies runtime/ownership
+markers, not arbitrary user config overrides.
+
+Failure can leave completed config or start operations. Inspect the exact selected
+instance before retry; no rollback is attempted. Output contains identity/status
+only, without raw config or daemon diagnostics. The cooperative lease cannot fence
+independent Incus administrators. This is disposable-environment opt-in, not pilot
+migration or permission to activate a reconciler.
 
 ## Transition one existing scoped workload (explicit mutation)
 
