@@ -434,7 +434,7 @@ with s.lock('runtime', timeout=0), s.lock():
     s.write(state)
     print('locked', flush=True)
     sys.stdin.readline()
-`, filepath.Join("..", "..", "scripts", "gateway"), f.owner.store.Root)
+	`, filepath.Join("..", "..", "..", "..", "scripts", "gateway"), f.owner.store.Root)
 	input, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -451,6 +451,8 @@ with s.lock('runtime', timeout=0), s.lock():
 	defer func() { _ = input.Close(); _ = cmd.Wait() }()
 	line := make([]byte, 7)
 	if _, err := io.ReadFull(output, line); err != nil {
+		_ = input.Close()
+		_ = cmd.Wait()
 		t.Fatalf("Python probe failed: %v %s", err, stderr.String())
 	}
 	if _, err := f.owner.Models(context.Background(), "personal"); err == nil || !strings.Contains(err.Error(), "owner busy") {
@@ -490,7 +492,7 @@ store=siwc.Store(sys.argv[2])
 owner=siwc.Owner(store,siwc.Provider(request,lambda:data['now']))
 with store.lock('runtime',timeout=0):
     assert owner.access('personal')==data['reply']['access_token']
-`, filepath.Join("..", "..", "scripts", "gateway"), f.owner.store.Root)
+	`, filepath.Join("..", "..", "..", "..", "scripts", "gateway"), f.owner.store.Root)
 	cmd.Stdin = bytes.NewReader(data)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("Python refresh rejected Go enrollment: %v %s", err, output)
