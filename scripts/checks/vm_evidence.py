@@ -25,6 +25,7 @@ SCENARIOS = (
     "smoke",
     "storage-network",
     "runtime-lifecycle",
+    "native-instance",
     "gateway-topology",
     "synthetic-gateway",
     "synthetic-tool-gateway",
