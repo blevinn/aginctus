@@ -48,11 +48,11 @@ Call out changes involving sandboxing, network controls, credentials, secrets, M
   `docs/milestones/`, and `docs/releases/` areas are exempt because they
   contain decisions, proposals, internal notes, or historical artifacts.
   Link particularly relevant documents from the index deliberately.
-- When adding gateway or acceptance pages, keep the gateway documentation map
-  and acceptance decision path in `docs/README.md` in sync, and verify any new
-  `operator ...` or `images ...` subcommands appear in both `docs/cli.md` and
-  `docs/configuration.md` with consistent opt-in/future status.
-- Keep `docs/getting-started.md`, `docs/cli.md`, and the Herdr operator
+- When adding gateway or acceptance pages, keep the gateway workflow at `docs/operations/gateway/README.md`
+  and acceptance path at `docs/testing/acceptance/README.md` in sync, and verify any new
+  `operator ...` or `images ...` subcommands appear in both `docs/reference/cli.md` and
+  `docs/reference/configuration.md` with consistent opt-in/future status.
+- Keep `docs/getting-started.md`, `docs/reference/cli.md`, and the Herdr operator
   runbook's literal `aginctus` shell examples aligned with generated
   `aginctus help` usage. Run `just check docs-examples` (or the legacy `just check-docs-examples` alias); it checks
   syntax shapes but **never runs the documented operations**. Use the CLI's
