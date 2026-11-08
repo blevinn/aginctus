@@ -71,6 +71,9 @@ func TestExistingInstanceFailsClosed(t *testing.T) {
 		{"implicit profiles", func(i *InstanceIntent, _ *InstanceObservation) { i.Profiles = nil }},
 		{"invalid type", func(i *InstanceIntent, _ *InstanceObservation) { i.Type = "invented" }},
 		{"invalid desired ownership", func(i *InstanceIntent, _ *InstanceObservation) { i.Config["user.aginctus.resource"] = "instance" }},
+		{"caller-selected base image", func(i *InstanceIntent, _ *InstanceObservation) {
+			i.Config["volatile.base_image"] = strings.Repeat("a", 64)
+		}},
 		{"absent observation", func(_ *InstanceIntent, o *InstanceObservation) { *o = InstanceObservation{} }},
 		{"wrong observed project", func(_ *InstanceIntent, o *InstanceObservation) { o.Identity.Project = "foreign" }},
 		{"wrong observed name", func(_ *InstanceIntent, o *InstanceObservation) { o.Identity.Name = "other" }},
