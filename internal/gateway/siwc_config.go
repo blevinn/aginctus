@@ -60,7 +60,7 @@ func (s Spec) SIWCAttachments() []map[string]string {
 	if s.SelectiveGoForwarding {
 		attachments = s.SelectiveGoAttachments()
 	}
-	for _, name := range []string{"config.json", "siwc.py", "litellm_siwc.py"} {
+	for _, name := range []string{"config.json", "siwc.py", "litellm_siwc.py", "siwc_admin.py"} {
 		attachments = append(attachments, map[string]string{"source": "aginctus-siwc-" + name, "target": siwcPythonPath + "/" + name})
 	}
 	return attachments
