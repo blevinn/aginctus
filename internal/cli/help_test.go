@@ -59,7 +59,7 @@ func TestHelpGeneratedFamilyTreeMatchesCanonicalSyntax(t *testing.T) {
 		{"network", []string{"aginctus network apply", "aginctus network firewall egress reconcile"}},
 		{"herdr", []string{"aginctus herdr authorize WORKLOAD", "aginctus herdr client status"}},
 		{"workload", []string{"aginctus workload apply [NAME]", "aginctus workload start [NAME]", "aginctus workload gateway provision WORKLOAD"}},
-		{"images", []string{"aginctus images import-owned ALIAS [PATH]", "aginctus images replace-plan ALIAS [PATH]"}},
+		{"images", []string{"aginctus images import ALIAS PATH", "aginctus images owner-audit ALIAS", "aginctus images import-owned ALIAS PATH", "aginctus images replace-plan ALIAS PATH"}},
 		{"operator", []string{"aginctus operator project-ensure", "aginctus operator units-audit"}},
 		{"testenv", []string{"aginctus testenv vm plan SCENARIO", "aginctus testenv vm test SCENARIO"}},
 	} {
