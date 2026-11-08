@@ -131,6 +131,15 @@ synthetic secret disclosure; Home Manager switching preserves both state trees'
 contents and owner/mode metadata. These are read-only diagnostics, not proof of
 the running gateway's state identity or credential migration acceptance.
 
+Lifecycle unit-audit acceptance starts harmless sleep fixtures under a known
+Aginctus lifecycle unit name in the real system/current-user managers. Installed
+inactive and active competing units cause refusal; simultaneous system/user
+fixtures refuse either authority selection. Removing both fixtures restores the
+no-known-conflict result, while stopping the user manager yields unverified
+evidence and refusal. Root firewall-only units remain outside that allowlist.
+This verifies read-only diagnostics, not mutation-time guards, real reconciler
+behavior, other-user visibility, or exclusion of manual/renamed controllers.
+
 This exercises real guest CLI build and switch against the included local
 configuration. It does **not** establish image/workload write authorization,
 active-controller exclusion, credential migration/rollback or production
