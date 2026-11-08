@@ -1,6 +1,6 @@
 # Gateway: opt-in authenticated Responses smoke
 
-**Stage 5** of the [canonical gateway workflow](gateway-operator-path.md#5-inference-evidence-and-operator-hold). This is a separately approved, potentially billable host-side provider check; it does not replace the [OpenCode agent acceptance path](acceptance-opencode.md). Confirm scoped-key revocation and independent upstream attribution, not merely a terminal local HTTP response.
+**Stage 5** of the [canonical gateway workflow](README.md#5-inference-evidence-and-operator-hold). This is a separately approved, potentially billable host-side provider check; it does not replace the [OpenCode agent acceptance path](../../testing/acceptance/README.md). Confirm scoped-key revocation and independent upstream attribution, not merely a terminal local HTTP response.
 
 This script is an **opt-in live provider request** from the trusted NixOS
 pilot host, not a synthetic #124 Herdr acceptance run. It uses only a

@@ -1,6 +1,6 @@
 # Gateway: API-key provider/model registration
 
-**Stage 3** of the [canonical gateway workflow](gateway-operator-path.md#3-register-an-authorized-upstream).
+**Stage 3** of the [canonical gateway workflow](README.md#3-register-an-authorized-upstream).
 This is opt-in model registration, not inference or permission to rebuild an
 existing gateway. Complete read-only network/isolation verification before
 separately approving registry changes.
@@ -8,7 +8,7 @@ separately approving registry changes.
 ## Preconditions
 
 1. Confirm existing PostgreSQL connectivity, gateway DNS/application readiness
-   and gateway-only egress using [firewall pilot validation](firewall-pilot-validation.md).
+   and gateway-only egress using [firewall pilot validation](../host/firewall-pilot-validation.md).
    Rediscover the owned LiteLLM instance's current management IPv4; old observed
    addresses are not configuration. Do not run gateway apply as a repair.
 2. Select an explicitly authorized provider/model with Responses support and an

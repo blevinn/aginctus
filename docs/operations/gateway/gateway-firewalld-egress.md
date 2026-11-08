@@ -1,6 +1,6 @@
 # LiteLLM egress with firewalld
 
-For hosts that actually use firewalld, this is the **conditional host-policy path** under [gateway operator maintenance stage 2](gateway-operator-path.md#2-maintenance-is-a-separately-authorized-change). Inspect the current NixOS firewall state before approving system activation or any runtime grant; a network configuration or gateway health check does not authorize provider traffic.
+For hosts that actually use firewalld, this is the **conditional host-policy path** under [gateway operator maintenance stage 2](README.md#2-maintenance-is-a-separately-authorized-change). Inspect the current NixOS firewall state before approving system activation or any runtime grant; a network configuration or gateway health check does not authorize provider traffic.
 
 NixOS owns the durable security boundary. Aginctus owns narrowly scoped runtime
 permissions inside it, using firewalld's native D-Bus API. Incus owns bridge

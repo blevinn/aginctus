@@ -118,7 +118,7 @@ guest DHCP leases or reverse imperative Incus configuration.
   result; it is infrastructure preflight, not release signoff.
 - Check bridge DNS, LiteLLM-to-PostgreSQL DNS/TCP readiness,
   workload-to-gateway TCP and Herdr-to-workload private connectivity separately.
-- Follow the [guest TCP controls](acceptance-opencode-preflight.md) and
+- Follow the [guest TCP controls](../../testing/acceptance/acceptance-opencode-preflight.md) and
   [firewalld egress acceptance](gateway-firewalld-egress.md) for independently
   authorized direct-public, host, private-network and Tailscale denial checks.
   A kernel no-route result does not test what happens if a guest adds a route.

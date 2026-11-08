@@ -120,7 +120,7 @@ production PostgreSQL image, and do not validate upgrades or persistent gateway
 restart. aarch64 execution and a real wrong-version OCI image are unrun; the
 version rejection has import-level regression coverage. The historical
 fast-buffered event-drain defect is addressed by the pinned source patch
-from #556. [Actual patched-runtime validation](opencode-runtime-validation.md)
+from #556. [Actual patched-runtime validation](../../testing/acceptance/opencode-runtime-validation.md)
 passes incremental and one-write buffered delivery directly and through pinned
 LiteLLM/disposable PostgreSQL, preserving native terminal text/stop assertions.
 Live pilot coding/inference is independently recorded in #118; neither protocol
@@ -274,14 +274,14 @@ it safe for Go traffic: disable Go consumers until the selective policy is valid
    issuing credentials or calling a provider as a health check.
 4. Reconfirm effective gateway-only egress, workload/PostgreSQL direct-provider
    denial, no public listener, and private/host destination restrictions using
-   [firewall pilot validation](firewall-pilot-validation.md).
+   [firewall pilot validation](../host/firewall-pilot-validation.md).
 5. Obtain **separate authorization** for one bounded genuine coding request using
    the operator's entitled Go model. Use the existing
    [restricted-key procedure](gateway-workload-key-pilot.md), protected system
    state and a new one-hour/$1/5-RPM/concurrency-one alias-scoped key. LiteLLM's
    dollar budget is not independent proof of provider subscription accounting.
 6. Provision only the approved owned workload using the documented
-   [OpenCode path](workloads/opencode.md), and invoke it through Herdr with the
+   [OpenCode path](../workloads/opencode.md), and invoke it through Herdr with the
    native session plugin. Require terminal output plus redacted gateway/provider
    correlation and genuine session/UA continuity. Do not replace this with the
    generic nonce smoke, manufactured session headers or a direct provider call.
