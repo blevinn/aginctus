@@ -76,3 +76,34 @@ func TestEnsureRetainsPartialCompletionAndNeverStartsAfterUnsafePlan(t *testing.
 		t.Fatalf("unsafe replacement: %+v %v", result, err)
 	}
 }
+
+func TestExistingOnlyEnsureNeverCreates(t *testing.T) {
+	intent, _ := instanceFixture()
+	f := &ensureFake{fakeCreateClient: &fakeCreateClient{intent: intent}}
+	result, err := ensureInstanceWithClient(context.Background(), intent, false, false, f)
+	if err == nil || result.Verified || f.creates+f.updates+f.starts != 0 {
+		t.Fatalf("existing-only ensure mutated absence: %+v %v", result, err)
+	}
+}
+
+func TestEnsureRechecksAuthorityBetweenStages(t *testing.T) {
+	intent, _ := instanceFixture()
+	f := &ensureFake{fakeCreateClient: &fakeCreateClient{intent: intent}}
+	if _, err := CreateInstanceWithClient(context.Background(), intent, f); err != nil {
+		t.Fatal(err)
+	}
+	intent.Description = "updated"
+	checks := 0
+	guard := func(context.Context) error {
+		checks++
+		if checks == 2 {
+			return errors.New("authority revoked")
+		}
+		return nil
+	}
+	result, err := ensureInstanceWithGuard(context.Background(), intent, false, false, f, guard)
+	var failure *ReconcileError
+	if !errors.As(err, &failure) || failure.Stage != "authority" || !failure.Mutated || !result.Updated || result.Verified || f.starts != 0 || f.updates != 1 {
+		t.Fatalf("authority revocation crossed boundary: %+v %v", result, err)
+	}
+}

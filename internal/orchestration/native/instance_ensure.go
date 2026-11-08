@@ -90,6 +90,15 @@ func PlanInstanceWithReader(ctx context.Context, intent InstanceIntent, reader I
 // Callers own actor authorization and writer exclusion. Dry-run only observes.
 // EnsureRunning=false preserves existing state; it never means stop.
 func EnsureLocalInstance(ctx context.Context, intent InstanceIntent, dryRun bool) (InstanceEnsureResult, error) {
+	return ensureLocalInstance(ctx, intent, dryRun, true)
+}
+
+// EnsureExistingLocalInstance cannot create, including if the instance disappears
+// before execution. It is used by explicitly confirmed manual scoped apply.
+func EnsureExistingLocalInstance(ctx context.Context, intent InstanceIntent, guard func(context.Context) error) (InstanceEnsureResult, error) {
+	if guard == nil {
+		return InstanceEnsureResult{}, fmt.Errorf("existing-only execution requires an authority guard")
+	}
 	if err := intent.Validate(); err != nil {
 		return InstanceEnsureResult{}, err
 	}
@@ -99,12 +108,33 @@ func EnsureLocalInstance(ctx context.Context, intent InstanceIntent, dryRun bool
 	}
 	defer cancel()
 	defer server.Disconnect()
-	return EnsureInstanceWithClient(ctx, intent, dryRun, sdkInstanceEnsureClient{sdkInstanceUpdateClient{server: server}})
+	return ensureInstanceWithGuard(ctx, intent, false, false, sdkInstanceEnsureClient{sdkInstanceUpdateClient{server: server}}, guard)
+}
+
+func ensureLocalInstance(ctx context.Context, intent InstanceIntent, dryRun, allowCreate bool) (InstanceEnsureResult, error) {
+	if err := intent.Validate(); err != nil {
+		return InstanceEnsureResult{}, err
+	}
+	server, cancel, err := connectLocal(ctx, intent.Identity.Project)
+	if err != nil {
+		return InstanceEnsureResult{}, err
+	}
+	defer cancel()
+	defer server.Disconnect()
+	return ensureInstanceWithClient(ctx, intent, dryRun, allowCreate, sdkInstanceEnsureClient{sdkInstanceUpdateClient{server: server}})
 }
 
 // EnsureInstanceWithClient stops at the first failure, without rollback or
 // retry. Each primitive independently re-observes at its mutation boundary.
 func EnsureInstanceWithClient(ctx context.Context, intent InstanceIntent, dryRun bool, client InstanceEnsureClient) (InstanceEnsureResult, error) {
+	return ensureInstanceWithClient(ctx, intent, dryRun, true, client)
+}
+
+func ensureInstanceWithClient(ctx context.Context, intent InstanceIntent, dryRun, allowCreate bool, client InstanceEnsureClient) (InstanceEnsureResult, error) {
+	return ensureInstanceWithGuard(ctx, intent, dryRun, allowCreate, client, func(context.Context) error { return nil })
+}
+
+func ensureInstanceWithGuard(ctx context.Context, intent InstanceIntent, dryRun, allowCreate bool, client InstanceEnsureClient, guard func(context.Context) error) (InstanceEnsureResult, error) {
 	plan, err := PlanInstanceWithReader(ctx, intent, client)
 	result := InstanceEnsureResult{Plan: plan}
 	if err != nil {
@@ -113,8 +143,14 @@ func EnsureInstanceWithClient(ctx context.Context, intent InstanceIntent, dryRun
 	if plan.Action == ReplacementRequired {
 		return result, fmt.Errorf("instance requires replacement; no ensure applied")
 	}
+	if plan.Action == Create && !allowCreate {
+		return result, fmt.Errorf("existing-only ensure requires a present owned instance")
+	}
 	if dryRun {
 		return result, nil
+	}
+	if err := guard(ctx); err != nil {
+		return result, &ReconcileError{Stage: "authority", cause: err}
 	}
 	if plan.Action == Create {
 		created, err := CreateInstanceWithClient(ctx, intent, client)
@@ -137,6 +173,9 @@ func EnsureInstanceWithClient(ctx context.Context, intent InstanceIntent, dryRun
 		}
 		if ready.Action == ReplacementRequired || len(ready.Changes) != 0 {
 			return result, fmt.Errorf("instance changed before lifecycle; inspect before retry")
+		}
+		if err := guard(ctx); err != nil {
+			return result, &ReconcileError{Stage: "authority", Mutated: result.Created || result.Updated, cause: err}
 		}
 		scope, _ := incusscope.NewProjectScope(intent.Identity.Project)
 		state, err := EnsureInstanceStateWithClient(ctx, InstanceLifecycleIntent{
