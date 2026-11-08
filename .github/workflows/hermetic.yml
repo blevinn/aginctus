@@ -10,9 +10,11 @@ on:
 permissions:
   contents: read
 
+# Only superseded PR heads may cancel. Every push to main and explicit
+# dispatch must produce independent, durable evidence for that revision.
 concurrency:
-  group: hermetic-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: hermetic-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   hermetic:
