@@ -2,6 +2,36 @@
 
 The installed `aginctus help` and `aginctus help <command>` are the source of truth for supported syntax. Help is available without loading the host's configuration. This guide explains **effects and boundaries**, not a duplicated flag-by-flag manual. Check [configuration precedence](configuration.md) and [security limitations](security.md) before provisioning.
 
+## Command discovery and compatibility
+
+The Cobra command tree is authoritative for **canonical syntax**. `aginctus help`
+prints a command inventory generated from registered leaves, including their
+actual local flags and aliases. Use `aginctus help gateway` or a leaf's
+`--help` to narrow the output. Flags shown on a different leaf are **not**
+automatically accepted or authorized on the command you are running.
+
+The v0.1 positional-first spellings for provider/model registration and
+inspection (`gateway provider TYPE register`, `gateway model NAME
+register|show|render`) and named workload setup/removal (`workload NAME
+ensure|teardown`) remain supported by explicit compatibility translation.
+Prefer the action-first `gateway provider register TYPE`,
+`gateway model register NAME`, and `workload apply|remove NAME` forms in
+new automation. For names that collide with command verbs, use the canonical
+action-first form to avoid ambiguity.
+
+The generated command synopsis reports positional argument *shape* and
+available flags; it does **not** imply permission to perform an action.
+In particular, scoped image imports and project creation require their
+explicit `--confirm-create`; scoped workload transitions require
+`--confirm-start` or `--confirm-stop`; and gateway egress/DHCP mutations
+require their own scoped confirmations. These guards are checked by the
+actual command handlers. Inspection, plans and dry-run previews are not
+write-authorization tokens.
+
+The hermetic documentation checker reads generated Cobra help to validate
+example syntax and flag scope. It never executes the example commands or
+proves the target host, remote/project selection or credentials are safe.
+
 ## Read-only inspection and planning
 
 | Surface | What it establishes | What it does not establish |

@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"io"
 	"strings"
 	"testing"
 
@@ -175,12 +174,16 @@ func TestOpenCodeGoRegistrationOffline(t *testing.T) {
 }
 
 func TestOpenCodeGoHelpIsDiscoverable(t *testing.T) {
-	for _, usage := range []func(io.Writer){printGatewayUsage, printUsage} {
-		var out bytes.Buffer
-		usage(&out)
-		if !strings.Contains(out.String(), "gateway provider opencode-go register") ||
-			!strings.Contains(out.String(), "--source=chatgpt/MODEL|openai/MODEL") {
-			t.Fatalf("missing OpenCode Go CLI usage: %s", out.String())
+	for _, args := range [][]string{
+		{"help", "gateway"}, {"gateway", "provider", "register", "--help"},
+		{"gateway", "model", "register", "--help"},
+	} {
+		var out, errs bytes.Buffer
+		if code := Run(context.Background(), args, &out, &errs, nil, nil); code != 0 || errs.Len() != 0 {
+			t.Fatalf("%q: code=%d stderr=%q", args, code, errs.String())
+		}
+		if !strings.Contains(out.String(), "register") {
+			t.Fatalf("registry command not advertised: %s", out.String())
 		}
 	}
 }

@@ -183,55 +183,25 @@ type mutationOptions struct {
 	Force  bool
 }
 
-func printNetworkUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] network apply [--dry-run] [--force]")
-	fmt.Fprintln(w, "       aginctus [global options] network remove [--dry-run] [--force]")
-	fmt.Fprintln(w, "       aginctus [global options] network status")
-	fmt.Fprintln(w, "       aginctus [global options] network firewall policy")
-	fmt.Fprintln(w, "       aginctus [global options] network firewall reconcile  # privileged mutation")
-	fmt.Fprintln(w, "       aginctus [global options] network firewall egress reconcile|revoke  # privileged runtime grants")
-	fmt.Fprintln(w, "Aliases: network ensure = apply; network teardown = remove")
-	fmt.Fprintln(w, "Status/policy are read-only; apply/remove/reconcile mutate unless --dry-run is explicitly supported above.")
+func parseNetworkOptions(args []string) (mutationOptions, error) {
+	var options mutationOptions
+	for _, arg := range args {
+		switch arg {
+		case "--dry-run":
+			options.DryRun = true
+		case "--force":
+			options.Force = true
+		default:
+			return mutationOptions{}, fmt.Errorf("unknown option %q", arg)
+		}
+	}
+	return options, nil
 }
 
 var ensureCredentialStorage = gateway.EnsureCredentialVolume
 var attachGatewayCredentials = gateway.AttachCredentialVolume
 var auditGatewayCredentials = gateway.AuditCredentialAttachment
 
-
-func printGatewayUsage(w io.Writer) {
-	fmt.Fprintln(w, "Gateway assets: plugin/provider/model/mcp/catalog (Cobra help: aginctus gateway catalog --help).")
-	fmt.Fprintln(w, "Usage: aginctus [global options] gateway validate")
-	fmt.Fprintln(w, "       aginctus [global options] gateway render")
-	fmt.Fprintln(w, "       aginctus [global options] gateway up")
-	fmt.Fprintln(w, "       aginctus [global options] gateway apply")
-	fmt.Fprintln(w, "       aginctus [global options] gateway remove [--force]")
-	fmt.Fprintln(w, "       aginctus [global options] gateway status")
-	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall plan --uplink-zone=ZONE  (read-only)")
-	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall audit --uplink-zone=ZONE  (read-only)")
-	fmt.Fprintln(w, "       aginctus [global options] gateway egress firewall reload-parity  (read-only; NOT approval)")
-	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage ensure")
-	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage attach")
-	fmt.Fprintln(w, "       aginctus [global options] gateway credential-storage audit  (read-only; no authentication)")
-	fmt.Fprintln(w, "       aginctus [global options] gateway provider chatgpt register [--alias=NAME] [--dry-run]")
-	fmt.Fprintln(w, "       aginctus [global options] gateway provider opencode-go register [--alias=NAME] [--dry-run]")
-	fmt.Fprintln(w, "       aginctus [global options] gateway provider list")
-	fmt.Fprintln(w, "       aginctus [global options] gateway provider ALIAS show")
-	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME register [--provider=ALIAS] [--source=chatgpt/MODEL|openai/MODEL] [--dry-run]")
-	fmt.Fprintln(w, "       aginctus [global options] gateway model list")
-	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME show")
-	fmt.Fprintln(w, "       aginctus [global options] gateway model NAME render  (read-only, not activated)")
-	fmt.Fprintln(w, "       aginctus [global options] gateway responses verify [--require-function-call] < stream.sse")
-	fmt.Fprintln(w, "       aginctus [global options] gateway egress preflight  (read-only; candidate is not reserved)")
-	fmt.Fprintln(w, "       aginctus [global options] gateway egress audit  (read-only NIC declarations; not connectivity)")
-	fmt.Fprintln(w, "       aginctus [global options] gateway egress dhcp plan --ranges=START-END  (read-only)")
-	fmt.Fprintln(w, "       aginctus [global options] gateway egress dhcp apply --ranges=START-END --confirm-bridge-only  (mutates bridge only)")
-	fmt.Fprintln(w, "       aginctus [global options] gateway egress reconcile --dry-run  (read-only)")
-	fmt.Fprintln(w, "       aginctus [global options] gateway egress reconcile --confirm-stopped-instance  (mutates NICs; leaves instance stopped)")
-	fmt.Fprintln(w, "Alias: gateway up = apply. No gateway apply --dry-run; use validate/render for offline review.")
-	fmt.Fprintln(w, "Validate/render/list/show/verify/audit and plans are read-only; apply/remove/ensure/attach/register mutate unless previewed with --dry-run.")
-	fmt.Fprintln(w, "Registration writes local metadata only; it does not authenticate or activate inference. Remove retains persistent volumes.")
-}
 
 // transitionHerdrClientCommand executes a validated lifecycle action.
 func transitionHerdrClientCommand(ctx context.Context, action string, stdout, stderr io.Writer, effective *config.Config) int {
@@ -281,21 +251,6 @@ func executeHerdrClientOperation(ctx context.Context, operation string, options 
 		fmt.Fprintf(stdout, "Herdr client %q: absent\n", spec.Name)
 	}
 	return 0
-}
-
-func printHerdrClientUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] herdr  (interactive console)")
-	fmt.Fprintln(w, "       aginctus [global options] herdr authorize <workload-id>")
-	fmt.Fprintln(w, "       aginctus [global options] herdr pin-host <workload-id>")
-	fmt.Fprintln(w, "       aginctus [global options] herdr register <workload-id>")
-	fmt.Fprintln(w, "       aginctus [global options] herdr client apply [--dry-run] [--force]")
-	fmt.Fprintln(w, "       aginctus [global options] herdr client remove [--dry-run] [--force]")
-	fmt.Fprintln(w, "       aginctus [global options] herdr client status")
-	fmt.Fprintln(w, "       aginctus [global options] herdr client status --project NAME  (read-only; verified local project)")
-	fmt.Fprintln(w, "       aginctus [global options] herdr client start")
-	fmt.Fprintln(w, "       aginctus [global options] herdr client stop")
-	fmt.Fprintln(w, "Aliases: herdr client ensure = apply; herdr client teardown = remove")
-	fmt.Fprintln(w, "Status is read-only; bootstrap/lifecycle operations mutate unless --dry-run is explicitly supported above.")
 }
 
 // executeConfiguredWorkloads takes parsed actions and selected IDs, with an
@@ -372,74 +327,4 @@ func workloadIDs(effective *config.Config) []string {
 	}
 	sort.Strings(ids)
 	return ids
-}
-
-func printWorkloadUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aginctus [global options] workload ls")
-	fmt.Fprintln(w, "       aginctus [global options] workload apply [name] [--dry-run] [--force]")
-	fmt.Fprintln(w, "       aginctus [global options] workload apply --project NAME WORKLOAD-ID --render  (read-only, instance-only; never authorizes writes)")
-	fmt.Fprintln(w, "       aginctus [global options] workload apply --project NAME WORKLOAD-ID --dry-run  (read-only native local-project diff; never authorizes writes)")
-	fmt.Fprintln(w, "       aginctus [global options] workload remove [name] [--dry-run] [--force]")
-	fmt.Fprintln(w, "       aginctus [global options] workload start [name]")
-	fmt.Fprintln(w, "       aginctus [global options] workload start --project NAME WORKLOAD-ID --confirm-start  (existing stopped instance only; mutates)")
-	fmt.Fprintln(w, "       aginctus [global options] workload stop [name]")
-	fmt.Fprintln(w, "       aginctus [global options] workload stop --project NAME WORKLOAD-ID --confirm-stop  (existing running instance only; mutates)")
-	fmt.Fprintln(w, "       aginctus [global options] workload status [name]")
-	fmt.Fprintln(w, "       aginctus [global options] workload status --project NAME [name]  (read-only; verified local project)")
-	fmt.Fprintln(w, "       aginctus [global options] workload ls --project NAME  (read-only; verified local project)")
-	fmt.Fprintln(w, "       aginctus [global options] workload gateway provision <workload-id> --model=ALIAS --key-file=PATH  (mutates guest configuration)")
-	fmt.Fprintln(w, "Aliases: workload list = ls; workload <name> ensure|teardown = apply|remove <name>")
-	fmt.Fprintln(w, "List/status are read-only; apply/remove/start/stop/provision mutate unless --dry-run is explicitly supported above.")
-}
-
-func printUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage: aginctus [global options] <command>
-
-Global options:
-  --config=path=value          Override one configuration value; may be repeated
-  --configure=path=value       Alias for --config
-  --configuration-file=path    Load an explicit JSON configuration file
-
-Commands:
-  remove            Remove configured resources in reverse dependency order (mutation)
-  status            Inspect all configured resource groups (read-only)
-  doctor [--fix]    Inspect Incus; --fix may configure a loopback HTTPS listener
-  operator preflight --project NAME   Inspect Incus/project read access (no writes)
-  operator state-audit --owner system|user  Inspect gateway secret-state metadata only (no writes)
-  operator units-audit --owner system|user  Inspect system/current-user lifecycle units (no writes)
-  operator package-audit --owner system|user  Compare declared NixOS/HM CLI package identity (no writes)
-  operator project-plan --project NAME  Inspect owned Incus project policy (no writes)
-  operator project-ensure --project NAME --confirm-create  Create only an owned local Incus project (explicit mutation)
-  images list|ls    List local Incus images and aliases (read-only; legacy ambient project)
-  images list|ls --project NAME  List verified owned local-project images (read-only)
-  herdr client status --project NAME  Inspect verified owned local-project Herdr client (read-only)
-  workload status --project NAME [name]  Inspect verified owned local-project workloads (read-only)
-  workload ls --project NAME  List running owned local-project workloads (read-only)
-  workload apply --project NAME WORKLOAD-ID --render  Render owned-project instance-only preview (read-only; NOT executable authorization)
-  workload apply --project NAME WORKLOAD-ID --dry-run  Inspect native local-project changes (read-only; NOT write authorization)
-  workload start --project NAME WORKLOAD-ID --confirm-start  Start one verified stopped local-project workload (mutation)
-  workload stop --project NAME WORKLOAD-ID --confirm-stop  Stop one verified running local-project workload (mutation)
-  images import --project NAME ALIAS PATH --confirm-create  Create a new alias only in a verified owned local project (mutation)
-  images owner-audit --project NAME --owner system|user ALIAS  Inspect image ownership claim (read-only; NOT write authorization)
-  images import-owned --project NAME --owner system|user ALIAS PATH --confirm-create  Create new image with claimed owner (mutation)
-  images replace-plan --project NAME --owner system|user ALIAS PATH  Inspect candidate image replacement (read-only; never authorization)
-  images update NAME PATH   Import an image from a Nix result directory (mutation)
-  config show       Print the effective merged configuration
-  config get PATH   Print one effective configuration value
-  version|--version Print the CLI version and source revision
-  testenv vm ...    Isolated opt-in NixOS VM scenario operations (see 'help testenv')
-  help [command]    Show help without loading configuration or contacting Incus
-  <command> --help  Show command help (also -h)
-
-Inspection, validation, rendering, plans and --dry-run do not mutate resources.
-Apply, remove, start, stop, registration, provisioning and repair commands mutate
-unless explicitly previewed. Read-only Incus checks still require daemon access.
-Provider/model registration changes local metadata, not authentication or activation.
-Gateway remove preserves persistent volumes.
-`)
-	printApplyUsage(w)
-	printGatewayUsage(w)
-	printHerdrClientUsage(w)
-	printNetworkUsage(w)
-	printWorkloadUsage(w)
 }
