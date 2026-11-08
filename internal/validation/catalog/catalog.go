@@ -52,6 +52,7 @@ var scenarios = []Scenario{
 	{Name: "smoke", Target: "vm-harness-smoke", Description: "Real guest Incus and Herdr image smoke", Tier: Disposable, Surface: Operator, Evidence: true},
 	{Name: "storage-network", Target: "vm-harness-storage-network", Description: "Guest-local Btrfs storage and management bridge", Tier: Disposable, Surface: Operator, Evidence: true},
 	{Name: "runtime-lifecycle", Target: "vm-harness-runtime-lifecycle", Description: "Real Herdr/OpenCode provisioning and reconciliation", Tier: Disposable, Surface: Operator, Evidence: true},
+	{Name: "native-instance", Target: "vm-harness-native-instance", Description: "Native scoped create/config/start-stop and dry-run against disposable Incus", Tier: Disposable, Surface: Operator, Evidence: true},
 	{Name: "gateway-topology", Target: "vm-harness-gateway-topology", Description: "Real guest-local LiteLLM/Postgres and Herdr/OpenCode topology (OCI pulls required; no inference)", Tier: Disposable, Surface: Operator, Networked: true, Evidence: true},
 	// Feasibility-only: runnable through Python, not exported by the Go CLI
 	// or accepted by the existing v1 evidence normalizer.
