@@ -53,7 +53,7 @@ func newBootstrap() *cobra.Command {
 				return errors.New("could not write offline bootstrap plan")
 			}
 			if planErr != nil {
-				return errOperatorAction
+				return ErrOperatorAction
 			}
 			return nil
 		},
