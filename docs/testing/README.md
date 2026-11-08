@@ -25,7 +25,7 @@ This page is the **canonical testing entry point** for Aginctus. Different test 
 
 ## Reference and historical evidence
 
-- [OpenCode staged acceptance](acceptance/README.md) owns the canonical operator decision sequence; the individual `acceptance-opencode-*.md` pages hold specialized commands.
+- [OpenCode staged acceptance](acceptance/README.md) owns the canonical operator decision sequence; [private evidence and attribution](acceptance/evidence.md) owns optional runner-local reports and log correlation; the individual `acceptance-opencode-*.md` pages hold specialized commands.
 - [v0.1 deployment acceptance procedure](../history/v0.1-deployment-acceptance.md) is a **historical, incompletely exercised fresh-host procedure**. The fresh-host repeat/cleanup gate was deferred to v0.2 #580; the runbook is not a pass report.
 - [Test reporting design and implemented output contracts](../design/test-reporting.md) has detailed report/evidence semantics. A report only covers its own provenance and selected gates.
 - The developer-facing [test architecture refactor](https://github.com/blevinn/aginctus/issues/645) may change script placement; validate commands against the checked-out version, not a stale worktree.
