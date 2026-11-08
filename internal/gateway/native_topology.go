@@ -7,25 +7,25 @@ import "fmt"
 // The native reconciler must resolve and verify physical resource identities
 // before any mutation. No secret values are included in this representation.
 type NativeGatewayTopology struct {
-	Deployment string
-	Project string
+	Deployment        string
+	Project           string
 	ManagementNetwork string
-	EgressNetwork string
-	DatabaseVolume string
-	Services []NativeGatewayService
+	EgressNetwork     string
+	DatabaseVolume    string
+	Services          []NativeGatewayService
 }
 
 type NativeGatewayService struct {
-	Name string
-	ImageReference string
-	Networks []NativeGatewayNetwork
-	Volume string
-	DependsOn []string
+	Name              string
+	ImageReference    string
+	Networks          []NativeGatewayNetwork
+	Volume            string
+	DependsOn         []string
 	SecretEnvironment []string
 }
 
 type NativeGatewayNetwork struct {
-	Name string
+	Name        string
 	IPv4Address string
 }
 
@@ -44,24 +44,24 @@ func (s Spec) NativeTopology() (NativeGatewayTopology, error) {
 		})
 	}
 	return NativeGatewayTopology{
-		Deployment: s.ID,
-		Project: s.Project,
+		Deployment:        s.ID,
+		Project:           s.Project,
 		ManagementNetwork: s.Network,
-		EgressNetwork: s.EgressNetwork,
-		DatabaseVolume: "gateway-postgres",
+		EgressNetwork:     s.EgressNetwork,
+		DatabaseVolume:    "gateway-postgres",
 		Services: []NativeGatewayService{
 			{
-				Name: "postgres",
-				ImageReference: s.PostgresImage,
-				Networks: []NativeGatewayNetwork{{Name: s.Network}},
-				Volume: "gateway-postgres",
+				Name:              "postgres",
+				ImageReference:    s.PostgresImage,
+				Networks:          []NativeGatewayNetwork{{Name: s.Network}},
+				Volume:            "gateway-postgres",
 				SecretEnvironment: []string{"AGINCTUS_GATEWAY_POSTGRES_PASSWORD"},
 			},
 			{
-				Name: "litellm",
+				Name:           "litellm",
 				ImageReference: s.LiteLLMImage,
-				Networks: litellmNetworks,
-				DependsOn: []string{"postgres"},
+				Networks:       litellmNetworks,
+				DependsOn:      []string{"postgres"},
 				SecretEnvironment: []string{
 					"AGINCTUS_GATEWAY_POSTGRES_PASSWORD",
 					"AGINCTUS_GATEWAY_MASTER_KEY",
