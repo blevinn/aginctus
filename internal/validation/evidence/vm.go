@@ -99,6 +99,12 @@ func getString(source map[string]json.RawMessage, name string) (string, error) {
 }
 
 func getInt(source map[string]json.RawMessage, name string) (int, error) {
+	// json.Number also decodes quoted decimal strings, but the v1 schema
+	// requires actual JSON integers, not coercible strings.
+	raw, ok := source[name]
+	if !ok || len(raw) == 0 || (raw[0] != '-' && (raw[0] < '0' || raw[0] > '9')) {
+		return 0, fmt.Errorf("invalid integer %s", name)
+	}
 	var number json.Number
 	if json.Unmarshal(source[name], &number) != nil {
 		return 0, fmt.Errorf("invalid numeric %s", name)

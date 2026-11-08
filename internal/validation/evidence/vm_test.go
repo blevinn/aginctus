@@ -45,6 +45,8 @@ func TestNormalizeVMFailsClosedOnInvalidClaims(t *testing.T) {
 		{"schema_version": 2},
 		{"status": "fail"},
 		{"exit_code": true},
+		{"exit_code": "0"},
+		{"schema_version": "1"},
 		{"scenario": "native-oci"},
 		{"scenario": "../foreign"},
 		{"created_utc": "2026-11-08T00:00:00-07:00"},
