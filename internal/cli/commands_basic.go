@@ -57,15 +57,18 @@ func runBasicCobra(
 		return nil
 	}
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
+		// Nested help is derived from the exact Cobra leaf, including only
+		// its declared flags. Family/root compatibility help is replaced
+		// separately after the old help-contract tests are migrated.
+		if cmd != root && cmd.Parent() != root {
+			fmt.Fprint(stdout, cmd.UsageString())
+			return
+		}
 		if cmd == root {
 			printUsage(stdout)
 			return
 		}
-		family := cmd
-		for family.Parent() != nil && family.Parent() != root {
-			family = family.Parent()
-		}
-		if code, handled := runHelp([]string{"help", family.Name()}, stdout, stderr); !handled || code != 0 {
+		if code, handled := runHelp([]string{"help", cmd.Name()}, stdout, stderr); !handled || code != 0 {
 			fmt.Fprint(stdout, cmd.UsageString())
 		}
 	})
