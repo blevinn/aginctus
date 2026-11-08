@@ -2,9 +2,10 @@
 
 Aginctus controls Incus resources for a private Herdr/OpenCode environment and a LiteLLM inference gateway. This guide covers **installation, inspection and explicitly selected deployment**. The v0.1 pilot demonstrated genuine Herdr/OpenCode coding and private provider inference, but complete **fresh-host** deployment/smoke/cleanup/repeat was not performed and is deferred to [v0.2 #580](https://github.com/blevinn/aginctus/issues/580). Read [security limitations](security.md) and [v0.1 release acceptance](https://github.com/blevinn/aginctus/issues/118) before using real credentials or billable models.
 
-For the pinned release-candidate deployment, credential lifecycle, optional real
-coding smoke and independently checked cleanup, see the
-[v0.1 operator handoff](v0.1-deployment-acceptance.md). That procedure's full
+For the **historical v0.1** release-candidate deployment plan, credential
+lifecycle, optional real coding smoke and independently checked cleanup,
+see the [preserved v0.1 operator handoff](v0.1-deployment-acceptance.md).
+For current validation tier selection, use the [testing index](testing/README.md). That procedure's full
 fresh-host execution was **not validated for v0.1** and is not a substitute for
 the pilot functional acceptance recorded in release acceptance #118; treat it
 as operator guidance, not as verified v0.1 behavior.
