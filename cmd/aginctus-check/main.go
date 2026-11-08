@@ -24,12 +24,22 @@ func execute(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return 2
 	}
+	vmSelected := false
+	flags.Visit(func(entry *flag.Flag) {
+		if entry.Name == "vm-run-id" {
+			vmSelected = true
+		}
+	})
 	if *format != "text" && *format != "json" {
 		fmt.Fprintln(stderr, "format must be text or json")
 		return 2
 	}
 	if *format == "json" && *verbose {
 		fmt.Fprintln(stderr, "--verbose cannot be combined with --format json")
+		return 2
+	}
+	if vmSelected && *verbose {
+		fmt.Fprintln(stderr, "--verbose is unavailable for VM evidence")
 		return 2
 	}
 	root, err := os.Getwd()
@@ -41,11 +51,7 @@ func execute(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "aginctus-check requires the repository root")
 		return 1
 	}
-	if *vmRunID != "" {
-		if *verbose {
-			fmt.Fprintln(stderr, "--verbose is unavailable for VM evidence")
-			return 2
-		}
+	if vmSelected {
 		vm, err := evidence.ReadVM(filepath.Join(root, ".vm-harness-results"), *vmRunID)
 		if err != nil {
 			vm = evidence.Unavailable()
