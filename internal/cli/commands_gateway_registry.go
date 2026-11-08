@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"io"
 
 	registrycmd "github.com/blevinn/aginctus/internal/cli/commands/gateway/registry"
