@@ -20,9 +20,11 @@ type InstanceIdentity struct {
 
 // InstanceIntent manages only explicitly supplied fields and device properties.
 // Extra observed config, devices and device properties are never removed.
+// Explicit empty config values clear keys, matching Incus normalization; omitted
+// keys are unmanaged. A nil map cannot satisfy required ownership markers.
 // ImageAlias is project-local; fingerprint resolution belongs to observation.
 // Native creation uses this intent only for create-if-absent. Existing-instance
-// updates, adoption, replacement and deletion remain unauthorized.
+// reconciliation permits only explicit config keys and description.
 type InstanceIntent struct {
 	Identity      InstanceIdentity
 	WorkloadID    string
@@ -55,6 +57,9 @@ func (intent InstanceIntent) Validate() error {
 	}
 	if _, reserved := intent.Config["volatile.base_image"]; reserved {
 		return fmt.Errorf("instance base image is selected by the verified image alias")
+	}
+	if deployment, supplied := intent.Config["user.aginctus.deployment"]; supplied && deployment != intent.Identity.Project {
+		return fmt.Errorf("instance deployment marker must match the selected project")
 	}
 	for name, device := range intent.Devices {
 		if !localName(name) || device["type"] == "" {
@@ -144,7 +149,7 @@ func PlanExistingInstance(intent InstanceIntent, observed InstanceObservation) (
 		change("description", false)
 	}
 	for _, key := range slices.Sorted(maps.Keys(intent.Config)) {
-		if got, exists := observed.Config[key]; !exists || got != intent.Config[key] {
+		if observed.Config[key] != intent.Config[key] {
 			change("config."+key, false)
 		}
 	}
