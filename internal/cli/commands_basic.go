@@ -136,7 +136,7 @@ func runBasicCobra(
 	addImageCommands(root, stdout, stderr, load, &status)
 
 	if err := root.ExecuteContext(ctx); err != nil {
-		fmt.Fprintf(stderr, "%v\nUsage: aginctus [global options] <command> [flags]\n", err)
+		fmt.Fprintf(stderr, "%v\nUsage: %s\n", err, root.UseLine())
 		return 2
 	}
 	return status
