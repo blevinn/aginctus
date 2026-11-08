@@ -1,6 +1,6 @@
-# Configuration
+# Configuration reference: sources and host integration
 
-Aginctus configuration is assembled from multiple sources with deterministic precedence.
+Aginctus configuration is assembled from multiple sources with deterministic precedence. This page owns values, precedence, NixOS/Home Manager integration and their authority boundaries; [CLI operations](cli.md) owns command side effects, while installed `aginctus help` owns syntax.
 
 From highest priority to lowest:
 
@@ -197,6 +197,17 @@ In particular, `config get incus.project` does **not** prove that a
 running instance, alias, volume or gateway belongs to that project.
 Do not use the setting to initiate live migration or grant additional
 operator privileges.
+
+For one existing workload in an approved disposable environment,
+`aginctus workload apply --project aginctus dev --confirm-apply` explicitly invokes
+native config/description reconciliation and ensures running. It requires the
+configured project, verified ownership/image identity, the project writer lease,
+and absent known lifecycle controllers. The command cannot create missing
+instances or change devices/profiles/storage/workspaces. `--dry-run` remains
+read-only and cannot be combined with confirmation. See
+[confirmed scoped apply](cli.md#reconcile-one-existing-scoped-workload-explicit-mutation)
+for partial-failure and authority limits. This does not enable NixOS/Home Manager
+controllers or migrate the pilot.
 
 For example, on an authorized local operator account:
 
