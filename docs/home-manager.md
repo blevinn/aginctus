@@ -52,7 +52,14 @@ no Incus authorization. This exercises the real CLI build/switch and activation
 paths without claiming a from-scratch module evaluation or closure build in the
 guest. The guest's NixOS activation does not run Home Manager. The VM remains
 offline, and all inputs and outputs are already in its store. The test then
-exercises repeat activation and a separate configuration-generation upgrade,
+exercises repeat activation and a configuration-generation upgrade through the
+CLI. An unmanaged configuration file blocks a switch without overwriting the
+file or changing the active-generation GC root; the CLI generation profile
+advances before activation, so a failed switch is not an atomic rollback.
+Removing that conflict permits retry.
+The test reactivates the recorded previous generation to roll back the user
+configuration, checks the selected profile and CLI, then switches forward again.
+This is package/configuration rollback, not Incus or credential rollback. It
 checks the installed CLI/config and
 OS-observed package identity, rejects mismatched system/user package declarations
 and denied Incus access, and verifies unchanged Incus inventories on a disposable
