@@ -4,33 +4,19 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/blevinn/aginctus/internal/config"
-	incusscope "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/orchestration/native"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
-// These are opt-in, existing-instance-only operations. Never forward
-// project-scoped transitions through the v0.1 default-project runner.
-var startScopedWorkloadIncus = func(ctx context.Context, scope incusscope.ProjectScope, instance string) error {
-	return exec.CommandContext(ctx, "incus", scopedWorkloadStartArgs(scope, instance)...).Run()
-}
-
-func scopedWorkloadStartArgs(scope incusscope.ProjectScope, instance string) []string {
-	return []string{"--force-local", "--project", scope.Name, "start", instance}
-}
-
-// Stop is separate from the legacy v0.1 default-project transition and uses
-// the same explicit local-project argument ordering as start.
-var stopScopedWorkloadIncus = func(ctx context.Context, scope incusscope.ProjectScope, instance string) error {
-	return exec.CommandContext(ctx, "incus", scopedWorkloadStopArgs(scope, instance)...).Run()
-}
-
-func scopedWorkloadStopArgs(scope incusscope.ProjectScope, instance string) []string {
-	return []string{"--force-local", "--project", scope.Name, "stop", instance}
+// The scoped transition reconciles through the Incus SDK. It never spawns
+// the incus CLI, and it never leaves the explicitly selected project.
+var transitionScopedWorkloadState = func(ctx context.Context, intent native.InstanceLifecycleIntent) error {
+	_, err := native.EnsureLocalInstanceState(ctx, intent)
+	return err
 }
 
 // A manual transition must not race known installed system/current-user
@@ -48,11 +34,11 @@ func requireNoKnownLifecycleUnits(ctx context.Context) error {
 }
 
 func runScopedWorkloadStart(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
-	return runScopedWorkloadTransition(ctx, args, out, stderr, cfg, "start", startScopedWorkloadIncus)
+	return runScopedWorkloadTransition(ctx, args, out, stderr, cfg, "start", native.InstanceRunning)
 }
 
 func runScopedWorkloadStop(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
-	return runScopedWorkloadTransition(ctx, args, out, stderr, cfg, "stop", stopScopedWorkloadIncus)
+	return runScopedWorkloadTransition(ctx, args, out, stderr, cfg, "stop", native.InstanceStopped)
 }
 
 // Both operations require an explicit project and a confirmed single ID.
@@ -60,7 +46,7 @@ func runScopedWorkloadStop(ctx context.Context, args []string, out, stderr io.Wr
 // lease, but independent Incus clients are still not fenced by that lease.
 func runScopedWorkloadTransition(
 	ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config,
-	action string, mutate func(context.Context, incusscope.ProjectScope, string) error,
+	action string, target native.InstanceState,
 ) int {
 	project, rest, err := parseScopedInstanceStatusArgs(args)
 	if err != nil || len(rest) != 2 || rest[0] == "" || rest[1] != "--confirm-"+action {
@@ -134,7 +120,14 @@ func runScopedWorkloadTransition(
 		fmt.Fprintln(stderr, prefix+"instance changed before mutation; no transition attempted")
 		return 1
 	}
-	if err := mutate(ctx, scope, spec.Name); err != nil {
+	if err := transitionScopedWorkloadState(ctx, native.InstanceLifecycleIntent{
+		Scope:      scope,
+		Name:       spec.Name,
+		Resource:   "workload",
+		Role:       "agent-workload",
+		WorkloadID: spec.ID,
+		State:      target,
+	}); err != nil {
 		fmt.Fprintln(stderr, prefix+"scoped Incus transition failed; inspect local project before retrying")
 		return 1
 	}
