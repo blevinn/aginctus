@@ -23,8 +23,8 @@ const (
 )
 
 var (
-	caseID = regexp.MustCompile("^[A-Za-z0-9_./:-]{1,192}$")
-	pythonFailure = regexp.MustCompile("^(FAIL|ERROR): [A-Za-z_][A-Za-z0-9_]* \\(([A-Za-z_][A-Za-z0-9_.]{1,190})\\)$")
+	caseID        = regexp.MustCompile("^[A-Za-z0-9_./:-]{1,192}$")
+	pythonFailure = regexp.MustCompile(`^(FAIL|ERROR): [A-Za-z_][A-Za-z0-9_]* \(([A-Za-z_][A-Za-z0-9_.]{1,190})\)$`)
 )
 
 // FailureCase contains a bounded, allowlisted identifier, never test output.
@@ -68,15 +68,15 @@ func SanitizeEnv(in []string) []string {
 		}
 	}
 	for key, value := range map[string]string{
-		"AGINCTUS_INCUS_INTEGRATION":    "0",
-		"AGINCTUS_INCUS_DISPOSABLE":     "NO",
-		"AGINCTUS_ACCEPTANCE_LIVE":     "",
+		"AGINCTUS_INCUS_INTEGRATION":     "0",
+		"AGINCTUS_INCUS_DISPOSABLE":      "NO",
+		"AGINCTUS_ACCEPTANCE_LIVE":       "",
 		"AGINCTUS_ACCEPTANCE_LIVE_HOOKS": "",
-		"ACCEPTANCE_TEST_FAIL":         "",
-		"GOFLAGS":                      "",
-		"GOPROXY":                      "off",
-		"GOSUMDB":                      "off",
-		"GOTOOLCHAIN":                  "local",
+		"ACCEPTANCE_TEST_FAIL":           "",
+		"GOFLAGS":                        "",
+		"GOPROXY":                        "off",
+		"GOSUMDB":                        "off",
+		"GOTOOLCHAIN":                    "local",
 	} {
 		values[key] = value
 	}
@@ -101,12 +101,12 @@ func withStructuredFlag(env []string, on bool) []string {
 }
 
 type failureCollector struct {
-	suite      string
-	line       []byte
-	discard    bool
-	cases      []FailureCase
-	truncated  bool
-	seen       map[string]bool
+	suite     string
+	line      []byte
+	discard   bool
+	cases     []FailureCase
+	truncated bool
+	seen      map[string]bool
 }
 
 func newFailureCollector(suite string) *failureCollector {
@@ -163,9 +163,9 @@ func (c *failureCollector) parse(line string) {
 			return
 		}
 		var event struct {
-			Action string
+			Action  string
 			Package string
-			Test string
+			Test    string
 		}
 		if json.Unmarshal([]byte(line), &event) != nil || event.Action != "fail" {
 			return
