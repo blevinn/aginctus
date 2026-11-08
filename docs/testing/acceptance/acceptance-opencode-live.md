@@ -1,14 +1,14 @@
 # Opt-in live acceptance phase adapter (#124)
 
-This is **stage 4** of the [OpenCode acceptance decision path](acceptance-opencode.md#4-operator-authorized-live-nine-phase-acceptance). Read-only preflight or a successful workspace-only Herdr smoke does not authorize this step. Obtain separate approval under the current [#122 inference gate](https://github.com/blevinn/aginctus/issues/122) before enabling live requests or paying for an upstream provider.
+This is **stage 4** of the [OpenCode acceptance decision path](README.md#4-operator-authorized-live-nine-phase-acceptance). Read-only preflight or a successful workspace-only Herdr smoke does not authorize this step. Obtain separate approval under the current [#122 inference gate](https://github.com/blevinn/aginctus/issues/122) before enabling live requests or paying for an upstream provider.
 
 `scripts/acceptance/opencode-live-adapter.sh` is a **fail-closed dispatcher**
-for the [disposable acceptance harness](acceptance-opencode.md). It requires
+for the [disposable acceptance harness](README.md). It requires
 operator-supplied hooks and is not proof of a completed end-to-end run.
 
 ## Why explicit hooks
 
-The [OpenCode guest launcher](workloads/opencode.md) reads private gateway
+The [OpenCode guest launcher](../../operations/workloads/opencode.md) reads private gateway
 configuration and a workload key. The separate
 [Herdr lifecycle implementation](acceptance-opencode-herdr.md) supports
 `open`, `start`, `prompt`, `wait`, `stop` and `close`, but does not provide

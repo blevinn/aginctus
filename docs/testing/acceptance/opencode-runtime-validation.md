@@ -69,7 +69,7 @@ socket, host home or pilot DB were mounted.
 
 ## Reproduce the decisive four cases
 
-First follow the [offline export instructions](selective-go-forwarding.md#reproduce-without-contacting-providers)
+First follow the [offline export instructions](../../operations/gateway/selective-go-forwarding.md#reproduce-without-contacting-providers)
 to set `WORK`, `RUNTIME`, `IMAGE`, `PODMAN`, `POSTGRES_BIN` and export
 `WORK/deployment`. The observed PostgreSQL was cached Nix-store **18.6**, not
 the production OCI. LiteLLM used the exact digest in that guide. Existing

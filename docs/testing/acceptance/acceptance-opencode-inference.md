@@ -1,12 +1,12 @@
 # Read-only OpenCode gateway runtime readiness (#124)
 
-This is the **second read-only check in stage 2** of the [OpenCode acceptance decision path](acceptance-opencode.md#2-read-only-pilot-inspection), after the host/Incus topology preflight. Running it does not start an agent, validate a scoped LiteLLM key remotely or grant permission for billable inference.
+This is the **second read-only check in stage 2** of the [OpenCode acceptance decision path](README.md#2-read-only-pilot-inspection), after the host/Incus topology preflight. Running it does not start an agent, validate a scoped LiteLLM key remotely or grant permission for billable inference.
 
 This is a **necessary, not sufficient** gate for the separately opted-in
-[OpenCode live acceptance harness](acceptance-opencode.md). It complements the
+[OpenCode live acceptance harness](README.md). It complements the
 [Incus topology preflight](acceptance-opencode-preflight.md), the
 [Herdr lifecycle checks](acceptance-opencode-herdr.md), and the
-[managed gateway provisioning contract](workloads/opencode.md). It does
+[managed gateway provisioning contract](../../operations/workloads/opencode.md). It does
 not execute any model request, change a guest, or inspect secret contents.
 
 The v0.1 managed CLI's `aginctus workload gateway provision dev` command

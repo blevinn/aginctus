@@ -1,6 +1,6 @@
 # Read-only OpenCode pilot infrastructure preflight (#124)
 
-This is the **first read-only check in stage 2** of the [OpenCode acceptance decision path](acceptance-opencode.md#2-read-only-pilot-inspection). Follow it with the separately documented [guest gateway readiness preflight](acceptance-opencode-inference.md) before considering any opted-in Herdr or live-provider test. Neither preflight provides authorization to alter Incus or the host.
+This is the **first read-only check in stage 2** of the [OpenCode acceptance decision path](README.md#2-read-only-pilot-inspection). Follow it with the separately documented [guest gateway readiness preflight](acceptance-opencode-inference.md) before considering any opted-in Herdr or live-provider test. Neither preflight provides authorization to alter Incus or the host.
 
 This increment implements **actual read-only Incus interrogation**, not the complete live acceptance adapter. It does not execute a model request, discover the Herdr automation API, modify firewall rules or claim that gateway egress was proven.
 

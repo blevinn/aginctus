@@ -1,6 +1,6 @@
 # Owned Herdr lifecycle phases for #124
 
-This is **stage 3** of the [OpenCode acceptance decision path](acceptance-opencode.md#3-opt-in-real-herdr-lifecycle-not-yet-the-full-agent-task). A workspace-only pass demonstrates owned Herdr operations, not model inference or agent-executed tests. The #124 issue's closure does not replace the independent #122/#257 live provider and egress gates.
+This is **stage 3** of the [OpenCode acceptance decision path](README.md#3-opt-in-real-herdr-lifecycle-not-yet-the-full-agent-task). A workspace-only pass demonstrates owned Herdr operations, not model inference or agent-executed tests. The #124 issue's closure does not replace the independent #122/#257 live provider and egress gates.
 
 The Python implementation `scripts/acceptance/herdr-lifecycle.py` now calls documented Herdr commands for `open`, `start`, `prompt`, `wait`, `stop` and `close`. It uses the Herdr `--machine` selector, which points to a **previously saved and authenticated Herdr machine on the same machine where the CLI runs**, not an arbitrary SSH host. The pilot's intended Herdr client runs inside the `aginctus-herdr` Incus container; the host's `herdr machine list --json` is not its machine registry. The API is documented at [Herdr agent automation](https://herdr.dev/docs/agent-automation/) and [Herdr CLI reference](https://herdr.dev/docs/cli-reference/); pilot validation must confirm the pinned Herdr version supports them.
 

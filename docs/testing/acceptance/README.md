@@ -1,6 +1,6 @@
 # OpenCode acceptance: staged operator decision path
 
-For tier selection and evidence limitations across hermetic, VM, worker and live checks, start with the [testing overview](testing/README.md). This page is the **canonical staged operator decision path** for validating Aginctus → Herdr → OpenCode → private LiteLLM. Choose the least privileged check that answers your question; progress to the next stage only after reviewing its separate prerequisites and authorization. The original #124 tracking issue is closed, but that administrative state, a green mock, a gateway health response, and a read-only preflight **do not establish successful authenticated provider inference**. The [#122 provider-inference gate](https://github.com/blevinn/aginctus/issues/122), [#257 egress gate](https://github.com/blevinn/aginctus/issues/257), and [#118 release sign-off](https://github.com/blevinn/aginctus/issues/118) remain authoritative.
+For tier selection and evidence limitations across hermetic, VM, worker and live checks, start with the [testing overview](../README.md). This page is the **canonical staged operator decision path** for validating Aginctus → Herdr → OpenCode → private LiteLLM. Choose the least privileged check that answers your question; progress to the next stage only after reviewing its separate prerequisites and authorization. The original #124 tracking issue is closed, but that administrative state, a green mock, a gateway health response, and a read-only preflight **do not establish successful authenticated provider inference**. The [#122 provider-inference gate](https://github.com/blevinn/aginctus/issues/122), [#257 egress gate](https://github.com/blevinn/aginctus/issues/257), and [#118 release sign-off](https://github.com/blevinn/aginctus/issues/118) remain authoritative.
 
 ## Choose the evidence you need
 
@@ -22,7 +22,7 @@ bash scripts/acceptance/opencode-test.sh
 bash scripts/acceptance/opencode-live-adapter-test.sh
 ```
 
-The [harness](../scripts/acceptance/opencode.sh) creates a uniquely named temporary Go module with a deliberately wrong `Add` implementation and a failing test. Its mock adapter *simulates* an edit and gateway evidence. The harness checks the resulting source and independently runs `go test ./...`; it also verifies injected failures, unauthorized live rejection and owned cleanup. Expect `PASS: deterministic acceptance orchestration and cleanup` for the first test; an intentionally printed failure inside a negative test is not itself a failed test suite. Nonzero exit means the invoked check failed.
+The [harness](../../../scripts/acceptance/opencode.sh) creates a uniquely named temporary Go module with a deliberately wrong `Add` implementation and a failing test. Its mock adapter *simulates* an edit and gateway evidence. The harness checks the resulting source and independently runs `go test ./...`; it also verifies injected failures, unauthorized live rejection and owned cleanup. Expect `PASS: deterministic acceptance orchestration and cleanup` for the first test; an intentionally printed failure inside a negative test is not itself a failed test suite. Nonzero exit means the invoked check failed.
 
 These tests need neither deployed Aginctus/Herdr/Incus nor an upstream model. They are safe for hermetic CI; they prove **no live inference**. The broader offline repository suite is `nix develop -c just check ci`, which keeps live and disposable acceptance opt-ins disabled.
 
@@ -32,7 +32,7 @@ Use a separately provisioned pilot **only with read-only permissions** and the r
 
 1. Run the [host/Incus topology preflight](acceptance-opencode-preflight.md) after confirming that `aginctus` and `incus` are available. It checks the configured default-project bridge and managed running containers, **not** the complete NIC attachments, firewall effectiveness or authenticated Herdr connection.
 2. Run the [OpenCode inference-runtime readiness preflight](acceptance-opencode-inference.md) with a reviewed workload name, if overridden. It reads nonsecret `gateway.json`, agent-owned key **metadata** and key readability; it never reads key bytes or sends a model request.
-3. Compare the declared network and model topology with the [gateway/workload integration contract](workloads/opencode.md). Verify gateway ownership, direct-provider egress denial, scoped LiteLLM authorization and upstream access **independently** before any higher-impact action.
+3. Compare the declared network and model topology with the [gateway/workload integration contract](../../operations/workloads/opencode.md). Verify gateway ownership, direct-provider egress denial, scoped LiteLLM authorization and upstream access **independently** before any higher-impact action.
 
 A private `http://<IPv4>:4000/v1` syntax check, or `/health/liveliness` returning HTTP 200, does not prove that the LiteLLM address is owned by the managed gateway, that an OpenCode request is authorized, or that Responses/provider inference succeeded. A failed preflight is a hold, not permission to fix the host firewall, inspect secrets or reissue credentials.
 

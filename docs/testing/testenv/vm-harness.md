@@ -1,6 +1,6 @@
 # Disposable NixOS VM harness (v0.2, experimental)
 
-For test tier selection and proof limits, start with the [testing overview](testing/README.md). Parent design [#425](https://github.com/blevinn/aginctus/issues/425). This is
+For test tier selection and proof limits, start with the [testing overview](../README.md). Parent design [#425](https://github.com/blevinn/aginctus/issues/425). This is
 **not** v0.1 pilot acceptance and does not verify real provider/OAuth traffic.
 
 ## Shared host declaration
