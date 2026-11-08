@@ -46,6 +46,10 @@ minimal NixOS container image and exercises the native scoped-instance SDK APIs:
 create, config/description update, repeated ensure, start/stop, dry-run without
 writes, stale ETag refusal, attachment preservation, and unsafe drift rejection.
 Its storage volume and read-only workspace fixture exist only inside the VM.
+The packaged CLI also performs confirmed existing-only apply and stop as a guest
+operator with real system/current-user unit discovery and a cooperative writer
+lease. It verifies read-only previews, repeated apply/stop, controller denial and
+missing-instance refusal. No actor evidence is injected into this CLI scenario.
 It does not activate a controller or verify production migration/actor authority.
 
 ```sh
