@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/orchestration/nativeoci"
@@ -12,7 +13,7 @@ import (
 // They are not inferred from ambient Docker or Incus credentials.
 type NativeGatewayImageSources struct {
 	Postgres nativeoci.Source
-	LiteLLM nativeoci.Source
+	LiteLLM  nativeoci.Source
 }
 
 // NativeResolvedGateway retains the registry manifest/config identities in
@@ -21,10 +22,15 @@ type NativeGatewayImageSources struct {
 type NativeResolvedGateway struct {
 	Topology NativeGatewayTopology
 	Postgres nativeoci.ResolvedImage
-	LiteLLM nativeoci.ResolvedImage
+	LiteLLM  nativeoci.ResolvedImage
 }
 
 type nativeGatewayImageResolver func(context.Context, nativeoci.Source) (nativeoci.ResolvedImage, error)
+
+var (
+	nativeGatewayImageDigest = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+	nativeGatewayFingerprint = regexp.MustCompile(`^[a-f0-9]{64}$`)
+)
 
 // ResolveNativeGatewayImages is metadata-only. It deliberately does not
 // import images, reuse daemon fingerprints, create aliases, or grant write
@@ -35,12 +41,19 @@ func ResolveNativeGatewayImages(ctx context.Context, topology NativeGatewayTopol
 }
 
 func resolveNativeGatewayImages(ctx context.Context, topology NativeGatewayTopology, sources NativeGatewayImageSources, resolve nativeGatewayImageResolver) (NativeResolvedGateway, error) {
-	if err := ctx.Err(); err != nil { return NativeResolvedGateway{}, err }
+	if err := ctx.Err(); err != nil {
+		return NativeResolvedGateway{}, err
+	}
 	if len(topology.Services) != 2 || topology.Services[0].Name != "postgres" || topology.Services[1].Name != "litellm" {
 		return NativeResolvedGateway{}, fmt.Errorf("native gateway image resolution requires exact service roles")
 	}
-	if resolve == nil { return NativeResolvedGateway{}, fmt.Errorf("native gateway image resolver is required") }
-	// Copy the slice before filling resolved references; the candidate graph is immutable.\n\tcopyTopology := topology\n\tcopyTopology.Services = append([]NativeGatewayService(nil), topology.Services...)\n\tout := NativeResolvedGateway{Topology: copyTopology}
+	if resolve == nil {
+		return NativeResolvedGateway{}, fmt.Errorf("native gateway image resolver is required")
+	}
+	// Copy the slice before filling resolved references; the candidate graph is immutable.
+	copyTopology := topology
+	copyTopology.Services = append([]NativeGatewayService(nil), topology.Services...)
+	out := NativeResolvedGateway{Topology: copyTopology}
 	for i, entry := range []struct {
 		source nativeoci.Source
 		result *nativeoci.ResolvedImage
@@ -49,20 +62,24 @@ func resolveNativeGatewayImages(ctx context.Context, topology NativeGatewayTopol
 			return NativeResolvedGateway{}, fmt.Errorf("native gateway OCI source %d rejected", i)
 		}
 		marker := ":"
-		if strings.HasPrefix(entry.source.Reference, "sha256:") { marker = "@" }
+		if strings.HasPrefix(entry.source.Reference, "sha256:") {
+			marker = "@"
+		}
 		want := entry.source.Registry + "/" + entry.source.Repository + marker + entry.source.Reference
 		if topology.Services[i].ImageReference != want {
 			return NativeResolvedGateway{}, fmt.Errorf("native gateway OCI source %d does not match configured image", i)
 		}
 		resolved, err := resolve(ctx, entry.source)
 		if err != nil {
-			if ctx.Err() != nil { return NativeResolvedGateway{}, ctx.Err() }
+			if ctx.Err() != nil {
+				return NativeResolvedGateway{}, ctx.Err()
+			}
 			return NativeResolvedGateway{}, fmt.Errorf("native gateway OCI identity resolution failed for service %d", i)
 		}
 		if resolved.Registry != entry.source.Registry || resolved.Repository != entry.source.Repository ||
-			!strings.HasPrefix(resolved.ManifestDigest, "sha256:") || len(resolved.ManifestDigest) != 71 ||
-			!strings.HasPrefix(resolved.ConfigDigest, "sha256:") || len(resolved.ConfigDigest) != 71 ||
-			len(resolved.IncusFingerprint) != 64 {
+			!nativeGatewayImageDigest.MatchString(resolved.ManifestDigest) ||
+			!nativeGatewayImageDigest.MatchString(resolved.ConfigDigest) ||
+			!nativeGatewayFingerprint.MatchString(resolved.IncusFingerprint) {
 			return NativeResolvedGateway{}, fmt.Errorf("native gateway OCI resolver returned incomplete identity for service %d", i)
 		}
 		*entry.result = resolved
