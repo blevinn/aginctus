@@ -53,6 +53,14 @@ execution capability is carried by observations or plans. Generic versioned
 resource schema work in #155 remains outstanding, as do independent resource
 intents and multi-resource execution.
 
+`native.EnsureLocalInstance` composes create-if-absent, scalar update and optional
+start for one explicit instance intent. Its dry-run uses the same typed planner
+without submitting operations. False `EnsureRunning` preserves lifecycle state;
+stop remains explicit. Each stage revalidates independently and stops on failure,
+retaining completed-stage results without rollback. Callers must establish actor
+authority and writer exclusion separately; the API does not activate controllers
+or authorize a production migration.
+
 Native project provisioning implements the existing explicit operator
 create-only contract through the SDK. It requires confirmed nondefault scope
 and verified local transport, rechecks absence before an atomic create with
