@@ -92,11 +92,11 @@ docs-examples:
 # echo so JSON mode emits exactly one machine-readable object.
 [no-cd]
 report:
-    @python3 scripts/checks/report.py --format text
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format text
 
 [no-cd]
 report-json:
-    @python3 scripts/checks/report.py --format json
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format json
 
 # Read-only, explicit VM evidence inspection. Never runs or discovers VMs.
 # quote() prevents the operator-provided run ID becoming shell syntax.
