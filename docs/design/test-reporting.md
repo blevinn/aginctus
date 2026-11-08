@@ -54,11 +54,12 @@ A failed test's exact native diagnostics require explicit rerun. Machine output
 is suitable for pasting as a compact status snapshot, not as a substitute for
 collecting approved diagnostic evidence. The adapter does not store raw logs.
 
-The developer/CI interface is now implemented in Go (`cmd/aginctus-check`) and
-uses the typed catalog. `scripts/checks/report.py` remains a non-default
-compatibility implementation during migration. The existing Python schema
-validator and CI Markdown presentation remain in place for independent
-validation of the emitted JSON v1 contract.
+The developer/CI reporter is implemented in Go (`cmd/aginctus-check`) and
+uses the typed catalog. The legacy Python hermetic runner has been retired
+along with its duplicated runner-only tests; Go tests cover fixed dispatch,
+redaction, sanitization, bounded case extraction and argument rejection.
+The independent Python CI schema validator/Markdown renderer remains in place
+to validate the emitted JSON v1 contract.
 
 ## Standard validation and CI adoption
 
