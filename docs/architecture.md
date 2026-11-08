@@ -1,6 +1,6 @@
 # Architecture: current single-host deployment
 
-Aginctus is a Go CLI and NixOS/Incus integration for managing a private agent lab. This page describes **what the v0.1 implementation can deploy**, not the later API, multi-host or multi-runtime vision. Its components can be provisioned without the whole pilot passing live model-backed acceptance.
+Aginctus is a Go CLI and NixOS/Incus integration for managing a private agent lab. This page describes the **implemented single-host v0.1 topology and the incremental v0.2 code paths**; it does not imply that an unmerged cutover or a future API is supported. The installed CLI, selected configuration, and tests determine which paths can actually execute. Its components can be provisioned without the whole pilot passing live model-backed acceptance.
 
 ## Runtime topology
 
@@ -29,6 +29,18 @@ Operator on trusted Incus host
 ```
 
 The drawing shows **intended connectivity**, not proof that the deployed pilot currently reaches an upstream model. The management bridge is shared at v0.1: network membership alone is not per-workload segmentation. PostgreSQL and normal workloads have no intended direct public egress; LiteLLM's dedicated egress path has separate routing and filtering prerequisites.
+
+## Implemented and transitional boundaries (as of this refactor)
+
+| Area | Available implementation | Not established by its existence |
+| --- | --- | --- |
+| Network | Legacy Apply-backed management bridge plus selectable native SDK network reconciliation (`incus.management.network.backend`) | Native end-to-end gateway/Herdr/workload cutover or real-host validation of every mode |
+| Instances | Existing Apply/Compose deployment paths; native observer, project and instance reconciliation primitives under `internal/orchestration/native/` | General native activation for all CLI lifecycle operations or lossless migration of existing volumes |
+| Gateway | LiteLLM deployment/registration/key workflows with guarded operator opt-ins | A green read-only check is not provider inference, routing isolation or key revocation evidence |
+| Operator | NixOS host integration and separately evolving Home Manager operator surfaces | Home Manager never grants independent host firewall or Incus administration authority |
+| Testenv | Opt-in hermetic and VM/worker tools | Test fixtures, a VM harness or an acceptance runbook do not prove fresh-host repeatability |
+
+The **native cutover remains an active migration**, not a shipped global switch. The selected management-network backend is narrower than the overall desired native orchestrator. The code contract is described in [orchestration](orchestration.md); the migration rationale and outstanding parity gates belong to [ADR 0002](adr/0002-native-incus-reconciliation.md) and the [native reconciliation design](design/native-incus-reconciliation.md).
 
 ## Host control and orchestration
 
@@ -65,7 +77,7 @@ Gateway provider/model registration is **local metadata**, not a completed OAuth
 
 ## What is not yet the shipping architecture
 
-A public control-plane API, dashboard, Bubble Tea TUI, multiple independent Incus projects, remote Kubernetes workloads, arbitrary aggregation shells, broadly portable guest bootstrap, general-purpose managed SSH rotation, agent-controlled host tools/MCP grants and native Incus reconciliation are **design/roadmap work**. See [project overview](project-overview.md) for direction and [ADR 0001](adr/0001-herdr-client-topology.md) / [ADR 0002](adr/0002-native-incus-reconciliation.md) for durable decisions. Do not copy future proposals as current configuration contracts.
+A public control-plane API, dashboard, Bubble Tea TUI, multiple independent Incus projects, remote Kubernetes workloads, arbitrary aggregation shells, broadly portable guest bootstrap, general-purpose managed SSH rotation, agent-controlled host tools/MCP grants and **complete** native Incus reconciliation/cutover are **design/roadmap or in-progress work**, not an all-subsystem shipping claim. See [project overview](project-overview.md) for direction and [ADR 0001](adr/0001-herdr-client-topology.md) / [ADR 0002](adr/0002-native-incus-reconciliation.md) for durable decisions. Do not copy future proposals as current configuration contracts.
 
 ## Verification boundary
 
