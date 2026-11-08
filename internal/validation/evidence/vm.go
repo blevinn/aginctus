@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 	"strconv"
 	"syscall"
 	"time"
@@ -238,7 +239,7 @@ func NormalizeVM(payload []byte, runID string) (Report, error) {
 		"status": status,
 		"summary": counts,
 		"results": []any{map[string]any{"id": "vm/" + scenario, "status": status, "exit_code": exitCode, "rerun": "just test-vm-" + scenario}},
-		"source": map[string]any{"kind": "vm_harness", "run_id": runID, "created_utc": instant.Format(time.RFC3339Nano), "git_revision": revision, "git_dirty": dirty, "flake_lock_sha256": lock},
+		"source": map[string]any{"kind": "vm_harness", "run_id": runID, "created_utc": instant.Format("2006-01-02T15:04:05.999999999") + "+00:00", "git_revision": revision, "git_dirty": dirty, "flake_lock_sha256": lock},
 		"failure_stage": stage,
 		"verification_tier": vmTier,
 		"upstream_inference": unverified,
@@ -267,4 +268,62 @@ func Unavailable() Report {
 		"verification_tier": unverified,
 		"upstream_inference": unverified, "cleanup": unverified,
 	}
+}
+
+// WriteJSON emits only the normalized synthetic metadata on one line.
+func WriteJSON(output io.Writer, record Report) error {
+	return json.NewEncoder(output).Encode(record)
+}
+
+// WriteVMText renders the existing concise operator presentation. A selected
+// receipt is never upgraded into independently verified live acceptance.
+func WriteVMText(output io.Writer, record Report) error {
+	if record["status"] == "error" {
+		_, err := fmt.Fprintln(output, "ERROR VM evidence unavailable or invalid (no verification claimed)")
+		return err
+	}
+	results, ok := record["results"].([]any)
+	if !ok || len(results) != 1 {
+		return errors.New("invalid normalized VM report")
+	}
+	item, ok := results[0].(map[string]any)
+	if !ok {
+		return errors.New("invalid normalized VM suite result")
+	}
+	if _, err := fmt.Fprintf(output, "%-5s %s  exit=%v\n",
+		strings.ToUpper(item["status"].(string)), item["id"], item["exit_code"]); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(output, "Tier: "+vmTier); err != nil {
+		return err
+	}
+	if stage, ok := record["failure_stage"].(string); ok {
+		if _, err := fmt.Fprintln(output, "Failure stage: "+stage); err != nil {
+			return err
+		}
+	}
+	if full, ok := record["full_stack"].(map[string]any); ok {
+		if _, err := fmt.Fprintln(output, "Observations: guest readback, not cryptographic attestation"); err != nil {
+			return err
+		}
+		for _, section := range []struct{ name string; ids []string }{
+			{"phases", []string{"preflight", "open", "start", "prompt", "wait", "credential-check", "gateway-evidence", "stop", "close"}},
+			{"gates", []string{"synthetic_setup", "tool_transcript", "fixture_diff", "independent_test", "credential_scope", "gateway_correlation", "workload_network", "failure_cleanup_control", "owned_fixture_removed", "foreign_workspaces_preserved", "scoped_key_revoked", "workload_key_absent", "model_removed", "listener_stopped", "storage_preserved", "external_traffic", "external_deny"}},
+		} {
+			rows := full[section.name].(map[string]string)
+			for _, id := range section.ids {
+				if _, err := fmt.Fprintf(output, "  %-12s %s/%s\n", strings.ToUpper(rows[id]), section.name, id); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if _, err := fmt.Fprintln(output, "Unverified: upstream inference, cleanup"); err != nil {
+		return err
+	}
+	if item["status"] != "pass" {
+		_, err := fmt.Fprintln(output, "Re-run explicitly: "+item["rerun"].(string))
+		return err
+	}
+	return nil
 }
