@@ -437,7 +437,7 @@ with s.lock('runtime', timeout=0), s.lock():
     s.write(state)
     print('locked', flush=True)
     sys.stdin.readline()
-	`, filepath.Join("..", "..", "..", "..", "scripts", "gateway"), f.owner.store.Root)
+	`, filepath.Join("..", "..", "..", "scripts", "gateway"), f.owner.store.Root)
 	input, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -498,7 +498,7 @@ store=siwc.Store(sys.argv[2])
 owner=siwc.Owner(store,siwc.Provider(request,lambda:data['now']))
 with store.lock('runtime',timeout=0):
     assert owner.access('personal')==data['reply']['access_token']
-	`, filepath.Join("..", "..", "..", "..", "scripts", "gateway"), f.owner.store.Root)
+	`, filepath.Join("..", "..", "..", "scripts", "gateway"), f.owner.store.Root)
 	cmd.Stdin = bytes.NewReader(data)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("Python refresh rejected Go enrollment: %v %s", err, output)
