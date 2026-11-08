@@ -1,6 +1,6 @@
 # Trusted Incus testenv recovery worker (v0.2, experimental)
 
-This page documents **opt-in worker-only** installation of the one-shot
+For test tier selection and authority limits, start with the [testing overview](testing/README.md). This page documents **opt-in worker-only** installation of the one-shot
 expiration reconciler. It is **not** an agent-usable VM controller and
 does **not** automatically initialize Incus or configure a project.
 
