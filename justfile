@@ -87,6 +87,10 @@ test-vm-opencode-tool-loopback:
 test-vm-ownership-recovery:
     python3 scripts/vm_harness/runner.py test ownership-recovery
 
+# Native scoped instance create, update, lifecycle, and existing-only apply.
+test-vm-native-instance:
+    python3 scripts/vm_harness/runner.py test native-instance
+
 # Inspect the same VM fixture with the interactive NixOS test driver.
 # Run under a dedicated unprivileged worker identity, never on pilot host.
 vm-debug:
