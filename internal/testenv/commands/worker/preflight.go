@@ -38,4 +38,3 @@ func NewPreflight(handlers Handlers) *cobra.Command {
 	cmd.Flags().BoolVar(&inspectPool, "pool-fingerprint", false, "Inspect the worker pool fingerprint without admission")
 	return cmd
 }
-

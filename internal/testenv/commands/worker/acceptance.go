@@ -43,4 +43,3 @@ func NewAcceptance(handlers Handlers) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.ForeignInstance, "foreign-instance", "", "required: existing unsigned foreign VM sentinel")
 	return cmd
 }
-
