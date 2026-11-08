@@ -71,6 +71,11 @@ let
     import sys
 
     report = Path("/run/operator-report").read_text()
+    for root in ["/var/lib/aginctus/state", "/home/operator/.local/state"]:
+        secret = Path(root) / "aginctus/gateway/upgraded-operator/secrets.json"
+        if secret.is_file() and not secret.is_symlink():
+            if secret.read_text().strip() in report:
+                sys.exit("synthetic credential material in operator report")
     for user in ["operator", "administrator"]:
         for name in ["client.key", "client.crt"]:
             path = Path(f"/home/{user}/.config/incus/{name}")
@@ -410,6 +415,52 @@ pkgs.testers.runNixOSTest {
     # is driver-owned, so reattach it rather than claiming workload recovery.
     machine.succeed("ip link set guest-host master hm-mgmt; ip link set guest-host up")
     packets()
+
+    # Metadata diagnostics must not turn an unreadable host tree into evidence
+    # of absence, or repair/adopt a competing user credential tree.
+    system_gateway = "/var/lib/aginctus/state/aginctus/gateway/upgraded-operator"
+    user_gateway = "/home/operator/.local/state/aginctus/gateway/upgraded-operator"
+    machine.succeed("install -d -m 0700 " + system_gateway)
+    machine.succeed("umask 077; openssl rand -hex 32 > " + system_gateway + "/secrets.json")
+    machine.succeed(operator + " install -d -m 0700 " + user_gateway)
+    machine.succeed(operator + " sh -c 'umask 077; openssl rand -hex 32 > " + user_gateway + "/secrets.json'")
+    def credential_metadata(path):
+        return machine.succeed("sha256sum " + path + "/secrets.json; stat -c '%u:%g:%a' " + path + " " + path + "/secrets.json")
+    system_gateway_before = credential_metadata(system_gateway)
+    user_gateway_before = credential_metadata(user_gateway)
+    state_audit = cli + " operator state-audit --owner user"
+    state_report = report(state_audit, 1)
+    assert "System gateway credential metadata: unverified" in state_report
+    assert "User gateway credential metadata: present" in state_report
+    assert "no migration" in state_report
+    machine.fail(operator + " test -r " + system_gateway + "/secrets.json")
+    root_cli = "env XDG_STATE_HOME=/run/absent-operator-state ${
+      self.packages.${system}.aginctus
+    }/bin/aginctus --config gateway.id=upgraded-operator"
+    root_report = report(root_cli + " operator state-audit --owner system", 0)
+    assert "System gateway credential metadata: present" in root_report
+    assert "User gateway credential metadata: absent" in root_report
+    machine.fail("test -e /run/absent-operator-state")
+
+    machine.succeed(operator + " chmod 0644 " + user_gateway + "/secrets.json")
+    assert "User gateway credential metadata: unsafe" in report(state_audit, 1)
+    machine.succeed("test $(stat -c '%a' " + user_gateway + "/secrets.json) = 644")
+    machine.succeed(operator + " chmod 0600 " + user_gateway + "/secrets.json")
+    machine.succeed(operator + " mv " + user_gateway + "/secrets.json " + user_gateway + "/saved-credential")
+    machine.succeed(operator + " ln -s " + system_gateway + "/secrets.json " + user_gateway + "/secrets.json")
+    assert "User gateway credential metadata: unsafe" in report(state_audit, 1)
+    machine.succeed("test -L " + user_gateway + "/secrets.json")
+    machine.succeed(operator + " rm -f " + user_gateway + "/secrets.json")
+    machine.succeed(operator + " mv " + user_gateway + "/saved-credential " + user_gateway + "/secrets.json")
+    machine.succeed("chown root:root " + user_gateway + "/secrets.json")
+    assert "User gateway credential metadata: unsafe" in report(state_audit, 1)
+    machine.succeed("test $(stat -c '%u' " + user_gateway + "/secrets.json) = 0")
+    machine.succeed("chown operator:users " + user_gateway + "/secrets.json")
+    machine.succeed(operator_home_manager + " switch", timeout=600)
+    machine.succeed(upgraded_home_manager + " switch", timeout=600)
+    assert "User gateway credential metadata: present" in report(state_audit, 1)
+    assert credential_metadata(system_gateway) == system_gateway_before
+    assert credential_metadata(user_gateway) == user_gateway_before
 
     for command in inventories:
         assert machine.succeed(f"incus {command} --format json | jq -S .") == before[command], f"HM activation or user-manager lifecycle changed Incus {command}"

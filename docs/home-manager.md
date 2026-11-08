@@ -118,6 +118,17 @@ reconciliation and test-driver reattachment of its synthetic peer to the recreat
 bridge. This tests clean daemon interruption, not workload recovery or a crash during an Incus
 write transaction.
 
+Gateway state-audit acceptance uses separate runtime-generated synthetic files
+with owner-only directory/file permissions. The ordinary operator reports the
+protected system tree as unverified, not absent, and refuses a handoff even when
+its own credential metadata is present. A root-only diagnostic separately proves
+the system fixture is present without initializing the selected empty user root.
+User files with broad modes, symlinks to protected system state, or foreign
+ownership are reported unsafe without automatic repair. Reports are checked for
+synthetic secret disclosure; Home Manager switching preserves both state trees'
+contents and owner/mode metadata. These are read-only diagnostics, not proof of
+the running gateway's state identity or credential migration acceptance.
+
 This exercises real guest CLI build and switch against the included local
 configuration. It does **not** establish image/workload write authorization,
 active-controller exclusion, credential migration/rollback or production
