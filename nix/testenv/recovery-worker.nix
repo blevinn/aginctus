@@ -18,7 +18,7 @@ in
 
     package = lib.mkOption {
       type = types.package;
-      default = self.packages.${pkgs.stdenv.hostPlatform.system}.testenv-sweep;
+      default = self.packages.${pkgs.stdenv.hostPlatform.system}.testenv-cli;
       description = "Store-pinned one-shot testenv Incus reconciliation binary.";
     };
 
@@ -88,7 +88,7 @@ in
         User = "aginctus-testenv";
         Group = "aginctus-testenv";
         SupplementaryGroups = [ "incus-admin" ];
-        ExecStart = "${cfg.package}/bin/aginctus-testenv-sweep";
+        ExecStart = "${cfg.package}/bin/aginctus-testenv worker sweep";
         LoadCredential = [ "policy-key:${cfg.policyKeyFile}" ];
         Environment = [
           "AGINCTUS_TESTENV_WORKER_SOCKET=${cfg.socketPath}"
