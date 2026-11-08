@@ -205,7 +205,7 @@ jobs:
       - name: populate Go modules for Python fixtures
         run: go mod download
       - name: install Python check tools
-        run: python3 -m pip install --disable-pip-version-check "markdown-it-py==4.0.0" "ruff==0.14.3"
+        run: python3 -m pip install --disable-pip-version-check "markdown-it-py==4.0.0" "ruff==0.14.3" "PyJWT[crypto]==2.15.1" "cryptography==50.0.2"
       - name: Ruff lint
         run: ruff check .
       # The Go coordinator regression suite executes real Just recipes in
