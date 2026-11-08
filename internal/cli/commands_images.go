@@ -64,7 +64,14 @@ func addImageCommands(root *cobra.Command, stdout, stderr io.Writer,
 			}
 			return nil
 		}
-		command := add(verb+" ALIAS [PATH]", nil, cobra.ExactArgs(argCount), validate,
+		// Keep Cobra's published synopsis consistent with the exact count.
+		// owner-audit takes only an alias; every other operation takes
+		// an alias and an artifact directory.
+		use := verb + " ALIAS PATH"
+		if argCount == 1 {
+			use = verb + " ALIAS"
+		}
+		command := add(use, nil, cobra.ExactArgs(argCount), validate,
 			func(cmd *cobra.Command, args []string, cfg *config.Config) int {
 				legacy := []string{verb, "--project", project}
 				if requireOwner {

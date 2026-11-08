@@ -718,74 +718,36 @@ func TestWorkloadRemoveNamed(t *testing.T) {
 	}
 }
 
-// TestPrintUsageMatchesGatewaySurface verifies the top-level help advertises
-// the gateway commands actually dispatched by runGateway.
-func TestPrintUsageMatchesGatewaySurface(t *testing.T) {
-	var buf bytes.Buffer
-	printUsage(&buf)
-	help := buf.String()
-
-	// The historical bug: the help printed a non-dispatchable form.
-	if strings.Contains(help, "gateway chatgpt model render") {
-		t.Fatalf("top-level usage still advertises the non-dispatchable "+
-			"'gateway chatgpt model render' form:\n%s", help)
+func TestGeneratedGatewayHelpIsDispatchable(t *testing.T) {
+	var out, errs bytes.Buffer
+	if code := Run(context.Background(), []string{"gateway", "--help"}, &out, &errs, nil, nil); code != 0 || errs.Len() != 0 {
+		t.Fatalf("code=%d stderr=%q", code, errs.String())
 	}
-
-	// The correct, dispatched form must appear.
-	if !strings.Contains(help, "gateway model NAME render") {
-		t.Fatalf("top-level usage missing 'gateway model NAME render':\n%s", help)
-	}
-
-	// Other dispatched commands must each appear at least once.
-	for _, want := range []string{
-		"gateway provider chatgpt register",
-		"gateway provider list",
-		"gateway provider ALIAS show",
-		"gateway model NAME register",
-		"gateway model list",
-		"gateway model NAME show",
-		"gateway credential-storage ensure",
-		"gateway credential-storage attach",
-		"gateway credential-storage audit",
+	for _, route := range []string{
+		"aginctus gateway validate", "aginctus gateway render", "aginctus gateway apply",
+		"aginctus gateway remove", "aginctus gateway status",
+		"aginctus gateway credential-storage ensure", "aginctus gateway credential-storage attach",
+		"aginctus gateway credential-storage audit", "aginctus gateway provider register TYPE",
+		"aginctus gateway provider list", "aginctus gateway provider show [PROVIDER]",
+		"aginctus gateway model register NAME", "aginctus gateway model list",
+		"aginctus gateway model show [PROVIDER] [MODEL]", "aginctus gateway model render NAME",
 	} {
-		if !strings.Contains(help, want) {
-			t.Fatalf("top-level usage missing %q:\n%s", want, help)
+		if !strings.Contains(out.String(), route) {
+			t.Fatalf("gateway help missing %q: %s", route, out.String())
 		}
 	}
-
-	// A literal escape sequence leaked into the help would render as
-	// "\n" instead of a real newline.
-	if strings.Contains(help, `\n`) {
-		t.Fatalf("top-level usage contains a literal backslash-n:\n%s", help)
+	if strings.Contains(out.String(), "gateway chatgpt model render") || strings.Contains(out.String(), `\\n`) {
+		t.Fatalf("obsolete or escaped gateway syntax: %s", out.String())
 	}
 }
 
-// TestGatewayHelpTextInvariants covers the same surface from the gateway
-// subcommand usage, which is printed for unmatched gateway subcommands.
-func TestGatewayHelpTextInvariants(t *testing.T) {
-	var buf bytes.Buffer
-	printGatewayUsage(&buf)
-	help := buf.String()
-
-	for _, want := range []string{
-		"gateway validate",
-		"gateway render",
-		"gateway apply",
-		"gateway remove",
-		"gateway status",
-		"gateway credential-storage ensure",
-		"gateway credential-storage attach",
-		"gateway credential-storage audit",
-		"gateway provider chatgpt register",
-		"gateway provider list",
-		"gateway provider ALIAS show",
-		"gateway model NAME register",
-		"gateway model list",
-		"gateway model NAME show",
-		"gateway model NAME render",
-	} {
-		if !strings.Contains(help, want) {
-			t.Fatalf("gateway usage missing %q:\n%s", want, help)
-		}
+func TestGeneratedGatewayHelpMatchesHelpCommand(t *testing.T) {
+	var family, explicit, errs bytes.Buffer
+	if code := Run(context.Background(), []string{"gateway", "--help"}, &family, &errs, nil, nil); code != 0 {
+		t.Fatalf("direct help failed: %d %s", code, errs.String())
+	}
+	errs.Reset()
+	if code := Run(context.Background(), []string{"help", "gateway"}, &explicit, &errs, nil, nil); code != 0 || errs.Len() != 0 || helpSyntax(family.String()) != helpSyntax(explicit.String()) {
+		t.Fatalf("help mismatch: code=%d stderr=%q", code, errs.String())
 	}
 }

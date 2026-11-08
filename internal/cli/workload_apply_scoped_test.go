@@ -178,7 +178,8 @@ func TestScopedWorkloadApplyRenderHelpOffline(t *testing.T) {
 		var out, errOut bytes.Buffer
 		code := Run(context.Background(), args, &out, &errOut, nil, nil)
 		if code != 0 || errOut.Len() != 0 ||
-			!strings.Contains(out.String(), "workload apply --project NAME WORKLOAD-ID --render") {
+			!strings.Contains(out.String(), "aginctus workload apply [NAME]") ||
+			!strings.Contains(out.String(), "--project string") || !strings.Contains(out.String(), "--render") {
 			t.Fatalf("missing offline help for %q: code=%d stderr=%q", args, code, errOut.String())
 		}
 	}

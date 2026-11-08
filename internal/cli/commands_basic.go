@@ -10,15 +10,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// runBasicCobra is the first vertical slice of the declarative command tree.
-// It deliberately constructs fresh commands and flags for every Run invocation.
-// Legacy command families remain on their existing dispatch path until migrated.
+// runBasicCobra constructs the authoritative Cobra command tree afresh for
+// every invocation. Only explicit legacy spelling translations precede this
+// parser; all command families are registered here and reuse shared services.
 func runBasicCobra(
 	ctx context.Context, args []string, stdout, stderr io.Writer,
 	incusClient IncusClient, loader ConfigLoader,
 ) int {
 	var options config.Options
-	root := &cobra.Command{Use: "aginctus", SilenceUsage: true, SilenceErrors: true}
+	root := &cobra.Command{
+		Use: "aginctus", SilenceUsage: true, SilenceErrors: true,
+		Long: "Aginctus uses explicit commands and scopes. Inspection, plans, rendering and supported dry-runs do not authorize writes. Apply/remove/start/stop, provisioning and repair can mutate resources; --confirm-* guards apply only to the commands that declare them.",
+	}
 	root.SetOut(stdout)
 	root.SetErr(stderr)
 	root.SetArgs(normalizeLegacyCLIArgs(args))
@@ -57,20 +60,7 @@ func runBasicCobra(
 		return nil
 	}
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
-		// Nested help is derived from the exact Cobra leaf, including only
-		// its declared flags. Family/root compatibility help is replaced
-		// separately after the old help-contract tests are migrated.
-		if cmd != root && cmd.Parent() != root {
-			fmt.Fprint(stdout, cmd.UsageString())
-			return
-		}
-		if cmd == root {
-			printUsage(stdout)
-			return
-		}
-		if code, handled := runHelp([]string{"help", cmd.Name()}, stdout, stderr); !handled || code != 0 {
-			fmt.Fprint(stdout, cmd.UsageString())
-		}
+		writeCobraHelp(cmd, stdout)
 	})
 
 	status := 0
@@ -146,7 +136,7 @@ func runBasicCobra(
 	addImageCommands(root, stdout, stderr, load, &status)
 
 	if err := root.ExecuteContext(ctx); err != nil {
-		fmt.Fprintf(stderr, "%v\nUsage: aginctus [global options] <command> [flags]\n", err)
+		fmt.Fprintf(stderr, "%v\nUsage: %s\n", err, root.UseLine())
 		return 2
 	}
 	return status
@@ -159,7 +149,7 @@ type configOverrideFlag struct {
 }
 
 func (f *configOverrideFlag) String() string { return strings.Join(*f.values, ",") }
-func (f *configOverrideFlag) Type() string { return "path=value" }
+func (f *configOverrideFlag) Type() string   { return "path=value" }
 func (f *configOverrideFlag) Set(value string) error {
 	if value == "" {
 		return fmt.Errorf("configuration override requires path=value")
