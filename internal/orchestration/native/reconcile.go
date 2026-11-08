@@ -1,8 +1,10 @@
 package native
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	incus "github.com/lxc/incus/v7/client"
 )
@@ -53,4 +55,20 @@ func localTransport(info *incus.ConnectionInfo, project string) error {
 		return fmt.Errorf("native reconciliation requires the local Incus socket and the selected project")
 	}
 	return nil
+}
+
+// connectLocal opens a bounded local Incus connection bound to one project.
+// The caller must hold the returned cancel function for as long as the
+// connection is used.
+func connectLocal(ctx context.Context, project string) (incus.InstanceServer, context.CancelFunc, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	server, err := incus.ConnectIncusUnixWithContext(ctx, "", &incus.ConnectionArgs{SkipGetServer: true})
+	if err != nil {
+		cancel()
+		return nil, nil, observationFailure(ctx, "local Incus observation unavailable")
+	}
+	return server.UseProject(project), cancel, nil
 }

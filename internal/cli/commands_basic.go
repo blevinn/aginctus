@@ -149,7 +149,7 @@ type configOverrideFlag struct {
 }
 
 func (f *configOverrideFlag) String() string { return strings.Join(*f.values, ",") }
-func (f *configOverrideFlag) Type() string { return "path=value" }
+func (f *configOverrideFlag) Type() string   { return "path=value" }
 func (f *configOverrideFlag) Set(value string) error {
 	if value == "" {
 		return fmt.Errorf("configuration override requires path=value")

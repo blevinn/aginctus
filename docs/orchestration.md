@@ -266,6 +266,25 @@ The management-network backend is selected with
 `incus.management.network.backend`. See
 [Configuration](configuration.md#management-network-reconciliation-backend).
 
+### Native instance lifecycle
+
+The scoped workload lifecycle commands reconcile the running state of one
+existing instance in the explicitly selected Incus project through the same
+native reconciler. `aginctus workload start --project NAME WORKLOAD-ID
+--confirm-start` and the matching `stop` no longer spawn the `incus` CLI to
+perform the transition.
+
+The reconciler observes the instance, verifies the Aginctus ownership
+markers, refuses an absent or foreign instance, rechecks the instance at the
+mutation boundary, applies the state transition, waits for the Incus
+operation and verifies the reached state. It never creates, replaces or
+removes an instance, and a failed or unverified transition is reported as
+uncertain rather than as success.
+
+The stop transition keeps the graceful Incus CLI semantics: no forced stop,
+no stored runtime state and no client-side timeout, so the Incus daemon
+applies the same shutdown grace period as `incus stop`.
+
 ## Execution semantics
 
 Execution is sequential and fail-fast.

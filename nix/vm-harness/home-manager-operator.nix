@@ -24,6 +24,8 @@ let
           programs.aginctus = {
             enable = true;
             settings.gateway.id = gatewayID;
+            # User intent cannot alter the separately configured host policy.
+            settings.firewall.zone = "trusted";
           };
         }
       ];
@@ -37,14 +39,44 @@ let
       package = "/nix/store/00000000000000000000000000000000-wrong-cli";
     }
   );
+  checkReport = pkgs.writeText "check-operator-report.py" ''
+    from pathlib import Path
+    import sys
+
+    report = Path("/run/operator-report").read_text()
+    for user in ["operator", "administrator"]:
+        for name in ["client.key", "client.crt"]:
+            path = Path(f"/home/{user}/.config/incus/{name}")
+            if not path.exists():
+                continue
+            # Check body fragments too, not only PEM delimiters. Emit no
+            # report or credential contents when a redaction check fails.
+            for line in path.read_text().splitlines():
+                if line and line in report:
+                    sys.exit("credential material in operator report")
+    print(report, end="")
+  '';
 in
 pkgs.testers.runNixOSTest {
   name = "aginctus-vm-home-manager-operator";
 
   nodes.machine = {
+    imports = [ self.nixosModules.default ];
     system.stateVersion = "26.05";
-    # NixOS Incus requires nftables, even when this VM does not expose Aginctus host firewall services.
     networking.nftables.enable = true;
+    networking.dhcpcd.allowInterfaces = [ "eth0" ];
+    services.firewalld.enable = true;
+    services.aginctus = {
+      enable = true;
+      images.herdrClient.enable = false;
+      images.opencodeWorkload.enable = false;
+      reconcile.enable = false;
+      firewall.egress.enable = true;
+      settings = {
+        incus.management.network.name = "hm-mgmt";
+        gateway.egress.network.name = "hm-egress";
+      };
+    };
     boot.supportedFilesystems = [ "btrfs" ];
     virtualisation = {
       cores = 2;
@@ -53,8 +85,15 @@ pkgs.testers.runNixOSTest {
       incus.enable = true;
     };
     users.users.operator = {
+      uid = 1000;
       isNormalUser = true;
       home = "/home/operator";
+      createHome = true;
+    };
+    users.users.administrator = {
+      uid = 1001;
+      isNormalUser = true;
+      home = "/home/administrator";
       createHome = true;
     };
     nix.settings.allowed-users = [
@@ -70,6 +109,11 @@ pkgs.testers.runNixOSTest {
     environment.systemPackages = [
       pkgs.incus
       pkgs.jq
+      pkgs.openssl
+      pkgs.firewalld
+      pkgs.nftables
+      pkgs.netcat-openbsd
+      pkgs.dnsutils
     ];
   };
 
@@ -82,11 +126,37 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus storage list --format json | jq -e 'any(.[]; .name == \"default\" and .driver == \"btrfs\")'")
     machine.succeed("incus list --format json | jq -e 'length == 0'")
     machine.succeed("incus image list --format json | jq -e 'length == 0'")
-    machine.succeed("test ! -e /etc/aginctus/config.json")
-    machine.fail("systemctl list-unit-files --no-legend 'aginctus*' | grep -q '^aginctus'")
+    machine.wait_for_unit("firewalld.service")
+    machine.succeed("incus network create hm-mgmt ipv4.address=10.247.84.1/24 ipv4.nat=false ipv4.routing=false ipv6.address=none raw.dnsmasq=address=/fixture.incus/10.247.84.1 user.aginctus.managed=true user.aginctus.resource=management-network")
+    machine.succeed("incus project create aginctus -c restricted=true -c features.networks=true")
+    machine.succeed("incus project create foreign")
+    for project in ["default", "aginctus", "foreign"]:
+        machine.succeed(f"incus profile create scope-sentinel --project {project}")
+    machine.wait_until_succeeds("systemctl reset-failed aginctus-firewall-reconcile.service; systemctl start aginctus-firewall-reconcile.service", timeout=60)
+
+    def host_policy():
+        return machine.succeed("nft -s list ruleset")
+
+    def host_units():
+        units = machine.succeed("systemctl list-unit-files --no-legend 'aginctus*'")
+        observed = {line.split()[0] for line in units.splitlines()}
+        assert observed == {"aginctus-firewall-reconcile.service", "aginctus-firewall-reconcile.timer", "aginctus-egress-firewall.service", "aginctus-egress-firewall.timer"}, units
+        for name in ["aginctus-firewall-reconcile", "aginctus-egress-firewall"]:
+            assert machine.succeed(f"systemctl show -p User --value {name}.service").strip() == "root"
+            machine.succeed(f"systemctl is-active {name}.timer")
+        machine.succeed("test $(stat -c '%u:%g:%a' /var/lib/aginctus-firewall) = 0:0:700")
+        machine.succeed("test $(stat -c '%u:%g:%a' /var/lib/aginctus-firewall/overrides.json) = 0:0:600")
+
+    host_units()
+    firewall_before = host_policy()
+    host_config = machine.succeed("sha256sum /etc/aginctus/config.json /etc/aginctus/operator-package.json")
 
     # Compare complete nonsecret resource inventory, not just instance counts.
-    inventories = ["list", "image list", "project list", "network list", "storage list", "profile list"]
+    inventories = ["project list", "storage list"] + [
+        f"{command} --project {project}"
+        for project in ["default", "aginctus", "foreign"]
+        for command in ["list", "image list", "network list", "profile list"]
+    ]
     before = {command: machine.succeed(f"incus {command} --format json | jq -S .") for command in inventories}
 
     # Synthetic protected host state is not a source for operator credentials.
@@ -105,21 +175,23 @@ pkgs.testers.runNixOSTest {
     machine.succeed("runuser -u operator -- /home/operator/.nix-profile/bin/aginctus config get gateway.id | grep -q disposable-operator")
     operator = "runuser -u operator -- env HOME=/home/operator USER=operator LOGNAME=operator"
     cli = operator + " /home/operator/.nix-profile/bin/aginctus"
+    assert not {"wheel", "incus", "incus-admin"}.intersection(machine.succeed(operator + " id -nG").split())
     machine.succeed(cli + " operator package-audit --owner user | grep -q 'observed running CLI path'")
     status, _ = machine.execute(cli + " operator preflight --project aginctus", timeout=30)
     assert status == 1, "operator preflight must fail for denied Incus access, not usage"
+    assert host_policy() == firewall_before, "unauthorized activation changed firewall policy"
     machine.fail(operator + " test -r /var/lib/aginctus/state/acceptance-sentinel")
 
     # Repeated activation remains an operator-only package/config change.
     machine.succeed(activation, timeout=600)
     machine.succeed(cli + " operator package-audit --owner user")
 
-    # A changed declaration must not make a mismatched running CLI acceptable.
+    # A changed declaration must not make incompatible system/user CLIs acceptable.
     manifest = "/home/operator/.config/aginctus/operator-package.json"
     machine.succeed(operator + " rm -f " + manifest)
     machine.succeed(operator + " cp ${mismatchedManifest} " + manifest)
     status, mismatch = machine.execute(cli + " operator package-audit --owner user 2>&1")
-    assert status == 1 and "differs from the selected package" in mismatch, "runtime/declaration mismatch must fail safely"
+    assert status == 1 and "operator package declarations differ" in mismatch, "system/user declaration mismatch must fail safely"
     machine.succeed(operator + " rm -f " + manifest)
 
     # Package/config generation switching does not imply resource reconciliation.
@@ -136,13 +208,106 @@ pkgs.testers.runNixOSTest {
     machine.succeed("loginctl disable-linger operator")
     machine.succeed("systemctl stop user@1000.service")
 
+    # Only the disposable administrator provisions TLS trust. Private keys are
+    # generated inside the VM, never materialized in Nix or returned to the log.
+    machine.succeed("incus config set core.https_address 127.0.0.1:8443")
+    for user in ["operator", "administrator"]:
+        home = f"/home/{user}"
+        machine.succeed(f"runuser -u {user} -- install -d -m 0700 {home}/.config/incus")
+        machine.succeed(f"runuser -u {user} -- sh -c 'umask 077; openssl req -x509 -newkey rsa:2048 -nodes -keyout {home}/.config/incus/client.key -out {home}/.config/incus/client.crt -days 1 -subj /CN={user} >/dev/null 2>&1'")
+        restriction = " --restricted --projects aginctus" if user == "operator" else ""
+        machine.succeed(f"incus config trust add-certificate {home}/.config/incus/client.crt --name {user}{restriction}")
+        # Incus selects the sole permitted project when adding a restricted
+        # remote. Subsequent probes must not rewrite this client configuration.
+        machine.succeed(f"runuser -u {user} -- env HOME={home} incus remote add fixture https://127.0.0.1:8443 --accept-certificate --auth-type tls")
+        machine.succeed(f"runuser -u {user} -- env HOME={home} incus remote switch fixture")
+        # Initialize Incus's last-working-address cache before freezing config.
+        machine.succeed(f"runuser -u {user} -- env HOME={home} incus project list --format json >/dev/null")
+
+    admin = "runuser -u administrator -- env HOME=/home/administrator USER=administrator LOGNAME=administrator"
+    admin_cli = admin + " ${self.packages.${system}.aginctus}/bin/aginctus"
+    client_config = machine.succeed("sha256sum /home/operator/.config/incus/config.yml /home/administrator/.config/incus/config.yml")
+
+    def report(command, expected_status):
+        status, _ = machine.execute("umask 077; " + command + " > /run/operator-report 2>&1", timeout=30)
+        assert (status != 0 if expected_status == "denied" else status == expected_status), "unexpected command status"
+        output = machine.succeed("${pkgs.python3}/bin/python3 ${checkReport}")
+        assert "PRIVATE KEY" not in output and "BEGIN CERTIFICATE" not in output, "credential material in report"
+        return output
+
+    def denied(command, reason):
+        assert reason in report(command, "denied"), "failure did not demonstrate the expected boundary"
+
+    restricted = report(operator + " env INCUS_PROJECT=foreign /home/operator/.nix-profile/bin/aginctus operator preflight --project aginctus", 0)
+    assert "restricted TLS credential; selected project declared permitted (writes unproven)" in restricted
+    assert "Incus project: aginctus (instance read allowed)" in restricted
+    assert "Write permissions: unverified" in restricted
+    assert "Host bridge, firewall, pool and admin permissions: unverified" in restricted
+    report(cli + " operator preflight --project foreign", 1)
+    # The CLI refuses default before any probe; direct GET also proves server denial.
+    report(cli + " operator preflight --project default", 2)
+    machine.succeed(operator + " incus profile show scope-sentinel --project aginctus")
+    for project in ["default", "foreign"]:
+        denied(operator + f" incus project show {project}", "does not have permission")
+    denied(operator + " incus profile show scope-sentinel --project foreign", "does not have permission")
+    # Incus TLS authorization allows reads of default-project resources for
+    # inheritance. Restricted credentials do not establish metadata isolation.
+    machine.succeed(operator + " incus profile show scope-sentinel --project default")
+    denied(operator + " incus profile set scope-sentinel user.phase1=forbidden --project default", "does not have permission")
+    machine.succeed(operator + " incus project list --format json | jq -e 'map(.name) == [\"aginctus\"]'")
+
+    # Effective write denials belong ONLY in this disposable fixture, never in
+    # production preflight. Exact project flags prevent ambient switching.
+    denied(operator + " incus network create hm-denied --type bridge --project aginctus ipv4.address=none ipv6.address=none", "Network type does not support non-default projects")
+    denied(operator + " incus network create hm-denied --type bridge --project default ipv4.address=none ipv6.address=none", "does not have permission")
+    denied(operator + " incus project create forbidden-project", "Certificate is restricted")
+    denied(operator + " incus config set core.https_address=127.0.0.1:9443", "Certificate is restricted")
+    machine.fail(operator + " ip link add forbidden-linux type bridge")
+    machine.fail(operator + " nft add table inet forbidden_table")
+    machine.fail(operator + " systemctl start aginctus-reconcile.service")
+    denied(operator + " systemctl start aginctus-firewall-reconcile.service", "Access denied")
+    machine.fail(operator + " test -r /var/lib/aginctus-firewall/overrides.json")
+    machine.fail(operator + " sh -c 'printf unsafe > /var/lib/aginctus-firewall/overrides.json'")
+    machine.fail(operator + " sh -c 'printf unsafe > /var/lib/aginctus/state/acceptance-sentinel'")
+
+    broad = report(admin_cli + " operator preflight --project aginctus", 0)
+    assert "broad unrestricted TLS credential; effective administrative capabilities unproven" in broad
+    assert "Write permissions: unverified" in broad
+    machine.succeed(admin + " incus list --project foreign --format json | jq -e 'length == 0'")
+    # Positive control for the exact host-network operation denied above. This
+    # demonstrates one effective fixture capability, not arbitrary mutation rights.
+    machine.succeed(admin + " incus project show foreign")
+    machine.succeed(admin + " incus profile show scope-sentinel --project foreign")
+    machine.succeed(admin + " incus network create hm-denied --type bridge --project default ipv4.address=none ipv6.address=none")
+    machine.succeed(admin + " incus network delete hm-denied --project default")
+
+    # Re-activation with restricted credentials still changes no Incus objects.
+    firewall_authorized = host_policy()
+    machine.succeed(upgrade, timeout=600)
+    assert host_policy() == firewall_authorized, "authorized activation changed firewall policy"
+    assert machine.succeed("sha256sum /home/operator/.config/incus/config.yml /home/administrator/.config/incus/config.yml") == client_config
+    assert machine.succeed("sha256sum /etc/aginctus/config.json /etc/aginctus/operator-package.json") == host_config
+    host_units()
+
+    # Real DNS positive/host-port negative survive host firewall reload without
+    # any user controller or authority to start privileged firewall operations.
+    machine.succeed("ip netns add guest; ip link add guest-host type veth peer name guest-eth; ip link set guest-host master hm-mgmt; ip link set guest-host up; ip link set guest-eth netns guest; ip -n guest link set lo up; ip -n guest link set guest-eth up; ip -n guest addr add 10.247.84.25/24 dev guest-eth")
+    machine.succeed("systemd-run --unit=host-listener ${pkgs.python3}/bin/python3 -m http.server 18082 --bind 0.0.0.0")
+    machine.wait_until_succeeds("ss -lnt | grep ':18082'")
+    def packets():
+        machine.succeed("ip netns exec guest dig +time=1 +tries=1 @10.247.84.1 fixture.incus A | grep -F 10.247.84.1")
+        machine.fail("ip netns exec guest nc -z -w 1 10.247.84.1 18082")
+    packets()
+    machine.succeed("firewall-cmd --reload")
+    machine.succeed("systemctl start aginctus-firewall-reconcile.service")
+    packets()
+
     for command in inventories:
         assert machine.succeed(f"incus {command} --format json | jq -S .") == before[command], f"HM activation or user-manager lifecycle changed Incus {command}"
     assert machine.succeed("sha256sum /var/lib/aginctus/state/acceptance-sentinel; stat -c '%u:%g:%a' /var/lib/aginctus/state /var/lib/aginctus/state/acceptance-sentinel") == protected_before
     machine.succeed("incus list --format json | jq -e 'length == 0'")
     machine.succeed("incus image list --format json | jq -e 'length == 0'")
-    machine.succeed("test ! -e /etc/aginctus/config.json")
-    machine.fail("systemctl list-unit-files --no-legend 'aginctus*' | grep -q '^aginctus'")
+    host_units()
     machine.succeed("test ! -e /home/operator/.config/systemd/user/aginctus-reconcile.service")
     machine.succeed("test ! -e /home/operator/.config/systemd/user/aginctus-image-update.service")
   '';
