@@ -39,7 +39,7 @@ The stable deployment selector is **explicit**. It binds a deployment/profile ID
 
 ### System and user operational modes: one accepted deployment, scoped authority
 
-**Working proposal:** model NixOS/system and Home Manager/user as distinct **candidate producers and authorized projections** of the *same deployment's accepted state*, not as two mutually overwriting accepted-state stores. The accepted revision is globally coherent for the deployment, while each field/resource domain has one recorded lifecycle owner. A promotion may change only the caller's owned domains; the state service performs server-side partial-change validation, builds the new complete immutable revision from the previous accepted revision, and commits through CAS. Unchanged domains remain byte-for-byte stable; a conflict triggers a replan, never a silent last-writer-wins merge.
+**Provisional working proposal (security boundary not approved; see #704):** model NixOS/system and Home Manager/user as distinct **candidate producers and authorized projections** of the *same deployment's accepted state*, not as two mutually overwriting accepted-state stores. The accepted revision is globally coherent for the deployment, while each field/resource domain has one recorded lifecycle owner. A promotion may change only the caller's owned domains; the state service performs server-side partial-change validation, builds the new complete immutable revision from the previous accepted revision, and commits through CAS. Unchanged domains remain byte-for-byte stable; a conflict triggers a replan, never a silent last-writer-wins merge.
 
 | Mode | Candidate source and visibility | May accept/reconcile | Must not assume |
 | --- | --- | --- | --- |
@@ -47,7 +47,7 @@ The stable deployment selector is **explicit**. It binds a deployment/profile ID
 | **Home Manager user** | `programs.aginctus` nonsecret declarations and authorized project/user scope; sanitized host-capability status | Explicitly delegated operator-owned resources, given independently verified Incus API capabilities | Host firewall/bridge admin, unrestricted `incus-admin`, other users' state, or implicit sudo |
 | **Combined** | Two distinct candidates and filtered views of one accepted deployment | Each actor updates its own domain through scoped CAS; one lifecycle writer per resource | Two independent active accepted specifications for the same Incus object |
 
-In **NixOS-only** mode, system authority can own operator workloads/gateway as well as host-facing resources. In **HM-only** mode, project-scoped operator actions are possible only after an external administrator has established necessary host capabilities and delegated bounded Incus authority. In **combined** mode (preferred long-term), system authority supplies host network/firewall/storage prerequisites while HM runs only its explicitly delegated operator lifecycle. Shifting ownership between these modes requires a reviewed migration/handoff with writer quiescence and verification; changing effective UID or selecting a different XDG directory cannot switch ownership.
+In **NixOS-only** mode, system authority can own operator workloads/gateway as well as host-facing resources. In **HM-only** mode, project-scoped operator actions are possible only after an external administrator has established necessary host capabilities and delegated bounded Incus authority. In **combined** mode (one candidate deployment pattern), system authority supplies host network/firewall/storage prerequisites while HM runs only its explicitly delegated operator lifecycle. Shifting ownership between these modes requires a reviewed migration/handoff with writer quiescence and verification; changing effective UID or selecting a different XDG directory cannot switch ownership.
 
 The user-facing status view should distinguish **configured candidate** (specific to caller), **accepted spec** (one deployment authority, filtered by actor capability), and **current observations** (only what the actor can actually read). System mode may display nonsecret user-scope summary/health when authorized, but should not copy user token material; user mode may see a sanitized host-capability readiness/denial summary but not edit host policy. A hidden or unauthorized field is *not* evidence of equality or absence. State-service authorization is based on authenticated principal and explicit resource ownership, **not** solely a `--mode` flag, `sudo`, root EUID or Nix module location.
 
@@ -55,7 +55,24 @@ The user-facing status view should distinguish **configured candidate** (specifi
 
 **Source hygiene:** do not feed untrusted user `AGINCTUS_*`, `--config`, user JSON or XDG state into a system-authoritative candidate for protected host fields. Conversely do not elevate a user's candidate into system-owned accepted fields by recursively merging it with `/etc/aginctus/config.json`. Implement an explicit scope-aware candidate projection, validate overlaps and reject conflicting system/user ownership before accepting or executing. Existing generic config precedence is retained for permitted caller-owned fields only.
 
-This approach deliberately avoids a second root-vs-user database and duplicate current-state controllers. The remaining work is to prove transport authentication and per-domain authorization in #696, candidate/source scoping in #694/#697, NixOS/HM ownership and handoff in #699/#700, and cross-mode negative tests in #701.
+This is a candidate model, **not** a decision to implement a cross-trust-boundary merge. An Incus project-native or separately authoritative host/tenant arrangement may replace the single shared revision/merge implementation while retaining the three-layer model. This approach currently avoids a second root-vs-user database and duplicate current-state controllers. The remaining work is to **choose and verify the authority boundary (#704)**, then prove transport authentication and per-domain authorization in #696, candidate/source scoping in #694/#697, NixOS/HM ownership and handoff in #699/#700, and cross-mode negative tests in #701.
+
+### Privilege-escalation risk and Incus-native alternative (open)
+
+**Risk (high impact; likelihood not established):** system/root and Home Manager/user configuration originate in different trust domains. A malformed user key, unexpected nested object, omission/null/default, conflicting namespace, schema migration or a buggy scoped merge could result in a privileged accepted revision or direct write. Even a state service that serializes updates with CAS can become a **confused deputy** if it accepts user input and executes root-capable operations. **Do not rely on string prefixes, CLI role flags, UI filtering or field ownership annotations alone as proof of authorization.**
+
+The current single logical accepted revision and per-domain scoped CAS are **tentative**, not a commitment to any cross-principal merging implementation. The alternatives to test in [#704](https://github.com/blevinn/aginctus/issues/704) are:
+
+| Authority design | Benefit | Security/operational question |
+| --- | --- | --- |
+| **Incus-native confined project(s)** with project-scoped credentials for operator resources, separately administered host capabilities | Incus checks resource/project actions rather than Aginctus merely filtering JSON | How do project features, shared bridges, images/volumes and the current host Unix socket affect effective confinement? |
+| **Separate host and tenant accepted authorities**, with read-only capability dependencies and no privileged user-to-root config merge | Strong separation of source-of-truth and failure domains | How are revisions, status and cross-boundary dependencies observed consistently without duplicated writers? |
+| **Shared accepted revision + server-side scoped CAS**, as drafted | Single coherent revision and simple audit/history | Can the API provably prevent a user from influencing any host-owned field through defaulting, migration, nested paths or proxying? |
+| **Hybrid composite view** with separately authorized host/project sub-revisions | Independent security authority plus a unified CLI summary | How is a consistent combined plan pinned, fenced and recovered under partial failures? |
+
+A confined Incus project is only useful if the *actual* client identity is restricted. A `--project` flag does not constrain a fully privileged local daemon socket; system-owned networks/firewall/storage-pool policies remain a separate root boundary. Evaluate restricted project features, project-scoped TLS or equivalent supported client identities, negative cross-project tests and any inherited `default` entities on the pinned Incus version. Do not assume that an Incus project protects host filesystem or firewall operations by itself.
+
+**Gate:** proceed with #694 canonical state/identity, #695 storage, read-only comparison, and isolated single-authority slices. **Defer cross-principal candidate merges, root-capable user-triggered API calls, user-managed host-resource reconciliation, and ownership transfer** until #704 has an explicit reviewed threat model and a tested selection. In particular, do not implement the conceptual partial-patch flow across system and user domains solely because this document sketches it. If an Incus-native boundary proves better, change the implementation/topology while preserving stable configured/accepted/current semantics.
 
 ## 2. Two independent drift and mutation paths
 
@@ -189,7 +206,7 @@ A vertical proof should show: accept R, change an env var (candidate drift only)
 
 ## 9. Open engineering decisions for early slices
 
-The following are intentionally not settled by the architecture ADR:
+The following are intentionally not settled by the architecture ADR (and the system/user boundary is a risk-gated choice under #704):
 
 1. Protected physical placement: one instance per deployment versus a host-scoped state service with rigorously isolated per-profile stores; prefer the former initially, validate against #199/#204.
 2. Host↔service transport and actor authentication in existing Incus networking/host-authority constraints; require a no-public-listener feasible path before committing.
