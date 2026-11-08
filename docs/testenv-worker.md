@@ -110,8 +110,7 @@ project enforcement, real-host isolation or complete storage reclamation.
 The `testenv-cli` package supplies the fixed
 `aginctus-testenv worker acceptance` command in the Nix store. It uses the same
 `IncusVMBackend`, signed handles, readiness probes, typed guest exec and
-destruction path as the worker library. It is not installed or started by
-the recovery module, normal checks, public CLI or MCP. Its commands and
+destruction path as the worker library. It is never started by the recovery module, normal checks, public CLI or MCP.\nThe installed operator binary exposes this leaf, but only the explicitly\napproved dedicated worker invocation supplies the necessary admission inputs. Its commands and
 resource sizes cannot be overridden by a checkout manifest or guest input.
 
 ### Prerequisites and invocation
@@ -158,7 +157,7 @@ and an owned private report root without installing a persistent service:
 
 ```sh
 helper=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-cli)
-"$helper/bin/aginctus-testenv worker acceptance" --help
+"$helper/bin/aginctus-testenv" worker acceptance --help
 
 # On the independently approved dedicated worker ONLY:
 sudo systemd-run --unit=aginctus-testenv-acceptance --wait --pipe --collect \
@@ -172,7 +171,7 @@ sudo systemd-run --unit=aginctus-testenv-acceptance --wait --pipe --collect \
   --property=PrivateTmp=yes --property=PrivateDevices=yes \
   --property=RestrictAddressFamilies=AF_UNIX --property=IPAddressDeny=any \
   --property=TimeoutStartSec=13min --property=TimeoutStopSec=150s \
-  "$helper/bin/aginctus-testenv worker acceptance" \
+  "$helper/bin/aginctus-testenv" worker acceptance \
   --disposable-worker DEDICATED_DISPOSABLE_WORKER \
   --socket /var/lib/incus/unix.socket --project aginctus-testenv \
   --image '<actual-64-hex-imported-image-fingerprint>' \
@@ -416,7 +415,7 @@ trusting its hash; do not automatically feed discovery into admission:
 
 ```sh
 preflight=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-cli)
-"$preflight/bin/aginctus-testenv worker preflight" --help
+"$preflight/bin/aginctus-testenv" worker preflight --help
 
 # Dedicated disposable worker ONLY, with the root-owned regular marker and
 # runtime key provisioned as above; substitute the actual imported fingerprint.
@@ -431,7 +430,7 @@ sudo systemd-run --unit=aginctus-testenv-pool-inspect --wait --pipe --collect \
   --setenv=AGINCTUS_TESTENV_WORKER_SOCKET=/var/lib/incus/unix.socket \
   --setenv=AGINCTUS_TESTENV_POLICY_KEY_FILE=/run/credentials/aginctus-testenv-pool-inspect.service/policy-key \
   --setenv=AGINCTUS_TESTENV_IMAGE_FINGERPRINT='<actual-64-hex-image-fingerprint>' \
-  "$preflight/bin/aginctus-testenv worker preflight" --pool-fingerprint
+  "$preflight/bin/aginctus-testenv" worker preflight --pool-fingerprint
 ```
 
 `inspection_only` is never an admission pass. The returned hash covers
