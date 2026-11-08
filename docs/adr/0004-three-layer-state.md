@@ -10,14 +10,14 @@
 
 Aginctus combines CLI flags, explicit configuration files, environment variables, system/user JSON and NixOS/Home Manager declarations into an effective configuration. Its current orchestration machinery evaluates intent and reconciles Incus resources, but effective configuration and some operational metadata are currently resolved or stored in the invoking client context. Consequently, one changed environment or state directory can affect what a later lifecycle invocation intends to deploy. Nix configuration changes are also too closely coupled to optional resource reconciliation.
 
-ADR 0002 established an Aginctus-owned native Incus observe/plan/validate/execute engine and kept future desired-state configuration out of its initial operation-oriented scope. The next architectural step is to make the accepted deployment specification durable and independent from any individual CLI invocation, without building a new general-purpose infrastructure controller.
+ADR 0002 established an Aginctus-owned native Incus observe/plan/validate/execute engine and kept future accepted-state configuration out of its initial operation-oriented scope. The next architectural step is to make the accepted deployment specification durable and independent from any individual CLI invocation, without building a new general-purpose infrastructure controller.
 
 ## Decision (proposed)
 
 Aginctus has **three distinct layers**:
 
 1. **Configured state:** a fully resolved, validated candidate based on the current caller's configuration cascade and selected deployment. It is a proposal, not authority to change deployed infrastructure.
-2. **Desired state:** the durable, authoritative, versioned *accepted* specification for one explicitly selected Aginctus deployment. It is independent of subsequent configuration/environment changes and is the only source of deployment intent for infrastructure reconciliation.
+2. **Accepted state:** the durable, authoritative, versioned *accepted* specification for one explicitly selected Aginctus deployment. It is independent of subsequent configuration/environment changes and is the only source of deployment intent for infrastructure reconciliation.
 3. **Current state:** independently observed Incus resources and relevant runtime/application resources. Observation supplies evidence for planning but never overrides policy or proves ownership on its own.
 
 There are **two distinct reconciliation boundaries**:
@@ -25,7 +25,7 @@ There are **two distinct reconciliation boundaries**:
 - **Configured → desired:** inspect a canonical, nonsecret diff and *explicitly promote* a validated candidate as a new immutable accepted revision. Promotion is a version-checked state transaction, not an Incus mutation.
 - **Desired → current:** use a pinned accepted revision to observe, diff, preflight and execute selected, authorized infrastructure changes using the native orchestration/reconciliation engine. This must not re-resolve deployment intent from ambient CLI parameters or environment. Infrastructure reconciliation never implicitly promotes a configured candidate.
 
-A NixOS or Home Manager switch, a change to an AGINCTUS_ environment variable, or a changed CLI parameter must not alter the accepted revision or modify managed resources by itself. Manual operation is the initial default. Optional automatic **desired → current** reconciliation is independent of configuration promotion; automatic promotion is not introduced by this ADR.
+A NixOS or Home Manager switch, a change to an AGINCTUS_ environment variable, or a changed CLI parameter must not alter the Aginctus accepted revision or reconcile Aginctus-managed deployment resources by itself. NixOS may still activate *its own* root-owned host firewall/services outside this acceptance boundary. Manual operation is the initial default. Optional automatic **desired → current** reconciliation is independent of configuration promotion; automatic promotion is not introduced by this ADR.
 
 ## Durable ownership boundary
 
@@ -37,12 +37,28 @@ Persist canonical validated **nonsecret** deployment intent (including explicit 
 
 The state service may hold Aginctus-owned operational metadata and references to credentials. It is **not** automatically the owner of every private key, access token or application database. Dedicated runtime volumes and their credential owners remain authoritative, including LiteLLM's sole ownership of OAuth refresh credentials ([#171](https://github.com/blevinn/aginctus/issues/171)). Avoid plaintext secrets, secret-derived hashes, and expanded Incus configuration in plans, revision history, logs and generic state APIs.
 
+## Operational modes and ownership (proposed)
+
+The accepted-state service is one logical authority **per deployment**, not a root-side database plus an unrelated user-side database for the same resources. Its immutable accepted revision carries an explicit **owner/authority scope for every managed resource or policy domain**. System and user operational modes are two authenticated, capability-filtered projections of this one deployment. An actor may promote only changes within its explicitly assigned scope; the state service constructs and CAS-commits the full new revision, retaining other scopes unchanged. A namespace or field cannot silently change owner as a side effect of selecting another CLI user or configuration source. Host/user ownership transfer is a separately approved, backed-up, fenced migration.
+
+- **NixOS (system/root) context:** root-managed host capabilities (Incus daemon, storage pool prerequisites, host DNS/DHCP and egress firewall policy) and any explicitly system-owned Aginctus deployment resources. Its candidate comes from trusted system declarations and authorized root-side overrides, not a general merge of an untrusted user's XDG/AGINCTUS_ overlay for host-owned policy. Root is a powerful OS administrator, but application-layer writes still require an explicit selected deployment and scoped operation; no ambient project or implicit takeover of a user-owned runtime credential.
+- **Home Manager (user/operator) context:** user-scoped nonsecret configuration and explicitly delegated operator-owned resources within verified Incus project and host capability boundaries. A Home Manager candidate cannot alter host-owned accepted fields, authorize a Linux bridge/firewall change, or acquire root-only secret material through the state API. A user with broad Incus host administration rights must still be treated as privileged; `home-manager` is not a security sandbox.
+- **NixOS-only deployment:** system actor may own both host and operator resources when explicitly configured. A Home Manager installation on the same host is not automatically a second accepted-state writer.
+- **Home Manager-only deployment:** user may inspect and, if separately authorized, own selected project-scoped operator resources; required host capabilities must preexist under an external host administrator. An absent or unverified host capability is not automatically created with sudo or an ambient Incus admin connection.
+- **Combined deployment (preferred):** NixOS remains authoritative for host capability/policy; Home Manager owns only the explicitly delegated operator portion. A resource has exactly one active lifecycle owner, with coordinated leases at shared-resource boundaries; competing system/user reconcilers fail closed.
+
+**Important scope limit:** `nixos-rebuild switch` legitimately applies NixOS-owned system and firewall configuration through the *NixOS* activation machinery. Aginctus cannot promise to freeze that external host policy behind its accepted-state promotion. The guarantee is that the switch **does not automatically accept a new Aginctus revision or reconcile Aginctus-managed deployment resources**. An HM switch changes its operator package and candidate config, not the running infrastructure; it never triggers privileged host policy. Host capability changes may independently cause observed drift or make a previously accepted deployment nonconvergent, which must be reported.
+
+**Views and access:** both contexts address the same selected deployment and accepted revision, but do not necessarily see the same detail. System mode can report host capabilities, shared-resource ownership, resource convergence and nonsecret user-scope health/summary only as authorized; user mode can inspect its accepted operator declarations and sanitized availability/health of required host capabilities, not host policy internals or another user's secrets. Current-state observation requires separate read capabilities and must distinguish *not authorized* from *not observable* from *no drift*. An `--owner` or `--mode` flag is only an explicit selector, never proof of authority; authenticated actor identity and state-service policy determine permission.
+
+This is a **logical single accepted revision with scoped updates**, not a promise of a monolithic secret store or shared writable root/user filesystem. Cross-scope changes require distinct explicitly authorized steps or a separately designed joint transaction. The per-deployment state service must validate every change server-side against the owner's scope, even when a client supplies a full candidate document.
+
 ## Safety and recovery
 
 - Selection, profile/deployment identity, Incus project identity and resource ownership must be fixed at the relevant authorization boundary, never inferred from a changed ambient environment.
 - Only explicitly selected workloads/resources participate; omission is not deletion. Foreign resources, unsupported drift, destructive replacements and protected volumes retain current fail-closed/explicit-approval rules.
 - Reconciliation pins an accepted revision and coordinates writer exclusion/fencing. A stale revision, conflict, service outage or lost lock cannot silently produce a mixed-revision deployment.
-- Incus operations are not transactional. Journal partial/uncertain outcomes and verify observed convergence; a desired revision may be accepted while current state is not converged. Rollback means a new accepted revision plus separately validated resource changes, not rewinding a database or claiming infrastructure rollback.
+- Incus operations are not transactional. Journal partial/uncertain outcomes and verify observed convergence; a accepted revision may be accepted while current state is not converged. Rollback means a new accepted revision plus separately validated resource changes, not rewinding a database or claiming infrastructure rollback.
 - Bootstrap and recovery of the state service and its authoritative volume must operate through a narrow, explicit, ownership-checked path even when the state service is unavailable. Normal workload teardown cannot delete the state-service volume.
 - Initial activation and migration must be safe for existing deployments, existing host-/user-scoped state and dedicated Incus project policies; no implicit adoption or silent credential migration.
 
@@ -62,7 +78,7 @@ The proposed design does **not** retroactively make the state service a v0.2 rel
 
 - **Directly reconcile the latest effective configuration:** simple but loses a stable acceptance boundary and allows incidental environment changes to alter infrastructure.
 - **Store a last-applied file in each CLI user's XDG state:** avoids a service but permits competing clients, distinct user/system state, missing shared authority and unsafe recovery.
-- **Use Incus resources themselves as the desired-state database:** conflates accepted policy with observed infrastructure and cannot reliably represent independent configuration drift.
+- **Use Incus resources themselves as the accepted-state database:** conflates accepted policy with observed infrastructure and cannot reliably represent independent configuration drift.
 - **Put a full continuous privileged controller in the state container:** adds unnecessary daemon authority and failure complexity before bounded operations are proven.
 - **Use an external orchestration/secret-management platform:** increases dependencies without evidence that Aginctus needs its full scope.
 
