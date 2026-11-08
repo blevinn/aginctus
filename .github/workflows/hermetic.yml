@@ -214,3 +214,66 @@ jobs:
           bash scripts/acceptance/opencode-live-adapter-test.sh
       - name: local Markdown links
         run: python3 scripts/check_markdown_links.py
+
+  # A failed/ambiguous selector must never exempt a Nix-sensitive change.
+  # This separate result is advisory until the required gate migrates in #709.
+  changes:
+    name: classify PR Nix applicability
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      nix_required: ${{ steps.classify.outputs.nix_required }}
+    steps:
+      - name: checkout full PR merge tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: classify changed paths (fail closed)
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/checks/ci_select.py --base "$BASE_SHA"
+
+  nix-contracts:
+    name: targeted Nix security contracts (ubuntu)
+    needs: changes
+    # Explicitly evaluate on selector failure, which also fails the gate.
+    # A clean docs-only diff is the sole exemption.
+    if: ${{ always() && github.event_name == 'pull_request' && needs.changes.outputs.nix_required != 'false' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    env:
+      NIX_CONFIG: experimental-features = nix-command flakes
+      AGINCTUS_INCUS_INTEGRATION: "0"
+      AGINCTUS_INCUS_DISPOSABLE: "NO"
+      AGINCTUS_ACCEPTANCE_LIVE: ""
+      AGINCTUS_ACCEPTANCE_LIVE_HOOKS: ""
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: require unprivileged namespace isolation
+        run: |
+          set -euo pipefail
+          # Do not weaken this contract or alter runner security settings.
+          unshare --user --map-root-user --mount --fork -- true
+      - name: install Nix
+        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+          enable_kvm: false
+      - name: build NixOS Home Manager and gateway security contracts
+        run: |
+          nix --quiet build --no-update-lock-file --no-link \
+            .#checks.x86_64-linux.nixos-module \
+            .#checks.x86_64-linux.home-manager-module \
+            .#checks.x86_64-linux.operator-settings-parity \
+            .#checks.x86_64-linux.gateway-config-parity \
+            .#checks.x86_64-linux.opencode-workload-socket-alignment \
+            .#checks.x86_64-linux.testenv-incus-vm-image-config \
+            .#checks.x86_64-linux.testenv-recovery-worker-policy \
+            .#checks.x86_64-linux.testenv-installed-worker-policy
