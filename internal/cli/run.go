@@ -328,4 +328,3 @@ func workloadIDs(effective *config.Config) []string {
 	sort.Strings(ids)
 	return ids
 }
-

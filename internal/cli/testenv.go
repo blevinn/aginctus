@@ -105,4 +105,3 @@ func runTestenv(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	fmt.Fprintln(stderr, "invalid testenv invocation; see aginctus testenv --help")
 	return 2
 }
-
