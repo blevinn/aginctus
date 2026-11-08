@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/blevinn/aginctus/internal/validation/catalog"
 )
 
 func TestSanitizeEnv(t *testing.T) {
@@ -120,5 +122,19 @@ func TestLaunchErrorsAreDistinct(t *testing.T) {
 		if r.Status != "error" || r.ExitCode != nil {
 			t.Fatalf("incorrect launch result: %#v", r)
 		}
+	}
+}
+
+func TestCanceledSuiteIsAnErrorNotAFailure(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "just")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result := runSuite(ctx, dir, catalog.HermeticSuites()[0], SanitizeEnv([]string{"PATH=" + dir}), false, nil)
+	if result.Status != "error" || result.ExitCode != nil {
+		t.Fatalf("canceled suite was not reported as an error: %#v", result)
 	}
 }
