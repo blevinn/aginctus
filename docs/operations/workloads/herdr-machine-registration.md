@@ -1,6 +1,6 @@
 # Herdr: operator workflow and validation
 
-This is the canonical **current v0.1 Herdr/SSH procedure** for an Aginctus-owned Herdr client and OpenCode workload. The commands use the configured `dev` workload; replace it with another explicitly configured OpenCode container ID. See the [SSH helper and trust contract](ssh-credentials.md) for what these steps change and the [state-volume guide](herdr-persistent-state-volumes.md) before any image replacement or legacy reset.
+This is the canonical **current v0.1 Herdr/SSH procedure** for an Aginctus-owned Herdr client and OpenCode workload. The commands use the configured `dev` workload; replace it with another explicitly configured OpenCode container ID. See the [SSH helper and trust contract](../../reference/ssh-credentials.md) for what these steps change and the [state-volume guide](herdr-persistent-state-volumes.md) before any image replacement or legacy reset.
 
 The managed Herdr client is a **separate infrastructure container** entered by the host CLI; the workload runs its own Herdr server and agent as `agent`. Completing a Herdr SSH session does not prove model-backed OpenCode inference or gateway egress.
 

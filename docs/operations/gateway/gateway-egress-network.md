@@ -1,6 +1,6 @@
 # Gateway-only outbound bridge
 
-Start with the [gateway and egress operator decision path](gateway-operator-path.md) for ordered read-only inventory, exceptional maintenance, credential approval, inference evidence and key revocation. This page describes the configured network contract, not live acceptance of guest routes or host filtering.
+Start with the [gateway and egress operator decision path](README.md) for ordered read-only inventory, exceptional maintenance, credential approval, inference evidence and key revocation. This page describes the configured network contract, not live acceptance of guest routes or host filtering.
 
 The gateway egress bridge gives LiteLLM an outbound path while keeping
 PostgreSQL and agent workloads on the private management network. Network
@@ -25,7 +25,7 @@ them before Compose runs. LiteLLM's management attachment is marked
 actual guest route and host isolation still require deployment validation.
 
 The effective configuration can specify the egress bridge CIDR, LiteLLM
-host CIDR, and DHCP policy. See [configuration](configuration.md) for
+host CIDR, and DHCP policy. See [configuration](../../reference/configuration.md) for
 configuration sources and [the OCI egress pilot](litellm-oci-egress-pilot.md)
 for address selection, restricted DHCP ranges, stopped-instance migration,
 recovery, and live route/isolation acceptance. Existing instances are not
@@ -60,11 +60,11 @@ running infrastructure**, and is not part of this validation command list.
 
 - [API-key provider pilot](gateway-api-key-pilot.md): provider registration
   and the separately authorized live path.
-- [Native ChatGPT OAuth](architecture/native-chatgpt-oauth.md): accepted
+- [Native ChatGPT OAuth](../../architecture/native-chatgpt-oauth.md): accepted
   credential design; OAuth tokens are not interchangeable with API keys.
 - [Workload key pilot](gateway-workload-key-pilot.md): scoped LiteLLM key
   provisioning and revocation, separate from upstream credentials.
-- [Host firewall policy](firewall-host-backends.md): management isolation
+- [Host firewall policy](../host/firewall-host-backends.md): management isolation
   and DNS/DHCP integration.
 
 Rendered topology and component tests do not establish successful upstream

@@ -3,7 +3,7 @@
 Status: image, lifecycle, fail-closed launcher and private gateway provisioning
 are implemented. Genuine managed-workload coding/inference and cleanup passed
 on the `57c2da6` pilot (#118). Full fresh-host deployment/smoke/repeat remains
-pending in the [v0.1 operator handoff](../v0.1-deployment-acceptance.md).
+pending in the [v0.1 operator handoff](../../history/v0.1-deployment-acceptance.md).
 
 ## Purpose
 
@@ -45,7 +45,7 @@ aginctus-opencode-workload
 
 The image enables `sshd` but disables password and keyboard-interactive authentication. Root SSH login is disabled.
 
-No SSH public key is baked into the image. The image provides the fixed `aginctus-ssh-authorize` helper and a dedicated root-owned authorization path for managed client keys. An operator explicitly runs `aginctus herdr authorize dev` to inspect the existing Herdr client public identity and install matching authorization; ordinary workload `apply` does not do this automatically. See [Herdr SSH identity contract](../ssh-credentials.md) for the public-key handoff and [Herdr operations](../herdr-machine-registration.md) for host trust and registration.
+No SSH public key is baked into the image. The image provides the fixed `aginctus-ssh-authorize` helper and a dedicated root-owned authorization path for managed client keys. An operator explicitly runs `aginctus herdr authorize dev` to inspect the existing Herdr client public identity and install matching authorization; ordinary workload `apply` does not do this automatically. See [Herdr SSH identity contract](../../reference/ssh-credentials.md) for the public-key handoff and [Herdr operations](herdr-machine-registration.md) for host trust and registration.
 
 The Herdr headless server starts at boot as the `agent` user with persistent state under `/var/lib/herdr` and runtime state under `/run/herdr`.
 
@@ -77,7 +77,7 @@ match; absent/malformed session IDs fail closed. It never fabricates an ID,
 overrides the user agent, or reads credentials. Other model aliases do not
 load the plugin. This completes only the **client-to-gateway** session-header
 leg. Selective pinned LiteLLM forwarding and exposure controls are documented
-in the [forwarding guide](../selective-go-forwarding.md); actual pilot/provider
+in the [forwarding guide](../gateway/selective-go-forwarding.md); actual pilot/provider
 evidence and remaining release decisions are recorded in #118.
 
 If the endpoint, model or key is absent/invalid, OpenCode does **not** launch. An incorrect DNS name or an unreachable gateway fails requests without making direct upstream network connectivity available. The management network stays unrouted and without NAT.
