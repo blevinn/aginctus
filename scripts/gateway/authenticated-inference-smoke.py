@@ -222,16 +222,22 @@ def run_authorization(host, alias, workload_key, master_key, opener=None):
     return opener
 
 
-def run(host, alias, workload_key, master_key, opener=None, marker=None):
+def run(host, alias, workload_key, master_key, opener=None, marker=None, siwc=False):
     opener = run_authorization(host, alias, workload_key, master_key, opener)
     marker = marker or "AGINCTUS_OK_" + secrets.token_hex(12)
-    status, data = request(opener, host, "/v1/responses", workload_key, {
+    body = {
         "model": alias,
         "input": "Return exactly this identifier, and nothing else: " + marker,
         "stream": True,
         "max_output_tokens": 80,
         "user": "aginctus-smoke-" + marker.lower(),
-    }, diagnose=True)
+    }
+    if siwc:
+        body["input"] = [{"role": "user", "content": body["input"]}]
+        body["store"] = False
+        del body["max_output_tokens"]
+        del body["user"]
+    status, data = request(opener, host, "/v1/responses", workload_key, body, diagnose=True)
     if status != 200:
         raise SmokeError(f"upstream Responses request failed (HTTP {status})")
     count = verify_sse(data, marker)
@@ -259,6 +265,7 @@ def main(argv=None):
     p.add_argument("--alias", required=True)
     p.add_argument("--workload-key-file", required=True)
     p.add_argument("--gateway-id", default="local")
+    p.add_argument("--siwc", action="store_true", help="Use the SIWC array-input, store:false request contract")
     action = p.add_mutually_exclusive_group()
     action.add_argument("--run", action="store_true", help="Opt in to a paid real inference request")
     action.add_argument(
@@ -287,7 +294,7 @@ def main(argv=None):
             run_authorization(host, args.alias, workload_key, master)
             print(json.dumps(authorization_report("pass"), separators=(",", ":")))
             return 0
-        marker, event_count = run(host, args.alias, workload_key, master)
+        marker, event_count = run(host, args.alias, workload_key, master, siwc=args.siwc)
         print(f"PASS: authenticated LiteLLM Responses stream completed with requested output; "
               f"{event_count} events; gateway correlation identifier {marker}; "
               "provider provenance and egress require separate gateway-side evidence")
