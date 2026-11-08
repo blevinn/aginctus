@@ -74,7 +74,7 @@ signed runs; do not regenerate it as a workaround for failure.
 Systemd copies the key using `LoadCredential` into a private
 credential directory. The service checks its open file descriptor for
 type, ownership, permissions and exact length before contacting the
-dedicated Incus daemon. The executable accepts no command-line
+dedicated Incus daemon. The recovery subcommand accepts no command-line
 arguments, uses no default Incus remote, rejects root, and prints only
 bounded aggregate success/failure counts.
 
@@ -107,11 +107,12 @@ project enforcement, real-host isolation or complete storage reclamation.
 
 ## Opt-in real-worker lifecycle helper
 
-`testenv-worker-acceptance` packages the fixed
-`aginctus-testenv-acceptance` binary in the Nix store. It uses the same
+The `testenv-cli` package supplies the fixed
+`aginctus-testenv worker acceptance` command in the Nix store. It uses the same
 `IncusVMBackend`, signed handles, readiness probes, typed guest exec and
-destruction path as the worker library. It is not installed or started by
-the recovery module, normal checks, public CLI or MCP. Its commands and
+destruction path as the worker library. It is never started by the recovery module, normal checks, public CLI or MCP.
+The installed operator binary exposes this leaf, but only the explicitly
+approved dedicated worker invocation supplies the necessary admission inputs. Its commands and
 resource sizes cannot be overridden by a checkout manifest or guest input.
 
 ### Prerequisites and invocation
@@ -157,8 +158,8 @@ fingerprint and sentinel name. The transient unit supplies the runtime key
 and an owned private report root without installing a persistent service:
 
 ```sh
-helper=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-worker-acceptance)
-"$helper/bin/aginctus-testenv-acceptance" --help
+helper=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-cli)
+"$helper/bin/aginctus-testenv" worker acceptance --help
 
 # On the independently approved dedicated worker ONLY:
 sudo systemd-run --unit=aginctus-testenv-acceptance --wait --pipe --collect \
@@ -172,7 +173,7 @@ sudo systemd-run --unit=aginctus-testenv-acceptance --wait --pipe --collect \
   --property=PrivateTmp=yes --property=PrivateDevices=yes \
   --property=RestrictAddressFamilies=AF_UNIX --property=IPAddressDeny=any \
   --property=TimeoutStartSec=13min --property=TimeoutStopSec=150s \
-  "$helper/bin/aginctus-testenv-acceptance" \
+  "$helper/bin/aginctus-testenv" worker acceptance \
   --disposable-worker DEDICATED_DISPOSABLE_WORKER \
   --socket /var/lib/incus/unix.socket --project aginctus-testenv \
   --image '<actual-64-hex-imported-image-fingerprint>' \
@@ -252,12 +253,15 @@ The authorization/service API and agent-facing mutations remain gated.
 
 ### Offline bootstrap contract and drift planning
 
-The separately packaged `aginctus-testenv` command is installed by
+The unified operator-only `aginctus-testenv` command is installed by
 `aginctusTestenvWorker`. Its `worker bootstrap` subcommands are **offline
 operator tools**, with no daemon connection, registry access, subprocess
 execution, signing key access, service or activation hook. They accept bounded
 JSON on stdin and emit deterministic plans or inspection-only fingerprints.
-The ordinary agent CLI and MCP have no bootstrap interface.
+The ordinary agent CLI and MCP have no bootstrap or privileged worker interface.
+The installed worker also uses `worker preflight` and `worker sweep`;
+`worker acceptance` requires explicit operator invocation and is never
+installed as an automatic service.
 
 `IncusBootstrapContract` and `IncusBootstrapInventory` in
 `internal/testenv/incus_bootstrap.go` define the input schema. The project
@@ -415,8 +419,8 @@ immutable helper. Inspect the actual pool configuration independently before
 trusting its hash; do not automatically feed discovery into admission:
 
 ```sh
-preflight=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-worker-preflight)
-"$preflight/bin/aginctus-testenv-worker-preflight" --help
+preflight=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-cli)
+"$preflight/bin/aginctus-testenv" worker preflight --help
 
 # Dedicated disposable worker ONLY, with the root-owned regular marker and
 # runtime key provisioned as above; substitute the actual imported fingerprint.
@@ -431,7 +435,7 @@ sudo systemd-run --unit=aginctus-testenv-pool-inspect --wait --pipe --collect \
   --setenv=AGINCTUS_TESTENV_WORKER_SOCKET=/var/lib/incus/unix.socket \
   --setenv=AGINCTUS_TESTENV_POLICY_KEY_FILE=/run/credentials/aginctus-testenv-pool-inspect.service/policy-key \
   --setenv=AGINCTUS_TESTENV_IMAGE_FINGERPRINT='<actual-64-hex-image-fingerprint>' \
-  "$preflight/bin/aginctus-testenv-worker-preflight" --pool-fingerprint
+  "$preflight/bin/aginctus-testenv" worker preflight --pool-fingerprint
 ```
 
 `inspection_only` is never an admission pass. The returned hash covers

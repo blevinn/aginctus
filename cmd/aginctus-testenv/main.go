@@ -2,6 +2,9 @@
 package main
 
 import (
+	"context"
+	"os/signal"
+	"syscall"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -19,6 +22,7 @@ type plannerInput struct {
 }
 
 var errOperatorAction = errors.New("offline bootstrap needs operator action")
+var errWorkerIncomplete = errors.New("worker operation incomplete or unverified")
 
 func readPlannerInput(r io.Reader) (plannerInput, error) {
 	const limit = 256 * 1024
@@ -36,6 +40,10 @@ func readPlannerInput(r io.Reader) (plannerInput, error) {
 }
 
 func newRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
+	return newRootCommandWithServices(stdin, stdout, stderr, defaultWorkerServices())
+}
+
+func newRootCommandWithServices(stdin io.Reader, stdout, stderr io.Writer, services workerServices) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "aginctus-testenv",
 		Short:         "Operator tools for isolated test environments",
@@ -61,6 +69,7 @@ func newRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 		RunE: groupRun,
 	}
 	worker.AddCommand(bootstrap)
+	worker.AddCommand(newPreflightCommand(services), newAcceptanceCommand(services), newSweepCommand(services))
 	root.AddCommand(worker)
 
 	bootstrap.AddCommand(&cobra.Command{
@@ -113,11 +122,15 @@ func newRootCommand(stdin io.Reader, stdout, stderr io.Writer) *cobra.Command {
 }
 
 func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	root := newRootCommand(stdin, stdout, stderr)
+	return executeWithServices(context.Background(), args, stdin, stdout, stderr, defaultWorkerServices())
+}
+
+func executeWithServices(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer, services workerServices) int {
+	root := newRootCommandWithServices(stdin, stdout, stderr, services)
 	root.SetArgs(args)
-	if err := root.Execute(); err != nil {
+	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(stderr, err)
-		if errors.Is(err, errOperatorAction) {
+		if errors.Is(err, errOperatorAction) || errors.Is(err, errWorkerIncomplete) {
 			return 1
 		}
 		return 2
@@ -126,5 +139,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func main() {
-	os.Exit(execute(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	os.Exit(executeWithServices(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr, defaultWorkerServices()))
 }
