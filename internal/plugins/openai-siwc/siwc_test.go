@@ -1,4 +1,4 @@
-package siwc
+package openaisiwc
 
 import (
 	"bytes"
