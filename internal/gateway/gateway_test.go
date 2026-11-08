@@ -309,6 +309,28 @@ func TestRenderedGatewayComposeMatchesDeploymentModel(t *testing.T) {
 	}
 }
 
+func TestManagedSIWCComposeAndDeploymentParity(t *testing.T) {
+	for _, selective := range []bool{false, true} {
+		effective, err := (&config.Loader{}).Load(config.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		spec, err := FromConfig(effective)
+		if err != nil {
+			t.Fatal(err)
+		}
+		spec.SelectiveGoForwarding = selective
+		spec.LiteLLMImage = "ghcr.io/berriai/litellm@sha256:" + strings.Repeat("a", 64)
+		if err := spec.ConfigureSIWC(`{"model_list":[],"litellm_settings":{"callbacks":["litellm_siwc.proxy_handler_instance"]}}`); err != nil {
+			t.Fatal(err)
+		}
+		assertRenderedGatewayComposeMatchesDeploymentModel(t, spec)
+		if len(spec.SIWCConfigs()) < 3 || !strings.Contains(spec.SIWCConfig, "litellm_siwc") {
+			t.Fatal("missing runtime delivery")
+		}
+	}
+}
+
 func assertRenderedGatewayComposeMatchesDeploymentModel(t *testing.T, spec Spec) (orchestration.Plan, map[string]any) {
 	t.Helper()
 	rendered, err := spec.RenderCompose()
