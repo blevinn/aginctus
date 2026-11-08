@@ -1,11 +1,13 @@
 name: hermetic
 
 on:
+  # Also validate stacked PRs targeting a topic branch. No secrets/write authority.
   pull_request:
-    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * 1'
 
 permissions:
   contents: read
@@ -17,8 +19,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  hermetic:
-    name: hermetic validation (ubuntu)
+  comprehensive:
+    name: comprehensive hermetic regression (ubuntu)
+    # Full coverage remains after merges, weekly and on manual dispatch.
+    # Do not make the PR fast lane pay for full Nix/packaging every update.
+    if: ${{ github.event_name != 'pull_request' }}
     # Probe the namespace contract instead of changing runner security policy.
     runs-on: ubuntu-22.04
     timeout-minutes: 45
@@ -116,6 +121,7 @@ jobs:
   # Advisory while the legacy required gate runs; #708 will convert the
   # existing required context into a fail-closed aggregator.
   go-fast:
+    if: ${{ github.event_name == 'pull_request' }}
     name: go tests and staticcheck (ubuntu)
     runs-on: ubuntu-22.04
     timeout-minutes: 15
@@ -170,6 +176,7 @@ jobs:
           go run ./cmd/aginctus help | python3 scripts/check_docs_examples.py
 
   static-fast:
+    if: ${{ github.event_name == 'pull_request' }}
     name: python shell and docs (ubuntu)
     runs-on: ubuntu-22.04
     timeout-minutes: 12
@@ -292,3 +299,51 @@ jobs:
             .#checks.x86_64-linux.testenv-incus-vm-image-config \
             .#checks.x86_64-linux.testenv-recovery-worker-policy \
             .#checks.x86_64-linux.testenv-installed-worker-policy
+
+  # Exact required status in main ruleset 24431697. The new gate must
+  # account for every upstream job; a skip is valid only for a positively
+  # classified documentation-only diff. Never infer a PASS from no evidence.
+  hermetic:
+    name: hermetic validation (ubuntu)
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    needs: [go-fast, static-fast, changes, nix-contracts]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    env:
+      GO_RESULT: ${{ needs.go-fast.result }}
+      STATIC_RESULT: ${{ needs.static-fast.result }}
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      NIX_RESULT: ${{ needs.nix-contracts.result }}
+      NIX_REQUIRED: ${{ needs.changes.outputs.nix_required }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - name: checkout for whitespace validation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: aggregate PR evidence (fail closed)
+        run: |
+          set -euo pipefail
+          {
+            echo '## Required PR hermetic gate'
+            echo
+            echo '| Evidence | Outcome |'
+            echo '| --- | --- |'
+            echo "| Go tests/staticcheck | \`$GO_RESULT\` |"
+            echo "| Python/shell/docs | \`$STATIC_RESULT\` |"
+            echo "| Change classification | \`$CHANGES_RESULT\` |"
+            echo "| Nix required | \`$NIX_REQUIRED\` |"
+            echo "| Targeted Nix contracts | \`$NIX_RESULT\` |"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$GO_RESULT" = success
+          test "$STATIC_RESULT" = success
+          test "$CHANGES_RESULT" = success
+          case "$NIX_REQUIRED" in
+            true) test "$NIX_RESULT" = success ;;
+            false) test "$NIX_RESULT" = skipped ;;
+            *) echo "::error::Nix applicability missing or invalid"; exit 1 ;;
+          esac
+          # GitHub's synthetic merge checkout includes base and head changes.
+          git diff --check "$BASE_SHA" HEAD
