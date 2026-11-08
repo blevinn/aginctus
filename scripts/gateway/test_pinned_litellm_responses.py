@@ -96,7 +96,7 @@ class PinnedResponsesProbeTests(unittest.TestCase):
 
     def test_operator_runbook_uses_ephemeral_podman_policy(self):
         runbook_path = Path(__file__).resolve().parents[2] / (
-            "docs/operations/gateway/gateway-api-key-pilot.md")
+            "docs/operations/gateway/selective-go-forwarding.md")
         runbook = runbook_path.read_text(encoding="utf-8")
         self.assertIn(
             'policy=$(mktemp)',
