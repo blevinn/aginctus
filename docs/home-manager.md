@@ -41,13 +41,19 @@ Home Manager (replace the username, home directory, and system):
 }
 ```
 
-The opt-in `vmTests.x86_64-linux.home-manager-operator` output evaluates
-and builds a standalone Home Manager generation in the outer Nix build, then
-activates it **as an unprivileged user** inside a disposable NixOS/Incus VM
-initially with no Incus authorization. Prebuilding is intentional: the VM is offline,
-so it cannot fetch build-time sources during a nested `home-manager build`.
-The test exercises real Home Manager activation twice and a separate
-configuration-generation upgrade, checks the installed CLI/config and
+The opt-in `vmTests.x86_64-linux.home-manager-operator` output embeds the
+standalone Home Manager CLI and generation closures in the disposable
+NixOS/Incus VM. It creates a local consuming flake using only store-path
+inputs. That flake exposes the exact generation closure evaluated by
+the outer test derivation; the guest invokes
+`home-manager --flake <path>#operator build --no-out-link` and
+`home-manager --flake <path>#operator switch` as the **unprivileged user** with
+no Incus authorization. This exercises the real CLI build/switch and activation
+paths without claiming a from-scratch module evaluation or closure build in the
+guest. The guest's NixOS activation does not run Home Manager. The VM remains
+offline, and all inputs and outputs are already in its store. The test then
+exercises repeat activation and a separate configuration-generation upgrade,
+checks the installed CLI/config and
 OS-observed package identity, rejects mismatched system/user package declarations
 and denied Incus access, and verifies unchanged Incus inventories on a disposable
 Btrfs-backed pool and Linux bridge. Starting/stopping a lingering user manager
@@ -95,9 +101,10 @@ packet checks survive firewalld reload independently of the user manager.
 Egress is dormant/fail-closed here; active gateway grant acceptance remains in
 the separate firewall integration fixtures.
 
-The scenario does **not** execute the `home-manager build/switch` CLI inside the
-guest or establish image/workload write authorization, active-controller
-exclusion, credential migration/rollback or production cutover acceptance.
+This exercises real guest CLI build and switch against the included local
+configuration. It does **not** establish image/workload write authorization,
+active-controller exclusion, credential migration/rollback or production
+cutover acceptance.
 
 Run the heavyweight acceptance test explicitly:
 

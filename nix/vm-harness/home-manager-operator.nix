@@ -8,8 +8,8 @@ let
 
   # Evaluate a real standalone Home Manager configuration, without linking
   # Home Manager into NixOS modules or granting the user Incus access.
-  # Build the activation closure OUTSIDE the isolated VM: its in-guest Nix
-  # daemon has no network and must not fetch a toolchain during activation.
+  # Prebuild a generation for the CLI and repeat-activation checks in the
+  # offline guest.
   homeManager = import "${pkgs.home-manager.src}/lib" { lib = pkgs.lib; };
   makeGeneration =
     gatewayID:
@@ -32,6 +32,26 @@ let
     };
   operatorGeneration = makeGeneration "disposable-operator";
   upgradedGeneration = makeGeneration "upgraded-operator";
+  operatorFlake = pkgs.writeText "home-manager-operator-flake.nix" ''
+    {
+      inputs = {
+        generation = {
+          url = "path:${operatorGeneration.activationPackage}";
+          flake = false;
+        };
+        news = {
+          url = "path:${operatorGeneration.config.news.json.output}";
+          flake = false;
+        };
+      };
+      outputs = { generation, news, ... }: {
+        homeConfigurations.operator = {
+          activationPackage = generation.outPath;
+          config.news.json.output = news.outPath;
+        };
+      };
+    }
+  '';
   mismatchedManifest = pkgs.writeText "mismatched-operator-package.json" (
     builtins.toJSON {
       schema = 1;
@@ -100,15 +120,23 @@ pkgs.testers.runNixOSTest {
       "root"
       "operator"
     ];
+    nix.settings.experimental-features = [
+      "nix-command"
+      "flakes"
+    ];
     # Embed the full prebuilt generation and its closure in the guest store.
     # This does not activate Home Manager or touch the user's home as root.
     system.extraDependencies = [
       operatorGeneration.activationPackage
       upgradedGeneration.activationPackage
+      operatorFlake
+      pkgs.home-manager
+      operatorGeneration.config.news.json.output
     ];
     environment.systemPackages = [
       pkgs.incus
       pkgs.jq
+      pkgs.home-manager
       pkgs.openssl
       pkgs.firewalld
       pkgs.nftables
@@ -164,16 +192,29 @@ pkgs.testers.runNixOSTest {
     machine.succeed("printf synthetic-protected-state > /var/lib/aginctus/state/acceptance-sentinel; chmod 0600 /var/lib/aginctus/state/acceptance-sentinel")
     protected_before = machine.succeed("sha256sum /var/lib/aginctus/state/acceptance-sentinel; stat -c '%u:%g:%a' /var/lib/aginctus/state /var/lib/aginctus/state/acceptance-sentinel")
 
-    # The generation was evaluated and built by the outer test derivation.
-    # Exercise its real Home Manager activation as the unprivileged operator.
-    # Neither the NixOS activation nor root invokes this script.
+    operator = "runuser -u operator -- env HOME=/home/operator USER=operator LOGNAME=operator"
+
+    # Exercise Home Manager's real CLI as the unprivileged operator. The
+    # fixture and all Nix inputs are already in the guest store; no network or
+    # NixOS-side activation is involved.
+    home_manager = "${pkgs.home-manager}/bin/home-manager"
+    machine.succeed(operator + " install -d -m 0700 /home/operator/home-manager-flake")
+    machine.succeed(operator + " cp ${operatorFlake} /home/operator/home-manager-flake/flake.nix")
+    machine.succeed(operator + " nix --offline flake lock /home/operator/home-manager-flake", timeout=120)
+    operator_home_manager = operator + " " + home_manager + " --flake /home/operator/home-manager-flake#operator"
+    machine.succeed("test -x " + home_manager)
+    machine.fail("test -e /home/operator/.config/aginctus/config.json")
+    machine.succeed(operator_home_manager + " build --no-out-link", timeout=600)
+    machine.fail("test -e /home/operator/.config/aginctus/config.json")
+    machine.succeed(operator_home_manager + " switch", timeout=600)
+
+    # Retain an explicit repeat activation using the independently evaluated
+    # generation closure as a second non-mutating activation path.
     activation = "runuser -u operator -- env HOME=/home/operator USER=operator LOGNAME=operator ${operatorGeneration.activationPackage}/activate"
     machine.succeed("test -x ${operatorGeneration.activationPackage}/activate")
-    machine.succeed(activation, timeout=600)
     machine.succeed("runuser -u operator -- test -L /home/operator/.config/aginctus/config.json")
     machine.succeed("runuser -u operator -- jq -e '.gateway.id == \"disposable-operator\"' /home/operator/.config/aginctus/config.json")
     machine.succeed("runuser -u operator -- /home/operator/.nix-profile/bin/aginctus config get gateway.id | grep -q disposable-operator")
-    operator = "runuser -u operator -- env HOME=/home/operator USER=operator LOGNAME=operator"
     cli = operator + " /home/operator/.nix-profile/bin/aginctus"
     assert not {"wheel", "incus", "incus-admin"}.intersection(machine.succeed(operator + " id -nG").split())
     machine.succeed(cli + " operator package-audit --owner user | grep -q 'observed running CLI path'")
