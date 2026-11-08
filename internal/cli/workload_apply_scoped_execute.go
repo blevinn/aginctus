@@ -13,6 +13,15 @@ import (
 
 var ensureScopedExistingWorkload = native.EnsureExistingLocalInstance
 
+func runScopedWorkloadApplyConfirm(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
+	project, rest, err := parseScopedInstanceStatusArgs(args)
+	if err != nil || len(rest) != 2 || rest[0] == "" || rest[1] != "--confirm-apply" {
+		fmt.Fprintln(stderr, "Usage: aginctus workload apply --project NAME WORKLOAD-ID --confirm-apply")
+		return 2
+	}
+	return runScopedWorkloadApply(ctx, project, rest[0], out, stderr, cfg)
+}
+
 // runScopedWorkloadApply uses the manual lifecycle authority contract. The
 // cooperative lease is not a fence against independent Incus administrators.
 func runScopedWorkloadApply(ctx context.Context, project, id string, out, stderr io.Writer, cfg *config.Config) int {
