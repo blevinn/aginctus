@@ -1,6 +1,6 @@
-// Package siwc implements the local SIWC enrollment and administration lifecycle.
+// Package openaisiwc implements the local OpenAI SIWC enrollment and administration lifecycle.
 // Its protected state and flock protocol are shared with the LiteLLM extension.
-package siwc
+package openaisiwc
 
 import (
 	"context"
