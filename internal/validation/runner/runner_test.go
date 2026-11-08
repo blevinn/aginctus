@@ -67,6 +67,7 @@ func TestRunFixedHermeticSuitesAndRedaction(t *testing.T) {
 if [ "$2" = go ]; then
   echo '{"Action":"fail","Package":"github.com/blevinn/aginctus/internal/test","Test":"TestBroken"}'
   echo SECRET_NEVER_IN_REPORT
+  echo SECRET_STDERR_NEVER_IN_REPORT >&2
   exit 7
 fi
 if [ "$2" = python ]; then
@@ -98,7 +99,9 @@ exit 0
 	if err := WriteJSON(&output, report); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(output.String(), "SECRET_NEVER_IN_REPORT") || len(bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n"))) != 1 {
+	if strings.Contains(output.String(), "SECRET_NEVER_IN_REPORT") ||
+		strings.Contains(output.String(), "SECRET_STDERR_NEVER_IN_REPORT") ||
+		len(bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n"))) != 1 {
 		t.Fatal("raw output or extra lines in machine report")
 	}
 	var parsed map[string]any
