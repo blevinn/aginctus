@@ -5,7 +5,9 @@ go 1.26.7
 require (
 	github.com/abiosoft/incus-apply v0.0.0
 	github.com/containerd/platforms v1.0.0-rc.4
+	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/go-jsonnet v0.22.0
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/lxc/incus-compose v1.3.4
 	github.com/lxc/incus/v7 v7.3.0
@@ -33,11 +35,9 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dominikbraun/graph v0.23.0 // indirect
 	github.com/flosch/pongo2/v6 v6.1.0 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/gosimple/slug v1.15.0 // indirect
 	github.com/gosimple/unidecode v1.0.1 // indirect
