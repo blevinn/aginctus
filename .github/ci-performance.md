@@ -101,3 +101,44 @@ included in the eventual required gate. The dedicated Nix job is skipped
 only when the selector explicitly outputs `false`; 'skipped' is not a
 security attestation or a successful Nix run. Complete flake checks remain
 a separate post-merge/release obligation.
+
+## Required status migration and comprehensive evidence (#709)
+
+The existing `hermetic validation (ubuntu)` **job name** is retained for the
+active ruleset. On PRs, it now runs as a fail-closed summary of the independent
+Go, static, change-selection and (if required) targeted Nix jobs. It is never
+skipped just because an upstream job fails, and an invalid selector output
+fails the required gate. A docs-only PR must have a passing classifier and
+an explicitly skipped Nix job. Changes to code/configuration/CI files must
+show Nix PASS. Whitespace validation remains mandatory.
+
+On pushes to `main`, weekly scheduled runs and explicit dispatch, the
+`comprehensive hermetic regression (ubuntu)` job continues to run all eight
+hermetic suites, gateway parity, a release packaging preview, and whitespace
+validation. The full flake check itself already performs evaluation, so a
+separate identical `--no-build` prepass was removed. Tag-triggered
+`release.yml` remains unchanged and independently validates release sources,
+packaged binaries and the draft release. Do not mistake passing PR checks
+for release signoff, or main post-merge failures for harmless skips.
+
+### Required operator review and rollback
+
+1. Confirm #712, #713 and #714 have merged/validated in order, and compare
+   the fast jobs against the previous eight-suite hermetic report.
+2. On a real PR targeting `main`, confirm the required
+   `hermetic validation (ubuntu)` context appears exactly once and fails if
+   either Go/static job or required Nix job fails. Confirm a docs-only PR
+   explicitly records the Nix skip and still runs all safe fast checks.
+3. Confirm the existing [main ruleset](https://github.com/blevinn/aginctus/rules/24431697)
+   still requires `hermetic validation (ubuntu)` with no missing check. It
+   should not require a new job name until that job has reported reliably.
+4. Confirm two `main` pushes produce two comprehensive jobs, neither of
+   which cancels the other. Dispatch one comprehensive run manually if needed.
+5. On CI regression, revert the workflow PR rather than simply removing the
+   required status. Restore the original full hermetic PR gate while retaining
+   the ruleset context. If a ruleset edit is later approved, revert it too
+   before making code changes that remove a required check.
+
+The repository administrator, not this code change, owns any eventual
+ruleset edits and optional cache credentials. This implementation does not
+write repository settings or inject secrets into untrusted PR jobs.
