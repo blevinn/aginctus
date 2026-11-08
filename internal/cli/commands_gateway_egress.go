@@ -119,6 +119,7 @@ func executeGatewayEgress(ctx context.Context, action, zone, ranges string,
 			return 1
 		}
 		candidate, err := gateway.EgressAddressPreflight(ctx, name)
+		//lint:ignore SA4023 The preflight must return a denial for an unreserved candidate; retain the error gate for any future atomic allocator.
 		if err != nil {
 			fmt.Fprintf(stderr, "egress preflight blocked: %v\n", err)
 			return 1
