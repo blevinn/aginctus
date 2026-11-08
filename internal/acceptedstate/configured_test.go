@@ -88,3 +88,48 @@ func TestConfiguredProjectionRejectsMalformedWorkloadContainer(t *testing.T) {
 		t.Fatal("accepted null workloads registry")
 	}
 }
+
+func TestConfiguredProjectionUsesResolvedConfigurationPrecedence(t *testing.T) {
+	writeConfig := func(name, contents string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), name)
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	systemPath := writeConfig("system.json", `{"incus":{"project":"system-project"},"workloads":{"alpha":{"image":{"alias":"system-image"}}}}`)
+	userPath := writeConfig("user.json", `{"incus":{"project":"user-project"}}`)
+	cliPath := writeConfig("cli.json", `{"incus":{"project":"cli-project"}}`)
+	cases := []struct {
+		name        string
+		environment []string
+		options     config.Options
+		project     string
+	}{
+		{name: "system plus user file", project: "user-project"},
+		{name: "environment over files", environment: []string{"AGINCTUS_INCUS_PROJECT=environment-project"}, project: "environment-project"},
+		{name: "command-line file over environment", environment: []string{"AGINCTUS_INCUS_PROJECT=environment-project"}, options: config.Options{ConfigurationFile: cliPath}, project: "cli-project"},
+		{name: "override over command-line file", environment: []string{"AGINCTUS_INCUS_PROJECT=environment-project"}, options: config.Options{ConfigurationFile: cliPath, Overrides: []string{"incus.project=override-project"}}, project: "override-project"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			loader := &config.Loader{SystemPath: systemPath, UserPath: userPath, Environment: tc.environment}
+			cfg, err := loader.Load(tc.options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			manifest, err := FromConfigured(cfg, "work", []string{"alpha"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if manifest.IncusProject != tc.project {
+				t.Fatalf("project = %q, want resolved project %q", manifest.IncusProject, tc.project)
+			}
+			if !reflect.DeepEqual(manifest.SelectedWorkloads, []string{"alpha"}) {
+				t.Fatalf("configured workload selection = %v", manifest.SelectedWorkloads)
+			}
+		})
+	}
+}
