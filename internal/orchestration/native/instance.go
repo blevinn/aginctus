@@ -21,7 +21,8 @@ type InstanceIdentity struct {
 // InstanceIntent manages only explicitly supplied fields and device properties.
 // Extra observed config, devices and device properties are never removed.
 // ImageAlias is project-local; fingerprint resolution belongs to observation.
-// This first contract supports existing workloads only, not create/remove/replace.
+// Native creation uses this intent only for create-if-absent. Existing-instance
+// updates, adoption, replacement and deletion remain unauthorized.
 type InstanceIntent struct {
 	Identity      InstanceIdentity
 	WorkloadID    string
@@ -51,6 +52,9 @@ func (intent InstanceIntent) Validate() error {
 		if intent.Config[key] != value {
 			return fmt.Errorf("instance intent lacks ownership markers")
 		}
+	}
+	if _, reserved := intent.Config["volatile.base_image"]; reserved {
+		return fmt.Errorf("instance base image is selected by the verified image alias")
 	}
 	for name, device := range intent.Devices {
 		if !localName(name) || device["type"] == "" {
