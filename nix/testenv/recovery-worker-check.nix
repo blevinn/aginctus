@@ -48,6 +48,7 @@ assert !(disabled.systemd.timers ? aginctus-testenv-recovery);
 assert !(disabled.users.users ? aginctus-testenv);
 assert cfg.services.aginctusTestenvRecovery.enable;
 assert service.serviceConfig.User == "aginctus-testenv";
+assert lib.hasSuffix "/bin/aginctus-testenv worker sweep" service.serviceConfig.ExecStart;
 assert service.serviceConfig.NoNewPrivileges;
 assert service.serviceConfig.PrivateDevices;
 assert service.serviceConfig.ProtectSystem == "strict";
