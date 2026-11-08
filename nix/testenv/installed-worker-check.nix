@@ -49,7 +49,7 @@ assert !(disabled.systemd.services ? aginctus-testenv-preflight);
 assert !(disabled.systemd.services ? aginctus-testenv-recovery);
 assert cfg.services.aginctusTestenvRecovery.enable;
 assert unit.wantedBy == [ ];
-assert builtins.elem self.packages.${system}.testenv-worker-plan cfg.environment.systemPackages;
+assert builtins.elem self.packages.${system}.testenv-cli cfg.environment.systemPackages;
 assert !(cfg.systemd.services ? aginctus-testenv-bootstrap);
 assert unit.serviceConfig.User == "aginctus-testenv";
 assert unit.serviceConfig.RestrictAddressFamilies == [ "AF_UNIX" ];

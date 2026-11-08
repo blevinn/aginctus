@@ -348,13 +348,13 @@
             vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
             subPackages = [ "./cmd/aginctus-testenv-sweep" ];
           };
-          # Operator tooling is packaged independently from the public CLI.
-          testenv-worker-plan = pkgs.buildGoModule {
-            pname = "aginctus-testenv-worker-plan";
+          # Offline operator planning is separate from the public CLI and its daemon client.
+          testenv-cli = pkgs.buildGoModule {
+            pname = "aginctus-testenv";
             version = releaseVersion;
             src = ./.;
             vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
-            subPackages = [ "./cmd/aginctus-testenv-worker-plan" ];
+            subPackages = [ "./cmd/aginctus-testenv" ];
           };
           testenv-worker-preflight = pkgs.buildGoModule {
             pname = "aginctus-testenv-worker-preflight";

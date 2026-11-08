@@ -51,7 +51,7 @@ in
     ];
     services.aginctusTestenvRecovery.enable = true;
     environment.systemPackages = [
-      self.packages.${pkgs.stdenv.hostPlatform.system}.testenv-worker-plan
+      self.packages.${pkgs.stdenv.hostPlatform.system}.testenv-cli
     ];
     # C copies a regular nonsecret marker only when absent; it never replaces
     # pre-existing operator state. The executable checks its ownership/content.

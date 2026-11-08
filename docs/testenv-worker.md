@@ -252,11 +252,12 @@ The authorization/service API and agent-facing mutations remain gated.
 
 ### Offline bootstrap contract and drift planning
 
-The separately packaged `testenv-worker-plan` executable is installed by
-`aginctusTestenvWorker`. It is an **offline operator tool**, with no daemon
-connection, registry access, subprocess execution, signing key access, service
-or activation hook. It accepts bounded JSON on stdin and emits a deterministic
-plan. The ordinary agent CLI and MCP have no bootstrap interface.
+The separately packaged `aginctus-testenv` command is installed by
+`aginctusTestenvWorker`. Its `worker bootstrap` subcommands are **offline
+operator tools**, with no daemon connection, registry access, subprocess
+execution, signing key access, service or activation hook. They accept bounded
+JSON on stdin and emit deterministic plans or inspection-only fingerprints.
+The ordinary agent CLI and MCP have no bootstrap interface.
 
 `IncusBootstrapContract` and `IncusBootstrapInventory` in
 `internal/testenv/incus_bootstrap.go` define the input schema. The project
@@ -339,11 +340,11 @@ Project entries use `name` and the complete `config` map. Profiles include
 both `default` and `aginctus-testenv` default profiles when that project exists.
 
 ```sh
-planner=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-worker-plan)
-"$planner/bin/aginctus-testenv-worker-plan" --help
+tool=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-cli)
+"$tool/bin/aginctus-testenv" worker bootstrap --help
 # Offline input inspection only, no daemon contact:
-"$planner/bin/aginctus-testenv-worker-plan" --fingerprints < operator-input.json
-"$planner/bin/aginctus-testenv-worker-plan" < operator-input.json
+"$tool/bin/aginctus-testenv" worker bootstrap fingerprints < operator-input.json
+"$tool/bin/aginctus-testenv" worker bootstrap plan < operator-input.json
 ```
 
 Fingerprint output is always `inspection_only`. Independently review the
