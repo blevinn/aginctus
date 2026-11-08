@@ -115,7 +115,7 @@ func TestScopedWorkloadApplyRenderRefusesMutatingSyntax(t *testing.T) {
 	for _, args := range [][]string{
 		{"workload", "apply", "--project", "aginctus", "dev"},
 		{"workload", "apply", "--project", "aginctus", "dev", "--force"},
-		{"workload", "apply", "--project", "aginctus", "dev", "--confirm-apply"},
+		{"workload", "apply", "--project", "aginctus", "dev", "--render", "--confirm-apply"},
 		{"workload", "apply", "--project", "aginctus", "--render"},
 		{"workload", "apply", "--project", "aginctus", "dev", "--render", "--force"},
 		{"workload", "apply", "--project", "default", "dev", "--render"},
