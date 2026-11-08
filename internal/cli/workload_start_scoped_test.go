@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/orchestration/native"
 )
 
 func scopedStartLoader() *config.Loader {
@@ -21,10 +21,10 @@ func scopedStartLoader() *config.Loader {
 func stubScopedStartEnvironment(t *testing.T) (status *string, projectReads *int, instanceReads *int, unitReads *int, starts *int) {
 	t.Helper()
 	oldProjects, oldInstances, oldLegacy := inspectLocalProjects, inspectScopedInstances, inspectIncusInstances
-	oldUnits, oldLease, oldStart := inspectOperatorUnit, acquireScopedImageMutationLease, startScopedWorkloadIncus
+	oldUnits, oldLease, oldStart := inspectOperatorUnit, acquireScopedImageMutationLease, transitionScopedWorkloadState
 	t.Cleanup(func() {
 		inspectLocalProjects, inspectScopedInstances, inspectIncusInstances = oldProjects, oldInstances, oldLegacy
-		inspectOperatorUnit, acquireScopedImageMutationLease, startScopedWorkloadIncus = oldUnits, oldLease, oldStart
+		inspectOperatorUnit, acquireScopedImageMutationLease, transitionScopedWorkloadState = oldUnits, oldLease, oldStart
 	})
 	state := "Stopped"
 	projectCalls, instanceCalls, unitCalls, startCalls := 0, 0, 0, 0
@@ -65,10 +65,12 @@ func stubScopedStartEnvironment(t *testing.T) (status *string, projectReads *int
 		}
 		return func() {}, nil
 	}
-	startScopedWorkloadIncus = func(_ context.Context, scope incusscope.ProjectScope, name string) error {
+	transitionScopedWorkloadState = func(_ context.Context, intent native.InstanceLifecycleIntent) error {
 		startCalls++
-		if scope.Name != "aginctus" || name != "aginctus-dev" {
-			t.Fatalf("unexpected scoped mutation: %q %q", scope.Name, name)
+		if intent.Scope.Name != "aginctus" || intent.Name != "aginctus-dev" ||
+			intent.Resource != "workload" || intent.Role != "agent-workload" ||
+			intent.WorkloadID != "dev" || intent.State != native.InstanceRunning {
+			t.Fatalf("unexpected scoped transition: %+v", intent)
 		}
 		state = "Running"
 		return nil
@@ -77,10 +79,6 @@ func stubScopedStartEnvironment(t *testing.T) (status *string, projectReads *int
 }
 
 func TestScopedWorkloadStartRequiresExplicitProjectAndConfirmation(t *testing.T) {
-	scope, _ := incusscope.NewProjectScope("aginctus")
-	if got, want := scopedWorkloadStartArgs(scope, "aginctus-dev"), []string{"--force-local", "--project", "aginctus", "start", "aginctus-dev"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("unsafe Incus arguments %q, want %q", got, want)
-	}
 	loader := scopedStartLoader()
 	_, _, _, _, starts := stubScopedStartEnvironment(t)
 	for _, args := range [][]string{
@@ -183,7 +181,7 @@ func TestScopedWorkloadStartRejectsUnverifiedStateWithoutMutation(t *testing.T) 
 func TestScopedWorkloadStartPostflightFailureNotReportedAsSuccess(t *testing.T) {
 	loader := scopedStartLoader()
 	_, _, _, _, starts := stubScopedStartEnvironment(t)
-	startScopedWorkloadIncus = func(context.Context, incusscope.ProjectScope, string) error {
+	transitionScopedWorkloadState = func(context.Context, native.InstanceLifecycleIntent) error {
 		*starts++
 		return nil // Daemon returned success, but instance never became running.
 	}
