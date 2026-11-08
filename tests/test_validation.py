@@ -48,19 +48,31 @@ class ValidationDispatchTests(unittest.TestCase):
             root = Path(temporary)
             shutil.copy(ROOT / "justfile", root)
             shutil.copytree(ROOT / ".just", root / ".just")
-            (root / "scripts/checks").mkdir(parents=True)
-            shutil.copy(ROOT / "scripts/checks/report.py", root / "scripts/checks/report.py")
+            # Build the real Go coordinator once; fake only the underlying
+            # suite commands inside the disposable Just fixture.
+            builder = shutil.which("go")
+            if builder is None:
+                self.skipTest("Go toolchain unavailable")
             tools = root / "bin"
             tools.mkdir()
+            runner = tools / "aginctus-check"
+            build = subprocess.run(
+                [builder, "build", "-o", str(runner), "./cmd/aginctus-check"],
+                cwd=ROOT,
+                env=dict(os.environ, GOFLAGS="", GOPROXY="off",
+                         GOSUMDB="off", GOTOOLCHAIN="local"),
+                capture_output=True, text=True, timeout=120, check=False,
+            )
+            self.assertEqual(build.returncode, 0, build.stderr)
             stub = f"#!{sys.executable}\n" + '''import os
 from pathlib import Path
 import sys
 name = Path(sys.argv[0]).name
-# Execute the actual reporter in the copied tree; fake only its children.
-# This happens before safety assertions because the reporter must sanitize
-# the intentionally hostile inherited environment.
-if name == "python3" and sys.argv[1:2] == ["scripts/checks/report.py"]:
-    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
+# Invoke the real Go coordinator before the child environment assertions.
+# It is responsible for cleansing the deliberately hostile caller flags.
+if name == "go" and sys.argv[1:3] == ["run", "./cmd/aginctus-check"]:
+    os.execv(os.environ["CHECK_RUNNER_BIN"],
+             [os.environ["CHECK_RUNNER_BIN"], *sys.argv[3:]])
 command = " ".join([name, *sys.argv[1:]])
 assert os.environ["AGINCTUS_INCUS_INTEGRATION"] == "0"
 assert os.environ["AGINCTUS_INCUS_DISPOSABLE"] == "NO"
@@ -107,6 +119,7 @@ if name == "git":
                 os.environ,
                 PATH=f"{tools}:{os.environ['PATH']}",
                 DISPATCH_LOG=str(log),
+                CHECK_RUNNER_BIN=str(runner),
                 AGINCTUS_INCUS_INTEGRATION="1",
                 AGINCTUS_INCUS_DISPOSABLE="YES",
                 AGINCTUS_ACCEPTANCE_LIVE="I_UNDERSTAND",
