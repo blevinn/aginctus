@@ -40,7 +40,7 @@ func resolveNativeGatewayImages(ctx context.Context, topology NativeGatewayTopol
 		return NativeResolvedGateway{}, fmt.Errorf("native gateway image resolution requires exact service roles")
 	}
 	if resolve == nil { return NativeResolvedGateway{}, fmt.Errorf("native gateway image resolver is required") }
-	out := NativeResolvedGateway{Topology: topology}
+	// Copy the slice before filling resolved references; the candidate graph is immutable.\n\tcopyTopology := topology\n\tcopyTopology.Services = append([]NativeGatewayService(nil), topology.Services...)\n\tout := NativeResolvedGateway{Topology: copyTopology}
 	for i, entry := range []struct {
 		source nativeoci.Source
 		result *nativeoci.ResolvedImage
