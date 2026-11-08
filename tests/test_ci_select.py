@@ -25,6 +25,7 @@ class NixSelectorTests(unittest.TestCase):
             "go.mod",
             "tests/test_ci_select.py",
             "docs/../internal/config/unsafe.md",
+            "docs/unsafe/../policy.md",
             "docs/README.md/extra",
             "docs/image.png",
         ):

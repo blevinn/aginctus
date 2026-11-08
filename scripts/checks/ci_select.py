@@ -23,7 +23,7 @@ def is_docs_only_path(path: str) -> bool:
     return path in ROOT_DOCS or (
         path.startswith("docs/")
         and path.endswith((".md", ".markdown"))
-        and not path.startswith("docs/../")
+        and ".." not in Path(path).parts
     )
 
 
