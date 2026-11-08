@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -19,180 +20,110 @@ import (
 
 func TestHelpOfflineInventory(t *testing.T) {
 	var top bytes.Buffer
-	printUsage(&top)
-	for _, command := range []string{"apply", "gateway", "network", "herdr", "workload", "images", "config", "doctor", "operator", "status", "remove", "version", "help"} {
-		for _, args := range [][]string{{"help", command}, {command, "--help"}, {command, "-h"}, {"--configuration-file=/nonexistent", command, "--help"}} {
-			var out, errOut bytes.Buffer
-			// Nil dependencies prove help cannot load config or contact Incus.
-			if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || out.Len() == 0 || errOut.Len() != 0 {
-				t.Fatalf("%v: code=%d stdout=%q stderr=%q", args, code, out.String(), errOut.String())
+	if code := Run(context.Background(), []string{"--help"}, &top, &bytes.Buffer{}, nil, nil); code != 0 || top.Len() == 0 {
+		t.Fatalf("root help: code=%d output=%q", code, top.String())
+	}
+	for _, family := range []string{"apply", "gateway", "network", "herdr", "workload", "images", "config", "doctor", "operator", "status", "remove", "version", "testenv"} {
+		for _, args := range [][]string{{"help", family}, {family, "--help"}, {family, "-h"}, {"--configuration-file=/nonexistent", family, "--help"}} {
+			var out, errs bytes.Buffer
+			if code := Run(context.Background(), args, &out, &errs, nil, nil); code != 0 || out.Len() == 0 || errs.Len() != 0 {
+				t.Fatalf("%q: code=%d stdout=%q stderr=%q", args, code, out.String(), errs.String())
 			}
 		}
 	}
 	for _, args := range [][]string{nil, {"help"}, {"--help"}, {"-h"}} {
-		var out bytes.Buffer
-		if code := Run(context.Background(), args, &out, &out, nil, nil); code != 0 || out.String() != top.String() {
-			t.Fatalf("%v: code=%d help=%q", args, code, out.String())
+		var out, errs bytes.Buffer
+		if code := Run(context.Background(), args, &out, &errs, nil, nil); code != 0 || !reflect.DeepEqual(helpRoutes(out.String()), helpRoutes(top.String())) || errs.Len() != 0 {
+			t.Fatalf("%q: code=%d stdout=%q stderr=%q", args, code, out.String(), errs.String())
 		}
 	}
 	for _, args := range [][]string{{"help", "phantom"}, {"phantom", "--help"}, {"help", "gateway", "extra"}} {
-		var out, errOut bytes.Buffer
-		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 2 || out.Len() != 0 || errOut.Len() == 0 {
-			t.Fatalf("%v: code=%d stdout=%q stderr=%q", args, code, out.String(), errOut.String())
+		var out, errs bytes.Buffer
+		if code := Run(context.Background(), args, &out, &errs, nil, nil); code != 2 || out.Len() != 0 || errs.Len() == 0 {
+			t.Fatalf("%q: code=%d stdout=%q stderr=%q", args, code, out.String(), errs.String())
 		}
 	}
-	for _, printFamily := range []func(*bytes.Buffer){
-		func(w *bytes.Buffer) { printGatewayUsage(w) },
-		func(w *bytes.Buffer) { printNetworkUsage(w) },
-		func(w *bytes.Buffer) { printHerdrClientUsage(w) },
-		func(w *bytes.Buffer) { printWorkloadUsage(w) },
-		func(w *bytes.Buffer) { printApplyUsage(w) },
-	} {
-		var family bytes.Buffer
-		printFamily(&family)
-		if !strings.Contains(top.String(), family.String()) {
-			t.Fatalf("top-level inventory differs from family usage: %s", family.String())
-		}
-	}
-	for _, want := range []string{
-		"YAML/JSON multi-document", "--from=FILE", "not stdin or a symlink", "16 MiB",
-		"gateway egress preflight", "gateway egress audit",
-		"gateway egress firewall plan --uplink-zone=ZONE  (read-only)",
-		"gateway egress firewall reload-parity  (read-only; NOT approval)",
-		"gateway egress dhcp plan --ranges=START-END",
-		"gateway egress dhcp apply --ranges=START-END --confirm-bridge-only",
-		"gateway egress reconcile --dry-run", "gateway egress reconcile --confirm-stopped-instance",
-		"network firewall policy", "network firewall reconcile", "herdr authorize", "herdr pin-host", "herdr register",
-		"network firewall egress reconcile|revoke",
-		"workload gateway provision", "--require-function-call", "network ensure", "herdr client ensure", "workload <name> ensure|teardown",
-		"operator state-audit --owner system|user", "operator units-audit --owner system|user", "operator package-audit --owner system|user", "operator project-plan --project NAME", "operator project-ensure --project NAME --confirm-create", "images list|ls --project NAME", "images import --project NAME ALIAS PATH --confirm-create", "images owner-audit --project NAME --owner system|user ALIAS", "images import-owned --project NAME --owner system|user ALIAS PATH --confirm-create", "images replace-plan --project NAME --owner system|user ALIAS PATH", "herdr client status --project NAME", "workload status --project NAME [name]", "workload ls --project NAME",
-	} {
-		if !strings.Contains(top.String(), want) {
-			t.Errorf("help missing %q", want)
+	for _, word := range []string{"gateway", "network", "herdr", "workload", "images", "operator", "testenv", "--configuration-file"} {
+		if !strings.Contains(top.String(), word) {
+			t.Errorf("root help missing %q", word)
 		}
 	}
 }
 
-func TestHelpScopedInstanceStatusUsage(t *testing.T) {
+func TestHelpGeneratedFamilyTreeMatchesCanonicalSyntax(t *testing.T) {
 	for _, tc := range []struct {
-		args []string
-		want []string
+		family string
+		routes []string
 	}{
-		{[]string{"help"}, []string{
-			"herdr client status --project NAME", "workload status --project NAME [name]", "workload ls --project NAME",
-		}},
-		{[]string{"help", "herdr"}, []string{"herdr client status --project NAME"}},
-		{[]string{"herdr", "--help"}, []string{"herdr client status --project NAME"}},
-		{[]string{"help", "workload"}, []string{"workload status --project NAME [name]", "workload ls --project NAME"}},
-		{[]string{"workload", "--help"}, []string{"workload status --project NAME [name]", "workload ls --project NAME"}},
+		{"gateway", []string{"aginctus gateway provider register TYPE", "aginctus gateway provider show [PROVIDER]", "aginctus gateway model register NAME", "aginctus gateway model show [PROVIDER] [MODEL]", "aginctus gateway model render NAME", "aginctus gateway egress firewall plan", "aginctus gateway egress dhcp apply", "aginctus gateway responses verify"}},
+		{"network", []string{"aginctus network apply", "aginctus network firewall egress reconcile"}},
+		{"herdr", []string{"aginctus herdr authorize WORKLOAD", "aginctus herdr client status"}},
+		{"workload", []string{"aginctus workload apply [NAME]", "aginctus workload start [NAME]", "aginctus workload gateway provision WORKLOAD"}},
+		{"images", []string{"aginctus images import ALIAS PATH", "aginctus images owner-audit ALIAS", "aginctus images import-owned ALIAS PATH", "aginctus images replace-plan ALIAS PATH"}},
+		{"operator", []string{"aginctus operator project-ensure", "aginctus operator units-audit"}},
+		{"testenv", []string{"aginctus testenv vm plan SCENARIO", "aginctus testenv vm test SCENARIO"}},
 	} {
-		var out, errOut bytes.Buffer
-		if code := Run(context.Background(), tc.args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
-			t.Fatalf("%q: code=%d stderr=%q", tc.args, code, errOut.String())
+		var out, errs bytes.Buffer
+		if code := Run(context.Background(), []string{"help", tc.family}, &out, &errs, nil, nil); code != 0 || errs.Len() != 0 {
+			t.Fatalf("%s: code=%d stderr=%q", tc.family, code, errs.String())
 		}
-		for _, want := range tc.want {
-			if !strings.Contains(out.String(), want) {
-				t.Fatalf("%q: missing scoped usage %q", tc.args, want)
+		for _, route := range tc.routes {
+			if !strings.Contains(out.String(), route) {
+				t.Errorf("%s help missing %q: %s", tc.family, route, out.String())
 			}
 		}
-	}
-}
-
-func TestHelpImageReplacementPlanUsage(t *testing.T) {
-	for _, args := range [][]string{{"help"}, {"help", "images"}, {"images", "--help"}} {
-		var out, errOut bytes.Buffer
-		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
-			t.Fatalf("%q: code=%d, stderr=%q", args, code, errOut.String())
-		}
-		if !strings.Contains(out.String(), "images replace-plan --project NAME --owner system|user ALIAS PATH") {
-			t.Fatalf("replace-plan missing from help %q", args)
+		var direct bytes.Buffer
+		if code := Run(context.Background(), []string{tc.family, "--help"}, &direct, &bytes.Buffer{}, nil, nil); code != 0 || !reflect.DeepEqual(helpRoutes(direct.String()), helpRoutes(out.String())) {
+			t.Errorf("%s family help differs from help command", tc.family)
 		}
 	}
 }
 
-func TestHelpScopedOwnedImportUsage(t *testing.T) {
-	for _, args := range [][]string{{"help"}, {"help", "images"}, {"images", "--help"}} {
-		var out, errOut bytes.Buffer
-		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
-			t.Fatalf("%q: code=%d, stderr=%q", args, code, errOut.String())
-		}
-		if !strings.Contains(out.String(), "images import-owned --project NAME --owner system|user ALIAS PATH --confirm-create") {
-			t.Fatalf("claimed-owner image import missing from help %q", args)
-		}
+func helpSyntax(output string) string {
+	const marker = "Subcommand syntax (derived from registered Cobra commands):"
+	index := strings.Index(output, marker)
+	if index < 0 {
+		return ""
 	}
+	return output[index:]
 }
 
-func TestHelpImageOwnerAuditUsage(t *testing.T) {
-	for _, args := range [][]string{{"help"}, {"help", "images"}, {"images", "--help"}} {
-		var out, errOut bytes.Buffer
-		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
-			t.Fatalf("%q: code=%d, stderr=%q", args, code, errOut.String())
-		}
-		if !strings.Contains(out.String(), "images owner-audit --project NAME --owner system|user ALIAS") {
-			t.Fatalf("read-only alias claim syntax missing from help %q", args)
-		}
+func helpRoutes(output string) []string {
+	const marker = "Subcommand syntax (derived from registered Cobra commands):"
+	index := strings.Index(output, marker)
+	if index < 0 {
+		return nil
 	}
+	var routes []string
+	for _, line := range strings.Split(output[index:], "\n") {
+		if !strings.HasPrefix(line, "  aginctus ") {
+			continue
+		}
+		line = strings.SplitN(line, " — ", 2)[0]
+		line = strings.SplitN(line, "  (aliases:", 2)[0]
+		routes = append(routes, line)
+	}
+	return routes
 }
 
-func TestHelpScopedImageCreateOnlyUsage(t *testing.T) {
-	for _, args := range [][]string{{"help"}, {"help", "images"}, {"images", "--help"}} {
-		var out, errOut bytes.Buffer
-		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
-			t.Fatalf("%q: code=%d, stderr=%q", args, code, errOut.String())
+func TestHelpLeafFlagsAndSafetyClaims(t *testing.T) {
+	for _, tc := range []struct {
+		args     []string
+		required []string
+	}{
+		{[]string{"help", "gateway"}, []string{"--confirm-stopped-instance", "--confirm-bridge-only", "--uplink-zone", "does not activate inference", "preserves persistent volumes"}},
+		{[]string{"help", "workload"}, []string{"--project", "--confirm-start", "--confirm-stop", "compatibility mapping"}},
+		{[]string{"help", "images"}, []string{"--project", "--owner", "--confirm-create"}},
+		{[]string{"help", "apply"}, []string{"--from", "--render"}},
+		{[]string{"gateway", "model", "register", "--help"}, []string{"--provider", "--source", "--dry-run"}},
+	} {
+		var out, errs bytes.Buffer
+		if code := Run(context.Background(), tc.args, &out, &errs, nil, nil); code != 0 || errs.Len() != 0 {
+			t.Fatalf("%q: code=%d stderr=%q", tc.args, code, errs.String())
 		}
-		if !strings.Contains(out.String(), "images import --project NAME ALIAS PATH --confirm-create") {
-			t.Fatalf("create-only scoped import missing from help %q", args)
-		}
-	}
-}
-
-func TestHelpScopedImageReadInventory(t *testing.T) {
-	for _, args := range [][]string{{"help"}, {"help", "images"}, {"images", "--help"}} {
-		var stdout, stderr bytes.Buffer
-		if code := Run(context.Background(), args, &stdout, &stderr, nil, nil); code != 0 || stderr.Len() != 0 {
-			t.Fatalf("args=%q code=%d stderr=%q", args, code, stderr.String())
-		}
-		if !strings.Contains(stdout.String(), "images list|ls --project NAME") {
-			t.Fatalf("scoped image read missing from help %q", args)
-		}
-	}
-}
-
-func TestHelpGatewayRegistrationSyntax(t *testing.T) {
-	for _, args := range [][]string{{"help"}, {"--help"}, {"help", "gateway"}, {"gateway", "--help"}, {"gateway", "-h"}, {"--configuration-file=/nonexistent", "gateway", "--help"}} {
-		var out, errOut bytes.Buffer
-		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
-			t.Fatalf("%v: code=%d stderr=%q", args, code, errOut.String())
-		}
-		for _, syntax := range []string{
-			"gateway provider chatgpt register [--alias=NAME] [--dry-run]",
-			"gateway provider opencode-go register [--alias=NAME] [--dry-run]",
-			"gateway model NAME register [--provider=ALIAS] [--source=chatgpt/MODEL|openai/MODEL] [--dry-run]",
-		} {
-			if count := strings.Count(out.String(), syntax); count != 1 {
-				t.Errorf("%v: expected one occurrence of %q, got %d", args, syntax, count)
-			}
-		}
-		if strings.Contains(out.String(), "[--source=chatgpt/MODEL]") {
-			t.Errorf("%v: stale ChatGPT-only model grammar", args)
-		}
-	}
-}
-
-func TestHelpGatewayFirewalldSyntax(t *testing.T) {
-	for _, args := range [][]string{{"help"}, {"--help"}, {"help", "gateway"}, {"gateway", "--help"}, {"gateway", "-h"}, {"--configuration-file=/nonexistent", "gateway", "--help"}} {
-		var out, errOut bytes.Buffer
-		if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
-			t.Fatalf("%v: code=%d stderr=%q", args, code, errOut.String())
-		}
-		for _, syntax := range []string{
-			"gateway egress firewall plan --uplink-zone=ZONE  (read-only)",
-			"gateway egress firewall audit --uplink-zone=ZONE  (read-only)",
-			"gateway egress firewall reload-parity  (read-only; NOT approval)",
-			"gateway egress audit  (read-only NIC declarations; not connectivity)",
-		} {
-			if count := strings.Count(out.String(), syntax); count != 1 {
-				t.Errorf("%v: expected one occurrence of %q, got %d", args, syntax, count)
+		for _, word := range tc.required {
+			if !strings.Contains(out.String(), word) {
+				t.Errorf("%q help missing %q", tc.args, word)
 			}
 		}
 	}

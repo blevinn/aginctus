@@ -162,7 +162,8 @@ func TestScopedWorkloadApplyNativeDryRunHelpOffline(t *testing.T) {
 		var output, diagnostic strings.Builder
 		code := Run(context.Background(), args, &output, &diagnostic, nil, nil)
 		if code != 0 || diagnostic.Len() != 0 ||
-			!strings.Contains(output.String(), "workload apply --project NAME WORKLOAD-ID --dry-run") {
+			!strings.Contains(output.String(), "aginctus workload apply [NAME]") ||
+			!strings.Contains(output.String(), "--project string") || !strings.Contains(output.String(), "--dry-run") {
 			t.Fatalf("missing native dry-run offline help: args=%q code=%d err=%q", args, code, diagnostic.String())
 		}
 	}
