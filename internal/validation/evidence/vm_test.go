@@ -34,7 +34,7 @@ func TestNormalizeVMKeepsOnlyBoundedSyntheticMetadata(t *testing.T) {
 		strings.Contains(string(encoded), "live_verified") {
 		t.Fatal("untrusted metadata escaped normalizer")
 	}
-	var source map[string]any = report["source"].(map[string]any)
+	source := report["source"].(map[string]any)
 	if source["run_id"] != id || report["upstream_inference"] != unverified {
 		t.Fatal("synthetic provenance was promoted")
 	}
