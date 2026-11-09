@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Issue #124: isolated OpenCode acceptance orchestration. See docs/acceptance-opencode.md.
+# Issue #124: isolated OpenCode acceptance orchestration. See docs/testing/acceptance/README.md.
 set -Eeuo pipefail
 umask 077
 

@@ -10,7 +10,7 @@ import (
 
 // IncusBootstrapContract is operator-owned, nonsecret input, not an agent API.
 // ExistingInventoryFingerprint must come from independent inventory review,
-// never from automatically trusting discovery output. See docs/testenv-worker.md.
+// never from automatically trusting discovery output. See docs/testing/testenv/testenv-worker.md.
 type IncusBootstrapContract struct {
 	SchemaVersion                int                  `json:"schema_version"`
 	ImageFingerprint             string               `json:"image_fingerprint"`
