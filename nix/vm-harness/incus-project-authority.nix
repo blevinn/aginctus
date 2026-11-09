@@ -112,20 +112,23 @@ pkgs.testers.runNixOSTest {
 
     # A test that fails only because its CLI syntax is invalid is NOT valid
     # authorization evidence. Assert a bounded class of remote denial errors.
-    def deny(command):
+    def deny(command, allow_hidden=False):
         status, output = machine.execute(operator + " " + command + " 2>&1")
         lower = output.lower()
         assert status != 0, "restricted principal completed a forbidden action"
         assert "unknown flag" not in lower and "unknown command" not in lower and "usage:" not in lower, "invalid CLI probe, not an authorization test"
-        assert any(piece in lower for piece in ["not authorized", "not allowed", "permission denied", "forbidden", "access denied", "not found", "restricted"]), "unexpected failure class in restricted authorization probe"
+        denied = ["not authorized", "not allowed", "permission denied", "forbidden", "access denied", "restricted", "not permitted"]
+        if allow_hidden:
+            denied.append("not found")
+        assert any(piece in lower for piece in denied), "unexpected failure class in restricted authorization probe"
 
-    deny("incus list scoped: --project unrelated --format json")
+    deny("incus list scoped: --project unrelated --format json", allow_hidden=True)
     deny("incus project set scoped:aginctus-authz restricted=false")
     deny("incus project create scoped:unauthorized")
     deny("incus network create scoped:escape-bridge ipv4.address=none ipv6.address=none")
     deny("incus storage create scoped:escape-pool dir")
-    deny("incus storage volume create scoped:default escape-volume --project unrelated")
-    deny("incus profile create scoped:foreign-profile --project unrelated")
+    deny("incus storage volume create scoped:default escape-volume --project unrelated", allow_hidden=True)
+    deny("incus profile create scoped:foreign-profile --project unrelated", allow_hidden=True)
     deny("incus config set scoped:core.https_address 0.0.0.0:8443")
     deny("incus config device add scoped:allowed-instance forbidden-host disk source=/etc path=/host --project aginctus-authz")
     deny("incus config set scoped:allowed-instance raw.lxc=lxc.apparmor.profile=unconfined --project aginctus-authz")
