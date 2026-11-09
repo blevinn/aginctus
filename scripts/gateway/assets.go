@@ -1,5 +1,5 @@
-// Package gatewayassets embeds the public, callback-only OpenCode Go bundle for
-// delivery through inline Compose configs. It contains no credentials or routes.
+// Package gatewayassets embeds public, opt-in gateway extensions for delivery.
+// Bundles contain no credentials; enrollment and activation remain explicit.
 package gatewayassets
 
 import (
@@ -21,6 +21,20 @@ var hook string
 
 //go:embed opencode_go_forwarding.py
 var forwarding string
+
+//go:embed siwc.py
+var siwcRuntime string
+
+//go:embed litellm_siwc.py
+var siwcHook string
+
+//go:embed siwc_admin.py
+var siwcAdmin string
+
+// SIWCFiles is a separate opt-in bundle; the native chatgpt/ provider is unused.
+func SIWCFiles() map[string]string {
+	return map[string]string{"siwc.py": siwcRuntime, "litellm_siwc.py": siwcHook, "siwc_admin.py": siwcAdmin}
+}
 
 // Files returns a new filename-to-raw-content map for public Compose configs.
 // The canonical Python sources are embedded directly, without generated copies.
