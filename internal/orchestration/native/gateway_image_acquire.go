@@ -6,13 +6,14 @@ import (
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"net/url"
+	"strings"
 	"time"
 
 	incus "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
-	"github.com/blevinn/aginctus/internal/orchestration/nativeoci"
 )
 
 var nativeOCIDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}package native
@@ -37,9 +38,17 @@ import (
 // GatewayImageAcquireIntent binds one immutable public OCI manifest to the
 // project selected by the caller. It is not an alias, deployment grant, or
 // permission to adopt/relabel existing images.
+type GatewayOCIIdentity struct {
+	Registry string
+	Repository string
+	ManifestDigest string
+	ConfigDigest string
+	IncusFingerprint string
+}
+
 type GatewayImageAcquireIntent struct {
 	Project string
-	Image nativeoci.ResolvedImage
+	Image GatewayOCIIdentity
 }
 
 func (in GatewayImageAcquireIntent) Validate() error {
@@ -53,15 +62,15 @@ func (in GatewayImageAcquireIntent) Validate() error {
 		!fingerprintPattern.MatchString(image.IncusFingerprint) {
 		return fmt.Errorf("gateway OCI acquisition requires complete immutable identity")
 	}
-	source := nativeoci.Source{
-		Registry:image.Registry,Repository:image.Repository,Reference:image.ManifestDigest,
-		// Platform is checked by nativeoci.ResolvePublic before this function.
-	}
-	// Source.Validate requires a platform; validate registry and repository by
-	// supplying a fixed Linux platform solely for syntax verification.
-	source.Platform.OS="linux"
-	source.Platform.Architecture="amd64"
-	if err := source.Validate(); err != nil {
+	// The metadata-only nativeoci resolver runs before this boundary.
+	// Independently reject credentials, paths and invalid registry authorities
+	// so a fabricated identity cannot redirect an SDK pull.
+	registryURL, err := url.Parse("https://" + image.Registry)
+	if err != nil || registryURL.Host != image.Registry || registryURL.User != nil ||
+		registryURL.Path != "" || registryURL.RawQuery != "" || registryURL.Fragment != "" ||
+		strings.ContainsAny(image.Registry,"@\\ ") ||
+		!nativeOCIRepository.MatchString(image.Repository) ||
+		strings.Contains(image.Repository,"..") || strings.Contains(image.Repository,"//") {
 		return fmt.Errorf("gateway OCI acquisition has invalid registry identity")
 	}
 	return nil
