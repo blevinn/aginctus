@@ -34,6 +34,15 @@ security audit, or production-readiness claim.
   file permissions, token refresh, account authorization, or OAuth safety.
   [Native ChatGPT OAuth](../architecture/native-chatgpt-oauth.md) remains gated;
   neither volume attachment nor model registration activates verified inference.
+- **Managed SIWC:** [apply/login](../gateway-siwc.md) derives model/key bindings
+  from configuration and records explicit connected-application/background
+  consent. The gateway owns tokens and rotating refresh; the host enrolls in
+  memory over audited authenticated Incus exec. Runtime UID/mount verification,
+  stream admission leases and atomic acknowledged publication protect credential
+  updates. No workload receives provider credentials, no host token cache is
+  persisted, and no network grants are added. Trusted host/Incus administrators
+  and reviewed gateway images remain inside this boundary. Synthetic tests do
+  not establish real account authorization or managed deployment acceptance.
 
 ## Validation boundary and remaining acceptance
 
@@ -63,3 +72,7 @@ in plaintext inside the private bridge; see the [API-key pilot](../operations/ga
 Do not publish expanded Incus configuration, which can contain gateway secrets
 and database URLs. Live migration, credential use, and billable inference
 require separate operator authorization under the linked runbooks and gates.
+
+## Reporting vulnerabilities versus operational limitations
+
+This document describes **technical controls and limitations**; it is not a confidential security-disclosure policy. The maintainer-approved private reporting route and support expectations are tracked separately in [#626](https://github.com/blevinn/aginctus/issues/626). Until that policy is published and verified, do not infer a private intake route from a GitHub issue or post exploit details, credentials or tokens into public tickets. Human contribution/conduct guidance is tracked independently in [#627](https://github.com/blevinn/aginctus/issues/627).
