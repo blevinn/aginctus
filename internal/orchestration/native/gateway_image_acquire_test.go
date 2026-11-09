@@ -11,7 +11,6 @@ import (
 	"github.com/lxc/incus/v7/shared/api"
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
-	"github.com/blevinn/aginctus/internal/orchestration/nativeoci"
 )
 
 type fakeGatewayImageClient struct {
@@ -41,7 +40,7 @@ func (f fakeImageAcquireOperation) Get()*api.Operation{return f.metadata}
 func imageAcquireFixture()(GatewayImageAcquireIntent,*fakeGatewayImageClient){
 	project:="aginctus-test"
 	scope,_:=incusscope.NewProjectScope(project)
-	image:=nativeoci.ResolvedImage{
+	image:=GatewayOCIIdentity{
 		Registry:"docker.io",Repository:"library/postgres",
 		ManifestDigest:"sha256:"+strings.Repeat("a",64),
 		ConfigDigest:"sha256:"+strings.Repeat("b",64),
