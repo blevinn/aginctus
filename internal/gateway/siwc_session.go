@@ -19,6 +19,10 @@ type CredentialUpdate func(json.RawMessage) (json.RawMessage, error)
 // ExchangeSIWC keeps credentials on authenticated exec streams, never argv,
 // environment, retained output, host files or the workload network.
 func ExchangeSIWC(ctx context.Context, attachment CredentialAttachment, update CredentialUpdate) error {
+	return exchangeSIWCOnHost(ctx, attachment, update, false)
+}
+
+func exchangeSIWCOnHost(ctx context.Context, attachment CredentialAttachment, update CredentialUpdate, prepare bool) error {
 	if err := AuditCredentialAttachment(ctx, attachment); err != nil {
 		return err
 	}
@@ -51,7 +55,7 @@ func ExchangeSIWC(ctx context.Context, attachment CredentialAttachment, update C
 		}
 	}()
 	done := make(chan bool)
-	op, err := server.ExecInstance(liteLLMServiceInstance, api.InstanceExecPost{Command: siwcAdminCommand(), WaitForWS: true}, &incusclient.InstanceExecArgs{Stdin: input, Stdout: output, Stderr: io.Discard, DataDone: done})
+	op, err := server.ExecInstance(liteLLMServiceInstance, api.InstanceExecPost{Command: siwcAdminCommand(prepare), WaitForWS: true}, &incusclient.InstanceExecArgs{Stdin: input, Stdout: output, Stderr: io.Discard, DataDone: done})
 	if err != nil {
 		return fmt.Errorf("start managed SIWC credential exchange")
 	}
@@ -68,12 +72,16 @@ func ExchangeSIWC(ctx context.Context, attachment CredentialAttachment, update C
 	return result
 }
 
-func siwcAdminCommand() []string {
+func siwcAdminCommand(prepare bool) []string {
 	files := gatewayassets.SIWCFiles()
 	runtime, _ := json.Marshal(files["siwc.py"])
 	helper, _ := json.Marshal(files["siwc_admin.py"])
 	code := fmt.Sprintf("import sys,types; m=types.ModuleType('siwc'); sys.modules['siwc']=m; exec(%s,m.__dict__); exec(%s)", runtime, helper)
-	return []string{"python3", "-c", code}
+	mode := "active"
+	if prepare {
+		mode = "prepare"
+	}
+	return []string{"python3", "-c", code, mode}
 }
 
 func exchangeSIWC(reader io.Reader, writer io.Writer, update CredentialUpdate) error {
@@ -113,7 +121,7 @@ func PrepareSIWC(ctx context.Context, attachment CredentialAttachment) error {
 	}
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		err := ExchangeSIWC(ctx, attachment, func(json.RawMessage) (json.RawMessage, error) { return nil, nil })
+		err := exchangeSIWCOnHost(ctx, attachment, func(json.RawMessage) (json.RawMessage, error) { return nil, nil }, true)
 		if err == nil {
 			break
 		}
@@ -134,5 +142,22 @@ func PrepareSIWC(ctx context.Context, attachment CredentialAttachment) error {
 	if err != nil {
 		return fmt.Errorf("restart managed SIWC owner")
 	}
-	return op.WaitContext(ctx)
+	if err := op.WaitContext(ctx); err != nil {
+		return err
+	}
+	deadline = time.Now().Add(30 * time.Second)
+	for {
+		err := ExchangeSIWC(ctx, attachment, func(json.RawMessage) (json.RawMessage, error) { return nil, nil })
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil || time.Now().After(deadline) {
+			return fmt.Errorf("managed SIWC owner did not become ready: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
 }

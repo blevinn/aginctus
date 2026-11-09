@@ -247,8 +247,9 @@ class SIWCHook(CustomLogger):
         self.lease.__enter__()
         self.clients = {}
         try:
-            self.owner.store.accept_pending()
-            self.routes = self.owner.store.read()["routes"]
+            with self.owner.store.lock("admin"):
+                self.owner.store.accept_pending()
+                self.routes = self.owner.store.read()["routes"]
         except Exception:
             self.close()
             raise
