@@ -1,11 +1,13 @@
 name: hermetic
 
 on:
+  # Also validate stacked PRs targeting a topic branch. No secrets/write authority.
   pull_request:
-    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * 1'
 
 permissions:
   contents: read
@@ -17,8 +19,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  hermetic:
-    name: hermetic validation (ubuntu)
+  comprehensive:
+    name: comprehensive hermetic regression (ubuntu)
+    # Full coverage remains after merges, weekly and on manual dispatch.
+    # Do not make the PR fast lane pay for full Nix/packaging every update.
+    if: ${{ github.event_name != 'pull_request' }}
     # Probe the namespace contract instead of changing runner security policy.
     runs-on: ubuntu-22.04
     timeout-minutes: 45
@@ -112,3 +117,233 @@ jobs:
           WHITESPACE_RESULT: ${{ steps.whitespace.outcome }}
         run: |
           python3 scripts/checks/ci_summary.py
+
+  # Advisory while the legacy required gate runs; #708 will convert the
+  # existing required context into a fail-closed aggregator.
+  go-fast:
+    if: ${{ github.event_name == 'pull_request' }}
+    name: go tests and staticcheck (ubuntu)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      AGINCTUS_INCUS_INTEGRATION: "0"
+      AGINCTUS_INCUS_DISPOSABLE: "NO"
+      AGINCTUS_ACCEPTANCE_LIVE: ""
+      AGINCTUS_ACCEPTANCE_LIVE_HOOKS: ""
+      ACCEPTANCE_TEST_FAIL: ""
+      GOFLAGS: ""
+      GOTOOLCHAIN: local
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: install pinned Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: populate Go modules
+        run: go mod download
+      - name: verify Go modules
+        env:
+          GOPROXY: "off"
+          GOSUMDB: "off"
+        run: go mod verify
+      - name: Go unit tests
+        env:
+          GOPROXY: "off"
+          GOSUMDB: "off"
+        run: go test ./...
+      - name: Go vet
+        env:
+          GOPROXY: "off"
+          GOSUMDB: "off"
+        run: go vet ./...
+      - name: Go staticcheck (same config as Nix check lint)
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        with:
+          version: v2.15.0
+          only-new-issues: false
+      - name: Markdown library for generated help validation
+        run: python3 -m pip install --disable-pip-version-check --user "markdown-it-py==4.0.0"
+      - name: Documented CLI examples (no command execution)
+        env:
+          GOPROXY: "off"
+          GOSUMDB: "off"
+        run: |
+          set -euo pipefail
+          go run ./cmd/aginctus help | python3 scripts/check_docs_examples.py
+
+  static-fast:
+    if: ${{ github.event_name == 'pull_request' }}
+    name: python shell and docs (ubuntu)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    env:
+      AGINCTUS_INCUS_INTEGRATION: "0"
+      AGINCTUS_INCUS_DISPOSABLE: "NO"
+      AGINCTUS_ACCEPTANCE_LIVE: ""
+      AGINCTUS_ACCEPTANCE_LIVE_HOOKS: ""
+      ACCEPTANCE_TEST_FAIL: ""
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: install pinned Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+      # Python regression tests invoke the actual Go validation coordinator.
+      # Pin Go rather than silently using Ubuntu's older preinstalled version.
+      - name: install pinned Go for Python fixtures
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: populate Go modules for Python fixtures
+        run: go mod download
+      - name: install Python check tools
+        run: python3 -m pip install --disable-pip-version-check "markdown-it-py==4.0.0" "ruff==0.14.3" "PyJWT[crypto]==2.15.1" "cryptography==50.0.2"
+      - name: Ruff lint
+        run: ruff check .
+      # The Go coordinator regression suite executes real Just recipes in
+      # a disposable fixture; do not let an absent Just silently skip it.
+      - name: install pinned Just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: '1.46.0'
+      - name: Python unit suites
+        run: |
+          set -euo pipefail
+          for path in scripts/vm_harness guest/opencode guest/ssh scripts/acceptance scripts/gateway tests; do
+            python3 -m unittest discover -s "$path" -p 'test_*.py' -v
+          done
+      - name: shellcheck
+        run: |
+          set -euo pipefail
+          command -v shellcheck
+          git ls-files -z -- '*.sh' | xargs -0 -r -n1 shellcheck
+      - name: shell parser check
+        run: |
+          set -euo pipefail
+          git ls-files -z -- '*.sh' | xargs -0 -r -n1 bash -n
+      - name: shell adapter tests (synthetic only)
+        run: |
+          set -euo pipefail
+          bash scripts/acceptance/opencode-test.sh
+          bash scripts/acceptance/opencode-live-adapter-test.sh
+      - name: local Markdown links
+        run: python3 scripts/check_markdown_links.py
+
+  # A failed/ambiguous selector must never exempt a Nix-sensitive change.
+  # This separate result is advisory until the required gate migrates in #709.
+  changes:
+    name: classify PR Nix applicability
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      nix_required: ${{ steps.classify.outputs.nix_required }}
+    steps:
+      - name: checkout full PR merge tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: classify changed paths (fail closed)
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/checks/ci_select.py --base "$BASE_SHA"
+
+  nix-contracts:
+    name: targeted Nix security contracts (ubuntu)
+    needs: changes
+    # Explicitly evaluate on selector failure, which also fails the gate.
+    # A clean docs-only diff is the sole exemption.
+    if: ${{ always() && github.event_name == 'pull_request' && needs.changes.outputs.nix_required != 'false' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    env:
+      NIX_CONFIG: experimental-features = nix-command flakes
+      AGINCTUS_INCUS_INTEGRATION: "0"
+      AGINCTUS_INCUS_DISPOSABLE: "NO"
+      AGINCTUS_ACCEPTANCE_LIVE: ""
+      AGINCTUS_ACCEPTANCE_LIVE_HOOKS: ""
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: require unprivileged namespace isolation
+        run: |
+          set -euo pipefail
+          # Do not weaken this contract or alter runner security settings.
+          unshare --user --map-root-user --mount --fork -- true
+      - name: install Nix
+        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+          enable_kvm: false
+      - name: build NixOS Home Manager and gateway security contracts
+        run: |
+          nix --quiet build --no-update-lock-file --no-link \
+            .#checks.x86_64-linux.nixos-module \
+            .#checks.x86_64-linux.home-manager-module \
+            .#checks.x86_64-linux.operator-settings-parity \
+            .#checks.x86_64-linux.gateway-config-parity \
+            .#checks.x86_64-linux.opencode-workload-socket-alignment \
+            .#checks.x86_64-linux.testenv-incus-vm-image-config \
+            .#checks.x86_64-linux.testenv-recovery-worker-policy \
+            .#checks.x86_64-linux.testenv-installed-worker-policy
+
+  # Exact required status in main ruleset 24431697. The new gate must
+  # account for every upstream job; a skip is valid only for a positively
+  # classified documentation-only diff. Never infer a PASS from no evidence.
+  hermetic:
+    name: hermetic validation (ubuntu)
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    needs: [go-fast, static-fast, changes, nix-contracts]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    env:
+      GO_RESULT: ${{ needs.go-fast.result }}
+      STATIC_RESULT: ${{ needs.static-fast.result }}
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      NIX_RESULT: ${{ needs.nix-contracts.result }}
+      NIX_REQUIRED: ${{ needs.changes.outputs.nix_required }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - name: checkout for whitespace validation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: aggregate PR evidence (fail closed)
+        run: |
+          set -euo pipefail
+          {
+            echo '## Required PR hermetic gate'
+            echo
+            echo '| Evidence | Outcome |'
+            echo '| --- | --- |'
+            echo "| Go tests/staticcheck | \`$GO_RESULT\` |"
+            echo "| Python/shell/docs | \`$STATIC_RESULT\` |"
+            echo "| Change classification | \`$CHANGES_RESULT\` |"
+            echo "| Nix required | \`$NIX_REQUIRED\` |"
+            echo "| Targeted Nix contracts | \`$NIX_RESULT\` |"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$GO_RESULT" = success
+          test "$STATIC_RESULT" = success
+          test "$CHANGES_RESULT" = success
+          case "$NIX_REQUIRED" in
+            true) test "$NIX_RESULT" = success ;;
+            false) test "$NIX_RESULT" = skipped ;;
+            *) echo "::error::Nix applicability missing or invalid"; exit 1 ;;
+          esac
+          # GitHub's synthetic merge checkout includes base and head changes.
+          git diff --check "$BASE_SHA" HEAD

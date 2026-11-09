@@ -54,6 +54,18 @@ in
                   default = { };
                   description = "Provider-offered MCP endpoints using the same server schema as settings.mcp.servers; grants are separate.";
                 };
+                routes = mkOption {
+                  default = { };
+                  description = "Managed SIWC routes resolved through catalog aliases; credentials are enrolled by provider login.";
+                  type = types.attrsOf (
+                    types.submodule {
+                      options = {
+                        catalog = mkOption { type = nameType; };
+                        workload_key_file = mkOption { type = types.str; };
+                      };
+                    }
+                  );
+                };
               };
             };
           };
