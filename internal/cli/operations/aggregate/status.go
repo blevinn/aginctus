@@ -1,4 +1,4 @@
-package cli
+package aggregateops
 
 import (
 	"bytes"
@@ -9,23 +9,20 @@ import (
 	"github.com/blevinn/aginctus/internal/config"
 )
 
-// runAggregateStatus keeps status read-only and buffers all results so a
-// failure in a later resource does not print a misleading partial summary.
-func runAggregateStatus(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
+// StatusCheck is an explicitly injected, read-only per-resource status hook.
+type StatusCheck struct {
+	Name string
+	Run func(context.Context, []string, io.Writer, io.Writer, *config.Config) int
+}
+
+// Status buffers all output and fails atomically instead of printing a partial
+// success report when a later status probe fails.
+func Status(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config, checks []StatusCheck) int {
 	if len(args) != 0 {
 		fmt.Fprintln(stderr, "Usage: aginctus [global options] status")
 		return 2
 	}
 	var results bytes.Buffer
-	checks := []struct {
-		name string
-		run  func(context.Context, []string, io.Writer, io.Writer, *config.Config) int
-	}{
-		{"network", runNetworkStatus},
-		{"gateway", runGatewayStatus},
-		{"Herdr client", runHerdrClientStatus},
-		{"workloads", runWorkloadStatus},
-	}
 	for _, check := range checks {
 		var errors bytes.Buffer
 		if code := check.run(ctx, nil, &results, &errors, cfg); code != 0 {
