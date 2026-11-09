@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	incus "github.com/lxc/incus/v7/client"
@@ -12,6 +13,25 @@ import (
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/orchestration/nativeoci"
+)
+
+var nativeOCIDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}package native
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"path/filepath"
+	"regexp"
+	"time"
+
+	incus "github.com/lxc/incus/v7/client"
+	"github.com/lxc/incus/v7/shared/api"
+
+	incusscope "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/orchestration/nativeoci"
+)
+
 )
 
 // GatewayImageAcquireIntent binds one immutable public OCI manifest to the
