@@ -47,6 +47,7 @@ The **native cutover remains an active migration**, not a shipped global switch.
 - **CLI/configuration:** `cmd/aginctus` and `internal/cli` implement status, lifecycle, gateway and Herdr commands. `internal/config` merges defaults, configuration files, environment and explicit overrides. The [configuration guide](../reference/configuration.md) is authoritative for precedence and values; [CLI operations](../reference/cli.md) documents effects and preview limits.
 - **NixOS integration:** `nix/nixos-module.nix` packages the CLI, typed host settings and optional image imports. `services.aginctus.firewall.enable` defaults **on**, reconciling selected host DNS/DHCP firewall rules; `services.aginctus.reconcile.enable` defaults **off**, leaving Incus resource deployment explicit unless opted in. `reconcile.gateway` is a further opt-in. These are **independent mutation boundaries**.
 - **Incus planning:** Jsonnet generates ordered resource plans, prevalidated by `internal/orchestration`. The current resource drivers use Incus Apply and Compose integration, plus an owned state-volume driver. A migration to native Incus reconciliation is [planned](../design/native-incus-reconciliation.md), **not the current driver**. `aginctus apply --render` is an offline plan; `apply` and `apply --from FILE` execute and mutate resources.
+- **Orchestration streams:** [`apply --from` document streams](orchestration-streams.md) are fully validated before ordered execution, but are not transactional.
 - **Ownership and discovery:** network, instances, Compose resources and persistent state carry Aginctus ownership markers and are checked before ordinary mutations. `--force` may relax selected guards; it is not a general safe repair mechanism. The current CLI/Herdr guest paths use the default Incus project; independent named Incus projects are future work.
 
 The Incus host and its administrators are in the trusted computing base. Ownership metadata helps reject accidents and foreign collisions, not privileged tampering.
@@ -61,7 +62,7 @@ For the supported OpenCode NixOS guest, explicit host commands authorize the cli
 
 `internal/gateway` renders and deploys an Aginctus-owned LiteLLM + PostgreSQL Compose service with protected runtime secrets. The gateway is reachable on the private management network. The OpenCode image contains no upstream provider credential: the operator obtains an approved, scoped LiteLLM workload key and **explicitly** runs `aginctus workload gateway provision`. The host discovers the owned LiteLLM service's management address, transfers the already issued key to a fixed guest helper over Incus stdin, and the OpenCode launcher fails closed if runtime configuration is missing or invalid.
 
-Gateway provider/model registration is **local metadata**, not a completed OAuth authorization, LiteLLM route activation or successful inference request. LiteLLM's additional OCI egress NIC, default route and host firewall are handled by separate guarded procedures. Enabling NAT on the management bridge or allowing a workload direct provider access is **not** a fallback. See [gateway](gateway.md), [key provisioning](../operations/workloads/opencode.md#provision-private-gateway-access-123), [host firewall](../operations/gateway/gateway-firewalld-egress.md) and [egress acceptance](../operations/gateway/litellm-oci-egress-pilot.md).
+Gateway provider/model registration is **local metadata**, not a completed OAuth authorization, LiteLLM route activation or successful inference request. LiteLLM's additional OCI egress NIC, default route and host firewall are handled by separate guarded procedures. Enabling NAT on the management bridge or allowing a workload direct provider access is **not** a fallback. See [gateway](gateway.md), [private credential volume attachment](litellm-private-volume.md), [key provisioning](../operations/workloads/opencode.md#provision-private-gateway-access-123), [host firewall](../operations/gateway/gateway-firewalld-egress.md) and [egress acceptance](../operations/gateway/litellm-oci-egress-pilot.md).
 
 ## State and trust boundaries
 
@@ -82,7 +83,6 @@ A public control-plane API, dashboard, Bubble Tea TUI, multiple independent Incu
 ## Verification boundary
 
 `just check-all`, rendering and read-only preflight validate offline contracts, not the pilot's live key scope, route, provider TLS, inference response, or model-directed file/test operation. The [v0.1 release checklist](https://github.com/blevinn/aginctus/issues/118) and its linked acceptance issues remain authoritative; a running container or HTTP 200 health check is insufficient. Consult [getting started](../getting-started.md) for non-mutating versus explicitly approved deployment commands.
-
 ## Component references and transitional implementation
 
 - [Project scope and direction](project-overview.md) — long-term context, not an implemented API.

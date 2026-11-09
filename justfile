@@ -65,7 +65,7 @@ test-vm-storage-network:
 test-vm-runtime-lifecycle:
     python3 scripts/vm_harness/runner.py test runtime-lifecycle
 
-# Native scoped instance lifecycle against disposable Incus.
+# Native scoped instance lifecycle and dry-run against disposable Incus.
 test-vm-native-instance:
     python3 scripts/vm_harness/runner.py test native-instance
 
