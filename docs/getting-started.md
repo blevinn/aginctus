@@ -1,10 +1,10 @@
 # Getting started on a technical host
 
-Aginctus controls Incus resources for a private Herdr/OpenCode environment and a LiteLLM inference gateway. This guide covers **installation, inspection and explicitly selected deployment**. The v0.1 pilot demonstrated genuine Herdr/OpenCode coding and private provider inference, but complete **fresh-host** deployment/smoke/cleanup/repeat was not performed and is deferred to [v0.2 #580](https://github.com/blevinn/aginctus/issues/580). Read [security limitations](security.md) and [v0.1 release acceptance](https://github.com/blevinn/aginctus/issues/118) before using real credentials or billable models.
+Aginctus controls Incus resources for a private Herdr/OpenCode environment and a LiteLLM inference gateway. This guide covers **installation, inspection and explicitly selected deployment**. The v0.1 pilot demonstrated genuine Herdr/OpenCode coding and private provider inference, but complete **fresh-host** deployment/smoke/cleanup/repeat was not performed and is deferred to [v0.2 #580](https://github.com/blevinn/aginctus/issues/580). Read [security limitations](reference/security.md) and [v0.1 release acceptance](https://github.com/blevinn/aginctus/issues/118) before using real credentials or billable models.
 
 For the **historical v0.1** release-candidate deployment plan, credential
 lifecycle, optional real coding smoke and independently checked cleanup,
-see the [preserved v0.1 operator handoff](v0.1-deployment-acceptance.md).
+see the [preserved v0.1 operator handoff](history/v0.1-deployment-acceptance.md).
 For current validation tier selection, use the [testing index](testing/README.md). That procedure's full
 fresh-host execution was **not validated for v0.1** and is not a substitute for
 the pilot functional acceptance recorded in release acceptance #118; treat it
@@ -13,7 +13,7 @@ as operator guidance, not as verified v0.1 behavior.
 ## Host prerequisites
 
 - Linux host with Nix flakes enabled; a working local Incus daemon and initialized storage pool are required only for Incus operations.
-- For host-level NixOS integration, import `nixosModules.default` and enable `services.aginctus` using the [NixOS module example](configuration.md#nixos-module). A separate [Home Manager operator-only installation](home-manager.md) is proposed in the unmerged v0.2 stack; it cannot replace host firewall authority. The current guest images are NixOS containers; selecting `vm` requires an independently compatible image.
+- For host-level NixOS integration, import `nixosModules.default` and enable `services.aginctus` using the [NixOS module example](reference/configuration.md#nixos-module). A separate [Home Manager operator-only installation](operations/host/home-manager.md) is proposed in the unmerged v0.2 stack; it cannot replace host firewall authority. The current guest images are NixOS containers; selecting `vm` requires an independently compatible image.
 - Trust the host and Incus administrators; review the effective configuration, storage pools, bridge topology, firewall backend and network exposure before enabling mutations.
 
 From the repository checkout, the development/build path is:
@@ -29,7 +29,7 @@ nix build .#aginctus
 
 ## Understand the NixOS activation boundary
 
-Enabling the NixOS module is **not entirely observational**. Its `services.aginctus.firewall.enable` setting defaults to **true**: a boot-time service and recurring timer can reconcile host INPUT rules for Incus DNS/DHCP. Review [firewall integration](firewall-host-backends.md) and the [configuration contract](configuration.md#host-firewall-reconciliation-default-on) before activating the module; disable the firewall integration explicitly if it has not been approved.
+Enabling the NixOS module is **not entirely observational**. Its `services.aginctus.firewall.enable` setting defaults to **true**: a boot-time service and recurring timer can reconcile host INPUT rules for Incus DNS/DHCP. Review [firewall integration](operations/host/firewall-host-backends.md) and the [configuration contract](reference/configuration.md#host-firewall-reconciliation-default-on) before activating the module; disable the firewall integration explicitly if it has not been approved.
 
 Separately, `services.aginctus.reconcile.enable` defaults to **false**. Turning it on reconciles selected Incus resources; `services.aginctus.reconcile.gateway = true` additionally opts in to gateway apply. Successful reconciliation is not application readiness. Gateway runtime secrets must not be placed in Nix settings, the Nix store, command-line arguments or shared logs.
 
@@ -57,7 +57,7 @@ aginctus herdr client apply --dry-run
 aginctus workload apply dev --dry-run
 ```
 
-The `dev` example assumes a `workloads.dev` definition matching the [module configuration example](configuration.md#nixos-module). A successful preview is not an authorization to operate on production state.
+The `dev` example assumes a `workloads.dev` definition matching the [module configuration example](reference/configuration.md#nixos-module). A successful preview is not an authorization to operate on production state.
 
 ## Explicit deployment after host approval
 
@@ -80,8 +80,8 @@ aginctus herdr client apply
 aginctus workload apply dev
 ```
 
-Then inspect `aginctus status`, `aginctus herdr client status` and `aginctus workload status dev`. If Herdr remote control is needed, consult [Herdr bootstrap and verification](herdr-machine-registration.md) to authorize, pin host trust and register the owned target before launching the interactive `aginctus herdr` console.
+Then inspect `aginctus status`, `aginctus herdr client status` and `aginctus workload status dev`. If Herdr remote control is needed, consult [Herdr bootstrap and verification](operations/workloads/herdr-machine-registration.md) to authorize, pin host trust and register the owned target before launching the interactive `aginctus herdr` console.
 
-**Do not enable the gateway or run a live model request merely to finish this quickstart.** Gateway deployment, scoped key issuance, guest provisioning and egress firewall activation each have separate prerequisites, operator approvals and acceptance gates. Continue with [gateway documentation](ai-gateway.md), [operator key workflow](gateway-workload-key-pilot.md) and [release acceptance](acceptance-opencode.md) only after those prerequisites are satisfied.
+**Do not enable the gateway or run a live model request merely to finish this quickstart.** Gateway deployment, scoped key issuance, guest provisioning and egress firewall activation each have separate prerequisites, operator approvals and acceptance gates. Continue with [gateway documentation](architecture/gateway.md), [operator key workflow](operations/gateway/gateway-workload-key-pilot.md) and [release acceptance](testing/acceptance/README.md) only after those prerequisites are satisfied.
 
-For mutation categories, special `--force` behavior and troubleshooting pointers, use the [CLI guide](cli.md). For a full development test matrix and optional disposable-Incus tests, see [development](development.md).
+For mutation categories, special `--force` behavior and troubleshooting pointers, use the [CLI guide](reference/cli.md). For a full development test matrix and optional disposable-Incus tests, see [development](development/README.md).

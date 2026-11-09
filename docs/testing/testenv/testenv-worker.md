@@ -1,0 +1,509 @@
+# Trusted Incus testenv recovery worker (v0.2, experimental)
+
+For test tier selection and authority limits, start with the [testing overview](../README.md). This page documents **opt-in worker-only** installation of the one-shot
+expiration reconciler. It is **not** an agent-usable VM controller and
+does **not** automatically initialize Incus or configure a project.
+
+## Dedicated host boundary
+
+Only deploy on an isolated, disposable NixOS/KVM worker with **no** pilot
+credentials, pilot routes, sensitive host paths or host Incus socket.
+The worker runs its own Incus daemon. The `aginctus-testenv-recovery`
+service uses a static non-login identity in the **incus-admin** group:
+that group grants *daemon-administrator* authority on this host.
+Systemd restrictions mitigate accidents but **do not sandbox a compromised
+incus-admin process from that host**. Do not deploy on the pilot.
+
+The NixOS module deliberately fails evaluation if `virtualisation.incus`
+is not enabled separately, or if the Aginctus pilot service is enabled.
+It uses exactly the `testenv` storage pool and
+`/var/lib/incus/unix.socket` (the dedicated worker's local socket).
+Enabling this module does not create an Incus project, image, pool,
+network, admin key, or account allowed to call MCP mutating operations.
+
+## Declarative unit, runtime-only signing credential
+
+On the **separate worker's NixOS configuration**, after provisioning
+a dedicated restricted Incus project and storage pool matching the
+read-only `aginctus testenv vm policy` contract:
+
+```nix
+{
+  inputs.aginctus.url = "github:blevinn/aginctus/<reviewed-revision>";
+
+  outputs = { self, nixpkgs, aginctus, ... }: {
+    nixosConfigurations.testenv-worker = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        aginctus.nixosModules.aginctusTestenvRecovery
+        ({ ... }: {
+          system.stateVersion = "26.05";
+          virtualisation.incus.enable = true;
+          networking.nftables.enable = true;
+          services.aginctusTestenvRecovery.enable = true;
+        })
+      ];
+    };
+  };
+}
+```
+
+The `<reviewed-revision>` placeholder must be replaced by an approved
+pinned revision. This example **does not supply** the Incus daemon's
+initialization, testenv storage pool, restricted project policy or disk
+quotas; these must be established on the isolated worker before the
+timer is activated. Avoid using this as an import on a multipurpose
+host, even when the option is disabled.
+
+Provision the policy key **out of band** as a root-owned 32-byte
+regular file in a root-owned 0700 directory. One example, executed
+only on that dedicated worker by its operator:
+
+```sh
+sudo install -d -m 0700 -o root -g root /var/lib/aginctus-testenv
+sudo sh -c 'umask 077; head -c 32 /dev/urandom > /var/lib/aginctus-testenv/worker-policy.key'
+sudo stat -c '%U %a %s %n' /var/lib/aginctus-testenv/worker-policy.key
+# Expected owner root, permissions 600, size 32.
+```
+
+Never place this key in a Nix expression, Nix store derivation,
+git commit, guest filesystem, MCP client or Incus instance metadata.
+**Preserve it across worker reboots.** Replacing it invalidates previously
+signed runs; do not regenerate it as a workaround for failure.
+
+Systemd copies the key using `LoadCredential` into a private
+credential directory. The service checks its open file descriptor for
+type, ownership, permissions and exact length before contacting the
+dedicated Incus daemon. The recovery subcommand accepts no command-line
+arguments, uses no default Incus remote, rejects root, and prints only
+bounded aggregate success/failure counts.
+
+## Runtime instance policy
+
+Signed run metadata does not authorize arbitrary additional Incus options.
+Before initial start, status, guest execution, ownership discovery or cleanup,
+the backend checks the expanded instance configuration. Only the launch plan's
+CPU, memory, nesting and signed run metadata keys are accepted, plus the
+dedicated daemon's `image.*` and `volatile.*` metadata. Other keys, including
+raw QEMU overrides, cloud-init (also legacy `user.*` seed keys), environment,
+boot and snapshot controls, fail closed even when their values are empty.
+The single root disk must contain exactly `type`, `path`, `pool` and `size`,
+with the admitted values; additional disk options are rejected.
+
+These are application preflight checks, not atomic daemon authorization or a
+defense against a compromised worker daemon/administrator. The daemon remains
+trusted for image/volatile metadata and enforcing project restrictions. A
+concurrent administrator can change resources between checks and operations.
+Policy drift blocks the entire discovery/sweep before deletion; an operator
+must investigate it on the dedicated worker. Do not rotate the signing key or
+weaken policy to bypass a failed sweep. A recoverable signed handle is returned
+if post-create verification fails, but it does not authorize cleanup of a
+policy-drifted instance.
+
+Hostless regression tests exercise extra configuration and disk options before
+start, exec and destruction, including expiry reconciliation, and permit
+daemon metadata on an otherwise valid run. They do not prove actual Incus
+project enforcement, real-host isolation or complete storage reclamation.
+
+## Opt-in real-worker lifecycle helper
+
+The `testenv-cli` package supplies the fixed
+`aginctus-testenv worker acceptance` command in the Nix store. It uses the same
+`IncusVMBackend`, signed handles, readiness probes, typed guest exec and
+destruction path as the worker library. It is never started by the recovery module, normal checks, public CLI or MCP.
+The installed operator binary exposes this leaf, but only the explicitly
+approved dedicated worker invocation supplies the necessary admission inputs. Its commands and
+resource sizes cannot be overridden by a checkout manifest or guest input.
+
+### Prerequisites and invocation
+
+**Run only after separate operator approval on the dedicated disposable
+worker described above. Never run this on a multipurpose host or the pilot.**
+An acknowledgement and marker are accident-prevention gates, not proof of
+host isolation or project-scoped daemon credentials. The process still has
+daemon-administrator authority through `incus-admin`.
+
+Before running, the operator must independently:
+
+- Establish the worker's isolation, restricted `aginctus-testenv` project,
+  `testenv` storage pool with effective quotas, and the no-NIC/no-host-device
+  project policy printed by `aginctus testenv vm policy`. The helper never
+  provisions any of these.
+- Build/import the [reviewed VM image](testenv-incus-vm-image.md), record its
+  actual full Incus image fingerprint, and ensure the image fits a 32 GiB
+  root disk. Only lowercase 64-hex fingerprints are accepted, not aliases.
+- Provision the stable policy key and non-login `aginctus-testenv` identity
+  described above. Never copy the key into the checkout, store or guest.
+- Provision `/etc/aginctus-testenv` as a root-owned real directory, without
+  group/world write access, and a root-owned **regular, single-link** file
+  `/etc/aginctus-testenv/disposable-worker`, also without group/world write
+  access. Its exact content is `aginctus-dedicated-disposable-worker-v1`
+  followed by one newline. A symlink, including a Nix `environment.etc`
+  store symlink, is deliberately rejected.
+- Supply an existing, preferably stopped, unsigned foreign VM sentinel in
+  that project, with a name outside the `testenv-` namespace. Do not attach
+  secrets to the sentinel. Keep it unchanged throughout the test. It occupies
+  one of the project's two instance slots; the helper creates its own two
+  VMs **sequentially**. Size the sentinel so the helper also fits the aggregate
+  CPU, memory and disk project limits. No other signed runs may exist at admission.
+- Quiesce other lifecycle writers and the recovery timer for this bounded
+  trial so they cannot race the helper's retained expiry observation.
+  Arrange to restore the independent timer after the trial, including after
+  failure. A quiesced timer is not independent recovery evidence.
+
+The following commands are **instructions for that approved worker only**,
+not part of hermetic validation. Use a clean checkout of the reviewed pinned
+revision, not an agent-writable checkout, and substitute the actual image
+fingerprint and sentinel name. The transient unit supplies the runtime key
+and an owned private report root without installing a persistent service:
+
+```sh
+helper=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-cli)
+"$helper/bin/aginctus-testenv" worker acceptance --help
+
+# On the independently approved dedicated worker ONLY:
+sudo systemd-run --unit=aginctus-testenv-acceptance --wait --pipe --collect \
+  --service-type=exec --uid=aginctus-testenv --gid=aginctus-testenv \
+  --property=SupplementaryGroups=incus-admin \
+  --property=LoadCredential=policy-key:/var/lib/aginctus-testenv/worker-policy.key \
+  --property=StateDirectory=aginctus-testenv-acceptance \
+  --property=StateDirectoryMode=0700 \
+  --property=UMask=0077 --property=NoNewPrivileges=yes \
+  --property=ProtectSystem=strict --property=ProtectHome=yes \
+  --property=PrivateTmp=yes --property=PrivateDevices=yes \
+  --property=RestrictAddressFamilies=AF_UNIX --property=IPAddressDeny=any \
+  --property=TimeoutStartSec=13min --property=TimeoutStopSec=150s \
+  "$helper/bin/aginctus-testenv" worker acceptance \
+  --disposable-worker DEDICATED_DISPOSABLE_WORKER \
+  --socket /var/lib/incus/unix.socket --project aginctus-testenv \
+  --image '<actual-64-hex-imported-image-fingerprint>' \
+  --policy-key-file /run/credentials/aginctus-testenv-acceptance.service/policy-key \
+  --report-root /var/lib/aginctus-testenv-acceptance \
+  --foreign-instance '<existing-unsigned-foreign-vm>'
+```
+
+The worker socket and project must be supplied explicitly and match those
+fixed values. No Incus default remote or inherited socket environment is used.
+The helper rejects root; `systemd-run` starts the dedicated non-root identity.
+Trusted report/key ancestors and same-UID writers remain operator concerns.
+
+### What the helper proves when actually run successfully
+
+Each VM uses two CPUs, 4096 MiB RAM, a 32 GiB root disk and a three-minute
+signed TTL. The helper checks create, agent readiness (up to two minutes),
+running status, and the fixed guest-agent command
+`/run/current-system/sw/bin/incus --version` with a ten-second budget.
+It requires successful exit, nonempty stdout and empty stderr, but does not
+claim that the reported version string authenticates the inner daemon.
+
+The ephemeral VM follows explicit backend destruction. The retained VM is
+left until its **actual** expiry, re-observed as present, then passed through
+the backend's same scoped expiry/ownership destruction path used by the
+reconciler. The helper never advances its production clock or runs a broad
+sweep over other runs. A retargeted signed handle must be refused before
+foreign mutation; the sentinel's adapter-visible configuration/devices,
+profiles, retention and status must compare unchanged at the end.
+
+The independent volume API must positively observe each live VM root volume,
+then report both absent after instance cleanup. This is separate evidence
+from instance absence. It is **not** proof of physical block reclamation,
+snapshot/backups/custom-volume removal, pool quotas or complete disk cleanup.
+Sentinel comparison is not a full foreign-resource inventory or proof against
+concurrent administrators. Expanded runtime preflight is not an adversarial
+project-enforcement test.
+
+### Evidence, failure and remaining acceptance
+
+The helper emits a bounded JSON summary containing a run ID and pass/fail.
+Inspect `/var/lib/aginctus-testenv-acceptance/<run-id>/result.json` privately
+as the worker operator. It uses the existing `schema_version`, `status`,
+`results`, run-ID and `disposable_guest_no_live_provider` evidence conventions,
+with profile `dedicated_worker`; it is not input to the batch `vm-report`
+reader and must not be represented as a hermetic report or live-provider proof.
+The store package embeds the reviewed source identity (`source-<narHash>` for
+dirty/non-Git builds). The private result also records the image fingerprint,
+project, signed per-VM handles, fixed check outcomes and failure stage.
+It never records guest output, daemon diagnostics, foreign configuration or
+key bytes. Keep signed handles private even though they are not credentials.
+
+Evidence is written atomically as 0600 in a new 0700 run directory, fsynced
+before daemon admission and after handle updates, and limited to 32 KiB per
+record. An advisory lock serializes this helper within a report root, not
+other daemon clients. Interrupted create/start can precede local handle
+persistence; signed daemon metadata and the separately installed recovery
+timer remain necessary for that window.
+
+The foreground budget is ten minutes plus up to two minutes of scoped
+best-effort cleanup on error/cancellation. Only returned signed handles are
+eligible for cleanup; policy drift still blocks destruction. Preserve the
+private failed/incomplete result and independently inspect remaining instance
+and volume inventory. Do not rotate the policy key. Restore the independent
+timer through the dedicated operator procedure.
+
+A helper `pass` covers only its implemented lifecycle subset. `crash_reboot`,
+`nested_isolation`, `storage_reclamation` and `report_retention` remain
+`not_verified`: no SIGKILL/reboot, nested Incus/Btrfs workload, packet isolation,
+physical storage reclamation or report retention/GC trial is implemented.
+Reports are deliberately retained, never automatically pruned; provision an
+operator-managed bounded filesystem and review retention separately. No real
+worker execution is claimed by building the package or running fake tests.
+The authorization/service API and agent-facing mutations remain gated.
+
+## Installed read-only image and pool gate
+
+### Offline bootstrap contract and drift planning
+
+The unified operator-only `aginctus-testenv` command is installed by
+`aginctusTestenvWorker`. Its `worker bootstrap` subcommands are **offline
+operator tools**, with no daemon connection, registry access, subprocess
+execution, signing key access, service or activation hook. They accept bounded
+JSON on stdin and emit deterministic plans or inspection-only fingerprints.
+The ordinary agent CLI and MCP have no bootstrap or privileged worker interface.
+The installed worker also uses `worker preflight` and `worker sweep`;
+`worker acceptance` requires explicit operator invocation and is never
+installed as an automatic service.
+
+`IncusBootstrapContract` and `IncusBootstrapInventory` in
+`internal/testenv/incus_bootstrap.go` define the input schema. The project
+configuration in every plan comes directly from `IncusProjectPolicy("testenv")`:
+the fixed restricted project, aggregate quotas, nesting exception, blocked
+outer NIC/host devices/snapshots and private profiles have one policy authority.
+The contract pins the operator-reviewed complete outer pool configuration
+and full locally imported x86_64 VM image fingerprint. The outer pool remains
+`testenv`, ZFS or LVM, reporting 64–80 GiB; these observations do not prove
+effective storage quotas or independent physical backing.
+
+The inventory is a **quiescent initial bootstrap inventory**, not a runtime
+fleet inventory. It must represent the entire dedicated local daemon: all
+non-default projects, all pools, images, profiles, networks, volumes and
+instances. `default_project_empty` asserts the default project contains no
+resources except its empty default profile, which is listed separately.
+Only the restricted project, selected pool/image and empty `default` profiles
+are permitted. No networks, volumes, instances or other projects/images/pools
+are accepted, including otherwise legitimate signed runs. Do not run this
+initial-state validator against a worker serving runs or the lifecycle
+helper's foreign sentinel and interpret rejection as a repair instruction.
+
+All three readiness booleans require independent operator verification:
+
+- `marker_ready`: the existing regular root-owned disposable-worker marker
+  matches the runtime helper's checks.
+- `identity_ready`: the existing non-login `aginctus-testenv` account and its
+  dedicated-daemon-only authority match the installed recovery module.
+- `credential_ready`: the fixed private runtime file holds exactly 32 bytes,
+  is root-owned and owner-only, is outside the store/checkout/image/logs, and
+  is stable across reboots. The planner neither reads nor generates it.
+
+These input assertions and hashes are not authenticated measurements. A
+forged, stale or incomplete inventory can produce a misleading offline plan.
+Keep the contract and inventory operator-owned and outside agent-writable
+checkouts. Independently collect and review daemon state on the authorized
+worker; no live collector is implemented by this planner.
+
+For example, this **template is deliberately incomplete**. Substitute the
+reviewed fingerprints and physical source, and set readiness only after
+independent verification. Empty arrays are assertions of verified absence:
+
+```json
+{
+  "contract": {
+    "schema_version": 1,
+    "image_fingerprint": "<reviewed-full-64-lowercase-hex-fingerprint>",
+    "pool": {
+      "name": "testenv",
+      "driver": "zfs",
+      "config": {"source": "/dev/disk/by-id/OPERATOR-APPROVED-DEVICE"}
+    },
+    "pool_config_fingerprint": "<independently-reviewed-pool-config-hash>",
+    "existing_inventory_fingerprint": ""
+  },
+  "inventory": {
+    "complete": false,
+    "dedicated_local": false,
+    "socket": "/var/lib/incus/unix.socket",
+    "default_project_empty": false,
+    "marker_ready": false,
+    "identity_ready": false,
+    "credential_ready": false,
+    "projects": [],
+    "profiles": [{"project": "default", "name": "default", "config": {}, "devices": {}}],
+    "pools": [],
+    "images": [],
+    "networks": [],
+    "volumes": [],
+    "instances": []
+  }
+}
+```
+
+Existing pools use `{"metadata":{"name":...,"driver":...,"config":...},
+"status":"Created","total":...,"used":...}` with byte counts. Image entries
+use the existing `WorkerImageInspection` fields: `Fingerprint`, `Project`,
+`Type`, `Architecture`, `Public`, `AutoUpdate`, `Cached`, `RemoteSource`.
+Project entries use `name` and the complete `config` map. Profiles include
+both `default` and `aginctus-testenv` default profiles when that project exists.
+
+```sh
+tool=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-cli)
+"$tool/bin/aginctus-testenv" worker bootstrap --help
+# Offline input inspection only, no daemon contact:
+"$tool/bin/aginctus-testenv" worker bootstrap fingerprints < operator-input.json
+"$tool/bin/aginctus-testenv" worker bootstrap plan < operator-input.json
+```
+
+Fingerprint output is always `inspection_only`. Independently review the
+underlying configuration before recording its candidate pool hash. Existing
+resources require a separately reviewed **complete inventory hash**, even if
+their names and configuration match. This records explicit initial-state
+approval, not ownership inferred from names. Never automatically pipe candidate
+hashes into the contract. Array order and runtime capacity/usage are included
+in the inventory hash; changed observations require renewed review. The pool
+configuration hash uses the installed preflight's encoding, excluding usage.
+
+Missing resources yield `plan_only`, with ordered operator obligations for
+pool provisioning, restricted project creation/empty-profile verification and
+local immutable image import. Fully matching reviewed state yields
+`offline_match`. Neither status admits lifecycle operations. Drift, incomplete
+credentials, unsafe profiles/devices/networks and unexpected or unreviewed
+resources yield `needs_operator_action` (exit 1), without partial steps or
+repair instructions. Malformed/oversized JSON or unsupported arguments exit 2.
+No raw pool configuration, inventory, credential or daemon diagnostics are
+printed. Project comparison is deliberately exact: extra daemon-normalized
+settings require explicit design review, not silent canonicalization/adoption.
+
+### Provisioner boundary and remaining design blockers
+
+No mutating bootstrap mechanism is implemented. Before a follow-up native
+provisioner can safely operate, the operator must choose and approve:
+
+1. The exact disposable ZFS/LVM backing device/dataset, capacity and effective
+   quota policy, including daemon-normalized config and proof that it is not
+   pilot/shared storage. A pool-config hash is not authorization to initialize
+   a disk, and a read-only resource query cannot establish safe disk ownership.
+2. A trusted bounded complete-daemon inventory collector and durable
+   provenance/approval receipt for partially completed bootstrap. This must
+   distinguish resources created by that invocation from matching foreign
+   resources after interruption. Re-read project, pool and image after each
+   permitted operation; uncertainty must stop without replacement or rollback.
+3. Operator-owned local image artifacts, their provenance and expected actual
+   Incus fingerprint before import, plus a safe policy for Incus-generated
+   default profiles and normalized project settings on the real daemon.
+
+The contract is a reviewable precursor, not a second worker configuration
+system. Future integration belongs in `aginctusTestenvWorker`, with explicit
+operator invocation and no routine-activation hook. The live installed
+preflight must be re-run before admitting a lifecycle operation; it is not an
+atomic authorization service. Independent recovery must not depend on image
+availability, the offline planner, or successful preflight. Existing recovery
+continues to perform its own project/ownership checks.
+
+`aginctusTestenvWorker` composes the existing recovery identity/timer with
+an operator-started `aginctus-testenv-preflight` service. It never initializes
+Incus, creates/adopts a project or pool, imports images, or grants agent
+access. Provisioning remains an explicitly authorized operator step on the
+dedicated worker. The same `IncusProjectPolicy` used by the backend supplies
+the actual project checks; there is no second Nix policy table.
+
+The preflight requires the exact private, locally imported x86_64 VM image
+fingerprint in `aginctus-testenv`, without public, remote-update or cached
+image metadata. It admits an existing `testenv` **ZFS or LVM** pool reporting
+64–80 GiB total capacity and fingerprints its complete configuration for
+operator review. These outer-pool choices are separate from the inner
+Aginctus fixture's Btrfs pool. Capacity is a daemon-reported snapshot, not
+proof that quotas, storage isolation or physical reclamation work.
+
+Before activating the module, establish the daemon, restricted project,
+pool, marker and runtime key described above. On that separately approved
+worker only, obtain a candidate pool-configuration fingerprint with the
+immutable helper. Inspect the actual pool configuration independently before
+trusting its hash; do not automatically feed discovery into admission:
+
+```sh
+preflight=$(nix --quiet build --no-update-lock-file --no-link --print-out-paths .#testenv-cli)
+"$preflight/bin/aginctus-testenv" worker preflight --help
+
+# Dedicated disposable worker ONLY, with the root-owned regular marker and
+# runtime key provisioned as above; substitute the actual imported fingerprint.
+sudo systemd-run --unit=aginctus-testenv-pool-inspect --wait --pipe --collect \
+  --service-type=exec --uid=aginctus-testenv --gid=aginctus-testenv \
+  --property=SupplementaryGroups=incus-admin \
+  --property=LoadCredential=policy-key:/var/lib/aginctus-testenv/worker-policy.key \
+  --property=RestrictAddressFamilies=AF_UNIX --property=IPAddressDeny=any \
+  --property=NoNewPrivileges=yes --property=ProtectSystem=strict \
+  --property=ProtectHome=yes --property=PrivateTmp=yes --property=PrivateDevices=yes \
+  --property=TimeoutStartSec=45s \
+  --setenv=AGINCTUS_TESTENV_WORKER_SOCKET=/var/lib/incus/unix.socket \
+  --setenv=AGINCTUS_TESTENV_POLICY_KEY_FILE=/run/credentials/aginctus-testenv-pool-inspect.service/policy-key \
+  --setenv=AGINCTUS_TESTENV_IMAGE_FINGERPRINT='<actual-64-hex-image-fingerprint>' \
+  "$preflight/bin/aginctus-testenv" worker preflight --pool-fingerprint
+```
+
+`inspection_only` is never an admission pass. The returned hash covers
+pool name, driver and configuration, not fluctuating used bytes or free
+capacity. It is not a secret. After independent review, configure the
+dedicated worker using reviewed immutable source:
+
+```nix
+{
+  imports = [ inputs.aginctus.nixosModules.aginctusTestenvWorker ];
+  virtualisation.incus.enable = true;
+  networking.nftables.enable = true;
+  services.aginctusTestenvWorker = {
+    enable = true;
+    dedicatedDisposableHost = true;
+    imageFingerprint = "<actual-64-hex-image-fingerprint>";
+    poolConfigFingerprint = "<reviewed-64-hex-pool-configuration-fingerprint>";
+  };
+}
+```
+
+The module rejects missing acknowledgement, mutable image aliases, invalid
+fingerprints, unsupported architectures, a missing Incus daemon and the
+Aginctus pilot service. It creates a nonsecret regular marker only when
+absent; existing mismatched markers are not replaced. Its preflight service
+does not start automatically. After a separately authorized deployment:
+
+```sh
+systemctl cat aginctus-testenv-preflight.service
+# Approved dedicated worker only:
+sudo systemctl start aginctus-testenv-preflight.service
+sudo journalctl -u aginctus-testenv-preflight.service --no-pager -n 10
+```
+
+The bounded report lists only fixed outcomes and the pool hash. Project,
+image and pool drift fail closed without daemon mutations. The service has
+no `RemainAfterExit` admission cache; a successful observation is not an
+authorization token or an assurance about subsequent daemon state. It does
+not gate recovery: removing an image must not prevent expired VM cleanup.
+The worker still has daemon-administrator authority, so its installation
+and configuration must be outside agent-writable checkouts. Resource
+enforcement, crash/reboot, cleanup, real daemon compatibility and runtime
+acceptance remain unverified until independently tested. No public CLI/MCP
+mutations are enabled by this module.
+
+## Operational acceptance — not yet performed
+
+After operator approval and after validating real project restrictions,
+image boot and nested guest isolation on the **disposable worker**:
+
+```sh
+systemctl cat aginctus-testenv-recovery.service
+systemctl cat aginctus-testenv-recovery.timer
+systemctl list-timers aginctus-testenv-recovery.timer
+# Only on that worker, explicitly start the one-shot service:
+sudo systemctl start aginctus-testenv-recovery.service
+sudo systemctl status aginctus-testenv-recovery.service --no-pager
+```
+
+Observe no inappropriate resources after a clean sweep. Seed
+known, signed **run-owned** expired ephemeral and retained test VMs,
+leave a separate foreign VM present, and repeat the sweep. Then
+SIGKILL the control process, reboot the worker and verify the timer
+removes only expired signed instances without altering foreign
+objects. Inspect the storage pool and root-volume inventory separately:
+a successful instance deletion is **not** evidence of complete disk
+or report cleanup. Incomplete/unverified recovery must remain visible.
+
+The run-admission authorization layer and mutating CLI/MCP operations
+remain **disabled** pending #475/#479 acceptance. The batch NixOS
+test-driver remains independently available to operators.
