@@ -13,8 +13,8 @@ import (
 type projectConfinementEvidence string
 
 const (
-	projectConfinementUnknown       projectConfinementEvidence = "unverified"
-	projectConfinementUnrestricted  projectConfinementEvidence = "not-restricted"
+	projectConfinementUnknown      projectConfinementEvidence = "unverified"
+	projectConfinementUnrestricted projectConfinementEvidence = "not-restricted"
 	projectConfinementShared       projectConfinementEvidence = "shared-resource-namespace"
 	projectConfinementNetwork      projectConfinementEvidence = "shared-network-namespace"
 	projectConfinementCandidate    projectConfinementEvidence = "restricted-isolated-candidate"
