@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	doctorops "github.com/blevinn/aginctus/internal/cli/operations/doctor"
+	herdrops "github.com/blevinn/aginctus/internal/cli/operations/herdr"
+	networkops "github.com/blevinn/aginctus/internal/cli/operations/network"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
@@ -101,36 +103,9 @@ func runConfig(args []string, stdout, stderr io.Writer, effective *config.Config
 	return 2
 }
 
-// executeNetworkOperation receives an operation selected by a Cobra leaf.
-// Only the network-domain reconciliation is performed here.
+// executeNetworkOperation is the typed compatibility binding from Cobra.
 func executeNetworkOperation(ctx context.Context, operation string, options mutationOptions, stdout, stderr io.Writer, effective *config.Config) int {
-	spec, err := managementnetwork.FromConfig(effective)
-	if err != nil {
-		fmt.Fprintf(stderr, "management network configuration: %v\n", err)
-		return 1
-	}
-
-	err = executeManagementNetwork(ctx, spec, managementnetwork.Options{
-		DryRun:    options.DryRun,
-		Force:     options.Force,
-		Operation: operation,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "management network: %v\n", err)
-		return 1
-	}
-
-	switch {
-	case operation == "upsert" && options.DryRun:
-		fmt.Fprintf(stdout, "management network %q: would reconcile\n", spec.Name)
-	case operation == "upsert":
-		fmt.Fprintf(stdout, "management network %q: ready\n", spec.Name)
-	case options.DryRun:
-		fmt.Fprintf(stdout, "management network %q: would delete if present\n", spec.Name)
-	default:
-		fmt.Fprintf(stdout, "management network %q: absent\n", spec.Name)
-	}
-	return 0
+	return networkops.Execute(ctx, operation, networkops.Options{DryRun: options.DryRun, Force: options.Force}, stdout, stderr, effective, executeManagementNetwork)
 }
 
 type mutationOptions struct {
@@ -158,54 +133,13 @@ var attachGatewayCredentials = gateway.AttachCredentialVolume
 var auditGatewayCredentials = gateway.AuditCredentialAttachment
 
 
-// transitionHerdrClientCommand executes a validated lifecycle action.
+// These bindings keep existing CLI dependency-injection seams intact.
 func transitionHerdrClientCommand(ctx context.Context, action string, stdout, stderr io.Writer, effective *config.Config) int {
-		spec, err := herdrclient.FromConfig(effective)
-		if err != nil {
-			fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
-			return 1
-		}
-		if err := transitionHerdrClient(ctx, spec, action); err != nil {
-			fmt.Fprintf(stderr, "Herdr client %s: %v\n", action, err)
-			return 1
-		}
-		verb := "started"
-		if action == "stop" {
-			verb = "stopped"
-		}
-		fmt.Fprintf(stdout, "Herdr client %q: %s\n", spec.Name, verb)
-		return 0
+	return herdrops.Transition(ctx, action, stdout, stderr, effective, transitionHerdrClient)
 }
 
-// executeHerdrClientOperation is called only from parsed Cobra leaves.
 func executeHerdrClientOperation(ctx context.Context, operation string, options mutationOptions, stdout, stderr io.Writer, effective *config.Config) int {
-	spec, err := herdrclient.FromConfig(effective)
-	if err != nil {
-		fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
-		return 1
-	}
-
-	err = executeHerdrClient(ctx, spec, herdrclient.Options{
-		DryRun:    options.DryRun,
-		Force:     options.Force,
-		Operation: operation,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "Herdr client: %v\n", err)
-		return 1
-	}
-
-	switch {
-	case operation == "upsert" && options.DryRun:
-		fmt.Fprintf(stdout, "Herdr client %q: would reconcile\n", spec.Name)
-	case operation == "upsert":
-		fmt.Fprintf(stdout, "Herdr client %q: ready\n", spec.Name)
-	case options.DryRun:
-		fmt.Fprintf(stdout, "Herdr client %q: would delete if present\n", spec.Name)
-	default:
-		fmt.Fprintf(stdout, "Herdr client %q: absent\n", spec.Name)
-	}
-	return 0
+	return herdrops.Execute(ctx, operation, herdrops.Options{DryRun: options.DryRun, Force: options.Force}, stdout, stderr, effective, executeHerdrClient)
 }
 
 // executeConfiguredWorkloads takes parsed actions and selected IDs, with an
