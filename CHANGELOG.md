@@ -5,18 +5,19 @@ A release is not complete until its acceptance gates and release notes are appro
 
 ## [Unreleased]
 
-v0.2 development is in progress. These entries describe merged code, not
-release approval or independently verified end-to-end operation. See the
-[working v0.2 release notes](docs/releases/v0.2.0.md) for acceptance gates
-and incomplete features.
+v0.2 development is in progress. These are **merged implementation changes**,
+not release approval or independently verified end-to-end acceptance. See
+[working v0.2 release notes](docs/releases/v0.2.0.md) for WIP features and gates.
 
-- Replaced the positional CLI dispatcher with typed Cobra command families, generated help, compatibility coverage, and a unified `aginctus-testenv` entry point ([#372](https://github.com/blevinn/aginctus/issues/372)).
-- Introduced official Incus SDK-based native planning and guarded project/network/instance lifecycle building blocks, including limited scoped workload reconciliation. The gateway cutover, full project co-location, and retirement of Apply/Compose remain incomplete ([#153](https://github.com/blevinn/aginctus/issues/153), [#198](https://github.com/blevinn/aginctus/issues/198)).
-- Added standalone Home Manager operator packaging/configuration and expanded read-only authority, mixed-manager, firewall-boundary, and disposable-VM regression coverage; default-on user reconciliation and safe migration remain gated ([#426](https://github.com/blevinn/aginctus/issues/426)).
-- Added typed MCP declarations and redacted effective-policy inspection, plus declarative nonsecret gateway provider/model asset configuration. Enforcement, full provider/model reconciliation, and live integration are not yet complete ([#162](https://github.com/blevinn/aginctus/issues/162), [#496](https://github.com/blevinn/aginctus/issues/496)).
-- Added Go-owned hermetic suite catalog, runner, structured redacted reporting and VM evidence inspection, along with more disposable-VM and dedicated-worker testenv foundations; genuine fresh-host acceptance remains outstanding ([#630](https://github.com/blevinn/aginctus/issues/630), [#580](https://github.com/blevinn/aginctus/issues/580)).
-- Added the initial protected LiteLLM-owned ChatGPT session/token lifecycle and Responses transport implementation, without claiming complete deployment, consent/recovery validation or live OAuth acceptance ([#187](https://github.com/blevinn/aginctus/issues/187)).
-- Began parallel Go/static CI validation while preserving the existing comprehensive required gate, and protected main-branch run evidence from superseding cancellation ([#705](https://github.com/blevinn/aginctus/issues/705)).
+- Refactored CLI and testenv operation families to typed Cobra subcommands, generated help, error/compatibility tests, and dedicated command packages ([#372](https://github.com/blevinn/aginctus/issues/372), [PR #667](https://github.com/blevinn/aginctus/pull/667)).
+- Added guarded native Incus project/bridge/instance lifecycle and scoped workload reconciliation, plus **native gateway design groundwork** for two-service topology, execution-safety validation, and immutable OCI image selection. Gateway cutover, project co-location and `incus-apply`/`incus-compose` retirement remain open ([#153](https://github.com/blevinn/aginctus/issues/153), [#158](https://github.com/blevinn/aginctus/issues/158), [PRs #719–#721](https://github.com/blevinn/aginctus/pull/721)).
+- Added standalone Home Manager operator configuration, read-only authority/ownership diagnostics and VM regressions covering host firewall coexistence, activation, recovery and Incus downtime; default-on user reconciliation and migration remain gated ([#426](https://github.com/blevinn/aginctus/issues/426)).
+- Added nonsecret gateway provider/model asset declarations, normalized MCP grants and redacted policy inspection. Live registration convergence and MCP runtime enforcement remain incomplete ([#496](https://github.com/blevinn/aginctus/issues/496), [#162](https://github.com/blevinn/aginctus/issues/162)).
+- Integrated an **Aginctus `openai-siwc` plugin** with the managed LiteLLM gateway for consented ChatGPT sign-in: protected gateway-only credential state, browser enrollment, serialized refresh, workload-scoped route binding, Responses transport and gateway apply/login/logout flows. This is **not** LiteLLM's native `chatgpt/` provider; separately authorized real-account and host acceptance remain unverified ([PR #692](https://github.com/blevinn/aginctus/pull/692), [#187](https://github.com/blevinn/aginctus/issues/187)).
+- Added initial nonsecret configured-to-accepted **selection manifests** and read-only identity projection; durable accepted revisions, promotion, reconciliation and root/user authorization are *not* implemented ([#693](https://github.com/blevinn/aginctus/issues/693), [PRs #716–#717](https://github.com/blevinn/aginctus/pull/717)).
+- Consolidated hermetic test catalogs, execution and redacted reporting in Go, expanded VM evidence and disposable testenv infrastructure, and unified worker CLI entry points. Genuine fresh-host deploy/coding/cleanup/repeat acceptance remains outstanding ([#630](https://github.com/blevinn/aginctus/issues/630), [#580](https://github.com/blevinn/aginctus/issues/580)).
+- Split CI into parallel Go/static jobs with fail-closed targeted Nix contracts and a preserved required aggregate; run comprehensive validation after merge, on demand and on schedule. Performance/operations closeout remains tracked ([#705](https://github.com/blevinn/aginctus/issues/705), [#710](https://github.com/blevinn/aginctus/issues/710)).
+- Reorganized documentation into task-oriented operations, reference, architecture, testing, development and history sections, with revised navigation, link checks and contributor/security reporting entry points; project-level governance closeout remains tracked ([#645](https://github.com/blevinn/aginctus/issues/645)).
 
 ## [0.1.0]
 
