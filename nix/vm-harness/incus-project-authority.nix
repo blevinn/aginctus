@@ -70,7 +70,55 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus project get aginctus-authz restricted | grep -qx true")
     machine.succeed("test $(stat -c '%a' /home/operator/.config/incus/client.key) = 600")
 
-    # This initial fixture proves only setup/transport mechanics when run.
-    # Denial matrix and isolation proof arrive in the next stacked PR.
+    # Restricted-client positive mutations: only confined project-scoped
+    # objects; do not provision privileged instances or host-device mappings.
+    machine.succeed(operator + " incus profile create scoped:operator-test --project aginctus-authz")
+    machine.succeed(operator + " incus storage volume create scoped:default safe-test --project aginctus-authz")
+
+    # Snapshot privileged objects AFTER expected authorized changes; every
+    # forbidden attempt below must be refused without modifying host state.
+    protected = {
+      "project": machine.succeed("incus project show aginctus-authz"),
+      "foreign": machine.succeed("incus project show unrelated"),
+      "network": machine.succeed("incus network show aginctus-authz-mgmt"),
+      "pools": machine.succeed("incus storage list --format json | jq -S ."),
+      "foreign_profiles": machine.succeed("incus profile list --project unrelated --format json | jq -S ."),
+    }
+
+    # A test that fails only because its CLI syntax is invalid is NOT valid
+    # authorization evidence. Assert a bounded class of remote denial errors.
+    def deny(command):
+        status, output = machine.execute(operator + " " + command + " 2>&1")
+        lower = output.lower()
+        assert status != 0, "restricted principal completed a forbidden action"
+        assert "unknown flag" not in lower and "unknown command" not in lower and "usage:" not in lower, "invalid CLI probe, not an authorization test"
+        assert any(piece in lower for piece in ["not authorized", "not allowed", "permission denied", "forbidden", "access denied", "not found"]), "unexpected failure class in restricted authorization probe"
+
+    deny("incus list scoped: --project unrelated --format json")
+    deny("incus project set scoped:aginctus-authz restricted=false")
+    deny("incus project create scoped:unauthorized")
+    deny("incus network create scoped:escape-bridge ipv4.address=none ipv6.address=none")
+    deny("incus storage create scoped:escape-pool dir")
+    deny("incus storage volume create scoped:default escape-volume --project unrelated")
+    deny("incus profile create scoped:foreign-profile --project unrelated")
+    deny("incus config set scoped:core.https_address 0.0.0.0:8443")
+
+    assert machine.succeed("incus project show aginctus-authz") == protected["project"], "project restrictions changed"
+    assert machine.succeed("incus project show unrelated") == protected["foreign"], "foreign project changed"
+    assert machine.succeed("incus network show aginctus-authz-mgmt") == protected["network"], "host-owned bridge changed"
+    assert machine.succeed("incus storage list --format json | jq -S .") == protected["pools"], "storage pool inventory changed"
+    assert machine.succeed("incus profile list --project unrelated --format json | jq -S .") == protected["foreign_profiles"], "foreign profile inventory changed"
+    machine.fail("incus network show escape-bridge")
+    machine.fail("incus storage show escape-pool")
+    machine.fail("incus project show unauthorized")
+
+    # Assert effective authorization routing, not only a certificate's
+    # advertised project restrictions. Empty means server defaults to the
+    # protocol's built-in TLS evaluator; any other custom routing is a gate.
+    routing = machine.succeed("incus config get authorization.client.tls-restricted").strip()
+    assert routing in ["", "tls"], "restricted-TLS authorization evaluator was overridden"
+
+    # Human-readable evidence never includes private key or cert contents.
+    print("INCUS AUTHORITY TEST: confined positive operations, forbidden operations and host invariants checked; version: " + machine.succeed("incus version").strip())
   '';
 }
