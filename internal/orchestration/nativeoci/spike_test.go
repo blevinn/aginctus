@@ -59,6 +59,25 @@ func TestDaemonOCI(t *testing.T) {
 		t.Fatal("native project provisioning adopted foreign object")
 	}
 	client := server.UseProject(scope.Name)
+
+	// Exercise project-bound, create-or-verify native gateway database storage.
+	// These are synthetic VM-only resources, separate from the original spike's
+	// unmanaged postgres-data volume and never visible to the pilot daemon.
+	gatewayVolume := native.GatewayVolumeIntent{Project:scope.Name,Pool:"spike",Name:"gateway-postgres"}
+	for attempt:=range 2 {
+		result,err:=native.EnsureLocalGatewayVolume(ctx,gatewayVolume)
+		if err!=nil || !result.Verified || result.Created != (attempt==0) {
+			t.Fatalf("native gateway volume create/reuse: %+v %v",result,err)
+		}
+	}
+	if err:=client.CreateStoragePoolVolume("spike",api.StorageVolumesPost{
+		Name:"foreign-gateway-postgres",Type:"custom",ContentType:"filesystem",
+	});err!=nil {t.Fatal(err)}
+	if _,err:=native.EnsureLocalGatewayVolume(ctx,native.GatewayVolumeIntent{
+		Project:scope.Name,Pool:"spike",Name:"foreign-gateway-postgres",
+	});err==nil {
+		t.Fatal("native gateway volume adopted unmarked foreign volume")
+	}
 	if err := server.UseProject("default").CreateNetwork(api.NetworksPost{Name: "spike-mgmt", Type: "bridge", NetworkPut: api.NetworkPut{Config: map[string]string{
 		"ipv4.address": "10.78.0.1/24", "ipv4.nat": "false", "ipv4.routing": "false", "ipv4.dhcp.gateway": "none", "ipv6.address": "none",
 	}}}); err != nil {
@@ -87,6 +106,21 @@ func TestDaemonOCI(t *testing.T) {
 			})
 			if err != nil {
 				t.Fatal(err)
+			}
+
+			// The create-only gateway acquisition must obtain immutable OCI
+			// identity directly through the SDK. Layer-only matches are not
+			// sufficient for subsequent adoption/reuse.
+			acquired, err := native.AcquireLocalGatewayImage(ctx, native.GatewayImageAcquireIntent{
+				Project:scope.Name,Image:resolved,
+			})
+			if err!=nil || !acquired.Attempted || !acquired.Verified {
+				t.Fatalf("guarded native image acquisition: %+v %v",acquired,err)
+			}
+			if _,err:=native.AcquireLocalGatewayImage(ctx,native.GatewayImageAcquireIntent{
+				Project:scope.Name,Image:resolved,
+			});err==nil {
+				t.Fatal("native image acquisition adopted an existing layer fingerprint")
 			}
 			request := api.ImagesPost{Source: &api.ImagesPostSource{
 				Type: "image", Mode: "pull", ImageSource: api.ImageSource{
