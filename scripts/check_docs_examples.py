@@ -14,7 +14,7 @@ from pathlib import Path
 
 from markdown_it import MarkdownIt
 
-GUIDES = ("docs/getting-started.md", "docs/cli.md", "docs/herdr-machine-registration.md")
+GUIDES = ("docs/getting-started.md", "docs/reference/cli.md", "docs/operations/workloads/herdr-machine-registration.md")
 GENERATED_MARKER = "Subcommand syntax (derived from registered Cobra commands):"
 GENERATED_ROUTE = re.compile(r"^  aginctus (.+)$")
 LEGACY_LINE = re.compile(r"^\s*(?:Usage:\s*)?aginctus \[global options\] (.+)$")

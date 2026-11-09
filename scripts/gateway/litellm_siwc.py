@@ -125,6 +125,26 @@ class TerminalStream(httpx.AsyncByteStream):
         await self.source.aclose()
 
 
+class AdmissionStream(httpx.AsyncByteStream):
+    def __init__(self, source, lease):
+        self.source, self.lease = source, lease
+
+    async def __aiter__(self):
+        try:
+            async for chunk in self.source:
+                yield chunk
+        finally:
+            await self.aclose()
+
+    async def aclose(self):
+        try:
+            await self.source.aclose()
+        finally:
+            if self.lease is not None:
+                self.lease.__exit__(None, None, None)
+                self.lease = None
+
+
 class SIWCTransport(AsyncHTTPHandler):
     def __init__(self, owner, route, transport=None):
         # Do not initialize LiteLLM's shared HTTP client: it can inherit proxy,
@@ -135,6 +155,21 @@ class SIWCTransport(AsyncHTTPHandler):
                                         trust_env=False, transport=transport)
 
     async def post(self, url, *, json=None, data=None, **kwargs):
+        lease = self.owner.store.lock("admin", timeout=0, shared=True)
+        lease.__enter__()
+        try:
+            permission = PERMISSION.get()
+            if ((self.owner.store.root / "pending.json").exists() or not permission
+                    or self.owner.store.read()["routes"].get(permission[0]) != self.route):
+                raise Error("SIWC configuration changed or maintenance is pending; retry after apply/login")
+            response = await self._post(url, json=json, data=data, **kwargs)
+            response.stream = AdmissionStream(response.stream, lease)
+            return response
+        except BaseException:
+            lease.__exit__(None, None, None)
+            raise
+
+    async def _post(self, url, *, json=None, data=None, **kwargs):
         import json as json_module
 
         if url != RESOURCE + "/responses" or data is not None:
@@ -212,8 +247,9 @@ class SIWCHook(CustomLogger):
         self.lease.__enter__()
         self.clients = {}
         try:
-            self.owner.store.accept_pending()
-            self.routes = self.owner.store.read()["routes"]
+            with self.owner.store.lock("admin"):
+                self.owner.store.accept_pending()
+                self.routes = self.owner.store.read()["routes"]
         except Exception:
             self.close()
             raise
@@ -226,6 +262,12 @@ class SIWCHook(CustomLogger):
 
         PERMISSION.set(None)
         alias = data.get("model", "")
+        if str(alias).startswith("siwc-"):
+            try:
+                with self.owner.store.lock("admin", timeout=0, shared=True):
+                    self.routes = self.owner.store.read()["routes"]
+            except Error:
+                raise HTTPException(503, "SIWC enrollment or configuration maintenance is in progress") from None
         if alias not in self.routes:
             if str(alias).startswith("siwc-") or str(data.get("api_key", "")).startswith("aginctus-siwc:"):
                 raise HTTPException(403, "Unbound SIWC route")
@@ -281,6 +323,8 @@ class SIWCHook(CustomLogger):
         record = self.owner.store.read()["accounts"].get(route["account"], {})
         if (record.get("client_id") != route["client_id"] or record.get("sub") != route["sub"]):
             raise Error("SIWC account binding changed; rebind after explicit consent")
+        if alias in self.clients and self.clients[alias].route != route:
+            await self.clients.pop(alias).client.aclose()
         if alias not in self.clients:
             self.clients[alias] = SIWCTransport(self.owner, route, self.transport)
         kwargs["client"] = self.clients[alias]

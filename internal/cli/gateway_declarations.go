@@ -3,7 +3,9 @@ package cli
 import (
 	"fmt"
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/gatewaycontrol"
+	siwc "github.com/blevinn/aginctus/internal/plugins/openai-siwc"
 )
 
 func checkGatewayProviderMutation(effective *config.Config, name string) error {
@@ -26,5 +28,27 @@ func configuredGatewayStore(effective *config.Config) (*gatewaycontrol.Store, er
 	if err := store.Configure(providers, catalogs, mcps); err != nil {
 		return nil, err
 	}
+	configureSIWCOperations(store, effective)
 	return store, nil
+}
+
+func configuredGatewaySpec(effective *config.Config) (gateway.Spec, error) {
+	spec, err := gateway.FromConfig(effective)
+	if err != nil {
+		return spec, err
+	}
+	store, err := configuredGatewayStore(effective)
+	if err != nil {
+		return spec, err
+	}
+	plan, err := siwc.Configure(store)
+	if err != nil || len(plan.Providers) == 0 {
+		return spec, err
+	}
+	public, err := plan.RuntimeConfig()
+	if err != nil {
+		return spec, err
+	}
+	err = spec.ConfigureSIWC(public)
+	return spec, err
 }

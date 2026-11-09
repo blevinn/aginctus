@@ -49,6 +49,7 @@ type Spec struct {
 	ForwardClientHeaders      bool
 	SelectiveGoForwarding     bool
 	ForwardClientHeaderModels []string
+	SIWCConfig                string
 }
 
 func FromConfig(effective *config.Config) (Spec, error) {
@@ -87,7 +88,7 @@ func FromConfig(effective *config.Config) (Spec, error) {
 	if err := rejectDottedEgressDHCPInput(effective); err != nil {
 		return Spec{}, err
 	}
-	// The input contract is documented in docs/configuration.md.
+	// The input contract is documented in docs/reference/configuration.md.
 	if raw, ok := effective.Get("gateway.egress.network.ipv4.dhcp"); ok {
 		switch value := raw.(type) {
 		case bool:
@@ -187,6 +188,9 @@ var gatewayIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 var selectiveGoImagePattern = regexp.MustCompile(`^ghcr\.io/berriai/litellm(:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?@sha256:[0-9a-f]{64}$`)
 
 func (s Spec) Validate() error {
+	if s.SIWCConfig != "" && (!selectiveGoImagePattern.MatchString(s.LiteLLMImage) || s.HasClientHeaderForwarding()) {
+		return fmt.Errorf("managed SIWC requires an immutable LiteLLM image and forbids broad client-header forwarding")
+	}
 	if s.SelectiveGoForwarding {
 		if s.HasClientHeaderForwarding() {
 			return fmt.Errorf("gateway.litellm.selectiveGoForwarding conflicts with all stock forwardClientHeaders modes")
@@ -366,7 +370,11 @@ services:
       LITELLM_MASTER_KEY: ${AGINCTUS_GATEWAY_MASTER_KEY}
       LITELLM_SALT_KEY: ${AGINCTUS_GATEWAY_SALT_KEY}
       STORE_MODEL_IN_DB: "True"
-{{if .SelectiveGoForwarding}}      CONFIG_FILE_PATH: /app/aginctus-go/config.yaml
+{{if .SIWCConfig}}      CONFIG_FILE_PATH: /app/aginctus-siwc/config.json
+      PYTHONPATH: {{.SIWCPythonPath}}
+      AGINCTUS_SIWC_STATE_DIR: /var/lib/aginctus/chatgpt/siwc
+    configs: {{json .SIWCAttachments}}
+{{else if .SelectiveGoForwarding}}      CONFIG_FILE_PATH: /app/aginctus-go/config.yaml
       PYTHONPATH: /app/aginctus-go
     configs: {{json .SelectiveGoAttachments}}
 {{end}}{{if .HasClientHeaderForwarding}}      CONFIG_FILE_PATH: /app/aginctus-client-headers.yaml
@@ -380,7 +388,8 @@ services:
 {{if .EgressNetwork}}      egress:{{if .EgressIPv4Address}}
         ipv4_address: {{.EgressIPv4Address}}{{else}} {}{{end}}
 {{end}}
-{{if .SelectiveGoForwarding}}configs: {{json .SelectiveGoConfigs}}
+{{if .SIWCConfig}}configs: {{json .SIWCConfigs}}
+{{else if .SelectiveGoForwarding}}configs: {{json .SelectiveGoConfigs}}
 {{end}}{{if .HasClientHeaderForwarding}}configs:
   aginctus-client-headers:
     content: |
@@ -463,6 +472,10 @@ func (s Spec) OrchestrationPlan() (orchestration.Plan, error) {
 			"selectiveGoAttachments":        s.SelectiveGoAttachments(),
 			"selectiveGoConfigPath":         gatewayassets.ConfigPath,
 			"selectiveGoPythonPath":         gatewayassets.PythonPath,
+			"siwcConfig":                    s.SIWCConfig,
+			"siwcConfigs":                   s.SIWCConfigs(),
+			"siwcAttachments":               s.SIWCAttachments(),
+			"siwcPythonPath":                s.SIWCPythonPath(),
 		},
 	)
 }

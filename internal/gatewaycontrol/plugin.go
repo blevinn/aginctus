@@ -23,9 +23,15 @@ type Model struct {
 }
 
 type Configuration struct {
-	StateDir string                     `json:"state_dir,omitempty"`
-	Models   map[string]Model           `json:"models,omitempty"`
-	MCPs     map[string]json.RawMessage `json:"mcps,omitempty"`
+	StateDir string                        `json:"state_dir,omitempty"`
+	Models   map[string]Model              `json:"models,omitempty"`
+	MCPs     map[string]json.RawMessage    `json:"mcps,omitempty"`
+	Routes   map[string]RouteConfiguration `json:"routes,omitempty"`
+}
+
+type RouteConfiguration struct {
+	Catalog         string `json:"catalog"`
+	WorkloadKeyFile string `json:"workload_key_file"`
 }
 
 type Provider struct {
@@ -35,8 +41,10 @@ type Provider struct {
 }
 
 type LoginOptions struct {
-	Output     io.Writer
-	EnablePlan bool
+	Output              io.Writer
+	EnablePlan          bool
+	ConsentConnectedApp bool
+	ConsentBackground   bool
 }
 
 // Plugin is compiled behavior, not a dynamically loaded executable or module.
@@ -48,6 +56,8 @@ type Plugin struct {
 	Validate        func(Configuration) error                           `json:"-"`
 	DiscoverModels  func(context.Context, Provider) ([]Model, error)    `json:"-"`
 	Login           func(context.Context, Provider, LoginOptions) error `json:"-"`
+	Status          func(context.Context, Provider) (any, error)        `json:"-"`
+	Logout          func(context.Context, Provider) error               `json:"-"`
 	RenderModel     func(Provider, Model) ([]byte, error)               `json:"-"`
 }
 
@@ -129,6 +139,9 @@ func ValidateMCP(name string, data json.RawMessage) error {
 }
 
 func (plugins Plugins) Validate(p Provider) error {
+	if len(p.Config.Routes) != 0 && p.Plugin != "openai-siwc" {
+		return fmt.Errorf("route declarations require the openai-siwc plugin")
+	}
 	plugin, ok := plugins[p.Plugin]
 	if !ok || !ValidName(p.Name) {
 		return fmt.Errorf("unknown compiled plugin or invalid provider name")
