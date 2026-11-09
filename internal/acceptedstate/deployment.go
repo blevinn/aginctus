@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 )
 
 // DeploymentSpec is a deliberately workload-only accepted-intent fragment.
@@ -85,7 +86,7 @@ func (s DeploymentSpec) Validate() error {
 
 func fingerprintHex(s string) bool {
 	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if !strings.ContainsRune("0123456789abcdef", c) {
 			return false
 		}
 	}
