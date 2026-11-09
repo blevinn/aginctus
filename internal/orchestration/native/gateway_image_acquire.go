@@ -91,7 +91,7 @@ type GatewayImageAcquireClient interface {
 	GetConnectionInfo() (*incus.ConnectionInfo,error)
 	GetProject(string) (*api.Project,string,error)
 	GetImage(string) (*api.Image,string,error)
-	CreateImage(api.ImagesPost,*incus.ImageCreateArgs) (GatewayImageAcquireOperation,error)
+	CreateImage(api.ImagesPost) (GatewayImageAcquireOperation,error)
 }
 type GatewayImageAcquireOperation interface {
 	WaitContext(context.Context) error
@@ -101,8 +101,8 @@ type sdkGatewayImageClient struct { server incus.InstanceServer }
 func (c sdkGatewayImageClient) GetConnectionInfo() (*incus.ConnectionInfo,error) { return c.server.GetConnectionInfo() }
 func (c sdkGatewayImageClient) GetProject(name string) (*api.Project,string,error) { return c.server.GetProject(name) }
 func (c sdkGatewayImageClient) GetImage(name string) (*api.Image,string,error) { return c.server.GetImage(name) }
-func (c sdkGatewayImageClient) CreateImage(req api.ImagesPost,args *incus.ImageCreateArgs) (GatewayImageAcquireOperation,error) {
-	return c.server.CreateImage(req,args)
+func (c sdkGatewayImageClient) CreateImage(req api.ImagesPost) (GatewayImageAcquireOperation,error) {
+	return c.server.CreateImage(req,nil)
 }
 
 // AcquireLocalGatewayImage performs a tightly scoped create-only OCI pull.
@@ -162,7 +162,7 @@ func AcquireGatewayImageWithClient(ctx context.Context,in GatewayImageAcquireInt
 		},
 	}}
 	result.Attempted=true
-	op,err:=client.CreateImage(request,nil)
+	op,err:=client.CreateImage(request)
 	if err!=nil{return fail("create",true,err)}
 	if op==nil{return fail("operation",true,fmt.Errorf("image operation unavailable"))}
 	if err:=op.WaitContext(ctx);err!=nil{return fail("operation",true,err)}
