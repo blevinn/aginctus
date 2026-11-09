@@ -18,5 +18,5 @@ func gatewayPlugins() gatewaycontrol.Plugins {
 func addGatewayAssetCommands(gateway, providers, models *cobra.Command,
 	status *int, options config.Options, load func() (*config.Config, error),
 ) {
-	assetscmd.Register(gateway, providers, models, status, options, load, configuredGatewayStore)
+	assetscmd.Register(gateway, providers, models, status, options, load, configuredGatewayStore, gatewayPlugins())
 }

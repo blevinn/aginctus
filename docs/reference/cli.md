@@ -118,6 +118,18 @@ operations retain v0.1 behavior. The separately confirmed start/stop
 transitions and confirmed existing-only apply below are opt-in scoped workload
 mutations. They do not migrate the pilot or activate a controller.
 
+## Managed Sign in with ChatGPT
+
+The compiled `openai-siwc` provider uses the normal gateway configuration.
+`gateway apply` delivers runtime files, prepares exclusive credential storage
+and derives routes from provider/catalog declarations. `gateway provider login`
+handles browser enrollment and gateway credential publication; use
+`--consent-connected-app --consent-background` to authorize that scope explicitly.
+Provider `status` and `logout` operate on the selected managed instance.
+These operations do not require a host token cache or separate SIWC state,
+binding, rendering or transfer commands. See the
+  [configuration, enrollment and recovery contract](../gateway-siwc.md).
+
 ## Review an existing scoped workload apply (read-only)
 
 To generate a machine-readable instance-only preview for a workload that

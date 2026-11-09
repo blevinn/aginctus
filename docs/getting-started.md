@@ -13,7 +13,7 @@ as operator guidance, not as verified v0.1 behavior.
 ## Host prerequisites
 
 - Linux host with Nix flakes enabled; a working local Incus daemon and initialized storage pool are required only for Incus operations.
-- For host-level NixOS integration, import `nixosModules.default` and enable `services.aginctus` using the [NixOS module example](reference/configuration.md#nixos-module). A separate [Home Manager operator-only installation](operations/host/home-manager.md) is proposed in the unmerged v0.2 stack; it cannot replace host firewall authority. The current guest images are NixOS containers; selecting `vm` requires an independently compatible image.
+- For host-level NixOS integration, import `nixosModules.default` and enable `services.aginctus` using the [NixOS module example](reference/nixos-module.md#nixos-module). A separate [Home Manager operator-only installation](operations/host/home-manager.md) is proposed in the unmerged v0.2 stack; it cannot replace host firewall authority. The current guest images are NixOS containers; selecting `vm` requires an independently compatible image.
 - Trust the host and Incus administrators; review the effective configuration, storage pools, bridge topology, firewall backend and network exposure before enabling mutations.
 
 From the repository checkout, the development/build path is:
