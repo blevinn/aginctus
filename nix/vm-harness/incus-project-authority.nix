@@ -94,13 +94,13 @@ pkgs.testers.runNixOSTest {
         assert "unknown flag" not in lower and "unknown command" not in lower and "usage:" not in lower, "invalid CLI probe, not an authorization test"
         assert any(piece in lower for piece in ["not authorized", "not allowed", "permission denied", "forbidden", "access denied", "not found"]), "unexpected failure class in restricted authorization probe"
 
-    deny("incus list scoped: --project unrelated --format json")
+    deny("incus list scoped: --project unrelated --format json", allow_hidden=True)
     deny("incus project set scoped:aginctus-authz restricted=false")
     deny("incus project create scoped:unauthorized")
     deny("incus network create scoped:escape-bridge ipv4.address=none ipv6.address=none")
     deny("incus storage create scoped:escape-pool dir")
-    deny("incus storage volume create scoped:default escape-volume --project unrelated")
-    deny("incus profile create scoped:foreign-profile --project unrelated")
+    deny("incus storage volume create scoped:default escape-volume --project unrelated", allow_hidden=True)
+    deny("incus profile create scoped:foreign-profile --project unrelated", allow_hidden=True)
     deny("incus config set scoped:core.https_address 0.0.0.0:8443")
 
     assert machine.succeed("incus project show aginctus-authz") == protected["project"], "project restrictions changed"
