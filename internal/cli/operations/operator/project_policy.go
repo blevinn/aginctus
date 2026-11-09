@@ -51,4 +51,3 @@ func AssessObservedProjects(scope incusscope.ProjectScope, raw []byte) (string, 
 	}
 	return status, nil
 }
-
