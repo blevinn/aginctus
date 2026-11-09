@@ -81,7 +81,7 @@ configuration-owned name again locally. Home Manager uses
 
 The referenced file contains an existing, dedicated **LiteLLM workload key**,
 never an OpenAI token. Provision its alias scope through the existing
-[workload key lifecycle](gateway-workload-key-pilot.md). It must be owned,
+  [workload key lifecycle](operations/gateway/gateway-workload-key-pilot.md). It must be owned,
 mode 0600, regular and single-link. Only its SHA-256 identity reaches the binding.
 Catalog inheritance preserves the original provider identity and source slug.
 MCP aliases do not create or rename tool grants.
@@ -172,5 +172,5 @@ workload egress/tool isolation require separately authorized live acceptance.
 Keep [#187](https://github.com/blevinn/aginctus/issues/187),
 [#171](https://github.com/blevinn/aginctus/issues/171) and
 [#172](https://github.com/blevinn/aginctus/issues/172) open until those observations
-are recorded. Follow the [gateway operator path](gateway-operator-path.md) for
+are recorded. Follow the [gateway operator path](operations/gateway/README.md) for
 the existing firewall and deployment controls.

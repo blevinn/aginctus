@@ -27,11 +27,11 @@ nix build .#aginctus         # build the CLI
 
 ```
 
-These are development checks; they do **not** deploy an Incus environment or prove gateway inference. For the supported host prerequisites, NixOS activation side effects, read-only preflight and optional operator-approved deployment, start with [getting started](docs/getting-started.md). See [development](docs/development.md) for local tooling and [NixOS configuration](docs/configuration.md#nixos-module) for the full host example.
+These are development checks; they do **not** deploy an Incus environment or prove gateway inference. For the supported host prerequisites, NixOS activation side effects, read-only preflight and optional operator-approved deployment, start with [getting started](docs/getting-started.md). See [development](docs/development/README.md) for local tooling and [NixOS configuration](docs/reference/configuration.md#nixos-module) for the full host example.
 
 ## Documentation
 
-Read the [documentation index](docs/README.md) or jump to the [CLI operations guide](docs/cli.md), [architecture](docs/architecture.md), [configuration](docs/configuration.md) and [security controls and limitations](docs/security.md). Individual implemented capabilities, pilot acceptance and deployment reproducibility are distinct: see the [v0.1 release notes](docs/releases/v0.1.0.md) for verified evidence, explicit deferrals and security limitations.
+Read the [documentation index](docs/README.md) or jump to the [CLI operations guide](docs/reference/cli.md), [architecture](docs/architecture/README.md), [configuration](docs/reference/configuration.md) and [security controls and limitations](docs/reference/security.md). Individual implemented capabilities, pilot acceptance and deployment reproducibility are distinct: see the [v0.1 release notes](docs/releases/v0.1.0.md) for verified evidence, explicit deferrals and security limitations.
 
 ## Development
 
