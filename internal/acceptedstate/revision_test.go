@@ -36,7 +36,7 @@ func TestDiffOnlyFieldNamesAndNonDeletingSelection(t *testing.T){
 	if err!=nil {t.Fatal(err)}
 	if len(diff.Modified)!=2 {t.Fatalf("diff = %+v",diff)}
 	payload,_:=json.Marshal(diff)
-	for _,s:=range []string{strings.Repeat("d",64),"instanceName\"":"} {
+	for _,s:=range []string{strings.Repeat("d",64),"stable"} {
 		if strings.Contains(string(payload),s){t.Fatal("diff disclosed value")}
 	}
 	if !reflect.DeepEqual(diff.NewlySelected,[]string{}) {t.Fatal(diff)}
