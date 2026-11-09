@@ -123,4 +123,4 @@ Follow the [dedicated worker runbook](testenv-worker-operations.md#installed-rea
 
 ### Operational acceptance — not yet performed
 
-Follow the [dedicated worker runbook](testenv-worker-operations.md#operational-acceptance-not-yet-performed) only on a separately approved worker.
+Follow the [dedicated worker runbook](testenv-worker-operations.md#operational-acceptance--not-yet-performed) only on a separately approved worker.
