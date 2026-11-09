@@ -17,6 +17,7 @@ Use this guide to find the **current** operator path, implementation contract or
 | --- | --- | --- |
 | NixOS activation, firewall and project authority | [Host operations](operations/host/README.md) | A configuration read or a dry-run authorizes activation |
 | Gateway registration, egress, scoped tokens and inference | [Gateway operator stages](operations/gateway/README.md) | Health checks establish real provider access or isolation |
+| Managed Sign in with ChatGPT configuration, login and recovery | [Managed SIWC](gateway-siwc.md) | Local checks establish live provider access or account readiness |
 | Herdr/OpenCode provisioning, lifecycle and persistence | [Workload operations](operations/workloads/README.md) | Running guests prove a model-directed coding task |
 | CLI/config values, security and declared grants | [Reference](reference/README.md) | A declared capability is an effective permission |
 | Testing tier and acceptance evidence | [Testing](testing/README.md) | Hermetic/VM reports substitute for an operator-controlled live test |

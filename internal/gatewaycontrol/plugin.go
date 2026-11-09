@@ -41,8 +41,10 @@ type Provider struct {
 }
 
 type LoginOptions struct {
-	Output     io.Writer
-	EnablePlan bool
+	Output              io.Writer
+	EnablePlan          bool
+	ConsentConnectedApp bool
+	ConsentBackground   bool
 }
 
 // Plugin is compiled behavior, not a dynamically loaded executable or module.
@@ -54,6 +56,8 @@ type Plugin struct {
 	Validate        func(Configuration) error                           `json:"-"`
 	DiscoverModels  func(context.Context, Provider) ([]Model, error)    `json:"-"`
 	Login           func(context.Context, Provider, LoginOptions) error `json:"-"`
+	Status          func(context.Context, Provider) (any, error)        `json:"-"`
+	Logout          func(context.Context, Provider) error               `json:"-"`
 	RenderModel     func(Provider, Model) ([]byte, error)               `json:"-"`
 }
 
