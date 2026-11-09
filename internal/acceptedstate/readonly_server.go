@@ -29,8 +29,11 @@ type ReadOnlyUnixService struct {
 func StartReadOnlyUnixService(ctx context.Context,store *LocalStore,socket string)(*ReadOnlyUnixService,error){
 	if ctx==nil || store==nil || !filepath.IsAbs(socket) {return nil,errors.New("service needs context, store and absolute socket path")}
 	if err:=privateStoreDirectory(filepath.Dir(socket));err!=nil{return nil,err}
-	if _,err:=os.Lstat(socket);err==nil{return nil,errors.New("existing socket path must not be adopted")}
-	else if !errors.Is(err,os.ErrNotExist){return nil,err}
+	if _,err:=os.Lstat(socket);err==nil{
+		return nil,errors.New("existing socket path must not be adopted")
+	} else if !errors.Is(err,os.ErrNotExist){
+		return nil,err
+	}
 	listener,err:=net.Listen("unix",socket)
 	if err!=nil{return nil,err}
 	cleanup:=func(e error)(*ReadOnlyUnixService,error){listener.Close();os.Remove(socket);return nil,e}
