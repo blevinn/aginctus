@@ -112,7 +112,11 @@ func TestDaemonOCI(t *testing.T) {
 			// identity directly through the SDK. Layer-only matches are not
 			// sufficient for subsequent adoption/reuse.
 			acquired, err := native.AcquireLocalGatewayImage(ctx, native.GatewayImageAcquireIntent{
-				Project:scope.Name,Image:resolved,
+				Project:scope.Name,Image:native.GatewayOCIIdentity{
+					Registry:resolved.Registry,Repository:resolved.Repository,
+					ManifestDigest:resolved.ManifestDigest,ConfigDigest:resolved.ConfigDigest,
+					IncusFingerprint:resolved.IncusFingerprint,
+				},
 			})
 			if err!=nil || !acquired.Attempted || !acquired.Verified {
 				t.Fatalf("guarded native image acquisition: %+v %v",acquired,err)
