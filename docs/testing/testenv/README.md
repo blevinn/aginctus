@@ -1,6 +1,7 @@
 # Test environment: choose an isolated harness
 
-- [Disposable nested-Incus VM harness](vm-harness.md) — opt-in QEMU/NixOS fixture, test-only diagnostics and evidence; **not** the pilot host.
+- [Disposable nested-Incus VM harness](vm-harness.md) — opt-in QEMU/NixOS setup, test-only diagnostics and evidence; **not** the pilot host.
+- [Scenario catalog](scenarios.md) — explicit synthetic and full-stack test recipes, including immutable OCI staging.
 - [Dedicated recovery worker](testenv-worker.md) — opt-in, **privileged** worker-only Incus lifecycle, isolated from pilot secrets.
 - [Outer Incus VM image](testenv-incus-vm-image.md) — explicit operator import into a dedicated worker, never a coding agent's host authority.
 
