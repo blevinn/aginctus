@@ -14,7 +14,6 @@ pkgs.testers.runNixOSTest {
   nodes.machine = { ... }: {
     system.stateVersion = "26.05";
     networking.nftables.enable = true;
-    networking.useDHCP = false;
     virtualisation = {
       memorySize = 4096;
       diskSize = 16384;
@@ -22,7 +21,7 @@ pkgs.testers.runNixOSTest {
       incus.enable = true;
       incus.package = pkgs.incus;
     };
-    environment.systemPackages = [ pkgs.incus pkgs.jq pkgs.coreutils pkgs.util-linux ];
+    environment.systemPackages = [ pkgs.incus pkgs.jq pkgs.coreutils pkgs.util-linux pkgs.curl ];
     users.users.operator = {
       uid = 1000;
       isNormalUser = true;
