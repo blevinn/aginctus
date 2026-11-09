@@ -81,7 +81,7 @@ class Store:
             raise Error("SIWC state directory must be owned, non-symlink and mode 0700")
 
     @contextlib.contextmanager
-    def lock(self, name="state", timeout=20):
+    def lock(self, name="state", timeout=20, shared=False):
         path = self.root / (name + ".flock")
         fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, 0o600)
         with os.fdopen(fd, "rb") as file:
@@ -92,11 +92,11 @@ class Store:
             deadline = time.monotonic() + timeout
             while True:
                 try:
-                    fcntl.flock(file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(file, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
                     break
                 except BlockingIOError:
                     if time.monotonic() >= deadline:
-                        raise Error("SIWC owner busy; stop LiteLLM before enrollment, transfer or logout") from None
+                        raise Error("SIWC owner busy; retry apply or provider login after active requests finish") from None
                     time.sleep(0.05)
             if not os.path.samestat(info, path.lstat()):
                 raise Error("SIWC lock was replaced")
@@ -154,9 +154,14 @@ class Store:
             raise Error("Malformed SIWC account or route state") from None
         return data
 
-    def write(self, data):
-        self.validate(data)
-        target = self.root / "state.json"
+    def write(self, data, name="state.json"):
+        if name == "state.json":
+            self.validate(data)
+        elif name == "pending.json":
+            self.validate(data["state"])
+        else:
+            raise Error("Invalid managed SIWC state filename")
+        target = self.root / name
         if target.exists() or target.is_symlink():
             private_read(target)
         fd, path = tempfile.mkstemp(prefix=".siwc-", dir=self.root)
