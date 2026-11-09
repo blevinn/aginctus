@@ -103,7 +103,7 @@ class PinnedResponsesProbeTests(unittest.TestCase):
             runbook,
         )
         self.assertNotIn(
-            'insecureAcceptAnything',
+            'podman-probe-policy.json',
             runbook,
         )
 
