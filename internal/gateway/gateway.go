@@ -88,7 +88,7 @@ func FromConfig(effective *config.Config) (Spec, error) {
 	if err := rejectDottedEgressDHCPInput(effective); err != nil {
 		return Spec{}, err
 	}
-	// The input contract is documented in docs/configuration.md.
+	// The input contract is documented in docs/reference/configuration.md.
 	if raw, ok := effective.Get("gateway.egress.network.ipv4.dhcp"); ok {
 		switch value := raw.(type) {
 		case bool:
