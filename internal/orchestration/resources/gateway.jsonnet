@@ -62,6 +62,10 @@ ag.orchestration(cfg.id,
           } else {}) + (if cfg.selectiveGoForwarding then {
             CONFIG_FILE_PATH: cfg.selectiveGoConfigPath,
             PYTHONPATH: cfg.selectiveGoPythonPath,
+          } else {}) + (if std.get(cfg, 'siwcConfig', '') != '' then {
+            CONFIG_FILE_PATH: '/app/aginctus-siwc/config.json',
+            PYTHONPATH: cfg.siwcPythonPath,
+            AGINCTUS_SIWC_STATE_DIR: '/var/lib/aginctus/chatgpt/siwc',
           } else {}),
           networks: {
             management: {
@@ -79,6 +83,8 @@ ag.orchestration(cfg.id,
           }],
         } else {}) + (if cfg.selectiveGoForwarding then {
           configs: cfg.selectiveGoAttachments,
+        } else {}) + (if std.get(cfg, 'siwcConfig', '') != '' then {
+          configs: cfg.siwcAttachments,
         } else {}),
       },
       volumes: {
@@ -107,6 +113,8 @@ ag.orchestration(cfg.id,
       },
     } else {}) + (if cfg.selectiveGoForwarding then {
       configs: cfg.selectiveGoConfigs,
+    } else {}) + (if std.get(cfg, 'siwcConfig', '') != '' then {
+      configs: cfg.siwcConfigs,
     } else {}),
   }),
 ])
