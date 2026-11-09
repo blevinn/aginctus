@@ -42,24 +42,35 @@ Call out changes involving sandboxing, network controls, credentials, secrets, M
 
 ## Documentation maintenance
 
-- Link new current/operator-facing documents from `docs/README.md`; the
-  Markdown checker requires discoverability for all such pages, including
-  subdirectories. The `docs/adr/`, `docs/design/`, `docs/internal/`,
-  `docs/milestones/`, and `docs/releases/` areas are exempt because they
-  contain decisions, proposals, internal notes, or historical artifacts.
-  Link particularly relevant documents from the index deliberately.
-- When adding gateway or acceptance pages, keep the gateway workflow at `docs/operations/gateway/README.md`
-  and acceptance path at `docs/testing/acceptance/README.md` in sync, and verify any new
-  `operator ...` or `images ...` subcommands appear in both `docs/reference/cli.md` and
+- Every current/operator-facing Markdown page must be **reachable** from
+  `docs/README.md` through a purpose-specific section index, usually in two
+  clicks. The offline Markdown checker follows local Markdown links recursively,
+  detects broken targets/fragments, and rejects orphaned active pages. Do not
+  defeat it with a flat dump of links in the root index.
+- Keep `docs/adr/`, `docs/design/`, `docs/internal/`,
+  `docs/milestones/`, `docs/releases/` and `docs/history/` explicitly
+  separated as decisions, proposals, internal notes or historical evidence;
+  these are exempt from active-operator discoverability, not from link safety.
+- Update **the canonical topic owner** instead of copying a side-effecting
+  workflow: `docs/operations/gateway/README.md` owns gateway stages,
+  `docs/testing/README.md` chooses evidence tiers,
+  `docs/testing/acceptance/README.md` owns OpenCode acceptance,
+  `docs/reference/cli.md` owns command effects, and
+  `docs/reference/configuration.md` owns config precedence and module effects.
+- Keep `docs/getting-started.md`, `docs/reference/cli.md`, and the Herdr
+  operator runbook's literal `aginctus` examples aligned with generated
+  `aginctus help` usage. Run `just check docs-examples` (or the legacy
+  `just check-docs-examples` alias); it checks syntax shapes without executing
+  operations. Use CLI help as authoritative syntax; do not copy a flag table.
+- When adding gateway or acceptance pages, keep the gateway workflow at
+  `docs/operations/gateway/README.md` and acceptance path at
+  `docs/testing/acceptance/README.md` in sync. Verify new `operator ...` or
+  `images ...` subcommands in both `docs/reference/cli.md` and
   `docs/reference/configuration.md` with consistent opt-in/future status.
-- Keep `docs/getting-started.md`, `docs/reference/cli.md`, and the Herdr operator
-  runbook's literal `aginctus` shell examples aligned with generated
-  `aginctus help` usage. Run `just check docs-examples` (or the legacy `just check-docs-examples` alias); it checks
-  syntax shapes but **never runs the documented operations**. Use the CLI's
-  actual help for authoritative syntax; do not create a parallel flag table.
-- Run `just check-markdown-links` for links, fragments and index coverage.
-  Keep planned designs and historical release notes distinct from current
-  supported behavior.
+- Run `just check markdown` (or `just check-markdown-links`) after moves. Preserve
+  host approval, secret handling, project scope, failure/rollback, and live-model
+  opt-in gates. Proposed features, old pilot observations, and green hermetic
+  checks are not proof of current production behavior.
 
 ## Working rules
 

@@ -356,3 +356,7 @@ from the pinned Python policy tests:
 nix shell nixpkgs#nodejs --command node --test guest/opencode/test_go_session_plugin.mjs
 nix develop -c python3 -m unittest discover -s scripts/gateway -p 'test_opencode_go_forwarding.py' -v
 ```
+
+## Related targeted checks
+
+The [pinned OpenCode runtime validation](opencode-runtime-validation.md) documents separate runtime/control verification. It is **not** an alternative path around the above explicit live provider and agent opt-in stages.
