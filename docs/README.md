@@ -29,6 +29,12 @@ Use this guide to find the **current** operator path, implementation contract or
 - [v0.1 release notes](releases/v0.1.0.md) state what was observed and what was deferred. [Historical materials](history/README.md) retain release-specific handoffs and old milestone pointers rather than masquerading as current procedures.
 - [Issue #645](https://github.com/blevinn/aginctus/issues/645) tracks the documentation refactor. Other release-specific work and verification state belong to their GitHub issues; a stale docs page is not a release sign-off.
 
-## Contributor maintenance
+## Contributors and security reporting
 
+- [Developer and test guide](development/README.md) — reproducible environment and review checks; [agent-specific rules](../AGENTS.md) are separate.
+- [Bug report](../.github/ISSUE_TEMPLATE/bug_report.md) and [feature request](../.github/ISSUE_TEMPLATE/feature_request.md) are existing templates. Scrub all private paths, tokens, keys and confidential details.
+- Human contributor onboarding and conduct expectations are tracked in [#627](https://github.com/blevinn/aginctus/issues/627). Private vulnerability intake is tracked in [#626](https://github.com/blevinn/aginctus/issues/626); these issues are **not** approved disclosure/contact channels or evidence that a policy has shipped.
+- [Technical security limitations](reference/security.md) remain separate from a future root `SECURITY.md` disclosure policy.
+
+## Contributor maintenance
 Keep each active topic in one canonical page and link to it from the corresponding section index. Update the [docs inventory](internal/document-inventory.md) only as a **historical baseline**, not as a duplicate live index. The hermetic Markdown checker validates link targets and operator-facing discoverability; the CLI example checker checks syntax without executing commands. No documentation example is permission to change a real host, issue credentials or make a billable model request.
