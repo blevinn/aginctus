@@ -190,6 +190,7 @@
             cp ${./guest/opencode/launch.py} $out/launch.py
             cp ${./guest/opencode/gateway_endpoint.py} $out/gateway_endpoint.py
             cp ${./guest/opencode/go_session_plugin.js} $out/go_session_plugin.js
+            cp ${./guest/opencode/siwc_plugin.js} $out/siwc_plugin.js
           '';
 
           # Scoped source patch for the flake-pinned CLI event-consumer join.

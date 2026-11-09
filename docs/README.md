@@ -36,5 +36,4 @@ Use this guide to find the **current** operator path, implementation contract or
 - [Technical security limitations](reference/security.md) remain separate from a future root `SECURITY.md` disclosure policy.
 
 ## Contributor maintenance
-
 Keep each active topic in one canonical page and link to it from the corresponding section index. Update the [docs inventory](internal/document-inventory.md) only as a **historical baseline**, not as a duplicate live index. The hermetic Markdown checker validates link targets and operator-facing discoverability; the CLI example checker checks syntax without executing commands. No documentation example is permission to change a real host, issue credentials or make a billable model request.

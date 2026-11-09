@@ -157,7 +157,7 @@ func (e *enrollment) exchange(state *State, previous *Record, code, clientID, re
 	if slices.Contains(record.Scopes, Direct) {
 		message = "ChatGPT plan usage enabled."
 	}
-	fmt.Fprintln(e.options.Output, "SIWC sign-in saved. "+message)
+	fmt.Fprintln(e.options.Output, "SIWC sign-in validated. "+message)
 	return nil
 }
 

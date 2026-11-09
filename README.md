@@ -32,7 +32,6 @@ These are development checks; they do **not** deploy an Incus environment or pro
 ## Documentation
 
 Read the [documentation index](docs/README.md) or jump to the [CLI operations guide](docs/reference/cli.md), [architecture](docs/architecture/README.md), [configuration](docs/reference/configuration.md) and [security controls and limitations](docs/reference/security.md). Individual implemented capabilities, pilot acceptance and deployment reproducibility are distinct: see the [v0.1 release notes](docs/releases/v0.1.0.md) for verified evidence, explicit deferrals and security limitations.
-
 ## Contributing and reporting issues
 
 For normal defects and enhancements, use the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md) or [feature request template](.github/ISSUE_TEMPLATE/feature_request.md). Read the [development guide](docs/development/README.md) for build and validation and [AGENTS.md](AGENTS.md) for the separate rules applying to automated coding agents.
