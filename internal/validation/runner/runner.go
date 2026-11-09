@@ -180,7 +180,13 @@ func (c *failureCollector) parse(line string) {
 func runSuite(ctx context.Context, root string, suite catalog.Suite, safeEnv []string, verbose bool, diagnostic io.Writer) Result {
 	start := time.Now()
 	rerun := "just check " + suite.Recipe
-	cmd := exec.CommandContext(ctx, "just", "check", suite.Recipe)
+	// An invalid catalog timeout never becomes unlimited child authority.
+	if suite.TimeoutSeconds <= 0 {
+		return Result{ID: suite.ID, Rerun: rerun, Status: "error"}
+	}
+	suiteContext, cancel := context.WithTimeout(ctx, time.Duration(suite.TimeoutSeconds)*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(suiteContext, "just", "check", suite.Recipe)
 	cmd.Dir = root
 	cmd.Env = withStructuredFlag(safeEnv, suite.ID == "go")
 	cmd.Stdin = nil
@@ -197,7 +203,7 @@ func runSuite(ctx context.Context, root string, suite catalog.Suite, safeEnv []s
 		result.ExitCode, result.Status = &zero, "pass"
 	} else {
 		var exit *exec.ExitError
-		if errors.As(err, &exit) && ctx.Err() == nil {
+		if errors.As(err, &exit) && suiteContext.Err() == nil {
 			code := exit.ExitCode()
 			result.ExitCode, result.Status = &code, "fail"
 		} else {

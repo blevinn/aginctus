@@ -175,3 +175,18 @@ func TestCanceledSuiteIsAnErrorNotAFailure(t *testing.T) {
 		t.Fatalf("canceled suite was not reported as an error: %#v", result)
 	}
 }
+
+func TestCatalogTimeoutIsBoundedAndNotCallerControlled(t *testing.T) {
+	suites := catalog.HermeticSuites()
+	for _, suite := range suites {
+		if suite.TimeoutSeconds <= 0 || suite.TimeoutSeconds > 3600 || suite.Authority != catalog.DeveloperCI {
+			t.Fatalf("unsafe hermetic execution metadata: %#v", suite)
+		}
+	}
+	bad := suites[0]
+	bad.TimeoutSeconds = 0
+	result := runSuite(context.Background(), t.TempDir(), bad, nil, false, nil)
+	if result.Status != "error" || result.ExitCode != nil {
+		t.Fatalf("unbounded catalog timeout was accepted: %#v", result)
+	}
+}
