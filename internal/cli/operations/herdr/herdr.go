@@ -11,7 +11,7 @@ import (
 
 type Options struct {
 	DryRun bool
-	Force bool
+	Force  bool
 }
 
 // Transition and Execute retain the established CLI result/exit contract.
@@ -65,4 +65,3 @@ func Execute(ctx context.Context, operation string, options Options, stdout, std
 	}
 	return 0
 }
-

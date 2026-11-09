@@ -12,7 +12,7 @@ import (
 
 type Options struct {
 	DryRun bool
-	Force bool
+	Force  bool
 }
 
 // Configured runs the selected workload operations using only caller-provided

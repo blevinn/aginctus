@@ -11,7 +11,7 @@ import (
 
 type Options struct {
 	DryRun bool
-	Force bool
+	Force  bool
 }
 
 // Execute reconciles one configured management network using the injected
@@ -45,4 +45,3 @@ func Execute(ctx context.Context, operation string, options Options, stdout, std
 	}
 	return 0
 }
-
