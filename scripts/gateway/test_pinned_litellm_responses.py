@@ -94,12 +94,12 @@ class PinnedResponsesProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "callback-only"):
             probe.verify_packaged_policy(policy)
 
-    def test_operator_runbook_uses_ephemeral_podman_policy(self):
+    def test_operator_runbook_uses_cached_networkless_image(self):
         runbook_path = Path(__file__).resolve().parents[2] / (
-            "docs/operations/gateway/gateway-api-key-pilot.md")
+            "docs/operations/gateway/selective-go-forwarding.md")
         runbook = runbook_path.read_text(encoding="utf-8")
         self.assertIn(
-            'policy=$(mktemp)',
+            '--pull=never --network none',
             runbook,
         )
         self.assertNotIn(
@@ -114,7 +114,7 @@ class PinnedResponsesProbeTests(unittest.TestCase):
         self.assertIn('default = "ghcr.io/berriai/litellm:v1.103.0";',
                       gateway_settings)
         runbook = (repo_root / "docs/operations/gateway/" /
-                   "gateway-api-key-pilot.md").read_text(encoding="utf-8")
+                   "selective-go-forwarding.md").read_text(encoding="utf-8")
         self.assertIn("ghcr.io/berriai/litellm:v1.103.0", runbook)
         self.assertNotIn("ghcr.io/berriai/litellm:v1.103.0-stable", runbook)
 
