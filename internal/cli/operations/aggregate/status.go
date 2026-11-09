@@ -25,8 +25,8 @@ func Status(ctx context.Context, args []string, out, stderr io.Writer, cfg *conf
 	var results bytes.Buffer
 	for _, check := range checks {
 		var errors bytes.Buffer
-		if code := check.run(ctx, nil, &results, &errors, cfg); code != 0 {
-			fmt.Fprintf(stderr, "%s status failed: %s", check.name, errors.String())
+		if code := check.Run(ctx, nil, &results, &errors, cfg); code != 0 {
+			fmt.Fprintf(stderr, "%s status failed: %s", check.Name, errors.String())
 			return 1
 		}
 	}
