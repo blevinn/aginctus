@@ -331,6 +331,12 @@ pkgs.testers.runNixOSTest {
     def denied(command, reason):
         assert reason in report(command, "denied"), "failure did not demonstrate the expected boundary"
 
+    def authorization_denied(command):
+        # A generic syntax/configuration error is not proof of denied authority.
+        output = report(command, "denied")
+        reasons = ["does not have permission", "Certificate is restricted", "not authorized", "Not authorized"]
+        assert any(reason in output for reason in reasons), "unexpected failure category (not proven authorization denial)"
+
     restricted = report(operator + " env INCUS_PROJECT=foreign /home/operator/.nix-profile/bin/aginctus operator preflight --project aginctus", 0)
     assert "restricted TLS credential; selected project declared permitted (writes unproven)" in restricted
     assert "Incus project: aginctus (instance read allowed)" in restricted
@@ -362,10 +368,10 @@ pkgs.testers.runNixOSTest {
     # Effective-denial probes belong only in the disposable guest; no
     # production preflight may issue writes. A successful unexpected write
     # is a test failure and a blocker for user-owned lifecycle services.
-    report(operator + " incus network set hm-mgmt user.hm-denied=true --project aginctus", "denied")
-    report(operator + " incus project set aginctus restricted=false", "denied")
-    report(operator + " incus storage set default user.hm-denied=true", "denied")
-    report(operator + " incus storage volume create default hm-cross-project --project foreign", "denied")
+    authorization_denied(operator + " incus network set hm-mgmt user.hm-denied=true --project aginctus")
+    authorization_denied(operator + " incus project set aginctus restricted=false")
+    authorization_denied(operator + " incus storage set default user.hm-denied=true")
+    authorization_denied(operator + " incus storage volume create default hm-cross-project --project foreign")
     denied(operator + " incus project create forbidden-project", "Certificate is restricted")
     denied(operator + " incus config set core.https_address=127.0.0.1:9443", "Certificate is restricted")
     machine.fail(operator + " ip link add forbidden-linux type bridge")
