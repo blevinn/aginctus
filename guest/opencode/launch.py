@@ -10,6 +10,7 @@ from gateway_endpoint import validate_endpoint, validate_model
 DEFAULT_DIR = "/var/lib/aginctus/opencode"
 GO_ALIAS = "aginctus-go-pilot"
 SESSION_PLUGIN = Path(__file__).with_name("go_session_plugin.js")
+SIWC_PLUGIN = Path(__file__).with_name("siwc_plugin.js")
 
 
 def load(directory):
@@ -61,6 +62,10 @@ def main():
         if not SESSION_PLUGIN.is_file():
             raise ValueError("OpenCode Go session plugin unavailable")
         config["plugin"] = [SESSION_PLUGIN.resolve().as_uri()]
+    if model.startswith("siwc-"):
+        if protocol != "responses" or not SIWC_PLUGIN.is_file():
+            raise ValueError("SIWC requires Responses and its packaged request profile")
+        config["plugin"] = [SIWC_PLUGIN.resolve().as_uri()]
     environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(config)
     os.execve(sys.argv[1], sys.argv[1:], environment)
 
