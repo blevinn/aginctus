@@ -176,7 +176,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus image list --format json | jq -e 'length == 0'")
     machine.wait_for_unit("firewalld.service")
     machine.succeed("incus network create hm-mgmt ipv4.address=10.247.84.1/24 ipv4.nat=false ipv4.routing=false ipv6.address=none raw.dnsmasq=address=/fixture.incus/10.247.84.1 user.aginctus.managed=true user.aginctus.resource=management-network")
-    machine.succeed("incus project create aginctus -c restricted=true -c features.networks=true")
+    machine.succeed("incus project create aginctus -c restricted=true -c features.images=true -c features.profiles=true -c features.storage.volumes=true -c features.networks=true -c restricted.networks.access=hm-mgmt")
     machine.succeed("incus project create foreign")
     for project in ["default", "aginctus", "foreign"]:
         machine.succeed(f"incus profile create scope-sentinel --project {project}")
@@ -335,11 +335,17 @@ pkgs.testers.runNixOSTest {
     assert "restricted TLS credential; selected project declared permitted (writes unproven)" in restricted
     assert "Incus project: aginctus (instance read allowed)" in restricted
     assert "Write permissions: unverified" in restricted
+    assert "Project confinement: restricted-isolated-candidate" in restricted
     assert "Host bridge, firewall, pool and admin permissions: unverified" in restricted
     report(cli + " operator preflight --project foreign", 1)
     # The CLI refuses default before any probe; direct GET also proves server denial.
     report(cli + " operator preflight --project default", 2)
     machine.succeed(operator + " incus profile show scope-sentinel --project aginctus")
+    # The host-admin provisioned bridge may be *used* through an explicit
+    # restricted network allowlist; this is not permission to administer it.
+    # Incus shares the listed default-project bridge into this isolated
+    # project without allowing an ordinary restricted identity to mutate it.
+    machine.succeed(operator + " incus network show hm-mgmt --project aginctus")
     for project in ["default", "foreign"]:
         denied(operator + f" incus project show {project}", "does not have permission")
     denied(operator + " incus profile show scope-sentinel --project foreign", "does not have permission")
@@ -353,6 +359,13 @@ pkgs.testers.runNixOSTest {
     # production preflight. Exact project flags prevent ambient switching.
     denied(operator + " incus network create hm-denied --type bridge --project aginctus ipv4.address=none ipv6.address=none", "Network type does not support non-default projects")
     denied(operator + " incus network create hm-denied --type bridge --project default ipv4.address=none ipv6.address=none", "does not have permission")
+    # Effective-denial probes belong only in the disposable guest; no
+    # production preflight may issue writes. A successful unexpected write
+    # is a test failure and a blocker for user-owned lifecycle services.
+    report(operator + " incus network set hm-mgmt user.hm-denied=true --project aginctus", "denied")
+    report(operator + " incus project set aginctus restricted=false", "denied")
+    report(operator + " incus storage set default user.hm-denied=true", "denied")
+    report(operator + " incus storage volume create default hm-cross-project --project foreign", "denied")
     denied(operator + " incus project create forbidden-project", "Certificate is restricted")
     denied(operator + " incus config set core.https_address=127.0.0.1:9443", "Certificate is restricted")
     machine.fail(operator + " ip link add forbidden-linux type bridge")
