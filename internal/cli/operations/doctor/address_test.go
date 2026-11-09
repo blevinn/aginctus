@@ -35,4 +35,3 @@ func TestDoctorHTTPSRequiresExplicitLoopbackAndPort(t *testing.T) {
 		})
 	}
 }
-
