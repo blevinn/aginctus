@@ -59,13 +59,18 @@ Call out changes involving sandboxing, network controls, credentials, secrets, M
   `docs/reference/configuration.md` owns config precedence and module effects.
 - Keep `docs/getting-started.md`, `docs/reference/cli.md`, and the Herdr
   operator runbook's literal `aginctus` examples aligned with generated
-  `aginctus help` usage. Run `just check docs-examples`: it checks syntax
-  shapes without executing the documented operations. CLI help, not a copied
-  flag table, is authoritative.
-- Run `just check markdown` (or `just check-markdown-links`) after moves.
-  Preserve host approval, secret handling, project scope, failure/rollback
-  and live-model opt-in gates. A proposed feature, an old pilot observation,
-  and a green hermetic check are not proof of current production behavior.
+  `aginctus help` usage. Run `just check docs-examples` (or the legacy
+  `just check-docs-examples` alias); it checks syntax shapes without executing
+  operations. Use CLI help as authoritative syntax; do not copy a flag table.
+- When adding gateway or acceptance pages, keep the gateway workflow at
+  `docs/operations/gateway/README.md` and acceptance path at
+  `docs/testing/acceptance/README.md` in sync. Verify new `operator ...` or
+  `images ...` subcommands in both `docs/reference/cli.md` and
+  `docs/reference/configuration.md` with consistent opt-in/future status.
+- Run `just check markdown` (or `just check-markdown-links`) after moves. Preserve
+  host approval, secret handling, project scope, failure/rollback, and live-model
+  opt-in gates. Proposed features, old pilot observations, and green hermetic
+  checks are not proof of current production behavior.
 
 ## Working rules
 
