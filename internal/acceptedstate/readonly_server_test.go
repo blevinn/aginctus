@@ -68,6 +68,9 @@ func TestReadOnlyUnixServiceRejectsUnsafeSocketPath(t *testing.T){
 	root:=filepath.Join(base,"state")
 	store,err:=InitializeLocalStore(root)
 	if err!=nil{t.Fatal(err)}
+	// t.TempDir is private by default; explicitly make the socket parent
+	// unsafe while keeping the already-initialized state directory private.
+	if err:=os.Chmod(base,0o755);err!=nil{t.Fatal(err)}
 	ctx,cancel:=context.WithCancel(context.Background())
 	defer cancel()
 	if _,err:=StartReadOnlyUnixService(ctx,store,filepath.Join(base,"exposed.sock"));err==nil{t.Fatal("accepted nonprivate socket parent")}
