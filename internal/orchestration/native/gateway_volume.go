@@ -61,6 +61,7 @@ func (v GatewayVolumeIntent) markers() map[string]string {
 		"user.aginctus.managed": "true",
 		"user.aginctus.resource": "gateway-postgres-volume",
 		"user.aginctus.deployment": v.Project,
+		"security.shifted": "true",
 	}
 }
 
