@@ -30,7 +30,7 @@ func (f *fakeGatewayImageClient) GetImage(string)(*api.Image,string,error){
 	if f.image==nil {return nil,"",api.StatusErrorf(http.StatusNotFound,"absent")}
 	return f.image,"",nil
 }
-func (f *fakeGatewayImageClient) CreateImage(req api.ImagesPost,_ *incus.ImageCreateArgs)(GatewayImageAcquireOperation,error){
+func (f *fakeGatewayImageClient) CreateImage(req api.ImagesPost)(GatewayImageAcquireOperation,error){
 	f.creates++
 	if f.onCreate!=nil {f.onCreate()}
 	return f.op,nil
