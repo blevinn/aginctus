@@ -151,7 +151,7 @@ func (b *IncusVMBackend) checkIncusOwned(actual *IncusVMInstance, ref VMRef) (ti
 	return expiry, nil
 }
 
-// Only the launch plan's options are admitted; see docs/testenv-worker.md.
+// Only the launch plan's options are admitted; see docs/testing/testenv/testenv-worker.md.
 // The dedicated daemon remains trusted for its image and volatile metadata.
 func incusInstanceOptionsAllowed(config map[string]string) bool {
 	for key := range config {

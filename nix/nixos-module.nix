@@ -205,7 +205,7 @@ in
       }
       {
         assertion = configuredSecretPaths == [ ];
-        message = "services.aginctus.settings cannot contain runtime gateway secrets: ${lib.concatStringsSep ", " configuredSecretPaths}. Leave secrets unset to generate and persist protected runtime state; see docs/configuration.md.";
+        message = "services.aginctus.settings cannot contain runtime gateway secrets: ${lib.concatStringsSep ", " configuredSecretPaths}. Leave secrets unset to generate and persist protected runtime state; see docs/reference/configuration.md.";
       }
       {
         assertion = builtins.all validImageAlias enabledImageAliases;
