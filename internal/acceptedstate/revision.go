@@ -33,19 +33,31 @@ type revisionIdentity struct {
 
 func (r Revision) validateDigest(spec DeploymentSpec) error {
 	digest, err := spec.Digest()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
+	if digest != r.SpecDigest {
+		return errors.New("accepted revision spec digest mismatch")
+	}
+	return r.validateIdentity()
+}
+
+func (r Revision) validateIdentity() error {
 	if r.APIVersion != RevisionAPIVersion || r.Generation == 0 ||
 		(r.Generation == 1) != (r.ParentID == "") ||
 		!fingerprintHex(r.SpecDigest) || len(r.SpecDigest) != 64 ||
 		(r.ParentID != "" && (len(r.ParentID) != 64 || !fingerprintHex(r.ParentID))) {
 		return errors.New("invalid accepted revision envelope")
 	}
-	if digest != r.SpecDigest { return errors.New("accepted revision spec digest mismatch") }
 	identity := revisionIdentity{r.APIVersion, r.Generation, r.ParentID, r.SpecDigest}
 	data, err := json.Marshal(identity)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	sum := sha256.Sum256(data)
-	if r.ID != hex.EncodeToString(sum[:]) { return errors.New("accepted revision ID mismatch") }
+	if r.ID != hex.EncodeToString(sum[:]) {
+		return errors.New("accepted revision ID mismatch")
+	}
 	return nil
 }
 
@@ -53,20 +65,27 @@ func (r Revision) validateDigest(spec DeploymentSpec) error {
 // A store must independently enforce CAS under lock before publishing.
 func BuildRevision(parent *Revision, candidate DeploymentSpec) (Revision, error) {
 	digest, err := candidate.Digest()
-	if err != nil { return Revision{}, err }
+	if err != nil {
+		return Revision{}, err
+	}
 	r := Revision{APIVersion: RevisionAPIVersion, Generation: 1, SpecDigest: digest}
 	if parent != nil {
-		if parent.Generation == 0 || len(parent.ID) != 64 || !fingerprintHex(parent.ID) ||
-			len(parent.SpecDigest) != 64 || !fingerprintHex(parent.SpecDigest) {
+		if parent.validateIdentity() != nil {
 			return Revision{}, errors.New("invalid parent revision")
 		}
-		if parent.SpecDigest == digest { return Revision{}, ErrNoChanges }
+		if parent.SpecDigest == digest {
+			return Revision{}, ErrNoChanges
+		}
 		r.Generation = parent.Generation + 1
-		if r.Generation == 0 { return Revision{}, errors.New("revision generation overflow") }
+		if r.Generation == 0 {
+			return Revision{}, errors.New("revision generation overflow")
+		}
 		r.ParentID = parent.ID
 	}
 	data, err := json.Marshal(revisionIdentity{r.APIVersion, r.Generation, r.ParentID, r.SpecDigest})
-	if err != nil { return Revision{}, err }
+	if err != nil {
+		return Revision{}, err
+	}
 	sum := sha256.Sum256(data)
 	r.ID = hex.EncodeToString(sum[:])
 	return r, nil
@@ -86,32 +105,58 @@ type DeploymentDiff struct {
 }
 
 func CompareDeployments(active, candidate DeploymentSpec) (DeploymentDiff, error) {
-	if err := active.Validate(); err != nil { return DeploymentDiff{}, err }
-	if err := candidate.Validate(); err != nil { return DeploymentDiff{}, err }
+	if err := active.Validate(); err != nil {
+		return DeploymentDiff{}, err
+	}
+	if err := candidate.Validate(); err != nil {
+		return DeploymentDiff{}, err
+	}
 	if active.Selection.DeploymentID != candidate.Selection.DeploymentID ||
 		active.Selection.IncusProject != candidate.Selection.IncusProject {
 		return DeploymentDiff{}, errors.New("deployment or project identity change requires separate migration")
 	}
 	sel, err := CompareSelections(active.Selection, candidate.Selection)
-	if err != nil { return DeploymentDiff{}, fmt.Errorf("selection diff: %w", err) }
+	if err != nil {
+		return DeploymentDiff{}, fmt.Errorf("selection diff: %w", err)
+	}
 	result := DeploymentDiff{NewlySelected: sel.NewlySelected, Unselected: sel.Unselected, Modified: []WorkloadChange{}}
 	old := map[string]WorkloadSpec{}
-	for _, w := range active.Workloads { old[w.ID] = w }
+	for _, w := range active.Workloads {
+		old[w.ID] = w
+	}
 	for _, w := range candidate.Workloads {
 		was, ok := old[w.ID]
-		if !ok { continue }
+		if !ok {
+			continue
+		}
 		fields := []string{}
-		if w.InstanceName != was.InstanceName { fields = append(fields, "instanceName") }
-		if w.InstanceType != was.InstanceType { fields = append(fields, "instanceType") }
-		if w.ImageFingerprint != was.ImageFingerprint { fields = append(fields, "imageFingerprint") }
-		if !slices.Equal(w.Profiles, was.Profiles) { fields = append(fields, "profiles") }
-		if w.EnsureRunning != was.EnsureRunning { fields = append(fields, "ensureRunning") }
-		if len(fields) > 0 { result.Modified = append(result.Modified, WorkloadChange{w.ID, fields}) }
+		if w.InstanceName != was.InstanceName {
+			fields = append(fields, "instanceName")
+		}
+		if w.InstanceType != was.InstanceType {
+			fields = append(fields, "instanceType")
+		}
+		if w.ImageFingerprint != was.ImageFingerprint {
+			fields = append(fields, "imageFingerprint")
+		}
+		if !slices.Equal(w.Profiles, was.Profiles) {
+			fields = append(fields, "profiles")
+		}
+		if w.EnsureRunning != was.EnsureRunning {
+			fields = append(fields, "ensureRunning")
+		}
+		if len(fields) > 0 {
+			result.Modified = append(result.Modified, WorkloadChange{w.ID, fields})
+		}
 	}
-	slices.SortFunc(result.Modified, func(a,b WorkloadChange) int {
-		if a.ID < b.ID { return -1 }
-		if a.ID > b.ID { return 1 }
+	slices.SortFunc(result.Modified, func(a, b WorkloadChange) int {
+		if a.ID < b.ID {
+			return -1
+		}
+		if a.ID > b.ID {
+			return 1
+		}
 		return 0
 	})
-	return result,nil
+	return result, nil
 }
