@@ -21,7 +21,13 @@ pkgs.testers.runNixOSTest {
       incus.enable = true;
       incus.package = pkgs.incus;
     };
-    environment.systemPackages = [ pkgs.incus pkgs.jq pkgs.coreutils pkgs.util-linux pkgs.curl ];
+    environment.systemPackages = [
+      pkgs.incus
+      pkgs.jq
+      pkgs.coreutils
+      pkgs.util-linux
+      pkgs.curl
+    ];
     users.users.operator = {
       uid = 1000;
       isNormalUser = true;
@@ -42,12 +48,12 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus version")
     machine.succeed("incus project create aginctus-authz --config restricted=true --config features.images=true --config features.profiles=true --config features.storage.volumes=true --config features.networks=false")
     machine.succeed("incus project create unrelated --config restricted=true")
-    machine.succeed("incus network create aginctus-authz-mgmt ipv4.address=none ipv6.address=none")
+    machine.succeed("incus network create authz-mgmt ipv4.address=none ipv6.address=none")
     # Explicitly bound access to one host-admin managed shared bridge/pool.
-    machine.succeed("incus project set aginctus-authz restricted.devices.nic=managed restricted.networks.access=aginctus-authz-mgmt restricted.storage-pools.access=default")
+    machine.succeed("incus project set aginctus-authz restricted.devices.nic=managed restricted.networks.access=authz-mgmt restricted.storage-pools.access=default")
     machine.succeed("incus project get aginctus-authz restricted | grep -qx true")
     machine.succeed("incus project get aginctus-authz features.networks | grep -qx false")
-    machine.succeed("incus project get aginctus-authz restricted.networks.access | grep -qx aginctus-authz-mgmt")
+    machine.succeed("incus project get aginctus-authz restricted.networks.access | grep -qx authz-mgmt")
 
     # A VM-only loopback HTTPS endpoint. No host networking or public listener.
     machine.succeed("incus config set core.https_address 127.0.0.1:8443")
