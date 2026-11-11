@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/blevinn/aginctus/internal/validation/catalog"
@@ -180,7 +182,25 @@ func (c *failureCollector) parse(line string) {
 func runSuite(ctx context.Context, root string, suite catalog.Suite, safeEnv []string, verbose bool, diagnostic io.Writer) Result {
 	start := time.Now()
 	rerun := "just check " + suite.Recipe
-	cmd := exec.CommandContext(ctx, "just", "check", suite.Recipe)
+	// An invalid catalog timeout never becomes unlimited child authority.
+	if suite.TimeoutSeconds <= 0 {
+		return Result{ID: suite.ID, Rerun: rerun, Status: "error"}
+	}
+	suiteContext, cancel := context.WithTimeout(ctx, time.Duration(suite.TimeoutSeconds)*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(suiteContext, "just", "check", suite.Recipe)
+	// Just launches recipe shells and tools. Cancel their process group, not
+	// only Just, so inherited output pipes cannot defeat the suite deadline.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if errors.Is(err, syscall.ESRCH) {
+			return os.ErrProcessDone
+		}
+		return err
+	}
+	// Bound pipe draining even if a tool deliberately leaves the group.
+	cmd.WaitDelay = time.Second
 	cmd.Dir = root
 	cmd.Env = withStructuredFlag(safeEnv, suite.ID == "go")
 	cmd.Stdin = nil
@@ -197,7 +217,7 @@ func runSuite(ctx context.Context, root string, suite catalog.Suite, safeEnv []s
 		result.ExitCode, result.Status = &zero, "pass"
 	} else {
 		var exit *exec.ExitError
-		if errors.As(err, &exit) && ctx.Err() == nil {
+		if errors.As(err, &exit) && suiteContext.Err() == nil {
 			code := exit.ExitCode()
 			result.ExitCode, result.Status = &code, "fail"
 		} else {
