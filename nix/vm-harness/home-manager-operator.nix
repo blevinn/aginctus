@@ -348,10 +348,11 @@ pkgs.testers.runNixOSTest {
     report(cli + " operator preflight --project default", 2)
     machine.succeed(operator + " incus profile show scope-sentinel --project aginctus")
     # An allowlist does not move a default-project bridge into an isolated
-    # project's network API. Observe that distinction, then address the actual
-    # host namespace for both the permitted metadata read and denied PATCH.
+    # project's network API. The restricted TLS identity also cannot observe
+    # this bridge through default (unlike the inherited profile below). Neither
+    # masked GET is proof of write denial: probe the actual PATCH separately.
     denied(operator + " incus network show hm-mgmt --project aginctus", "Network not found")
-    machine.succeed(operator + " incus network show hm-mgmt --project default")
+    denied(operator + " incus network show hm-mgmt --project default", "Network not found")
     for project in ["default", "foreign"]:
         denied(operator + f" incus project show {project}", "does not have permission")
     denied(operator + " incus profile show scope-sentinel --project foreign", "does not have permission")
@@ -394,6 +395,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed(admin + " incus profile show scope-sentinel --project foreign")
     machine.succeed(admin + " incus network create hm-denied --type bridge --project default ipv4.address=none ipv6.address=none")
     machine.succeed(admin + " incus network delete hm-denied --project default")
+    machine.succeed(admin + " incus network show hm-mgmt --project default")
     machine.succeed(admin + " incus query --request PATCH '/1.0/networks/hm-mgmt?project=default' --data '{\"config\":{\"user.hm-denied\":\"true\"}}'")
     machine.succeed(admin + " incus network unset hm-mgmt user.hm-denied --project default")
 

@@ -97,9 +97,10 @@ default-project networking. That configuration is not an accepted host/operator
 split. The acceptance fixture
 uses project-owned networks (`features.networks=true`) and an explicit
 `restricted.networks.access=hm-mgmt` allowlist. The bridge remains in `default`:
-the isolated project's network API returns `Network not found` for it even with
-that allowlist. The restricted operator may inspect its default-project metadata,
-but a direct PATCH to that actual namespace must fail authorization. The VM also
+the restricted operator's network API returns `Network not found` in both the
+isolated and default projects even with that allowlist. A separate administrator
+can inspect the bridge. Masked reads do not establish write denial, so a direct
+PATCH to its actual default namespace must fail authorization. The VM also
 requires refusal of project restriction changes, storage pool changes and
 foreign-project volume creation, and checks unchanged volume inventories.
 An administrator performs the same bridge PATCH and removes its test key as a
