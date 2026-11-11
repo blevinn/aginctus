@@ -477,6 +477,9 @@
         home-manager-operator = import ./nix/vm-harness/home-manager-operator.nix {
           inherit self nixpkgs system;
         };
+        incus-project-authority = import ./nix/vm-harness/incus-project-authority.nix {
+          inherit self nixpkgs system;
+        };
       });
 
       checks = forAllSystems (
