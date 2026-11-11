@@ -1,4 +1,4 @@
-package cli
+package clihelp
 
 import (
 	"fmt"
@@ -8,10 +8,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// writeCobraHelp renders syntax directly from the command/flag tree. No
+// WriteCobraHelp renders syntax directly from the command/flag tree. No
 // separate command vocabulary or hand-maintained usage strings exist here.
 // Help never loads configuration, touches private registries or queries Incus.
-func writeCobraHelp(cmd *cobra.Command, out io.Writer) {
+func WriteCobraHelp(cmd *cobra.Command, out io.Writer) {
 	if cmd.Long != "" {
 		fmt.Fprintln(out, cmd.Long)
 		fmt.Fprintln(out)

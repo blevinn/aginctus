@@ -84,6 +84,7 @@ func runOperatorPreflight(ctx context.Context, args []string, stdout, stderr io.
 			fmt.Fprintln(stdout, "Project enumeration: invalid response (scope cannot be inferred)")
 		}
 	}
+	fmt.Fprintf(stdout, "Project confinement: %s (read-only project-policy evidence; not a write authorization proof)\n", inspectProjectConfinement(ctx, project))
 	if ctx.Err() != nil {
 		fmt.Fprintf(stderr, "operator preflight: %s; retry the read-only check after restoring daemon access\n", operatorReadFailure(ctx.Err()))
 		return 1
