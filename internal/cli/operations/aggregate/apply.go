@@ -130,7 +130,7 @@ func ExecutePlan(ctx context.Context, plan orchestration.Plan, effective *config
 	if err := validator.Validate(plan, orchestration.ExecuteOptions{}); err != nil {
 		return err
 	}
-	var environment map[string]string
+	needsEnvironment := false
 	for _, step := range plan.Steps {
 		if step.Driver == "compose" {
 			// In a --from plan, only inject credentials into the configured
@@ -143,11 +143,16 @@ func ExecutePlan(ctx context.Context, plan orchestration.Plan, effective *config
 			if cfg.Project != spec.Project {
 				return fmt.Errorf("compose project %q is not configured gateway project %q", cfg.Project, spec.Project)
 			}
-			environment, err = spec.InitializeRuntimeEnvironment()
-			if err != nil {
-				return fmt.Errorf("gateway initialization: %w", err)
-			}
-			break
+			needsEnvironment = true
+		}
+	}
+	// The environment is shared by the Compose driver, so authorize every
+	// Compose step before creating secrets or handing any credentials to it.
+	var environment map[string]string
+	if needsEnvironment {
+		environment, err = spec.InitializeRuntimeEnvironment()
+		if err != nil {
+			return fmt.Errorf("gateway initialization: %w", err)
 		}
 	}
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
