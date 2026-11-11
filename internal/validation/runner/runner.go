@@ -8,10 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/blevinn/aginctus/internal/validation/catalog"
@@ -187,6 +189,18 @@ func runSuite(ctx context.Context, root string, suite catalog.Suite, safeEnv []s
 	suiteContext, cancel := context.WithTimeout(ctx, time.Duration(suite.TimeoutSeconds)*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(suiteContext, "just", "check", suite.Recipe)
+	// Just launches recipe shells and tools. Cancel their process group, not
+	// only Just, so inherited output pipes cannot defeat the suite deadline.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if errors.Is(err, syscall.ESRCH) {
+			return os.ErrProcessDone
+		}
+		return err
+	}
+	// Bound pipe draining even if a tool deliberately leaves the group.
+	cmd.WaitDelay = time.Second
 	cmd.Dir = root
 	cmd.Env = withStructuredFlag(safeEnv, suite.ID == "go")
 	cmd.Stdin = nil
