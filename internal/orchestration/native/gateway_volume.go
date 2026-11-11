@@ -18,26 +18,26 @@ import (
 // creation nor inspection authorizes attaching it to a guest.
 type GatewayVolumeIntent struct {
 	Project string
-	Pool string
-	Name string
+	Pool    string
+	Name    string
 }
 
 // GatewayVolumeResult distinguishes an observed no-op from a verified create.
 type GatewayVolumeResult struct {
-	Project string `json:"project"`
-	Pool string `json:"pool"`
-	Name string `json:"name"`
-	Created bool `json:"created"`
-	Verified bool `json:"verified"`
+	Project  string `json:"project"`
+	Pool     string `json:"pool"`
+	Name     string `json:"name"`
+	Created  bool   `json:"created"`
+	Verified bool   `json:"verified"`
 }
 
 // GatewayVolumeError deliberately does not include daemon error bodies. Once
 // Create was attempted, callers must inspect the volume before retrying.
 type GatewayVolumeError struct {
-	Stage string
+	Stage     string
 	Attempted bool
 	Uncertain bool
-	cause error
+	cause     error
 }
 
 func (e *GatewayVolumeError) Error() string {
@@ -58,10 +58,10 @@ func (v GatewayVolumeIntent) Validate() error {
 
 func (v GatewayVolumeIntent) markers() map[string]string {
 	return map[string]string{
-		"user.aginctus.managed": "true",
-		"user.aginctus.resource": "gateway-postgres-volume",
+		"user.aginctus.managed":    "true",
+		"user.aginctus.resource":   "gateway-postgres-volume",
 		"user.aginctus.deployment": v.Project,
-		"security.shifted": "true",
+		"security.shifted":         "true",
 	}
 }
 
@@ -74,7 +74,7 @@ type GatewayVolumeClient interface {
 	CreateStoragePoolVolume(pool string, request api.StorageVolumesPost) error
 }
 
-type sdkGatewayVolumeClient struct { server incus.InstanceServer }
+type sdkGatewayVolumeClient struct{ server incus.InstanceServer }
 
 func (c sdkGatewayVolumeClient) GetConnectionInfo() (*incus.ConnectionInfo, error) {
 	return c.server.GetConnectionInfo()
@@ -92,80 +92,112 @@ func (c sdkGatewayVolumeClient) CreateStoragePoolVolume(pool string, request api
 // EnsureLocalGatewayVolume uses a project-bound local Unix connection. It
 // leaves the volume untouched on reuse and never performs deletion.
 func EnsureLocalGatewayVolume(ctx context.Context, intent GatewayVolumeIntent) (GatewayVolumeResult, error) {
-	if err := intent.Validate(); err != nil { return GatewayVolumeResult{}, err }
+	if err := intent.Validate(); err != nil {
+		return GatewayVolumeResult{}, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := ctx.Err(); err != nil { return GatewayVolumeResult{}, err }
+	if err := ctx.Err(); err != nil {
+		return GatewayVolumeResult{}, err
+	}
 	server, err := incus.ConnectIncusUnixWithContext(ctx, "", &incus.ConnectionArgs{SkipGetServer: true})
-	if err != nil { return GatewayVolumeResult{}, observationFailure(ctx, "local Incus volume connection unavailable") }
+	if err != nil {
+		return GatewayVolumeResult{}, observationFailure(ctx, "local Incus volume connection unavailable")
+	}
 	defer server.Disconnect()
-	return EnsureGatewayVolumeWithClient(ctx, intent, sdkGatewayVolumeClient{server:server.UseProject(intent.Project)})
+	return EnsureGatewayVolumeWithClient(ctx, intent, sdkGatewayVolumeClient{server: server.UseProject(intent.Project)})
 }
 
 // EnsureGatewayVolumeWithClient only creates an absent owned filesystem
 // volume. An existing unmarked, block, or differently marked volume is refused;
 // ownership is never inferred from its name. All reads fail closed.
 func EnsureGatewayVolumeWithClient(ctx context.Context, intent GatewayVolumeIntent, client GatewayVolumeClient) (GatewayVolumeResult, error) {
-	result := GatewayVolumeResult{Project:intent.Project,Pool:intent.Pool,Name:intent.Name}
-	fail := func(stage string, attempted bool, cause error) (GatewayVolumeResult,error) {
-		return result, &GatewayVolumeError{Stage:stage,Attempted:attempted,Uncertain:attempted,cause:cause}
+	result := GatewayVolumeResult{Project: intent.Project, Pool: intent.Pool, Name: intent.Name}
+	fail := func(stage string, attempted bool, cause error) (GatewayVolumeResult, error) {
+		return result, &GatewayVolumeError{Stage: stage, Attempted: attempted, Uncertain: attempted, cause: cause}
 	}
-	if err := intent.Validate(); err != nil { return fail("intent",false,err) }
-	if err := ctx.Err(); err != nil { return fail("cancellation",false,err) }
+	if err := intent.Validate(); err != nil {
+		return fail("intent", false, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return fail("cancellation", false, err)
+	}
 	connection, err := client.GetConnectionInfo()
 	if err != nil || connection == nil || connection.Protocol != "incus" ||
 		!filepath.IsAbs(connection.SocketPath) || connection.Project != intent.Project {
-		return fail("transport",false,fmt.Errorf("local selected-project transport unavailable"))
+		return fail("transport", false, fmt.Errorf("local selected-project transport unavailable"))
 	}
 	scope, _ := incusscope.NewProjectScope(intent.Project)
 	checkProject := func() error {
-		if err := ctx.Err(); err != nil { return err }
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		p, _, err := client.GetProject(scope.Name)
-		if err != nil || p == nil || scope.AssessProject(p.Name,p.Config) != incusscope.ProjectCompatible {
+		if err != nil || p == nil || scope.AssessProject(p.Name, p.Config) != incusscope.ProjectCompatible {
 			return fmt.Errorf("selected project ownership or policy unverified")
 		}
 		return ctx.Err()
 	}
-	inspect := func() (bool,error) {
-		if err := ctx.Err(); err != nil { return false,err }
-		volume, _, err := client.GetStoragePoolVolume(intent.Pool,"custom",intent.Name)
-		if api.StatusErrorCheck(err,http.StatusNotFound) { return false,ctx.Err() }
+	inspect := func() (bool, error) {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		volume, _, err := client.GetStoragePoolVolume(intent.Pool, "custom", intent.Name)
+		if api.StatusErrorCheck(err, http.StatusNotFound) {
+			return false, ctx.Err()
+		}
 		if err != nil || volume == nil {
-			return false,fmt.Errorf("selected volume observation unavailable")
+			return false, fmt.Errorf("selected volume observation unavailable")
 		}
 		if volume.Name != intent.Name || volume.Type != "custom" || volume.ContentType != "filesystem" {
-			return false,fmt.Errorf("selected volume type or identity unverified")
+			return false, fmt.Errorf("selected volume type or identity unverified")
 		}
-		for key,value := range intent.markers() {
-			if volume.Config[key] != value { return false,fmt.Errorf("gateway volume ownership unverified") }
+		for key, value := range intent.markers() {
+			if volume.Config[key] != value {
+				return false, fmt.Errorf("gateway volume ownership unverified")
+			}
 		}
-		return true,ctx.Err()
+		return true, ctx.Err()
 	}
-	if err := checkProject(); err != nil { return fail("project",false,err) }
-	exists,err := inspect()
-	if err != nil { return fail("preflight",false,err) }
+	if err := checkProject(); err != nil {
+		return fail("project", false, err)
+	}
+	exists, err := inspect()
+	if err != nil {
+		return fail("preflight", false, err)
+	}
 	if exists {
 		result.Verified = true
-		return result,nil
+		return result, nil
 	}
-	if err := checkProject(); err != nil { return fail("mutation-boundary",false,err) }
-	exists,err = inspect()
-	if err != nil || exists { return fail("mutation-boundary",false,fmt.Errorf("volume absence not verified at mutation boundary")) }
-	if err := ctx.Err(); err != nil { return fail("cancellation",false,err) }
+	if err := checkProject(); err != nil {
+		return fail("mutation-boundary", false, err)
+	}
+	exists, err = inspect()
+	if err != nil || exists {
+		return fail("mutation-boundary", false, fmt.Errorf("volume absence not verified at mutation boundary"))
+	}
+	if err := ctx.Err(); err != nil {
+		return fail("cancellation", false, err)
+	}
 	request := api.StorageVolumesPost{
-		Name:intent.Name,Type:"custom",ContentType:"filesystem",
-		StorageVolumePut:api.StorageVolumePut{
-			Description:"Aginctus managed gateway PostgreSQL data",
-			Config:intent.markers(),
+		Name: intent.Name, Type: "custom", ContentType: "filesystem",
+		StorageVolumePut: api.StorageVolumePut{
+			Description: "Aginctus managed gateway PostgreSQL data",
+			Config:      intent.markers(),
 		},
 	}
-	if err := client.CreateStoragePoolVolume(intent.Pool,request); err != nil {
-		return fail("create",true,err)
+	if err := client.CreateStoragePoolVolume(intent.Pool, request); err != nil {
+		return fail("create", true, err)
 	}
 	result.Created = true
-	if err := checkProject(); err != nil { return fail("verification",true,err) }
-	exists,err = inspect()
-	if err != nil || !exists { return fail("verification",true,fmt.Errorf("created volume ownership or identity unverified")) }
+	if err := checkProject(); err != nil {
+		return fail("verification", true, err)
+	}
+	exists, err = inspect()
+	if err != nil || !exists {
+		return fail("verification", true, fmt.Errorf("created volume ownership or identity unverified"))
+	}
 	result.Verified = true
-	return result,nil
+	return result, nil
 }
