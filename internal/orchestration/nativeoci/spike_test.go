@@ -3,6 +3,7 @@ package nativeoci
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -61,21 +62,23 @@ func TestDaemonOCI(t *testing.T) {
 	client := server.UseProject(scope.Name)
 
 	// Exercise project-bound, create-or-verify native gateway database storage.
-	// These are synthetic VM-only resources, separate from the original spike's
-	// unmanaged postgres-data volume and never visible to the pilot daemon.
-	gatewayVolume := native.GatewayVolumeIntent{Project:scope.Name,Pool:"spike",Name:"gateway-postgres"}
-	for attempt:=range 2 {
-		result,err:=native.EnsureLocalGatewayVolume(ctx,gatewayVolume)
-		if err!=nil || !result.Verified || result.Created != (attempt==0) {
-			t.Fatalf("native gateway volume create/reuse: %+v %v",result,err)
+	// These are synthetic VM-only resources, never visible to the pilot daemon.
+	// Use the managed volume for the database recreation/persistence proof below.
+	gatewayVolume := native.GatewayVolumeIntent{Project: scope.Name, Pool: "spike", Name: "gateway-postgres"}
+	for attempt := range 2 {
+		result, err := native.EnsureLocalGatewayVolume(ctx, gatewayVolume)
+		if err != nil || !result.Verified || result.Created != (attempt == 0) {
+			t.Fatalf("native gateway volume create/reuse: %+v %v", result, err)
 		}
 	}
-	if err:=client.CreateStoragePoolVolume("spike",api.StorageVolumesPost{
-		Name:"foreign-gateway-postgres",Type:"custom",ContentType:"filesystem",
-	});err!=nil {t.Fatal(err)}
-	if _,err:=native.EnsureLocalGatewayVolume(ctx,native.GatewayVolumeIntent{
-		Project:scope.Name,Pool:"spike",Name:"foreign-gateway-postgres",
-	});err==nil {
+	if err := client.CreateStoragePoolVolume("spike", api.StorageVolumesPost{
+		Name: "foreign-gateway-postgres", Type: "custom", ContentType: "filesystem",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := native.EnsureLocalGatewayVolume(ctx, native.GatewayVolumeIntent{
+		Project: scope.Name, Pool: "spike", Name: "foreign-gateway-postgres",
+	}); err == nil {
 		t.Fatal("native gateway volume adopted unmarked foreign volume")
 	}
 	if err := server.UseProject("default").CreateNetwork(api.NetworksPost{Name: "spike-mgmt", Type: "bridge", NetworkPut: api.NetworkPut{Config: map[string]string{
@@ -83,7 +86,8 @@ func TestDaemonOCI(t *testing.T) {
 	}}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.CreateStoragePoolVolume("spike", api.StorageVolumesPost{Name: "postgres-data", Type: "custom", StorageVolumePut: api.StorageVolumePut{Config: map[string]string{"security.shifted": "true"}}}); err != nil {
+	otherScope, _ := agincus.NewProjectScope("aginctus-native-image-collision")
+	if _, err := native.EnsureLocalProject(ctx, otherScope, native.ProjectCreateAuthorization{Confirmed: true}); err != nil {
 		t.Fatal(err)
 	}
 	for _, image := range []struct{ name, registry, repository, reference string }{
@@ -111,20 +115,33 @@ func TestDaemonOCI(t *testing.T) {
 			// The create-only gateway acquisition must obtain immutable OCI
 			// identity directly through the SDK. Layer-only matches are not
 			// sufficient for subsequent adoption/reuse.
-			acquired, err := native.AcquireLocalGatewayImage(ctx, native.GatewayImageAcquireIntent{
-				Project:scope.Name,Image:native.GatewayOCIIdentity{
-					Registry:resolved.Registry,Repository:resolved.Repository,
-					ManifestDigest:resolved.ManifestDigest,ConfigDigest:resolved.ConfigDigest,
-					IncusFingerprint:resolved.IncusFingerprint,
-				},
-			})
-			if err!=nil || !acquired.Attempted || !acquired.Verified {
-				t.Fatalf("guarded native image acquisition: %+v %v",acquired,err)
+			identity := native.GatewayOCIIdentity{
+				Registry: resolved.Registry, Repository: resolved.Repository,
+				ManifestDigest: resolved.ManifestDigest, ConfigDigest: resolved.ConfigDigest,
+				IncusFingerprint: resolved.IncusFingerprint,
 			}
-			if _,err:=native.AcquireLocalGatewayImage(ctx,native.GatewayImageAcquireIntent{
-				Project:scope.Name,Image:resolved,
-			});err==nil {
+			acquired, err := native.AcquireLocalGatewayImage(ctx, native.GatewayImageAcquireIntent{
+				Project: scope.Name, Image: identity,
+			})
+			if err != nil || !acquired.Attempted || !acquired.Verified {
+				t.Fatalf("guarded native image acquisition: %+v %v", acquired, err)
+			}
+			if _, err := native.AcquireLocalGatewayImage(ctx, native.GatewayImageAcquireIntent{
+				Project: scope.Name, Image: identity,
+			}); err == nil {
 				t.Fatal("native image acquisition adopted an existing layer fingerprint")
+			}
+			// A different project's cached image can have the same layers but a
+			// different OCI config. It must be rejected before requesting a pull.
+			rejected, err := native.AcquireLocalGatewayImage(ctx, native.GatewayImageAcquireIntent{
+				Project: otherScope.Name, Image: identity,
+			})
+			var acquireErr *native.GatewayImageAcquireError
+			if !errors.As(err, &acquireErr) || acquireErr.Stage != "preflight" || rejected.Attempted {
+				t.Fatalf("cross-project cached image not refused before mutation: %+v %v", rejected, err)
+			}
+			if _, _, err := server.UseProject(otherScope.Name).GetImage(identity.IncusFingerprint); !api.StatusErrorCheck(err, 404) {
+				t.Fatal("cross-project refusal mutated selected image inventory")
 			}
 			request := api.ImagesPost{Source: &api.ImagesPostSource{
 				Type: "image", Mode: "pull", ImageSource: api.ImageSource{
@@ -169,7 +186,7 @@ func TestDaemonOCI(t *testing.T) {
 				"eth0": {"type": "nic", "name": "eth0", "network": "spike-mgmt", "ipv4.gateway": "none"},
 			}
 			if image.name == "postgres" {
-				devices["data"] = map[string]string{"type": "disk", "pool": "spike", "source": "postgres-data", "path": "/var/lib/postgresql/data"}
+				devices["data"] = map[string]string{"type": "disk", "pool": "spike", "source": gatewayVolume.Name, "path": "/var/lib/postgresql/data"}
 			}
 			instance := api.InstancesPost{
 				Name: name, Type: api.InstanceTypeContainer,
@@ -226,7 +243,7 @@ func TestDaemonOCI(t *testing.T) {
 			wait(client.UpdateInstanceState(name, api.InstanceStatePut{Action: "stop", Timeout: 60}, ""))
 			wait(client.DeleteInstance(name))
 			if image.name == "postgres" {
-				if _, _, err := client.GetStoragePoolVolume("spike", "custom", "postgres-data"); err != nil {
+				if _, _, err := client.GetStoragePoolVolume("spike", "custom", gatewayVolume.Name); err != nil {
 					t.Fatal("instance removal lost custom volume")
 				}
 				wait(client.CreateInstance(instance))
