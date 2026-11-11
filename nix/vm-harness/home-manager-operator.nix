@@ -203,7 +203,7 @@ pkgs.testers.runNixOSTest {
     inventories = ["project list", "storage list"] + [
         f"{command} --project {project}"
         for project in ["default", "aginctus", "foreign"]
-        for command in ["list", "image list", "network list", "profile list"]
+        for command in ["list", "image list", "network list", "profile list", "storage volume list default"]
     ]
     before = {command: machine.succeed(f"incus {command} --format json | jq -S .") for command in inventories}
 
@@ -347,11 +347,11 @@ pkgs.testers.runNixOSTest {
     # The CLI refuses default before any probe; direct GET also proves server denial.
     report(cli + " operator preflight --project default", 2)
     machine.succeed(operator + " incus profile show scope-sentinel --project aginctus")
-    # The host-admin provisioned bridge may be *used* through an explicit
-    # restricted network allowlist; this is not permission to administer it.
-    # Incus shares the listed default-project bridge into this isolated
-    # project without allowing an ordinary restricted identity to mutate it.
-    machine.succeed(operator + " incus network show hm-mgmt --project aginctus")
+    # An allowlist does not move a default-project bridge into an isolated
+    # project's network API. Observe that distinction, then address the actual
+    # host namespace for both the permitted metadata read and denied PATCH.
+    denied(operator + " incus network show hm-mgmt --project aginctus", "Network not found")
+    machine.succeed(operator + " incus network show hm-mgmt --project default")
     for project in ["default", "foreign"]:
         denied(operator + f" incus project show {project}", "does not have permission")
     denied(operator + " incus profile show scope-sentinel --project foreign", "does not have permission")
@@ -368,7 +368,9 @@ pkgs.testers.runNixOSTest {
     # Effective-denial probes belong only in the disposable guest; no
     # production preflight may issue writes. A successful unexpected write
     # is a test failure and a blocker for user-owned lifecycle services.
-    authorization_denied(operator + " incus network set hm-mgmt user.hm-denied=true --project aginctus")
+    # Direct PATCH avoids a CLI preliminary GET masking whether the write
+    # endpoint itself refuses the restricted principal.
+    authorization_denied(operator + " incus query --request PATCH '/1.0/networks/hm-mgmt?project=default' --data '{\"config\":{\"user.hm-denied\":\"true\"}}'")
     authorization_denied(operator + " incus project set aginctus restricted=false")
     authorization_denied(operator + " incus storage set default user.hm-denied=true")
     authorization_denied(operator + " incus storage volume create default hm-cross-project --project foreign")
@@ -392,6 +394,8 @@ pkgs.testers.runNixOSTest {
     machine.succeed(admin + " incus profile show scope-sentinel --project foreign")
     machine.succeed(admin + " incus network create hm-denied --type bridge --project default ipv4.address=none ipv6.address=none")
     machine.succeed(admin + " incus network delete hm-denied --project default")
+    machine.succeed(admin + " incus query --request PATCH '/1.0/networks/hm-mgmt?project=default' --data '{\"config\":{\"user.hm-denied\":\"true\"}}'")
+    machine.succeed(admin + " incus network unset hm-mgmt user.hm-denied --project default")
 
     # Re-activation with restricted credentials still changes no Incus objects.
     firewall_authorized = host_policy()

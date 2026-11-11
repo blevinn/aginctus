@@ -96,11 +96,15 @@ access allowlist, bridge creation through the selected project can reach shared
 default-project networking. That configuration is not an accepted host/operator
 split. The acceptance fixture
 uses project-owned networks (`features.networks=true`) and an explicit
-`restricted.networks.access=hm-mgmt` allowlist. Its restricted operator may
-inspect the host-provisioned shared bridge through the selected project, but
-the VM must refuse network modifications, project restriction changes, storage
-pool changes and foreign-project volume creation. This narrows the verified
-fixture boundary; it does **not** validate `features.networks=false` project
+`restricted.networks.access=hm-mgmt` allowlist. The bridge remains in `default`:
+the isolated project's network API returns `Network not found` for it even with
+that allowlist. The restricted operator may inspect its default-project metadata,
+but a direct PATCH to that actual namespace must fail authorization. The VM also
+requires refusal of project restriction changes, storage pool changes and
+foreign-project volume creation, and checks unchanged volume inventories.
+An administrator performs the same bridge PATCH and removes its test key as a
+positive control. This narrows the fixture boundary; it does **not** prove NIC
+attachment to that bridge or validate `features.networks=false` project
 delegation or substitute for a server-authorized resource writer. The additional
 policy line in `operator preflight` is read-only project metadata and explicitly
 never upgrades the preflight exit status into write authority. The complete
