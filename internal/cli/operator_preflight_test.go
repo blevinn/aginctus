@@ -13,6 +13,7 @@ import (
 
 const operatorServerQuery = "query --raw --request GET /1.0?project=sandbox"
 const operatorInstancesQuery = "query --raw --request GET /1.0/instances?project=sandbox&recursion=1"
+const operatorProjectQuery = "query --raw --request GET /1.0/projects/sandbox"
 
 func operatorAPIResponse(metadata string) []byte {
 	return []byte(`{"type":"sync","status_code":200,"metadata":` + metadata + `}`)
@@ -43,6 +44,8 @@ func TestOperatorPreflightProjectReadOnly(t *testing.T) {
 			return operatorAPIResponse(`[{"name":"guest"}]`), nil
 		case "project list --format json":
 			return []byte(`[{"name":"sandbox"}]`), nil
+		case operatorProjectQuery:
+			return operatorAPIResponse(`{"name":"sandbox","config":{"restricted":"true","features.images":"true","features.profiles":"true","features.storage.volumes":"true","features.networks":"false"}}`), nil
 		default:
 			t.Fatalf("unexpected command %q", call)
 			return nil, nil
@@ -57,12 +60,13 @@ func TestOperatorPreflightProjectReadOnly(t *testing.T) {
 		"daemon: readable", "project: sandbox (instance read allowed)",
 		"Visible Incus projects: 1", "Write permissions: unverified",
 		"Host bridge, firewall, pool and admin permissions: unverified",
+		"Project confinement: shared-network-namespace",
 	} {
 		if !strings.Contains(out.String(), required) {
 			t.Errorf("missing %q in output %q", required, out.String())
 		}
 	}
-	want := []string{operatorServerQuery, operatorInstancesQuery, "project list --format json"}
+	want := []string{operatorServerQuery, operatorInstancesQuery, "project list --format json", operatorProjectQuery}
 	if strings.Join(calls, "|") != strings.Join(want, "|") {
 		t.Fatalf("actual commands %#v, want %#v", calls, want)
 	}
@@ -171,6 +175,8 @@ func TestOperatorPreflightIdentityEvidence(t *testing.T) {
 					return operatorAPIResponse("[]"), nil
 				case "project list --format json":
 					return []byte(`[{"name":"sandbox"},{"name":"other"}]`), nil
+				case operatorProjectQuery:
+					return operatorAPIResponse(`{"name":"sandbox","config":{"restricted":"true","features.images":"true","features.profiles":"true","features.storage.volumes":"true","features.networks":"true"}}`), nil
 				default:
 					t.Fatalf("unexpected command: %#v", args)
 					return nil, nil
