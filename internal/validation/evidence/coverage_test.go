@@ -54,6 +54,17 @@ func TestHermeticParityAndHostileEvidence(t *testing.T) {
 	}
 }
 
+func TestHermeticRejectsAmbiguousJSON(t *testing.T) {
+	for _, raw := range []string{
+		strings.Replace(string(hermeticFixture()), `"schema_version":1`, `"schema_version":2,"schema_version":1`, 1),
+		strings.Replace(string(hermeticFixture()), `"exit_code":0`, `"exit_code":1,"exit_code":0`, 1),
+	} {
+		if _, err := NormalizeHermetic([]byte(raw)); err == nil {
+			t.Fatal("accepted ambiguous hermetic evidence")
+		}
+	}
+}
+
 func TestCoveragePreservesMissingAndUnverifiedClaims(t *testing.T) {
 	empty := NormalizeCoverage(CoverageSelection{})
 	if empty["status"] != "incomplete" || empty["complete_acceptance"] != false {

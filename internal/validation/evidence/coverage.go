@@ -16,13 +16,13 @@ var coverageCaseID = regexp.MustCompile("^[A-Za-z0-9_./:-]{1,192}$")
 // CoverageSelection contains only explicitly named existing evidence.
 // Missing selections are reported as not_run, never discovered or executed.
 type CoverageSelection struct {
-	HermeticJSON string
-	VMRunID string
-	VMRoot string
-	PilotTopologyJSON string
+	HermeticJSON        string
+	VMRunID             string
+	VMRoot              string
+	PilotTopologyJSON   string
 	OpenCodeRuntimeJSON string
-	AcceptanceRunID string
-	AcceptanceRoot string
+	AcceptanceRunID     string
+	AcceptanceRoot      string
 }
 
 func validateFailureCases(fields map[string]json.RawMessage, status string) error {
@@ -64,6 +64,12 @@ func validateFailureCases(fields map[string]json.RawMessage, status string) erro
 // NormalizeHermetic validates the complete v1 schema the independent Python
 // CI summary validator accepts. It only returns a status, not child output.
 func NormalizeHermetic(payload []byte) (string, error) {
+	if len(payload) > maxSelectedBytes {
+		return "", errors.New("oversized hermetic evidence")
+	}
+	if err := uniqueJSON(payload); err != nil {
+		return "", err
+	}
 	fields, err := object(payload)
 	if err != nil {
 		return "", err
@@ -190,7 +196,7 @@ func selectedCoverage(name string, selection CoverageSelection) (string, string,
 // only prove fixture and command observations, NOT a live inference result.
 func NormalizeCoverage(selection CoverageSelection) Report {
 	sources := []struct {
-		id string
+		id       string
 		selected bool
 	}{
 		{"hermetic", selection.HermeticJSON != ""},
