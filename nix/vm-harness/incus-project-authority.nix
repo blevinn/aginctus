@@ -89,14 +89,22 @@ pkgs.testers.runNixOSTest {
       "network": machine.succeed("incus network show authz-mgmt"),
       "pools": machine.succeed("incus storage list --format json | jq -S ."),
       "foreign_profiles": machine.succeed("incus profile list --project unrelated --format json | jq -S ."),
+      "foreign_volumes": machine.succeed("incus storage volume list default --project unrelated --format json | jq -S ."),
+      "daemon": machine.succeed("incus config show"),
     }
 
     # A test that fails only because its CLI syntax is invalid is NOT valid
     # authorization evidence. Assert a bounded class of remote denial errors.
+    failures = []
     def deny(command, allow_hidden=False):
         status, output = machine.execute(operator + " " + command + " 2>&1")
         lower = output.lower()
-        assert status != 0, "restricted principal completed a forbidden action"
+        # These fixed probes contain no credentials. Preserve all outcomes
+        # before failing so one unexpected success cannot hide later probes.
+        print("AUTHZ PROBE: " + command + " => exit " + str(status) + ": " + output.strip())
+        if status == 0:
+            failures.append(command)
+            return
         assert "unknown flag" not in lower and "unknown command" not in lower and "usage:" not in lower, "invalid CLI probe, not an authorization test"
         denied = ["not authorized", "not allowed", "permission denied", "forbidden", "access denied", "restricted", "not permitted"]
         if allow_hidden:
@@ -110,13 +118,15 @@ pkgs.testers.runNixOSTest {
     deny("incus storage create scoped:escape-pool dir")
     deny("incus storage volume create scoped:default escape-volume --project unrelated", allow_hidden=True)
     deny("incus profile create scoped:foreign-profile --project unrelated", allow_hidden=True)
-    deny("incus config set scoped:core.https_address 0.0.0.0:8443")
+    deny("incus config set scoped: core.https_address=0.0.0.0:8443")
 
     assert machine.succeed("incus project show aginctus-authz") == protected["project"], "project restrictions changed"
     assert machine.succeed("incus project show unrelated") == protected["foreign"], "foreign project changed"
     assert machine.succeed("incus network show authz-mgmt") == protected["network"], "host-owned bridge changed"
     assert machine.succeed("incus storage list --format json | jq -S .") == protected["pools"], "storage pool inventory changed"
     assert machine.succeed("incus profile list --project unrelated --format json | jq -S .") == protected["foreign_profiles"], "foreign profile inventory changed"
+    assert machine.succeed("incus storage volume list default --project unrelated --format json | jq -S .") == protected["foreign_volumes"], "foreign volume inventory changed"
+    assert machine.succeed("incus config show") == protected["daemon"], "daemon configuration changed"
     machine.fail("incus network show escape-bridge")
     machine.fail("incus storage show escape-pool")
     machine.fail("incus project show unauthorized")
@@ -126,6 +136,8 @@ pkgs.testers.runNixOSTest {
     # protocol's built-in TLS evaluator; any other custom routing is a gate.
     routing = machine.succeed("incus config get authorization.client.tls-restricted").strip()
     assert routing in ["", "tls"], "restricted-TLS authorization evaluator was overridden"
+    print("INCUS AUTHORITY VERSION: " + machine.succeed("incus version").strip() + "; TLS routing: " + repr(routing))
+    assert not failures, "restricted principal completed forbidden actions: " + repr(failures)
 
     # Human-readable evidence never includes private key or cert contents.
     print("INCUS AUTHORITY TEST: confined positive operations, forbidden operations and host invariants checked; version: " + machine.succeed("incus version").strip())
