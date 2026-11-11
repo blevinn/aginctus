@@ -86,19 +86,22 @@ pkgs.testers.runNixOSTest {
     protected = {
       "project": machine.succeed("incus project show aginctus-authz"),
       "foreign": machine.succeed("incus project show unrelated"),
-      "network": machine.succeed("incus network show aginctus-authz-mgmt"),
+      "network": machine.succeed("incus network show authz-mgmt"),
       "pools": machine.succeed("incus storage list --format json | jq -S ."),
       "foreign_profiles": machine.succeed("incus profile list --project unrelated --format json | jq -S ."),
     }
 
     # A test that fails only because its CLI syntax is invalid is NOT valid
     # authorization evidence. Assert a bounded class of remote denial errors.
-    def deny(command):
+    def deny(command, allow_hidden=False):
         status, output = machine.execute(operator + " " + command + " 2>&1")
         lower = output.lower()
         assert status != 0, "restricted principal completed a forbidden action"
         assert "unknown flag" not in lower and "unknown command" not in lower and "usage:" not in lower, "invalid CLI probe, not an authorization test"
-        assert any(piece in lower for piece in ["not authorized", "not allowed", "permission denied", "forbidden", "access denied", "not found"]), "unexpected failure class in restricted authorization probe"
+        denied = ["not authorized", "not allowed", "permission denied", "forbidden", "access denied", "restricted", "not permitted"]
+        if allow_hidden:
+            denied.append("not found")
+        assert any(piece in lower for piece in denied), "unexpected failure class in restricted authorization probe"
 
     deny("incus list scoped: --project unrelated --format json", allow_hidden=True)
     deny("incus project set scoped:aginctus-authz restricted=false")
@@ -111,7 +114,7 @@ pkgs.testers.runNixOSTest {
 
     assert machine.succeed("incus project show aginctus-authz") == protected["project"], "project restrictions changed"
     assert machine.succeed("incus project show unrelated") == protected["foreign"], "foreign project changed"
-    assert machine.succeed("incus network show aginctus-authz-mgmt") == protected["network"], "host-owned bridge changed"
+    assert machine.succeed("incus network show authz-mgmt") == protected["network"], "host-owned bridge changed"
     assert machine.succeed("incus storage list --format json | jq -S .") == protected["pools"], "storage pool inventory changed"
     assert machine.succeed("incus profile list --project unrelated --format json | jq -S .") == protected["foreign_profiles"], "foreign profile inventory changed"
     machine.fail("incus network show escape-bridge")
