@@ -30,7 +30,13 @@ Dynamic scenario discovery, generated arbitrary shell commands and unbounded
 user-selected Nix attributes are not appropriate for this boundary.
 
 The eight hermetic suite IDs and order, existing commands and JSON v1 output
-stay stable.
+stay stable. The catalog additionally declares fixed developer-CI authority,
+hermetic JSON v1 evidence contract and a 3600-second maximum per-suite deadline.
+The Go runner enforces this deadline (including cancellation as an execution
+error, not a test assertion failure). VM metadata declares explicit operator
+selection and the original disposable-VM evidence contract; it does not
+acquire a VM executor, authorize persistent workers, or grant new privileges.
+These are compatibility policy descriptors, not permission tokens.
 
 ## Execution boundaries
 
