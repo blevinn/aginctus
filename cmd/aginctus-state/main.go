@@ -20,9 +20,13 @@ func run(ctx context.Context, stateDir, socket string) error {
 		return errors.New("both --state-dir and --socket are required")
 	}
 	store, err := acceptedstate.OpenLocalStore(stateDir)
-	if err != nil { return fmt.Errorf("open private accepted-state directory: %w", err) }
+	if err != nil {
+		return fmt.Errorf("open private accepted-state directory: %w", err)
+	}
 	server, err := acceptedstate.StartReadOnlyUnixService(ctx, store, socket)
-	if err != nil { return fmt.Errorf("start read-only Unix service: %w", err) }
+	if err != nil {
+		return fmt.Errorf("start read-only Unix service: %w", err)
+	}
 	defer server.Close()
 	<-ctx.Done()
 	return nil
