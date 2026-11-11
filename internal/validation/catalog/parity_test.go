@@ -53,7 +53,7 @@ func TestHermeticSuiteParity(t *testing.T) {
 	seen := make(map[string]bool)
 	recipes := readSource(t, ".just/check.just")
 	for _, suite := range HermeticSuites() {
-		if suite.ID == "" || suite.Recipe != suite.ID || suite.Tier != Hermetic || seen[suite.ID] {
+		if suite.ID == "" || suite.Recipe != suite.ID || suite.Tier != Hermetic || suite.Authority != DeveloperCI || suite.TimeoutSeconds != 3600 || suite.EvidenceContract != "hermetic_json_v1" || seen[suite.ID] {
 			t.Fatalf("invalid suite metadata: %#v", suite)
 		}
 		seen[suite.ID] = true
@@ -102,7 +102,7 @@ func TestVMScenarioParity(t *testing.T) {
 		}
 		switch scenario.Surface {
 		case Operator:
-			if !scenario.Evidence {
+			if !scenario.Evidence || scenario.Authority != OperatorVM || !scenario.RequiresExplicitSelection || scenario.EvidenceContract != "disposable_vm_v1" {
 				t.Fatalf("operator batch scenario %q has no v1 evidence contract", scenario.Name)
 			}
 			public = append(public, scenario.Name)
@@ -110,7 +110,7 @@ func TestVMScenarioParity(t *testing.T) {
 				t.Fatalf("missing operator just recipe for %q", scenario.Name)
 			}
 		case Internal:
-			if scenario.Evidence {
+			if scenario.Evidence || scenario.Authority != InternalExperiment || !scenario.RequiresExplicitSelection || scenario.EvidenceContract != "none" {
 				t.Fatalf("internal experiment %q unexpectedly accepted as evidence", scenario.Name)
 			}
 		default:
