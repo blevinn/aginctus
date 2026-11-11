@@ -39,6 +39,9 @@ pkgs.testers.runNixOSTest {
   };
 
   testScript = ''
+    import json
+    import shlex
+
     start_all()
     machine.wait_for_unit("incus.service")
     # The test driver supplies an independent disposable QEMU disk and Incus
@@ -81,6 +84,75 @@ pkgs.testers.runNixOSTest {
     machine.succeed(operator + " incus profile create scoped:operator-test --project aginctus-authz")
     machine.succeed(operator + " incus storage volume create scoped:default safe-test --project aginctus-authz")
 
+    # Nonempty positive controls: no image or running container is needed to
+    # test API visibility. Only guest root provisions the foreign resources.
+    machine.succeed("incus init foreign-sentinel --empty --project unrelated --storage default -c user.authz_sentinel=foreign-only")
+    machine.succeed("incus profile create foreign-sentinel --project unrelated")
+    machine.succeed("incus profile set foreign-sentinel user.authz_sentinel=foreign-only --project unrelated")
+    machine.succeed("incus storage volume create default foreign-sentinel --project unrelated user.authz_sentinel=foreign-only")
+    machine.succeed(operator + " incus init scoped:scope-control --empty --project aginctus-authz --storage default -c user.authz_sentinel=allowed-only")
+    foreign_before = machine.succeed("incus config show foreign-sentinel --project unrelated --expanded")
+    assert "foreign-only" in foreign_before
+    assert machine.succeed("incus profile get foreign-sentinel user.authz_sentinel --project unrelated").strip() == "foreign-only"
+    assert machine.succeed("incus storage volume get default foreign-sentinel user.authz_sentinel --project unrelated").strip() == "foreign-only"
+
+    # Compare the CLI with the raw server response using the SAME confined
+    # TLS identity. No CLI-side filtering, broken transport, or empty foreign
+    # project may masquerade as isolation. Root's guest-local API is only an
+    # existence control, never evidence that the operator is confined.
+    def api_get(path, admin=False):
+        if admin:
+            curl = "curl --silent --show-error --unix-socket /var/lib/incus/unix.socket"
+            url = "http://localhost" + path
+        else:
+            curl = operator + " curl --silent --show-error --insecure --cert /home/operator/.config/incus/client.crt --key /home/operator/.config/incus/client.key"
+            url = "https://127.0.0.1:8443" + path
+        output = machine.succeed(curl + " --write-out '\\n%{http_code}' " + shlex.quote(url))
+        body, status = output.rsplit("\n", 1)
+        response = json.loads(body)
+        print("AUTHZ API: " + ("admin " if admin else "operator ") + path + " => HTTP " + status)
+        return int(status), response
+
+    def instances(path, admin=False):
+        status, response = api_get(path, admin)
+        assert status == 200 and response["type"] == "sync", "instance collection request failed"
+        return response["metadata"]
+
+    def cli_instances(project):
+        return json.loads(machine.succeed(operator + " incus list scoped: --project " + project + " --format json"))
+
+    # Both recursive objects and nonrecursive URL lists must be filtered.
+    # The allowed scope must remain populated through both transports.
+    for recursion in [0, 1, 2]:
+        suffix = "&recursion=" + str(recursion)
+        foreign = instances("/1.0/instances?project=unrelated" + suffix, admin=True)
+        assert len(foreign) == 1 and "foreign-sentinel" in json.dumps(foreign), "foreign fixture missing from admin API"
+        assert instances("/1.0/instances?project=unrelated" + suffix) == [], "foreign instance disclosed by raw API"
+        allowed = instances("/1.0/instances?project=aginctus-authz" + suffix)
+        assert "scope-control" in json.dumps(allowed) and "foreign-sentinel" not in json.dumps(allowed), "allowed API positive control failed"
+        assert allowed == instances("/1.0/instances?project=aginctus-authz" + suffix, admin=True), "allowed API omitted or added instances"
+        all_admin = instances("/1.0/instances?all-projects=true" + suffix, admin=True)
+        assert "foreign-sentinel" in json.dumps(all_admin) and "scope-control" in json.dumps(all_admin), "all-projects admin positive control failed"
+        assert instances("/1.0/instances?all-projects=true" + suffix) == allowed, "all-projects API escaped allowed scope"
+    assert cli_instances("unrelated") == [], "foreign instance disclosed by CLI"
+    assert "scope-control" in [item["name"] for item in cli_instances("aginctus-authz")], "allowed CLI positive control failed"
+    all_cli = json.loads(machine.succeed(operator + " incus list scoped: --all-projects --format json"))
+    assert sorted((item["project"], item["name"]) for item in all_cli) == sorted((item["project"], item["name"]) for item in cli_instances("aginctus-authz")), "all-projects CLI escaped allowed scope"
+    for admin in [False, True]:
+        status, response = api_get("/1.0/instances/foreign-sentinel?project=unrelated", admin)
+        if admin:
+            assert status == 200 and response["metadata"]["config"]["user.authz_sentinel"] == "foreign-only", "foreign named-resource positive control failed"
+        else:
+            assert status in [403, 404] and response["type"] == "error" and response["error_code"] == status, "foreign instance readable by name"
+    status, response = api_get("/1.0/instances/scope-control?project=aginctus-authz")
+    assert status == 200 and response["metadata"]["config"]["user.authz_sentinel"] == "allowed-only", "allowed named-resource positive control failed"
+    for path in ["/1.0/profiles/foreign-sentinel?project=unrelated", "/1.0/storage-pools/default/volumes/custom/foreign-sentinel?project=unrelated"]:
+        status, response = api_get(path, admin=True)
+        assert status == 200 and response["metadata"]["config"]["user.authz_sentinel"] == "foreign-only", "foreign profile/volume positive control failed"
+        status, response = api_get(path)
+        assert status in [403, 404] and response["type"] == "error" and response["error_code"] == status, "foreign profile/volume readable by raw API"
+    print("AUTHZ FILTERING: populated foreign instance visible to admin, absent from operator CLI/raw collections, named read denied; allowed controls visible")
+
     # Snapshot privileged objects AFTER expected authorized changes; every
     # forbidden attempt below must be refused without modifying host state.
     protected = {
@@ -111,7 +183,12 @@ pkgs.testers.runNixOSTest {
             denied.append("not found")
         assert any(piece in lower for piece in denied), "unexpected failure class in restricted authorization probe"
 
-    deny("incus list scoped: --project unrelated --format json", allow_hidden=True)
+    deny("incus config show scoped:foreign-sentinel --project unrelated", allow_hidden=True)
+    deny("incus profile show scoped:foreign-sentinel --project unrelated", allow_hidden=True)
+    deny("incus storage volume show scoped:default foreign-sentinel --project unrelated", allow_hidden=True)
+    deny("incus config set scoped:foreign-sentinel user.authz_sentinel=changed --project unrelated", allow_hidden=True)
+    deny("incus profile set scoped:foreign-sentinel user.authz_sentinel=changed --project unrelated", allow_hidden=True)
+    deny("incus storage volume set scoped:default foreign-sentinel user.authz_sentinel=changed --project unrelated", allow_hidden=True)
     deny("incus project set scoped:aginctus-authz restricted=false")
     deny("incus project create scoped:unauthorized")
     deny("incus network create scoped:escape-bridge ipv4.address=none ipv6.address=none")
@@ -127,6 +204,8 @@ pkgs.testers.runNixOSTest {
     assert machine.succeed("incus profile list --project unrelated --format json | jq -S .") == protected["foreign_profiles"], "foreign profile inventory changed"
     assert machine.succeed("incus storage volume list default --project unrelated --format json | jq -S .") == protected["foreign_volumes"], "foreign volume inventory changed"
     assert machine.succeed("incus config show") == protected["daemon"], "daemon configuration changed"
+    assert machine.succeed("incus config show foreign-sentinel --project unrelated --expanded") == foreign_before, "foreign instance changed"
+    assert cli_instances("unrelated") == [] and instances("/1.0/instances?project=unrelated&recursion=1") == [], "foreign visibility changed after denial probes"
     machine.fail("incus network show escape-bridge")
     machine.fail("incus storage show escape-pool")
     machine.fail("incus project show unauthorized")
