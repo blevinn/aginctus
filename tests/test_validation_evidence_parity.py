@@ -92,6 +92,44 @@ class ValidationEvidenceParityTests(unittest.TestCase):
             self.assertEqual(observed, expected)
             self.assertEqual(observed["status"], "error")
 
+    def test_acceptance_utc_spelling_parity(self):
+        for created in ("2026-11-08T22:00:00Z", "2026-11-08T22:00:00.1234Z"):
+            with self.subTest(created=created), tempfile.TemporaryDirectory() as folder:
+                private = Path(folder) / "private"
+                private.mkdir(mode=0o700)
+                local_report.record(
+                    private, run_id=RUN_ID, mode="mock", exit_code=0,
+                    fixture="pass", tests="pass", stop="pass", close="pass",
+                )
+                source = private / RUN_ID / "result.json"
+                record = json.loads(source.read_text())
+                record["created_utc"] = created
+                source.write_text(json.dumps(record))
+                expected = local_acceptance.normalize(record, RUN_ID)
+                observed = self.go_report(
+                    ["--acceptance-run-id", RUN_ID],
+                    env={"AGINCTUS_ACCEPTANCE_REPORT_ROOT": str(private)},
+                )
+                self.assertEqual(observed, expected)
+
+    def test_preflight_status_and_selection_parity(self):
+        for check in ("pilot-topology", "opencode-runtime"):
+            for status, code in (("pass", 0), ("fail", 1), ("error", None)):
+                with self.subTest(check=check, status=status), tempfile.TemporaryDirectory() as folder:
+                    source = Path(folder) / "preflight.json"
+                    source.write_text(json.dumps({
+                        "schema_version": 1, "profile": "pilot_preflight", "status": status,
+                        "verification_tier": "read_only_pilot_preflight",
+                        "upstream_inference": "not_verified",
+                        "gateway_authorization": "not_verified", "egress_policy": "not_verified",
+                        "summary": {"passed": int(status == "pass"),
+                                    "failed": int(status == "fail"), "errors": int(status == "error")},
+                        "results": [{"id": f"preflight/{check}", "status": status, "exit_code": code}],
+                    }))
+                    expected = coverage.normalize_sources(**{check.replace("-", "_") + "_json": source})
+                    observed = self.go_report(["--coverage", f"--{check}-json", str(source)])
+                    self.assertEqual(observed, expected)
+
 
 if __name__ == "__main__":
     unittest.main()
