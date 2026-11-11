@@ -1,6 +1,6 @@
 # Incus project authority: disposable acceptance evidence and decision ledger
 
-**Status: EXECUTED WITH A BLOCKING ASSERTION / NOT SECURITY APPROVED**. Tracking: [#704](https://github.com/blevinn/aginctus/issues/704), [#693](https://github.com/blevinn/aginctus/issues/693); test code in the #750 → #752 → #756 stack. See [threat model](incus-project-authority-gate.md) and [ADR 0004](../adr/0004-three-layer-state.md).
+**Status: IMPLEMENTED VM MATRIX PASSED / NOT SECURITY APPROVED**. Tracking: [#704](https://github.com/blevinn/aginctus/issues/704), [#693](https://github.com/blevinn/aginctus/issues/693); test code in the #750 → #752 → #756 stack. See [threat model](incus-project-authority-gate.md) and [ADR 0004](../adr/0004-three-layer-state.md).
 
 ## Why this ledger exists
 
@@ -25,7 +25,7 @@ This is intentionally excluded from ordinary PR hermetic checks due to its cost 
 | Operator identity | Client cert registered for one project, no Unix `incus-admin` access | **Passed** in disposable VM |
 | Allowed operations | Read permitted project, create project profile and volume | **Passed** in disposable VM |
 | Approved shared bridge | Create and run/stop pinned image instance on approved host bridge and pool | **Passed** on `authz-mgmt` / `default` |
-| Foreign project isolation | Deny list/volume/profile writes outside permitted project | **BLOCKED:** list returned exit 0 / `[]`; volume/profile writes denied |
+| Foreign project isolation | Filter populated foreign instance collections; deny named instance/profile/volume reads and mutations | **Passed:** CLI/raw API hide foreign instance; named API reads HTTP 403; CLI reads/mutations denied; admin existence controls passed |
 | Host-level denial | Deny daemon configuration, bridge and pool creation, project creation/policy relaxation | **Passed:** nonzero permission/policy errors |
 | Host filesystem protection | Deny user-added host disk and low-level unconfined runtime config | **Passed:** server reported forbidden pool-less disk and `raw.lxc` |
 | Invariants | Compare host bridge, foreign project, pool and instance configuration before/after denied attempts | **Passed**, including foreign volumes and daemon config; instance baseline taken after start/stop |
@@ -39,17 +39,46 @@ Attach the full **nonsecret** test output and the Nix/Incus version identity to 
 Executed using Nix 2.34.9 on x86_64-linux with a KVM-backed disposable
 NixOS test guest, two virtual CPUs, 4 GiB RAM and guest-local directory
 storage. No host Incus socket, authority or trust configuration was used.
-The fixture-only #750 test completed successfully. The #752 and cumulative
-#756 tests reached the final assertion and failed solely because
-`incus list scoped: --project unrelated --format json` returned exit 0 and
-`[]`, instead of the expected denial. The assertion remains intact.
+The fixture-only #750, populated denial-matrix #752 and cumulative workload
+#756 tests completed successfully. The earlier list-denial blocker was
+resolved by proving the pinned server's collection-filtering semantics,
+not by treating arbitrary successful requests as denials.
 
-This empty result is **not evidence of a foreign-resource disclosure**:
-the foreign project contains no instances. Before changing the expected
-outcome, populate it with a recognizable administrator-created instance,
-compare the raw API response with the CLI result, and establish whether
-the server deliberately filters inaccessible objects. Keep the gate open
-until that investigation and the policy decision are reviewed.
+### Populated foreign-resource proof
+
+Guest root creates `foreign-sentinel` instance, profile and custom volume
+in `unrelated`, each marked `user.authz_sentinel=foreign-only`. The
+restricted operator creates `scope-control` in `aginctus-authz`, marked
+`allowed-only`. These are stopped, empty-container visibility fixtures;
+#756 separately boots the pinned workload image. No project restrictions
+or certificate authority were widened to make the checks pass.
+
+| Request / control | Guest administrator | Restricted TLS operator |
+| --- | --- | --- |
+| Foreign instance collection, recursion 0/1/2 | HTTP 200, exactly the foreign sentinel present | HTTP 200, metadata exactly `[]` |
+| Allowed instance collection, recursion 0/1/2 | HTTP 200, allowed resources present | HTTP 200, metadata exactly equals admin's allowed-project collection |
+| All-projects instance collection, recursion 0/1/2 | HTTP 200, foreign and allowed sentinels present | HTTP 200, exactly the allowed-project collection, no foreign instance |
+| CLI instance list, foreign / allowed / all projects | Foreign existence independently checked above | Exit 0 / `[]` for foreign; allowed control visible; all-projects exactly equals allowed project/name pairs |
+| Named foreign instance, profile and custom volume | HTTP 200 with exact `foreign-only` marker | HTTP 403 with API error envelope |
+| Named allowed instance | Allowed existence independently checked above | HTTP 200 with exact `allowed-only` marker |
+| CLI named foreign reads and marker updates | Fixtures exist with original markers | Nonzero permission errors for instance, profile and volume |
+
+The raw requests use `curl` with the **same operator-owned TLS certificate**
+as the CLI, bypassing CLI filtering. Admin controls use only the guest's
+local socket. Collections are tested at URL-only, recursive and full-state
+levels, including `all-projects=true`; foreign absence is checked again
+after denial probes. Foreign configuration/profile/volume inventories and
+host policy remain unchanged. A nonempty foreign collection, unexpected
+named-read success, missing positive control or permitted mutation fails
+the test.
+
+This matches the [Incus v7.5.1 instance-list implementation](https://github.com/lxc/incus/blob/v7.5.1/cmd/incusd/instances_get.go):
+`instancesGet` obtains a `CanView` permission checker and removes instances
+the requester cannot access before rendering the response. Thus a successful
+empty collection is intentional **server-side authorization filtering**,
+not evidence of disclosure or a CLI-only concealment. The previous assertion
+requiring a nonzero collection response was incorrect; it is replaced by
+strict populated absence controls plus explicit named-read and write denials.
 
 Other observed denials were `Certificate is restricted`, `Network not
 allowed in project`, `User does not have permission for project
@@ -57,7 +86,7 @@ allowed in project`, `User does not have permission for project
 The guest reported AppArmor unavailable; these results exercise API policy,
 not AppArmor confinement or container-escape resistance. Revocation,
 restart/crash recovery, custom-volume attachment, populated foreign-image
-and instance isolation, and state-service confused-deputy/TOCTOU checks
+isolation, and state-service confused-deputy/TOCTOU checks
 remain outstanding. No authorization approval or cross-principal write
 permission follows from these partial results.
 
