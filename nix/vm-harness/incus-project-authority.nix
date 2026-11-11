@@ -41,7 +41,6 @@ pkgs.testers.runNixOSTest {
   testScript = ''
     import json
     import shlex
-
     start_all()
     machine.wait_for_unit("incus.service")
     # The test driver supplies an independent disposable QEMU disk and Incus

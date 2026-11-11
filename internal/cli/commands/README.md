@@ -27,3 +27,5 @@ and keep side effects behind leaf-specific parsing and confirmation checks.
 
 Do not place dedicated-worker operations under `aginctus testenv`: those
 belong exclusively to the distinct operator-only `aginctus-testenv` binary.
+
+See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the broader root/operation/domain ownership and safety contract, tracked in issue #725.
