@@ -56,14 +56,16 @@ func (s DeploymentSpec) Validate() error {
 		selected[id] = true
 	}
 	seen := make(map[string]bool, len(s.Workloads))
+	instances := make(map[string]bool, len(s.Workloads))
 	for _, item := range s.Workloads {
 		if !selected[item.ID] || seen[item.ID] {
 			return errors.New("unexpected or duplicate workload declaration")
 		}
 		seen[item.ID] = true
-		if !localID.MatchString(item.InstanceName) {
+		if !localID.MatchString(item.InstanceName) || instances[item.InstanceName] {
 			return errors.New("invalid workload instance name")
 		}
+		instances[item.InstanceName] = true
 		if item.InstanceType != "container" && item.InstanceType != "virtual-machine" {
 			return errors.New("unsupported workload instance type")
 		}
@@ -179,6 +181,12 @@ func strictKeySet(fields map[string]json.RawMessage, allowed ...string) error {
 	for name := range fields {
 		if !names[name] {
 			return errors.New("unknown or incorrectly cased deployment field")
+		}
+	}
+	for _, name := range allowed {
+		value, ok := fields[name]
+		if !ok || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return errors.New("deployment fields must be explicit and nonnull")
 		}
 	}
 	return nil
