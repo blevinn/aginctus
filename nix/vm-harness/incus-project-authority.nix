@@ -98,9 +98,9 @@ pkgs.testers.runNixOSTest {
     # project-restricted principal must be able to use it without possessing
     # admin credentials or reading its key material.
     machine.succeed("incus image import ${workloadImage.config.system.build.metadata}/tarball/* ${workloadImage.config.system.build.tarball}/tarball/* --alias authz-fixture --project aginctus-authz", timeout=180)
-    machine.succeed(operator + " incus init scoped:authz-fixture scoped:allowed-instance --project aginctus-authz --storage default --network aginctus-authz-mgmt", timeout=180)
+    machine.succeed(operator + " incus init scoped:authz-fixture scoped:allowed-instance --project aginctus-authz --storage default --network authz-mgmt", timeout=180)
     instance_before = machine.succeed("incus config show allowed-instance --project aginctus-authz --expanded")
-    assert "aginctus-authz-mgmt" in instance_before and "default" in instance_before, "approved network or root volume was not attached"
+    assert "authz-mgmt" in instance_before and "default" in instance_before, "approved network or root volume was not attached"
     machine.succeed(operator + " incus start scoped:allowed-instance --project aginctus-authz", timeout=180)
     machine.succeed(operator + " incus stop scoped:allowed-instance --project aginctus-authz --force", timeout=180)
     stopped = machine.succeed("incus info allowed-instance --project aginctus-authz")
