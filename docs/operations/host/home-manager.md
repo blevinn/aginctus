@@ -103,6 +103,8 @@ can inspect the bridge. Masked reads do not establish write denial, so a direct
 PATCH to its actual default namespace must fail authorization. The VM also
 requires refusal of project restriction changes, storage pool changes and
 foreign-project volume creation, and checks unchanged volume inventories.
+Creation of a non-allowlisted network in the selected project must be refused
+by project policy before network-driver validation.
 An administrator performs the same bridge PATCH and removes its test key as a
 positive control. This narrows the fixture boundary; it does **not** prove NIC
 attachment to that bridge or validate `features.networks=false` project

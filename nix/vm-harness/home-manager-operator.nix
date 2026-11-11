@@ -329,7 +329,9 @@ pkgs.testers.runNixOSTest {
         return output
 
     def denied(command, reason):
-        assert reason in report(command, "denied"), "failure did not demonstrate the expected boundary"
+        output = report(command, "denied")
+        print("Denied probe:", command, output)
+        assert reason in output, "failure did not demonstrate the expected boundary"
 
     def authorization_denied(command):
         # A generic syntax/configuration error is not proof of denied authority.
@@ -366,7 +368,9 @@ pkgs.testers.runNixOSTest {
 
     # Effective write denials belong ONLY in this disposable fixture, never in
     # production preflight. Exact project flags prevent ambient switching.
-    denied(operator + " incus network create hm-denied --type bridge --project aginctus ipv4.address=none ipv6.address=none", "Network type does not support non-default projects")
+    # The explicit network allowlist rejects this name before driver/type
+    # validation; require that policy denial rather than a structural error.
+    denied(operator + " incus network create hm-denied --type bridge --project aginctus ipv4.address=none ipv6.address=none", "Network not allowed in project")
     denied(operator + " incus network create hm-denied --type bridge --project default ipv4.address=none ipv6.address=none", "does not have permission")
     # Effective-denial probes belong only in the disposable guest; no
     # production preflight may issue writes. A successful unexpected write
