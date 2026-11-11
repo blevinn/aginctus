@@ -20,7 +20,7 @@ const (
 )
 
 var (
-	acceptanceID = regexp.MustCompile("^[a-zA-Z0-9]{8}$")
+	acceptanceID    = regexp.MustCompile("^[a-zA-Z0-9]{8}$")
 	preflightTarget = regexp.MustCompile("^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$")
 )
 
@@ -111,8 +111,14 @@ func utcValue(source map[string]json.RawMessage) (string, error) {
 	if offset != 0 {
 		return "", errors.New("non-UTC timestamp")
 	}
-	// Validate the source string, but never invent a timestamp for the run.
-	return created, nil
+	// Match datetime.isoformat() in the Python v1 viewer: UTC offset spelling
+	// and microsecond precision are normalized without inventing a run time.
+	date = date.Truncate(time.Microsecond)
+	created = date.Format("2006-01-02T15:04:05")
+	if date.Nanosecond() != 0 {
+		created += fmt.Sprintf(".%06d", date.Nanosecond()/1000)
+	}
+	return created + "+00:00", nil
 }
 
 // NormalizeAcceptance is a pure, allowlisted adapter for the existing local
@@ -209,9 +215,9 @@ func NormalizeAcceptance(payload []byte, runID string) (Report, error) {
 	return Report{
 		"schema_version": 1, "profile": "local_acceptance_view", "status": status,
 		"summary": summary, "results": observed,
-		"source": map[string]any{"run_id": runID, "mode": mode, "created_utc": created},
+		"source":            map[string]any{"run_id": runID, "mode": mode, "created_utc": created},
 		"verification_tier": map[string]string{"mock": "mock_orchestration", "live": "local_live_partial"}[mode],
-		"agent_tools": unverified, "upstream_inference": unverified,
+		"agent_tools":       unverified, "upstream_inference": unverified,
 		"credential_egress": unverified, "cleanup": unverified, "complete_acceptance": false,
 	}, nil
 }
@@ -219,8 +225,8 @@ func NormalizeAcceptance(payload []byte, runID string) (Report, error) {
 func UnavailableAcceptance() Report {
 	return Report{
 		"schema_version": 1, "profile": "local_acceptance_view", "status": "error",
-		"summary": map[string]int{"passed": 0, "failed": 0, "errors": 1, "not_run": 0},
-		"results": []any{map[string]any{"id": "acceptance/evidence", "status": "error"}},
+		"summary":     map[string]int{"passed": 0, "failed": 0, "errors": 1, "not_run": 0},
+		"results":     []any{map[string]any{"id": "acceptance/evidence", "status": "error"}},
 		"agent_tools": unverified, "upstream_inference": unverified,
 		"credential_egress": unverified, "cleanup": unverified, "complete_acceptance": false,
 	}
@@ -316,6 +322,12 @@ func ReadSelectedJSON(path string) ([]byte, error) {
 // NormalizePreflight checks an existing read-only Python pilot report but
 // never runs its pilot-touching check or promotes it into live authorization.
 func NormalizePreflight(payload []byte, check string) (string, error) {
+	if len(payload) > maxSelectedBytes {
+		return "", errors.New("oversized preflight evidence")
+	}
+	if err := uniqueJSON(payload); err != nil {
+		return "", err
+	}
 	if check != "pilot-topology" && check != "opencode-runtime" {
 		return "", errors.New("invalid preflight selection")
 	}

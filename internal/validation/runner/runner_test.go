@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/blevinn/aginctus/internal/validation/catalog"
 )
@@ -188,5 +189,25 @@ func TestCatalogTimeoutIsBoundedAndNotCallerControlled(t *testing.T) {
 	result := runSuite(context.Background(), t.TempDir(), bad, nil, false, nil)
 	if result.Status != "error" || result.ExitCode != nil {
 		t.Fatalf("unbounded catalog timeout was accepted: %#v", result)
+	}
+}
+
+func TestSuiteDeadlineStopsRecipeChildren(t *testing.T) {
+	dir := t.TempDir()
+	// The shell waits on a child that inherits the report pipes. Killing only
+	// the shell leaves cmd.Wait blocked until the child eventually exits.
+	if err := os.WriteFile(filepath.Join(dir, "just"), []byte("#!/bin/sh\nsleep 4 &\nwait\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	suite := catalog.HermeticSuites()[0]
+	suite.TimeoutSeconds = 1
+	start := time.Now()
+	result := runSuite(context.Background(), dir, suite, SanitizeEnv(os.Environ()), false, nil)
+	if result.Status != "error" || result.ExitCode != nil {
+		t.Fatalf("deadline was not an execution error: %#v", result)
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Fatalf("recipe child outlived deadline: %s", elapsed)
 	}
 }
