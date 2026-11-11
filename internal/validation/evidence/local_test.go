@@ -23,7 +23,7 @@ func acceptanceFixture() []byte {
 		"scenario": "opencode", "mode": "mock", "status": "incomplete",
 		"harness_exit_code": 0, "created_utc": "2026-11-08T22:00:00+00:00",
 		"verification_tier": "mock_orchestration", "results": rows,
-		"cleanup_commands": map[string]string{"stop": "pass", "close": "pass"},
+		"cleanup_commands":   map[string]string{"stop": "pass", "close": "pass"},
 		"upstream_inference": unverified, "credential_egress": unverified,
 		"cleanup": unverified, "complete_acceptance": false,
 	})
@@ -70,6 +70,22 @@ func TestAcceptanceNormalizationIsConservative(t *testing.T) {
 	}
 	if _, err := NormalizeAcceptance(append(acceptanceFixture(), []byte(" {}")...), acceptanceRun); err == nil {
 		t.Fatal("accepted trailing evidence objects")
+	}
+}
+
+func TestAcceptanceTimestampMatchesPythonView(t *testing.T) {
+	for source, want := range map[string]string{
+		"2026-11-08T22:00:00Z":      "2026-11-08T22:00:00+00:00",
+		"2026-11-08T22:00:00.1234Z": "2026-11-08T22:00:00.123400+00:00",
+	} {
+		raw := strings.Replace(string(acceptanceFixture()), "2026-11-08T22:00:00+00:00", source, 1)
+		report, err := NormalizeAcceptance([]byte(raw), acceptanceRun)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := report["source"].(map[string]any)["created_utc"]; got != want {
+			t.Fatalf("timestamp %q normalized as %q, want %q", source, got, want)
+		}
 	}
 }
 
@@ -122,8 +138,8 @@ func TestAcceptancePrivateReaderRejectsAliasesAndPublicFiles(t *testing.T) {
 func TestPreflightValidationCannotPromoteProof(t *testing.T) {
 	base := map[string]any{
 		"schema_version": 1, "profile": "pilot_preflight", "status": "pass",
-		"summary": map[string]int{"passed": 1, "failed": 0, "errors": 0},
-		"verification_tier": "read_only_pilot_preflight",
+		"summary":            map[string]int{"passed": 1, "failed": 0, "errors": 0},
+		"verification_tier":  "read_only_pilot_preflight",
 		"upstream_inference": unverified, "gateway_authorization": unverified,
 		"egress_policy": unverified, "target": "configured_pilot",
 		"results": []map[string]any{{"id": "preflight/pilot-topology", "status": "pass", "exit_code": 0}},
@@ -134,6 +150,15 @@ func TestPreflightValidationCannotPromoteProof(t *testing.T) {
 	}
 	if status, err := check(base); err != nil || status != "pass" {
 		t.Fatalf("valid preflight rejected: %s %v", status, err)
+	}
+	raw, _ := json.Marshal(base)
+	duplicate := strings.Replace(string(raw), `"schema_version":1`, `"schema_version":2,"schema_version":1`, 1)
+	if _, err := NormalizePreflight([]byte(duplicate), "pilot-topology"); err == nil {
+		t.Fatal("accepted ambiguous preflight envelope")
+	}
+	duplicate = strings.Replace(string(raw), `"exit_code":0`, `"exit_code":1,"exit_code":0`, 1)
+	if _, err := NormalizePreflight([]byte(duplicate), "pilot-topology"); err == nil {
+		t.Fatal("accepted ambiguous nested preflight result")
 	}
 	for _, change := range []map[string]any{
 		{"schema_version": true},
