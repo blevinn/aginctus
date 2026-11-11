@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	clihelp "github.com/blevinn/aginctus/internal/cli/help"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -60,7 +61,7 @@ func runBasicCobra(
 		return nil
 	}
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
-		writeCobraHelp(cmd, stdout)
+		clihelp.WriteCobraHelp(cmd, stdout)
 	})
 
 	status := 0
