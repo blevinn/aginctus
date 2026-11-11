@@ -131,7 +131,7 @@ pkgs.testers.runNixOSTest {
             failures.append(command)
             return
         assert "unknown flag" not in lower and "unknown command" not in lower and "usage:" not in lower, "invalid CLI probe, not an authorization test"
-        denied = ["not authorized", "not allowed", "permission denied", "forbidden", "access denied", "restricted", "not permitted"]
+        denied = ["not authorized", "not allowed", "permission denied", "does not have permission", "forbidden", "access denied", "restricted", "not permitted"]
         if allow_hidden:
             denied.append("not found")
         assert any(piece in lower for piece in denied), "unexpected failure class in restricted authorization probe"
