@@ -110,7 +110,6 @@ pkgs.testers.runNixOSTest {
     # Starting/stopping legitimately adds volatile runtime state. Compare
     # denial probes against the post-lifecycle configuration, not init state.
     instance_before = machine.succeed("incus config show allowed-instance --project aginctus-authz --expanded")
-
     # Nonempty positive controls: no image or running container is needed to
     # test API visibility. Only guest root provisions the foreign resources.
     machine.succeed("incus init foreign-sentinel --empty --project unrelated --storage default -c user.authz_sentinel=foreign-only")
