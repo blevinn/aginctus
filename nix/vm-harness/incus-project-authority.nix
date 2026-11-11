@@ -99,12 +99,15 @@ pkgs.testers.runNixOSTest {
     # admin credentials or reading its key material.
     machine.succeed("incus image import ${workloadImage.config.system.build.metadata}/tarball/* ${workloadImage.config.system.build.tarball}/tarball/* --alias authz-fixture --project aginctus-authz", timeout=180)
     machine.succeed(operator + " incus init scoped:authz-fixture scoped:allowed-instance --project aginctus-authz --storage default --network authz-mgmt", timeout=180)
-    instance_before = machine.succeed("incus config show allowed-instance --project aginctus-authz --expanded")
-    assert "authz-mgmt" in instance_before and "default" in instance_before, "approved network or root volume was not attached"
+    attached = machine.succeed("incus config show allowed-instance --project aginctus-authz --expanded")
+    assert "authz-mgmt" in attached and "default" in attached, "approved network or root volume was not attached"
     machine.succeed(operator + " incus start scoped:allowed-instance --project aginctus-authz", timeout=180)
     machine.succeed(operator + " incus stop scoped:allowed-instance --project aginctus-authz --force", timeout=180)
     stopped = machine.succeed("incus info allowed-instance --project aginctus-authz")
     assert "STOPPED" in stopped.upper(), "restricted instance lifecycle failed"
+    # Starting/stopping legitimately adds volatile runtime state. Compare
+    # denial probes against the post-lifecycle configuration, not init state.
+    instance_before = machine.succeed("incus config show allowed-instance --project aginctus-authz --expanded")
 
     # Snapshot privileged objects AFTER expected authorized changes; every
     # forbidden attempt below must be refused without modifying host state.
