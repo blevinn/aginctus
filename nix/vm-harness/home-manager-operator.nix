@@ -334,6 +334,8 @@ pkgs.testers.runNixOSTest {
     def authorization_denied(command):
         # A generic syntax/configuration error is not proof of denied authority.
         output = report(command, "denied")
+        # report() checks runtime credential redaction before evidence is logged.
+        print("Authorization probe:", command, output)
         reasons = ["does not have permission", "Certificate is restricted", "not authorized", "Not authorized"]
         assert any(reason in output for reason in reasons), "unexpected failure category (not proven authorization denial)"
 
