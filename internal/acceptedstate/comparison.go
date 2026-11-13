@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"syscall"
 )
 
 // ReadCandidateFile loads a bounded, explicit, nonsecret typed candidate.
@@ -15,7 +16,10 @@ func ReadCandidateFile(path, deploymentID, project string) (DeploymentSpec, erro
 	if path == "" || deploymentID == "" || project == "" {
 		return DeploymentSpec{}, errors.New("candidate path, deployment and project must be explicit")
 	}
-	f, err := os.Open(path)
+	// Do not block on a FIFO before we can verify the descriptor's type.
+	// Explicit symlinks to regular nonsecret inputs are permitted; checks and
+	// reads use the same opened descriptor.
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return DeploymentSpec{}, fmt.Errorf("open explicit candidate: %w", err)
 	}
@@ -62,13 +66,13 @@ func CompareCandidate(store *LocalStore, candidate DeploymentSpec) (CandidateCom
 		return CandidateComparison{}, err
 	}
 	result := CandidateComparison{
-		DeploymentID: candidate.Selection.DeploymentID,
-		IncusProject: candidate.Selection.IncusProject,
+		DeploymentID:    candidate.Selection.DeploymentID,
+		IncusProject:    candidate.Selection.IncusProject,
 		CandidateDigest: digest,
 		Changes: DeploymentDiff{
 			NewlySelected: []string{},
-			Unselected: []string{},
-			Modified: []WorkloadChange{},
+			Unselected:    []string{},
+			Modified:      []WorkloadChange{},
 		},
 	}
 	active, accepted, err := store.ReadActive()
