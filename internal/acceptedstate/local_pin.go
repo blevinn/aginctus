@@ -21,6 +21,10 @@ var ErrLocalPinScope = errors.New("selected workload scope is absent from accept
 //
 // In particular, no untrusted Home Manager user may treat this object as
 // authorization to invoke the privileged native local Incus socket.
+// A pin must not be copied. Check and Close are safe to call concurrently,
+// but the caller must keep Close ordered after its entire downstream operation:
+// a successful Check does not prevent another goroutine from closing the pin.
+// Cancellation makes Check fail; it does not release the lock. Always Close.
 type LocalRevisionPin struct {
 	mu         sync.Mutex
 	store      *LocalStore
