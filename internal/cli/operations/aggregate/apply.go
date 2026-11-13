@@ -1,4 +1,4 @@
-package cli
+package aggregateops
 
 import (
 	"context"
@@ -19,9 +19,10 @@ import (
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
+// Plan, ExecutePlan and ReadPlan are independent of Cobra and root CLI state.
 // aggregateApplyPlan produces a stable preview. The management network is a
 // shared dependency: it must be reconciled once, before any dependent step.
-func aggregateApplyPlan(effective *config.Config) (orchestration.Plan, error) {
+func Plan(effective *config.Config, ids func(*config.Config) []string) (orchestration.Plan, error) {
 	network, err := managementnetwork.FromConfig(effective)
 	if err != nil {
 		return orchestration.Plan{}, fmt.Errorf("management network: %w", err)
@@ -92,7 +93,7 @@ func aggregateApplyPlan(effective *config.Config) (orchestration.Plan, error) {
 			return orchestration.Plan{}, err
 		}
 	}
-	for _, id := range workloadIDs(effective) {
+	for _, id := range ids(effective) {
 		spec, err := workload.FromConfig(effective, id)
 		if err != nil {
 			return orchestration.Plan{}, fmt.Errorf("workload %q: %w", id, err)
@@ -113,7 +114,7 @@ func aggregateApplyPlan(effective *config.Config) (orchestration.Plan, error) {
 
 // executeAggregatePlan validates every step before initializing secrets or
 // changing host resources. The engine still executes in document order.
-var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, effective *config.Config) error {
+func ExecutePlan(ctx context.Context, plan orchestration.Plan, effective *config.Config) error {
 	spec, err := gateway.FromConfig(effective)
 	if err != nil {
 		return fmt.Errorf("gateway configuration: %w", err)
@@ -129,7 +130,7 @@ var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, ef
 	if err := validator.Validate(plan, orchestration.ExecuteOptions{}); err != nil {
 		return err
 	}
-	var environment map[string]string
+	needsEnvironment := false
 	for _, step := range plan.Steps {
 		if step.Driver == "compose" {
 			// In a --from plan, only inject credentials into the configured
@@ -142,11 +143,16 @@ var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, ef
 			if cfg.Project != spec.Project {
 				return fmt.Errorf("compose project %q is not configured gateway project %q", cfg.Project, spec.Project)
 			}
-			environment, err = spec.InitializeRuntimeEnvironment()
-			if err != nil {
-				return fmt.Errorf("gateway initialization: %w", err)
-			}
-			break
+			needsEnvironment = true
+		}
+	}
+	// The environment is shared by the Compose driver, so authorize every
+	// Compose step before creating secrets or handing any credentials to it.
+	var environment map[string]string
+	if needsEnvironment {
+		environment, err = spec.InitializeRuntimeEnvironment()
+		if err != nil {
+			return fmt.Errorf("gateway initialization: %w", err)
 		}
 	}
 	engine := orchestration.NewEngine(map[string]orchestration.Driver{
@@ -161,12 +167,16 @@ var executeAggregatePlan = func(ctx context.Context, plan orchestration.Plan, ef
 
 // executeAggregateApply runs a fully parsed, typed CLI operation. Flags and
 // positional syntax have already been validated by Cobra before loading config.
-func executeAggregateApply(ctx context.Context, render bool, fromFile string, stdout, stderr io.Writer, effective *config.Config) int {
+func Apply(ctx context.Context, render bool, fromFile string, stdout, stderr io.Writer, effective *config.Config,
+	planFunc func(*config.Config) (orchestration.Plan, error),
+	readFunc func(string) (orchestration.Plan, error),
+	executeFunc func(context.Context, orchestration.Plan, *config.Config) error,
+) int {
 	var plan orchestration.Plan
 	var err error
 	switch {
 	case render:
-		plan, err = aggregateApplyPlan(effective)
+		plan, err = planFunc(effective)
 		if err == nil {
 			encoder := json.NewEncoder(stdout)
 			encoder.SetIndent("", "  ")
@@ -178,15 +188,15 @@ func executeAggregateApply(ctx context.Context, render bool, fromFile string, st
 		}
 		return 0
 	case fromFile != "":
-		plan, err = readAggregatePlan(fromFile)
+		plan, err = readFunc(fromFile)
 	default:
-		plan, err = aggregateApplyPlan(effective)
+		plan, err = planFunc(effective)
 	}
 	if err != nil {
 		fmt.Fprintf(stderr, "load orchestration: %v\n", err)
 		return 1
 	}
-	if err := executeAggregatePlan(ctx, plan, effective); err != nil {
+	if err := executeFunc(ctx, plan, effective); err != nil {
 		fmt.Fprintf(stderr, "apply orchestration: %v\n", err)
 		return 1
 	}
@@ -194,7 +204,7 @@ func executeAggregateApply(ctx context.Context, render bool, fromFile string, st
 	return 0
 }
 
-func readAggregatePlan(path string) (orchestration.Plan, error) {
+func ReadPlan(path string) (orchestration.Plan, error) {
 	if path == "" || path == "-" {
 		return orchestration.Plan{}, fmt.Errorf("--from requires a regular file path")
 	}
