@@ -63,8 +63,11 @@ func (in GatewayImageAcquireIntent) Validate() error {
 type GatewayImageAcquireResult struct {
 	Project     string `json:"project"`
 	Fingerprint string `json:"fingerprint"`
-	Attempted   bool   `json:"attempted"`
-	Verified    bool   `json:"verified"`
+	// Image binds the result to the resolved manifest/config, not just layers.
+	// Like Verified, this value is not proof of provenance or authorization.
+	Image     GatewayOCIIdentity `json:"image"`
+	Attempted bool               `json:"attempted"`
+	Verified  bool               `json:"verified"`
 }
 
 type GatewayImageAcquireError struct {
@@ -137,7 +140,7 @@ func AcquireLocalGatewayImage(ctx context.Context, in GatewayImageAcquireIntent)
 // this project: Incus can reuse another project's cached layer-only identity.
 // Inventory checks are observations, not an atomic create-only Incus API.
 func AcquireGatewayImageWithClient(ctx context.Context, in GatewayImageAcquireIntent, client GatewayImageAcquireClient) (GatewayImageAcquireResult, error) {
-	result := GatewayImageAcquireResult{Project: in.Project, Fingerprint: in.Image.IncusFingerprint}
+	result := GatewayImageAcquireResult{Project: in.Project, Fingerprint: in.Image.IncusFingerprint, Image: in.Image}
 	fail := func(stage string, attempted bool, cause error) (GatewayImageAcquireResult, error) {
 		return result, &GatewayImageAcquireError{Stage: stage, Attempted: attempted, Uncertain: attempted, cause: cause}
 	}
