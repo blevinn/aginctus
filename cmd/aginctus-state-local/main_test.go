@@ -59,9 +59,9 @@ func TestOfflineExplicitLocalAcceptanceLifecycle(t *testing.T) {
 	if err!=nil || diff["hasAccepted"]!=false || diff["changed"]!=true {t.Fatalf("initial diff %+v %v",diff,err)}
 	if _,err:=call(append([]string{"accept"},append(base,"--candidate",candidate)...)...);err==nil {t.Fatal("accepted without confirm+CAS")}
 	// Nothing mutates until explicit --confirm and a genesis CAS expectation.
-	empty,_,err:=acceptedstate.OpenLocalStore(root)
-	_ = empty
+	opened,err:=acceptedstate.OpenLocalStore(root)
 	if err!=nil {t.Fatal(err)}
+	if current,_,err:=opened.ReadActive();err!=nil || current!=nil{t.Fatalf("diff/denied accept mutated state: %+v %v",current,err)}
 	acceptedArgs:=append([]string{"accept"},base...)
 	acceptedArgs=append(acceptedArgs,"--candidate",candidate,"--expected-revision","none","--confirm")
 	rev,err:=call(acceptedArgs...)
