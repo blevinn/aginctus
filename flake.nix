@@ -498,6 +498,9 @@
         incus-project-authority = import ./nix/vm-harness/incus-project-authority.nix {
           inherit self nixpkgs system;
         };
+        accepted-state-incus = import ./nix/vm-harness/accepted-state-incus.nix {
+          inherit self nixpkgs system;
+        };
       });
 
       checks = forAllSystems (
