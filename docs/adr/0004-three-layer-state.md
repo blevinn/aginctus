@@ -4,6 +4,7 @@
 - Date: 2026-11-08
 - Tracking: [#693](https://github.com/blevinn/aginctus/issues/693)
 - Detailed design: [Three-layer state and durable control plane](../design/three-layer-state.md)
+- Provisional authority alternative (no write approval): [ADR 0005](0005-provisional-authority-topology.md)
 - Related: [ADR 0002](0002-native-incus-reconciliation.md), [#153](https://github.com/blevinn/aginctus/issues/153), [#155](https://github.com/blevinn/aginctus/issues/155), [#439](https://github.com/blevinn/aginctus/issues/439), [#496](https://github.com/blevinn/aginctus/issues/496)
 
 ## Context
