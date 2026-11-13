@@ -11,13 +11,15 @@ nix build --no-link .#state-local
 nix build --no-link .#state-service
 ```
 
-The packages expose `aginctus-state-local` and `aginctus-state`, respectively. They are **not** NixOS/Home Manager service units and are not added to the normal `aginctus` CLI or an MCP tool. An ordinary `nixos-rebuild switch` / `home-manager switch` does not start a state daemon, promote a candidate or reconcile any workload.
+The packages expose `aginctus-state-local` and `aginctus-state`, respectively. They are **not** NixOS/Home Manager service units and are not added to the normal `aginctus` CLI or an MCP tool. These packages add no activation-time daemon, promotion or workload reconciliation. Existing separately enabled reconciliation units retain their current behavior; this experiment does not migrate them to accepted state.
 
 ## Explicit local experiment
 
 Use a scratch directory owned by the invoking user, outside any real deployment:
 
 ```sh
+nix shell .#state-local .#state-service
+# Run the remaining commands inside this temporary package shell.
 state_dir="$(mktemp -d)"
 chmod 700 "$state_dir"
 aginctus-state-local init --state-dir "$state_dir/local"
@@ -38,7 +40,7 @@ Nothing changes until explicit acceptance:
 aginctus-state-local accept --state-dir "$state_dir/local" --deployment demo --project aginctus --candidate ./candidate.json --expected-revision none --confirm
 ```
 
-For later updates, use the **exact active revision ID** reported by `status` in place of `none`. A stale expectation fails under a revision lock instead of overwriting a concurrent acceptance. On restart, `status` must report the same active revision; `diff` must report no change for an identical candidate. The output includes revision hashes and field names only, never configuration values.
+For later updates, use the **exact active revision ID** reported by `status` in place of `none`. A stale expectation fails under a revision lock instead of overwriting a concurrent acceptance. An identical candidate is a no-op error, not a new revision. On restart, `status` must report the same active revision; `diff` must report no change for an identical candidate. Local CLI output contains revision metadata, explicit deployment/project and workload IDs, and changed field names, not workload configuration values. The read-only service returns the complete typed nonsecret specification to the same UID.
 
 The Unix service can independently expose read-only status to the **same UID** via an owned private socket:
 
@@ -46,7 +48,7 @@ The Unix service can independently expose read-only status to the **same UID** v
 aginctus-state --state-dir "$state_dir/local" --socket "$state_dir/local/status.sock"
 ```
 
-It provides only `GET /v1/health` and `GET /v1/active?deployment=demo`. There is **no HTTP promotion endpoint**; stopping the service does not remove accepted records. Always use an explicitly selected local store; there is no XDG or root/system fallback.
+It provides only `GET /v1/health` and `GET /v1/active?deployment=demo`. There is **no HTTP promotion endpoint**; stopping the service does not remove accepted records. Stop it gracefully before restarting at the same socket path. An existing socket is never automatically adopted or deleted: after a crash, the operator must verify that no listener owns it before removing that socket path. For service packaging, place the socket in a private ephemeral runtime directory separate from the persistent store. Always use an explicitly selected local store; there is no XDG or root/system fallback.
 
 ## Important limitations and exit criteria for the actual feature
 
