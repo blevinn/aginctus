@@ -172,31 +172,44 @@ func TestDaemonOCI(t *testing.T) {
 			}
 			name := image.name + "-spike"
 			alias := name + "-image"
+			// A legitimate acquisition result must not be reused for a different
+			// OCI config merely because its Incus layer fingerprint still matches.
+			mismatched := native.GatewayAliasCreateIntent{
+				Project: scope.Name, Alias: alias, Image: identity, Acquisition: acquired,
+			}
+			mismatched.Image.ConfigDigest = "sha256:" + strings.Repeat("d", 64)
+			rejectedAlias, err := native.CreateLocalGatewayImageAlias(ctx, mismatched)
+			if err == nil || rejectedAlias.Created || rejectedAlias.Verified {
+				t.Fatalf("alias accepted mismatched acquisition identity: %+v %v", rejectedAlias, err)
+			}
+			if _, _, err := client.GetImageAlias(alias); !api.StatusErrorCheck(err, 404) {
+				t.Fatal("mismatched acquisition mutated alias inventory")
+			}
 			// The image alias is created only after the same selected-project
 			// acquisition has returned a verified result. This disposable VM
 			// is single-writer; production requires independently fenced writes.
-			createdAlias, err := native.CreateLocalGatewayImageAlias(ctx,native.GatewayAliasCreateIntent{
-				Project:scope.Name,Alias:alias,Image:identity,Acquisition:acquired,
+			createdAlias, err := native.CreateLocalGatewayImageAlias(ctx, native.GatewayAliasCreateIntent{
+				Project: scope.Name, Alias: alias, Image: identity, Acquisition: acquired,
 			})
 			if err != nil || !createdAlias.Created || !createdAlias.Verified {
-				t.Fatalf("guarded alias create: %+v %v",createdAlias,err)
+				t.Fatalf("guarded alias create: %+v %v", createdAlias, err)
 			}
-			if _,err:=native.CreateLocalGatewayImageAlias(ctx,native.GatewayAliasCreateIntent{
-				Project:scope.Name,Alias:alias,Image:identity,Acquisition:acquired,
-			});err==nil {
+			if _, err := native.CreateLocalGatewayImageAlias(ctx, native.GatewayAliasCreateIntent{
+				Project: scope.Name, Alias: alias, Image: identity, Acquisition: acquired,
+			}); err == nil {
 				t.Fatal("native alias create adopted a preexisting alias")
 			}
-			evidence:=native.GatewayImageEvidence{Project:scope.Name,Alias:alias,Identity:identity}
-			if err:=native.ObserveLocalGatewayImageReuse(ctx,native.GatewayImageAcquireIntent{
-				Project:scope.Name,Image:identity,
-			},alias,evidence);err!=nil {
-				t.Fatalf("observed OCI alias identity mismatch: %v",err)
+			evidence := native.GatewayImageEvidence{Project: scope.Name, Alias: alias, Identity: identity}
+			if err := native.ObserveLocalGatewayImageReuse(ctx, native.GatewayImageAcquireIntent{
+				Project: scope.Name, Image: identity,
+			}, alias, evidence); err != nil {
+				t.Fatalf("observed OCI alias identity mismatch: %v", err)
 			}
-			foreignEvidence:=evidence
-			foreignEvidence.Identity.ConfigDigest="sha256:"+strings.Repeat("d",64)
-			if err:=native.ObserveLocalGatewayImageReuse(ctx,native.GatewayImageAcquireIntent{
-				Project:scope.Name,Image:identity,
-			},alias,foreignEvidence);err==nil {
+			foreignEvidence := evidence
+			foreignEvidence.Identity.ConfigDigest = "sha256:" + strings.Repeat("d", 64)
+			if err := native.ObserveLocalGatewayImageReuse(ctx, native.GatewayImageAcquireIntent{
+				Project: scope.Name, Image: identity,
+			}, alias, foreignEvidence); err == nil {
 				t.Fatal("config-only image identity collision accepted")
 			}
 			config := map[string]string{
