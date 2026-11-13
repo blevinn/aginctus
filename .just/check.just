@@ -113,11 +113,11 @@ vm-report-json run_id:
 # Requires AGINCTUS_ACCEPTANCE_REPORT_ROOT to name the existing private root.
 [no-cd]
 acceptance-report run_id:
-    @python3 -m scripts.checks.local_acceptance --format text {{quote(run_id)}}
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format text --acceptance-run-id {{quote(run_id)}}
 
 [no-cd]
 acceptance-report-json run_id:
-    @python3 -m scripts.checks.local_acceptance --format json {{quote(run_id)}}
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format json --acceptance-run-id {{quote(run_id)}}
 
 # Operator-only, explicit read-only inspection of the configured pilot.
 # Not a dependency of ci/all; never runs a live acceptance or model request.
@@ -133,8 +133,8 @@ preflight-report-json check:
 # This never runs checks or imports live acceptance as proof of inference.
 [no-cd]
 coverage hermetic_json:
-    @python3 -m scripts.checks.coverage --format text --hermetic-json {{quote(hermetic_json)}}
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format text --coverage --hermetic-json {{quote(hermetic_json)}}
 
 [no-cd]
 coverage-json hermetic_json:
-    @python3 -m scripts.checks.coverage --format json --hermetic-json {{quote(hermetic_json)}}
+    @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format json --coverage --hermetic-json {{quote(hermetic_json)}}
