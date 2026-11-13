@@ -1,4 +1,4 @@
-package cli
+package aggregateops
 
 import (
 	"context"
@@ -12,13 +12,15 @@ import (
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
-// The gateway cleanup API preserves volumes and checks ownership; force is
-// deliberately not offered by aggregate remove.
-var removeAggregateGateway = func(ctx context.Context, spec gateway.Spec) error {
-	return spec.Remove(ctx, false)
-}
-
-func runAggregateRemove(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
+// Remove preflights every configured spec before any destructive operation.
+// Capabilities are bound at the CLI root so failure injections are preserved.
+func Remove(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config,
+	ids func(*config.Config) []string,
+	executeWorkload func(context.Context, workload.Spec, workload.Options) error,
+	executeHerdrClient func(context.Context, herdrclient.Spec, herdrclient.Options) error,
+	removeAggregateGateway func(context.Context, gateway.Spec) error,
+	executeManagementNetwork func(context.Context, managementnetwork.Spec, managementnetwork.Options) error,
+) int {
 	if len(args) != 0 {
 		fmt.Fprintln(stderr, "Usage: aginctus [global options] remove")
 		return 2
@@ -26,8 +28,8 @@ func runAggregateRemove(ctx context.Context, args []string, out, stderr io.Write
 	// Resolve every configured resource before executing destructive steps.
 	// Removal runs opposite to deployment dependencies: workloads, Herdr,
 	// gateway and finally the shared network.
-	workloads := make([]workload.Spec, 0, len(workloadIDs(cfg)))
-	for _, id := range workloadIDs(cfg) {
+	workloads := make([]workload.Spec, 0, len(ids(cfg)))
+	for _, id := range ids(cfg) {
 		spec, err := workload.FromConfig(cfg, id)
 		if err != nil {
 			fmt.Fprintf(stderr, "workload %q configuration: %v\n", id, err)
