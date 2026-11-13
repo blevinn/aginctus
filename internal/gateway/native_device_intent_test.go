@@ -31,7 +31,7 @@ func TestNativeGatewayDevicePlanPreservesIsolation(t *testing.T) {
 	if got.Postgres["root"]["pool"] != "rootpool" || got.LiteLLM["root"]["pool"] != "rootpool" {
 		t.Fatal("root pool mismatch")
 	}
-	if got.LiteLLM["egress"]["ipv4.address"] != "10.43.0.12" {
+	if got.LiteLLM["egress"]["ipv4.address"] != "10.43.0.12/24" {
 		t.Fatal("incorrect pinned egress address")
 	}
 	for _, v := range []map[string]map[string]string{got.Postgres, got.LiteLLM} {
