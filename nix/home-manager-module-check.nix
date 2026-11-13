@@ -278,8 +278,8 @@ assert lib.hasInfix "aginctus-hm-workload-candidate.json" (
 assert lib.all (a: a.assertion) withCandidate.assertions;
 assert lib.any (a: !a.assertion) duplicateCandidate.assertions;
 assert lib.any (a: !a.assertion) duplicateProfiles.assertions;
-assert !(builtins.tryEval invalidFingerprint.programs.aginctus.workloadCandidate.workloads).success;
-assert !(builtins.tryEval invalidSecretField.programs.aginctus.workloadCandidate.workloads).success;
+assert !(builtins.tryEval (builtins.deepSeq invalidFingerprint.programs.aginctus.workloadCandidate.workloads true)).success;
+assert !(builtins.tryEval (builtins.deepSeq invalidSecretField.programs.aginctus.workloadCandidate.workloads true)).success;
 assert
   withAssets.programs.aginctus.settings.gateway.providers.go.config.models.coding.source
   == "openai/gpt-6-luna";
