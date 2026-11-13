@@ -46,7 +46,7 @@ func TestObserveGatewayImageReuseRejectsUnknownAndForeign(t *testing.T){
 		"missing project":func(_ *GatewayImageEvidence,r *fakeGatewayReuseReader){r.project=nil},
 		"wrong selected project":func(_ *GatewayImageEvidence,r *fakeGatewayReuseReader){r.info.Project="default"},
 		"missing alias":func(_ *GatewayImageEvidence,r *fakeGatewayReuseReader){r.alias=nil},
-		"wrong alias target":func(_ *GatewayImageEvidence,r *fakeGatewayReuseReader){r.alias.Target=strings.Repeat("c",64)},
+		"wrong alias target":func(_ *GatewayImageEvidence,r *fakeGatewayReuseReader){r.alias.Target=strings.Repeat("d",64)},
 		"missing image":func(_ *GatewayImageEvidence,r *fakeGatewayReuseReader){r.image=nil},
 		"foreign image":func(_ *GatewayImageEvidence,r *fakeGatewayReuseReader){r.image.Project="foreign"},
 		"config digest drift":func(e *GatewayImageEvidence,_ *fakeGatewayReuseReader){e.Identity.ConfigDigest="sha256:"+strings.Repeat("d",64)},
