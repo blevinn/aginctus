@@ -8,6 +8,7 @@ import (
 	aggregateops "github.com/blevinn/aginctus/internal/cli/operations/aggregate"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
+	"github.com/blevinn/aginctus/internal/orchestration"
 	"github.com/spf13/cobra"
 )
 
@@ -45,4 +46,22 @@ var removeAggregateGateway = func(ctx context.Context, spec gateway.Spec) error 
 func runAggregateRemove(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
 	return aggregateops.Remove(ctx, args, out, stderr, cfg, workloadIDs,
 		executeWorkload, executeHerdrClient, removeAggregateGateway, executeManagementNetwork)
+}
+
+// Aggregate apply remains a thin entrypoint to the existing typed planner,
+// execution engine and strict regular-file parser. The engine variable is
+// retained as the regression tests' explicit failure-injection seam.
+func aggregateApplyPlan(effective *config.Config) (orchestration.Plan, error) {
+	return aggregateops.Plan(effective, workloadIDs)
+}
+
+var executeAggregatePlan = aggregateops.ExecutePlan
+
+func executeAggregateApply(ctx context.Context, render bool, fromFile string, stdout, stderr io.Writer, effective *config.Config) int {
+	return aggregateops.Apply(ctx, render, fromFile, stdout, stderr, effective,
+		aggregateApplyPlan, readAggregatePlan, executeAggregatePlan)
+}
+
+func readAggregatePlan(path string) (orchestration.Plan, error) {
+	return aggregateops.ReadPlan(path)
 }
