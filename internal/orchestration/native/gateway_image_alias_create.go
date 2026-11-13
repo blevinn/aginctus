@@ -132,6 +132,11 @@ func CreateGatewayImageAliasWithClient(ctx context.Context,in GatewayAliasCreate
 	if err!=nil || alias==nil || alias.Name!=in.Alias || alias.Target!=in.Image.IncusFingerprint {
 		return fail("verification",true,fmt.Errorf("created alias identity unverified"))
 	}
+	image,_,err:=client.GetImage(in.Image.IncusFingerprint)
+	if err!=nil || image==nil || image.Fingerprint!=in.Image.IncusFingerprint ||
+		image.Project!=in.Project || image.Type!="container" {
+		return fail("verification",true,fmt.Errorf("created alias target image unverified"))
+	}
 	if err:=ctx.Err();err!=nil{return fail("verification",true,err)}
 	result.Verified=true
 	return result,nil
