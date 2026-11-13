@@ -250,5 +250,23 @@ pkgs.testers.runNixOSTest {
 
     # Human-readable evidence never includes private key or cert contents.
     print("INCUS AUTHORITY TEST: confined positive operations, forbidden operations and host invariants checked; version: " + machine.succeed("incus version").strip())
+    # Revoke the exact fixture certificate only AFTER all positive/negative
+    # checks. The guest administrator, not the user, removes its trust entry.
+    # Require independent administrator positive controls before and after:
+    # failure caused by daemon downtime is not revocation evidence.
+    fingerprints = machine.succeed("incus config trust list --format json | jq -er '[.[] | select(.restricted == true and ((.projects // []) | index(\"aginctus-authz\")))] | if length == 1 then .[0].fingerprint else error(\"ambiguous scoped certificate\") end'").strip()
+    assert len(fingerprints) >= 16 and all(c in "0123456789abcdef" for c in fingerprints.lower()), "invalid restricted certificate fingerprint"
+    machine.succeed("incus list --project aginctus-authz --format json | jq -e 'any(.[]; .name == \"scope-control\")'")
+    machine.succeed("incus config trust remove " + shlex.quote(fingerprints))
+    revoked_status, revoked_output = machine.execute(operator + " incus list scoped: --project aginctus-authz --format json 2>&1", timeout=30)
+    assert revoked_status != 0, "revoked operator certificate still enumerated project resources"
+    machine.succeed("incus list --project aginctus-authz --format json | jq -e 'any(.[]; .name == \"scope-control\")'")
+    # Use the previously working SAME TLS client directly, bypassing CLI
+    # preflight/remote configuration. The resource is still present to root.
+    status, response = api_get("/1.0/instances/scope-control?project=aginctus-authz")
+    assert status in [401, 403, 404] and response["type"] == "error", "revoked TLS certificate retained named-resource read authority"
+    machine.succeed("incus config show scope-control --project aginctus-authz | grep -q allowed-only")
+    print("INCUS AUTHORITY REVOCATION: stale CLI and same-certificate raw API denied; admin positive controls retained")
+
   '';
 }
