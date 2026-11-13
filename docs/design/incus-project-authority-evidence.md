@@ -29,7 +29,7 @@ This is intentionally excluded from ordinary PR hermetic checks due to its cost 
 | Host-level denial | Deny daemon configuration, bridge and pool creation, project creation/policy relaxation | **Passed:** nonzero permission/policy errors |
 | Host filesystem protection | Deny user-added host disk and low-level unconfined runtime config | **Passed:** server reported forbidden pool-less disk and `raw.lxc` |
 | Invariants | Compare host bridge, foreign project, pool and instance configuration before/after denied attempts | **Passed**, including foreign volumes and daemon config; instance baseline taken after start/stop |
-| Recovery/revocation | Revoke client while operations occur; crash/restore state service; test altered bridge/pool policy | **Not implemented; follow-up required** |
+| Recovery/revocation | Revoke test TLS credential after permitted operations; require stale CLI and raw API denial with administrator existence controls. Mid-flight revoke/crash recovery remain separate | **Revocation fixture proposed; real VM execution pending** |
 | Confused deputy and schema upgrades | Adversarial nested/dotted config, cross-principal merge, defaults/null/unknown paths, TOCTOU | **Not implemented; blocked until #696 design** |
 
 Attach the full **nonsecret** test output and the Nix/Incus version identity to #704 as an issue comment or in repository-local committed evidence. Never attach client private keys, client certificate body, tokens, environment or runtime secrets. Explicitly identify any probe that failed because of invalid CLI syntax or unsupported feature: that is a **test failure**, not proof of denial.
@@ -84,10 +84,7 @@ Other observed denials were `Certificate is restricted`, `Network not
 allowed in project`, `User does not have permission for project
 "unrelated"`, and explicit forbidden host-disk / low-level-config errors.
 The guest reported AppArmor unavailable; these results exercise API policy,
-not AppArmor confinement or container-escape resistance. Revocation,
-restart/crash recovery, custom-volume attachment, populated foreign-image
-isolation, and state-service confused-deputy/TOCTOU checks
-remain outstanding. No authorization approval or cross-principal write
+not AppArmor confinement or container-escape resistance. The certificate-revocation fixture is now proposed but **not yet executed** on its exact head. In-flight revocation, restart/crash recovery, custom-volume attachment, populated foreign-image isolation, and state-service confused-deputy/TOCTOU checks remain outstanding. No authorization approval or cross-principal write
 permission follows from these partial results.
 
 ## Security disposition (must be reviewed, not auto-filled)
