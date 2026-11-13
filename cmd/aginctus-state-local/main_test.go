@@ -83,6 +83,9 @@ func TestLocalAcceptanceFailsClosedOnIdentityAndUnsafeCandidate(t *testing.T) {
 		{"accept","--state-dir",root,"--deployment","demo","--project","foreign","--candidate",candidate,"--expected-revision","none","--confirm"},
 		{"accept","--state-dir",root,"--deployment","demo","--project","isolated","--candidate",candidate,"--expected-revision","other","--confirm"},
 		{"init","--state-dir",root,"--confirm"},
+		{"status","--state-dir",root,"--deployment","demo","--project","default"},
+		{"status","--state-dir",root,"--deployment","../unsafe","--project","isolated"},
+		{"status","--state-dir",root,"--deployment","demo","--project","../unsafe"},
 	} {
 		var out bytes.Buffer
 		if err:=run(args,&out);err==nil{t.Fatalf("accepted invalid operation: %v",args)}
