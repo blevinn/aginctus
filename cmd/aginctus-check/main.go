@@ -21,13 +21,29 @@ func execute(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	format := flags.String("format", "text", "text or json")
 	verbose := flags.Bool("verbose", false, "stream unfiltered diagnostic output; local trusted use only")
 	vmRunID := flags.String("vm-run-id", "", "inspect an existing private VM receipt; never start a VM")
+	acceptanceID := flags.String("acceptance-run-id", "", "inspect an existing private acceptance receipt")
+	coverageMode := flags.Bool("coverage", false, "compose explicitly selected existing evidence only")
+	hermeticJSON := flags.String("hermetic-json", "", "existing bounded hermetic JSON file for coverage")
+	coverageVMID := flags.String("coverage-vm-run-id", "", "existing private VM run ID for coverage")
+	pilotJSON := flags.String("pilot-topology-json", "", "existing pilot topology preflight JSON for coverage")
+	runtimeJSON := flags.String("opencode-runtime-json", "", "existing runtime preflight JSON for coverage")
+	localID := flags.String("local-acceptance-run-id", "", "existing private local acceptance run ID for coverage")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return 2
 	}
-	vmSelected := false
+	vmSelected, acceptanceSelected, hasCoverageSource := false, false, false
+	invalidEmptySource := false
 	flags.Visit(func(entry *flag.Flag) {
-		if entry.Name == "vm-run-id" {
+		switch entry.Name {
+		case "vm-run-id":
 			vmSelected = true
+		case "acceptance-run-id":
+			acceptanceSelected = true
+		case "hermetic-json", "coverage-vm-run-id", "pilot-topology-json", "opencode-runtime-json", "local-acceptance-run-id":
+			hasCoverageSource = true
+			if entry.Value.String() == "" {
+				invalidEmptySource = true
+			}
 		}
 	})
 	if *format != "text" && *format != "json" {
@@ -38,8 +54,14 @@ func execute(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "--verbose cannot be combined with --format json")
 		return 2
 	}
-	if vmSelected && *verbose {
-		fmt.Fprintln(stderr, "--verbose is unavailable for VM evidence")
+	if *verbose && (vmSelected || acceptanceSelected || *coverageMode) {
+		fmt.Fprintln(stderr, "--verbose is unavailable for evidence reports")
+		return 2
+	}
+	if invalidEmptySource || (hasCoverageSource && !*coverageMode) ||
+		(vmSelected && (acceptanceSelected || *coverageMode)) ||
+		(acceptanceSelected && *coverageMode) {
+		fmt.Fprintln(stderr, "conflicting or incomplete evidence selection")
 		return 2
 	}
 	root, err := os.Getwd()
@@ -69,6 +91,41 @@ func execute(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return 0
+	}
+	if acceptanceSelected {
+		view, err := evidence.ReadAcceptance(os.Getenv("AGINCTUS_ACCEPTANCE_REPORT_ROOT"), *acceptanceID)
+		if err != nil {
+			view = evidence.UnavailableAcceptance()
+		}
+		if *format == "json" {
+			err = evidence.WriteJSON(stdout, view)
+		} else {
+			err = evidence.WriteAcceptanceText(stdout, view)
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, "unable to write acceptance evidence report")
+		}
+		// Partial acceptance is never a successful live sign-off.
+		return 1
+	}
+	if *coverageMode {
+		view := evidence.NormalizeCoverage(evidence.CoverageSelection{
+			HermeticJSON: *hermeticJSON, VMRunID: *coverageVMID,
+			VMRoot: filepath.Join(root, ".vm-harness-results"),
+			PilotTopologyJSON: *pilotJSON, OpenCodeRuntimeJSON: *runtimeJSON,
+			AcceptanceRunID: *localID,
+			AcceptanceRoot: os.Getenv("AGINCTUS_ACCEPTANCE_REPORT_ROOT"),
+		})
+		if *format == "json" {
+			err = evidence.WriteJSON(stdout, view)
+		} else {
+			err = evidence.WriteCoverageText(stdout, view)
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, "unable to write coverage evidence report")
+		}
+		// By design this profile cannot independently prove live acceptance.
+		return 1
 	}
 	report := runner.Run(ctx, root, os.Environ(), *verbose, stdout)
 	if *format == "json" {
