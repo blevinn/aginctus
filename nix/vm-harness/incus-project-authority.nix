@@ -8,6 +8,18 @@
 }:
 let
   pkgs = import nixpkgs { inherit system; };
+  # NixOS container image built outside the guest; no Internet image pull,
+  # unpinned alias or copy from a real host is necessary at runtime.
+  workloadImage = nixpkgs.lib.nixosSystem {
+    inherit system;
+    modules = [
+      "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
+      {
+        system.stateVersion = "26.05";
+        networking.useDHCP = false;
+      }
+    ];
+  };
 in
 pkgs.testers.runNixOSTest {
   name = "aginctus-incus-project-authority";
@@ -83,6 +95,21 @@ pkgs.testers.runNixOSTest {
     machine.succeed(operator + " incus profile create scoped:operator-test --project aginctus-authz")
     machine.succeed(operator + " incus storage volume create scoped:default safe-test --project aginctus-authz")
 
+    # Actual approved shared-bridge/root-disk attachment. Import the
+    # immutable Nix-built fixture only via the VM's administrator; a
+    # project-restricted principal must be able to use it without possessing
+    # admin credentials or reading its key material.
+    machine.succeed("incus image import ${workloadImage.config.system.build.metadata}/tarball/* ${workloadImage.config.system.build.tarball}/tarball/* --alias authz-fixture --project aginctus-authz", timeout=180)
+    machine.succeed(operator + " incus init scoped:authz-fixture scoped:allowed-instance --project aginctus-authz --storage default --network authz-mgmt", timeout=180)
+    attached = machine.succeed("incus config show allowed-instance --project aginctus-authz --expanded")
+    assert "authz-mgmt" in attached and "default" in attached, "approved network or root volume was not attached"
+    machine.succeed(operator + " incus start scoped:allowed-instance --project aginctus-authz", timeout=180)
+    machine.succeed(operator + " incus stop scoped:allowed-instance --project aginctus-authz --force", timeout=180)
+    stopped = machine.succeed("incus info allowed-instance --project aginctus-authz")
+    assert "STOPPED" in stopped.upper(), "restricted instance lifecycle failed"
+    # Starting/stopping legitimately adds volatile runtime state. Compare
+    # denial probes against the post-lifecycle configuration, not init state.
+    instance_before = machine.succeed("incus config show allowed-instance --project aginctus-authz --expanded")
     # Nonempty positive controls: no image or running container is needed to
     # test API visibility. Only guest root provisions the foreign resources.
     machine.succeed("incus init foreign-sentinel --empty --project unrelated --storage default -c user.authz_sentinel=foreign-only")
@@ -195,12 +222,16 @@ pkgs.testers.runNixOSTest {
     deny("incus storage volume create scoped:default escape-volume --project unrelated", allow_hidden=True)
     deny("incus profile create scoped:foreign-profile --project unrelated", allow_hidden=True)
     deny("incus config set scoped: core.https_address=0.0.0.0:8443")
+    deny("incus config device add scoped:allowed-instance forbidden-host disk source=/etc path=/host --project aginctus-authz")
+    deny("incus config set scoped:allowed-instance raw.lxc=lxc.apparmor.profile=unconfined --project aginctus-authz")
 
     assert machine.succeed("incus project show aginctus-authz") == protected["project"], "project restrictions changed"
     assert machine.succeed("incus project show unrelated") == protected["foreign"], "foreign project changed"
     assert machine.succeed("incus network show authz-mgmt") == protected["network"], "host-owned bridge changed"
     assert machine.succeed("incus storage list --format json | jq -S .") == protected["pools"], "storage pool inventory changed"
     assert machine.succeed("incus profile list --project unrelated --format json | jq -S .") == protected["foreign_profiles"], "foreign profile inventory changed"
+    assert machine.succeed("incus config show allowed-instance --project aginctus-authz --expanded") == instance_before, "forbidden device/config mutation changed project instance"
+    machine.fail("incus config device show allowed-instance --project aginctus-authz | grep forbidden-host")
     assert machine.succeed("incus storage volume list default --project unrelated --format json | jq -S .") == protected["foreign_volumes"], "foreign volume inventory changed"
     assert machine.succeed("incus config show") == protected["daemon"], "daemon configuration changed"
     assert machine.succeed("incus config show foreign-sentinel --project unrelated --expanded") == foreign_before, "foreign instance changed"
