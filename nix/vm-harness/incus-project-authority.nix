@@ -39,6 +39,7 @@ pkgs.testers.runNixOSTest {
       pkgs.coreutils
       pkgs.util-linux
       pkgs.curl
+      pkgs.openssl
     ];
     users.users.operator = {
       uid = 1000;
@@ -247,6 +248,50 @@ pkgs.testers.runNixOSTest {
     assert routing in ["", "tls"], "restricted-TLS authorization evaluator was overridden"
     print("INCUS AUTHORITY VERSION: " + machine.succeed("incus version").strip() + "; TLS routing: " + repr(routing))
     assert not failures, "restricted principal completed forbidden actions: " + repr(failures)
+
+    # Revocation and re-enrollment must be enforced by Incus, not by a
+    # cached CLI project selector. Establish a positive control on the same
+    # client certificate and HTTP route before revoking its trust entry.
+    client_fingerprint = machine.succeed(
+      "openssl x509 -in /home/operator/.config/incus/client.crt -outform DER | sha256sum"
+    ).split()[0]
+    trusted = json.loads(machine.succeed("incus config trust list --format json"))
+    matching = [cert for cert in trusted if cert.get("fingerprint", "").lower() == client_fingerprint]
+    assert len(matching) == 1, "test client certificate missing from trust store"
+    assert matching[0].get("restricted") is True and matching[0].get("projects") == ["aginctus-authz"], "unexpected test principal authority"
+    assert "scope-control" in json.dumps(instances("/1.0/instances?project=aginctus-authz&recursion=1")), "pre-revocation positive control missing"
+
+    # Revoking trust must remove all accepted requests from the old credential.
+    # The test server itself remains healthy and admin-owned fixtures persist.
+    machine.succeed("incus config trust remove " + shlex.quote(client_fingerprint))
+    machine.wait_until_succeeds(
+      operator + " curl --silent --show-error --max-time 15 --insecure" +
+      " --cert /home/operator/.config/incus/client.crt" +
+      " --key /home/operator/.config/incus/client.key" +
+      " --output /dev/null --write-out '%{http_code}'" +
+      " 'https://127.0.0.1:8443/1.0/instances?project=aginctus-authz&recursion=1' | grep -qx 403",
+      timeout=60,
+    )
+    machine.fail(operator + " incus list scoped: --project aginctus-authz --format json")
+    assert "scope-control" in json.dumps(instances("/1.0/instances?project=aginctus-authz&recursion=1", admin=True)), "daemon or instance unavailable after revocation"
+    assert "foreign-sentinel" in json.dumps(instances("/1.0/instances?project=unrelated&recursion=1", admin=True)), "foreign resources changed during revocation"
+
+    # Recovery remains an independently authorized administrator action.
+    # Re-add ONLY the project-scoped public certificate and verify previous
+    # project confinement persists rather than granting full-server access.
+    machine.succeed(
+      "incus config trust add-certificate /home/operator/.config/incus/client.crt" +
+      " --restricted --projects aginctus-authz"
+    )
+    machine.wait_until_succeeds(
+      operator + " incus list scoped: --project aginctus-authz --format json" +
+      " | jq -e 'any(.[]; .name == \"scope-control\")'",
+      timeout=60,
+    )
+    assert instances("/1.0/instances?project=unrelated&recursion=1") == [], "revived client gained foreign project visibility"
+    status, response = api_get("/1.0/instances/foreign-sentinel?project=unrelated")
+    assert status == 403 and response["type"] == "error", "re-enrolled credential gained foreign read"
+    print("INCUS AUTHORITY REVOCATION: restricted credential denied after removal; scoped permissions restored only after administrator re-enrollment")
 
     # Human-readable evidence never includes private key or cert contents.
     print("INCUS AUTHORITY TEST: confined positive operations, forbidden operations and host invariants checked; version: " + machine.succeed("incus version").strip())
