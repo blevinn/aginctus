@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	clihelp "github.com/blevinn/aginctus/internal/cli/help"
+	configops "github.com/blevinn/aginctus/internal/cli/operations/config"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -90,7 +91,7 @@ func runBasicCobra(
 		RunE: func(_ *cobra.Command, _ []string) error {
 			effective, err := load()
 			if err == nil {
-				status = runConfig([]string{"show"}, stdout, stderr, effective)
+				status = configops.Run([]string{"show"}, stdout, stderr, effective)
 			}
 			return nil
 		},
@@ -100,7 +101,7 @@ func runBasicCobra(
 		RunE: func(_ *cobra.Command, args []string) error {
 			effective, err := load()
 			if err == nil {
-				status = runConfig(append([]string{"get"}, args...), stdout, stderr, effective)
+				status = configops.Run(append([]string{"get"}, args...), stdout, stderr, effective)
 			}
 			return nil
 		},
