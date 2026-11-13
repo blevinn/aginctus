@@ -11,7 +11,7 @@
 
 The configured → accepted → current model is not in doubt. The question is **who has authority to accept and execute each scope**. A recursively merged NixOS/root and Home Manager/user configuration tree invites privilege-escalation bugs, even if a server tracks every edit with a single CAS revision. A selected Incus project over the administrative Unix socket does not confine the client.
 
-Tested restricted Incus 7.5.1 TLS principals have successfully passed meaningful positive/negative project isolation tests. They can use an explicitly allowed host-owned bridge/pool and cannot read populated foreign resources or change the host project's policy. This is strong *API-policy* evidence, not proof of container escape safety, correct application authentication, or authority transfer. Credential revocation and custom-volume/image expansion are implemented in the subsequent opt-in VM test stack but require successful recorded execution before being treated as evidence.
+Tested restricted Incus 7.5.1 TLS principals have successfully passed meaningful positive/negative project isolation tests. They can use an explicitly allowed host-owned bridge/pool and cannot read populated foreign resources or change the host project's policy. This is strong *API-policy* evidence, not proof of container escape safety, correct application authentication, or authority transfer. Post-operation credential revocation/re-enrollment and custom-volume/image expansion also passed the opt-in VM stack; exact source identities, outcomes and limitations are recorded in the [authorization ledger](../design/incus-project-authority-evidence.md#expanded-imagevolume-execution-775).
 
 ## Proposed topology
 
@@ -69,7 +69,7 @@ One physical database could eventually store multiple logically separate authori
 
 **The following are not checked by approving this proposed ADR text:**
 
-- Execute the opt-in restricted-TLS **revocation/re-enrollment** and **foreign-image/project-local custom-volume** VM cases on the pinned Incus/NixOS revision; record exact outcomes, server version and redacted evidence.
+- Preserve the recorded opt-in restricted-TLS **revocation/re-enrollment** and **foreign-image/project-local custom-volume** VM evidence, and rerun it when the pinned Incus/NixOS revision or relevant policy changes. These executed cases do not satisfy the remaining obligations below, including in-flight/persistent-connection revocation.
 - Test `features.networks=false` shared-host bridge inheritance, policy changes while an operator writes, and unexpected Incus credential/feature upgrades without relying on a CLI `--project` assertion.
 - Build #696's actual authenticated state-service API and test hostile nested keys, source overlays, null/default/unknown values, stale revision/credential, TOCTOU, schema upgrades and user attempts to set host capabilities.
 - Prove the selected operator writer cannot access unrestricted `incus-admin` or host root credentials, and that the state service cannot act as a confused deputy.

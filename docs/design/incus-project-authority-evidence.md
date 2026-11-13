@@ -1,6 +1,6 @@
 # Incus project authority: disposable acceptance evidence and decision ledger
 
-**Status: IMPLEMENTED VM MATRIX PASSED / NOT SECURITY APPROVED**. The [separate host/project authority proposal](../adr/0005-provisional-authority-topology.md) is **proposed**, not a sign-off. Additional revocation and volume/image tests are in open stacked PRs and have **no recorded real-VM results** yet. Tracking: [#704](https://github.com/blevinn/aginctus/issues/704), [#693](https://github.com/blevinn/aginctus/issues/693); test code in the #750 → #752 → #756 stack. See [threat model](incus-project-authority-gate.md) and [ADR 0004](../adr/0004-three-layer-state.md).
+**Status: IMPLEMENTED VM MATRIX PASSED / NOT SECURITY APPROVED**. The [separate host/project authority proposal](../adr/0005-provisional-authority-topology.md) is **proposed**, not a sign-off. The #773/#775 post-operation revocation and volume/image expansions also passed real disposable VM execution as recorded below. Tracking: [#704](https://github.com/blevinn/aginctus/issues/704), [#693](https://github.com/blevinn/aginctus/issues/693); baseline test code in the #750 → #752 → #756 stack. See [threat model](incus-project-authority-gate.md) and [ADR 0004](../adr/0004-three-layer-state.md).
 
 ## Why this ledger exists
 
@@ -24,6 +24,7 @@ This is intentionally excluded from ordinary PR hermetic checks due to its cost 
 | Real server identity and authorization routing | Capture `incus version`, server restricted-TLS routing and effective project settings | **Observed:** client/server 7.5.1; routing empty (default TLS evaluator); project assertions passed |
 | Operator identity | Client cert registered for one project, no Unix `incus-admin` access | **Passed** in disposable VM |
 | Allowed operations | Read permitted project, create project profile and volume | **Passed** in disposable VM |
+| Expanded storage/image boundary | Mount an allowed managed custom volume; filter populated foreign images and deny named foreign image/volume access and foreign-only attachment | **Passed** on #775; exact execution below |
 | Approved shared bridge | Create and run/stop pinned image instance on approved host bridge and pool | **Passed** on `authz-mgmt` / `default` |
 | Foreign project isolation | Filter populated foreign instance collections; deny named instance/profile/volume reads and mutations | **Passed:** CLI/raw API hide foreign instance; named API reads HTTP 403; CLI reads/mutations denied; admin existence controls passed |
 | Host-level denial | Deny daemon configuration, bridge and pool creation, project creation/policy relaxation | **Passed:** nonzero permission/policy errors |
@@ -85,7 +86,7 @@ Other observed denials were `Certificate is restricted`, `Network not
 allowed in project`, `User does not have permission for project
 "unrelated"`, and explicit forbidden host-disk / low-level-config errors.
 The guest reported AppArmor unavailable; these results exercise API policy,
-not AppArmor confinement or container-escape resistance. Post-operation revocation/re-enrollment passed as recorded below. In-flight/persistent-connection revocation, restart/crash recovery, custom-volume attachment, populated foreign-image isolation, and state-service confused-deputy/TOCTOU checks remain outstanding in this branch. No authorization approval or cross-principal write
+not AppArmor confinement or container-escape resistance. Post-operation revocation/re-enrollment and the expanded storage/image boundary passed as recorded below. In-flight/persistent-connection revocation, restart/crash recovery, and state-service confused-deputy/TOCTOU checks remain outstanding. No authorization approval or cross-principal write
 permission follows from these partial results.
 
 ### Post-operation revocation execution (#773 / #774)
@@ -130,6 +131,41 @@ nix log /nix/store/bgjnbsv43ay3gri5xxblfi9napvksn8w-vm-test-run-aginctus-incus-p
 These are new-request, post-operation checks. They do not test an existing
 keep-alive connection, cancel an already accepted asynchronous operation,
 prove rollback, or resolve the remaining #704 authorization gates.
+
+### Expanded image/volume execution (#775)
+
+Executed on 2026-11-13 at #775 head
+`05e5aeb7c8cbc587905f212d6e32ed266c7c7c21`, with the same Nix 2.34.9,
+nixpkgs pin, KVM guest size and Incus **7.5.1** as the revocation run.
+This proposal head inherits exactly that test source. Build output:
+`/nix/store/z6xjpziggjxw5lapw6502b6wr1ccdanf-vm-test-run-aginctus-incus-project-authority`.
+The local driver log is available through
+`nix log /nix/store/nacpdcs46jbc883zhk28mqy1mvakjmpl-vm-test-run-aginctus-incus-project-authority.drv`
+and was captured in `/tmp/opencode/restricted-775-vm-fixed.log`.
+
+- Administrator imported a private foreign image into the populated
+  `unrelated` project. Its raw inventory contained the fingerprint.
+  Restricted TLS image inventory returned HTTP 200 with exactly empty
+  metadata; named foreign image GET returned HTTP 404/error.
+- With explicit `restricted.devices.disk=managed` and the approved pool,
+  the operator attached `safe-test` to `/mnt/safe`. The workload booted,
+  and an in-container `mountpoint -q /mnt/safe` succeeded. The project-local
+  volume raw GET returned HTTP 200; foreign custom-volume GET returned
+  HTTP 403/error.
+- Attaching the foreign-only `foreign-sentinel` source in the allowed
+  project failed with `Storage volume not found`, not CLI syntax or
+  transport failure. The allowed instance config and foreign volume
+  sentinel were unchanged. This proves namespace resolution/absence,
+  not permission to address or mount a foreign project's volume.
+- The complete prior denial matrix and named GET/PATCH revocation and
+  restricted re-enrollment tests also passed. The successful test script
+  finished in 54.14 seconds. No host Incus daemon or production credential
+  was used. AppArmor confinement and in-flight cancellation remain unproved.
+
+The pure policy candidate in #770 intentionally models the earlier #756
+config and does not explicitly pin `restricted.devices.disk`. Matching
+that candidate is not runtime evidence for the volume capability tested
+here and must not silently change an existing deployment's policy.
 
 ## Security disposition (must be reviewed, not auto-filled)
 
