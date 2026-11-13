@@ -113,21 +113,6 @@ type mutationOptions struct {
 	Force  bool
 }
 
-func parseNetworkOptions(args []string) (mutationOptions, error) {
-	var options mutationOptions
-	for _, arg := range args {
-		switch arg {
-		case "--dry-run":
-			options.DryRun = true
-		case "--force":
-			options.Force = true
-		default:
-			return mutationOptions{}, fmt.Errorf("unknown option %q", arg)
-		}
-	}
-	return options, nil
-}
-
 var ensureCredentialStorage = gateway.EnsureCredentialVolume
 var attachGatewayCredentials = gateway.AttachCredentialVolume
 var auditGatewayCredentials = gateway.AuditCredentialAttachment
