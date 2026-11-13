@@ -7,6 +7,7 @@ import (
 	aggregatecmd "github.com/blevinn/aginctus/internal/cli/commands/aggregate"
 	aggregateops "github.com/blevinn/aginctus/internal/cli/operations/aggregate"
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/spf13/cobra"
 )
 
@@ -34,4 +35,14 @@ func runAggregateStatus(ctx context.Context, args []string, out, stderr io.Write
 		{Name: "Herdr client", Run: runHerdrClientStatus},
 		{Name: "workloads", Run: runWorkloadStatus},
 	})
+}
+
+// The aggregate removal path never exposes force and preserves volumes.
+var removeAggregateGateway = func(ctx context.Context, spec gateway.Spec) error {
+	return spec.Remove(ctx, false)
+}
+
+func runAggregateRemove(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
+	return aggregateops.Remove(ctx, args, out, stderr, cfg, workloadIDs,
+		executeWorkload, executeHerdrClient, removeAggregateGateway, executeManagementNetwork)
 }
