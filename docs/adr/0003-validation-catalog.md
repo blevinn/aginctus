@@ -66,3 +66,25 @@ Do not create a second VM backend, grant agents host powers, rewrite CLI
 parsing, change production gateway behavior or run pilot/privileged tests.
 
 Related: #491, #425, #457, #475, #293, #296, #514, #630.
+
+## Read-only evidence convergence (v0.2 follow-up)
+
+The Go validation subsystem now validates independently selected hermetic v1,
+private disposable VM, private local acceptance, and read-only pilot preflight
+receipts. The Go coverage compositor reports missing sources as not_run,
+invalid sources as error, and all independent live verification dimensions as
+not_run/not_verified. It **never** upgrades mock tests, command exits, synthetic
+gateway observations or guest-authored traces to live acceptance proof.
+
+The existing Just `acceptance-report*` and `coverage*` adapters invoke the
+read-only Go viewer. Their arguments and nonzero incomplete-acceptance exit
+behavior remain unchanged; Python implementations remain as independently
+testable compatibility validators for the migration. `preflight-report*`
+still invoke the explicitly operator-selected Python preflight **executor**:
+it touches the configured pilot and must not silently become part of hermetic
+checks or the read-only Go view. Python LiteLLM integrations, guest fixtures,
+and NixOS test driver are retained intentionally.
+
+Issue #514 separately governs trustworthy live observations; this design
+does not assert that such acceptance has been performed. No new signer,
+Incus authority or privileged agent-facing command is introduced.
