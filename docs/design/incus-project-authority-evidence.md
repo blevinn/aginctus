@@ -1,6 +1,6 @@
 # Incus project authority: disposable acceptance evidence and decision ledger
 
-**Status: IMPLEMENTED VM MATRIX PASSED / NOT SECURITY APPROVED**. Tracking: [#704](https://github.com/blevinn/aginctus/issues/704), [#693](https://github.com/blevinn/aginctus/issues/693); test code in the #750 → #752 → #756 stack. See [threat model](incus-project-authority-gate.md) and [ADR 0004](../adr/0004-three-layer-state.md).
+**Status: IMPLEMENTED VM MATRIX PASSED / NOT SECURITY APPROVED**. The [separate host/project authority proposal](../adr/0005-provisional-authority-topology.md) is **proposed**, not a sign-off. Additional revocation and volume/image tests are in open stacked PRs and have **no recorded real-VM results** yet. Tracking: [#704](https://github.com/blevinn/aginctus/issues/704), [#693](https://github.com/blevinn/aginctus/issues/693); test code in the #750 → #752 → #756 stack. See [threat model](incus-project-authority-gate.md) and [ADR 0004](../adr/0004-three-layer-state.md).
 
 ## Why this ledger exists
 
