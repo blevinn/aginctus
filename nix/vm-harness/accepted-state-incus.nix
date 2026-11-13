@@ -9,7 +9,9 @@
 let
   pkgs = import nixpkgs { inherit system; };
   stateDir = "/var/lib/aginctus-accepted/local";
-  socket = "${stateDir}/status.sock";
+  # Socket lifetime is the service lifetime, not the accepted records' lifetime.
+  # A forced instance stop must not persist an unowned stale listener path.
+  socket = "/run/aginctus-state-readonly/status.sock";
   stateLocal = self.packages.${system}.state-local;
   stateService = self.packages.${system}.state-service;
   guestImage = nixpkgs.lib.nixosSystem {
@@ -39,6 +41,8 @@ let
           serviceConfig = {
             Type = "simple";
             User = "aginctusstate";
+            RuntimeDirectory = "aginctus-state-readonly";
+            RuntimeDirectoryMode = "0700";
             ExecStart = "${stateService}/bin/aginctus-state --state-dir ${stateDir} --socket ${socket}";
             Restart = "on-failure";
           };
@@ -73,7 +77,11 @@ pkgs.testers.runNixOSTest {
       incus.enable = true;
       incus.package = pkgs.incus;
     };
-    environment.systemPackages = [ pkgs.incus pkgs.jq ];
+    environment.systemPackages = [
+      pkgs.incus
+      pkgs.jq
+      pkgs.coreutils
+    ];
   };
 
   testScript = ''
@@ -88,7 +96,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus config device add accepted-service accepted-data disk pool=default source=accepted-data path=/var/lib/aginctus-accepted --project accepted-state-probe")
     machine.succeed("incus start accepted-service --project accepted-state-probe", timeout=180)
 
-    guest = "incus exec accepted-service --project accepted-state-probe --"
+    guest = "timeout 20 incus exec accepted-service --project accepted-state-probe --disable-stdin --"
     runuser = guest + " /run/current-system/sw/bin/runuser -u aginctusstate --"
     machine.wait_until_succeeds(guest + " /run/current-system/sw/bin/id aginctusstate", timeout=120)
     machine.succeed(guest + " /run/current-system/sw/bin/chown aginctusstate:aginctusstate /var/lib/aginctus-accepted")
@@ -110,12 +118,23 @@ pkgs.testers.runNixOSTest {
         return report["revision"]["id"]
 
     first_revision = accepted_status()
+    def record_hashes():
+        return machine.succeed(
+          runuser + " /run/current-system/sw/bin/sha256sum ${stateDir}/active.json" +
+          " ${stateDir}/revisions/" + first_revision + ".json"
+        )
+
+    first_records = record_hashes()
     machine.succeed(guest + " /run/current-system/sw/bin/systemctl start aginctus-state-readonly.service")
-    machine.wait_until_succeeds(guest + " /run/current-system/sw/bin/systemctl is-active --quiet aginctus-state-readonly.service", timeout=60)
 
     def read_socket():
+        # Type=simple start/restart returning does not imply HTTP readiness.
+        machine.wait_until_succeeds(
+          runuser + " /run/current-system/sw/bin/curl --silent --show-error --fail --max-time 5" +
+          " --unix-socket ${socket} http://localhost/v1/health", timeout=60
+        )
         report = machine.succeed(
-          runuser + " /run/current-system/sw/bin/curl --silent --show-error --fail" +
+          runuser + " /run/current-system/sw/bin/curl --silent --show-error --fail --max-time 5" +
           " --unix-socket ${socket} 'http://localhost/v1/active?deployment=probe'"
         )
         parsed = json.loads(report)
@@ -124,10 +143,16 @@ pkgs.testers.runNixOSTest {
 
     read_socket()
     # A different process UID must not read the socket even within the guest.
-    machine.fail(
-      guest + " /run/current-system/sw/bin/curl --silent --show-error --fail" +
+    denial = machine.succeed(
+      guest + " /run/current-system/sw/bin/curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code}'" +
       " --unix-socket ${socket} 'http://localhost/v1/active?deployment=probe'"
     )
+    assert denial.strip() == "403", "cross-UID probe did not reach the authorization boundary"
+    write_denial = machine.succeed(
+      runuser + " /run/current-system/sw/bin/curl --silent --show-error --max-time 5 --request POST --output /dev/null --write-out '%{http_code}'" +
+      " --unix-socket ${socket} 'http://localhost/v1/active?deployment=probe'"
+    )
+    assert write_denial.strip() == "405", "read-only service accepted a write method"
     machine.succeed(guest + " /run/current-system/sw/bin/systemctl restart aginctus-state-readonly.service")
     read_socket()
 
@@ -141,13 +166,15 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus config device add accepted-service accepted-data disk pool=default source=accepted-data path=/var/lib/aginctus-accepted --project accepted-state-probe")
     machine.succeed("incus start accepted-service --project accepted-state-probe", timeout=180)
     machine.wait_until_succeeds(guest + " /run/current-system/sw/bin/id aginctusstate", timeout=120)
+    machine.succeed(guest + " /run/current-system/sw/bin/test ! -e /tmp/pinned.json")
     assert accepted_status() == first_revision, "accepted revision lost on service instance recreation"
+    assert record_hashes() == first_records, "persistent revision record bytes changed"
     machine.succeed(guest + " /run/current-system/sw/bin/systemctl start aginctus-state-readonly.service")
     read_socket()
 
     # No host Incus administration socket or gateway credentials are passed
     # into the state-service guest. An explicit host operator must own setup.
-    machine.fail(guest + " /run/current-system/sw/bin/test -e /var/lib/incus/unix.socket")
+    machine.succeed(guest + " /run/current-system/sw/bin/test ! -e /var/lib/incus/unix.socket")
     machine.succeed("incus storage volume show default accepted-data --project accepted-state-probe")
     machine.succeed("incus list --project default --format json | jq -e 'length == 0'")
     print("ACCEPTED STATE INCUS: external volume survived service instance recreation, read-only same-UID Unix inspection and explicit CAS persisted")
