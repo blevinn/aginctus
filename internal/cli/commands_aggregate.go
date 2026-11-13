@@ -5,6 +5,7 @@ import (
 	"io"
 
 	aggregatecmd "github.com/blevinn/aginctus/internal/cli/commands/aggregate"
+	aggregateops "github.com/blevinn/aginctus/internal/cli/operations/aggregate"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -21,5 +22,16 @@ func addAggregateCommands(root *cobra.Command, stdout, stderr io.Writer,
 		Status: func(ctx context.Context, out, errOut io.Writer, cfg *config.Config) int {
 			return runAggregateStatus(ctx, nil, out, errOut, cfg)
 		},
+	})
+}
+
+// runAggregateStatus binds the existing independent resource inspections to
+// the all-or-nothing aggregate formatter, retaining the original order.
+func runAggregateStatus(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
+	return aggregateops.Status(ctx, args, out, stderr, cfg, []aggregateops.StatusCheck{
+		{Name: "network", Run: runNetworkStatus},
+		{Name: "gateway", Run: runGatewayStatus},
+		{Name: "Herdr client", Run: runHerdrClientStatus},
+		{Name: "workloads", Run: runWorkloadStatus},
 	})
 }
