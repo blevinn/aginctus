@@ -17,6 +17,7 @@ let
       {
         system.stateVersion = "26.05";
         networking.useDHCP = false;
+        environment.systemPackages = [ pkgs.util-linux ];
       }
     ];
   };
@@ -289,7 +290,7 @@ pkgs.testers.runNixOSTest {
     )
     assert "safe-test" in allowed_volume and "/mnt/safe" in allowed_volume, "project-local managed volume not attached"
     machine.succeed(operator + " incus start scoped:allowed-instance --project aginctus-authz", timeout=180)
-    machine.succeed(operator + " incus exec scoped:allowed-instance --project aginctus-authz -- mountpoint -q /mnt/safe", timeout=60)
+    machine.wait_until_succeeds(operator + " incus exec scoped:allowed-instance --project aginctus-authz -- /run/current-system/sw/bin/mountpoint -q /mnt/safe", timeout=60)
     machine.succeed(operator + " incus stop scoped:allowed-instance --project aginctus-authz --force", timeout=180)
     # Runtime volatile keys can change during the allowed start/stop.
     allowed_volume = machine.succeed("incus config show allowed-instance --project aginctus-authz --expanded")
