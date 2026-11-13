@@ -351,6 +351,24 @@
             subPackages = [ "./cmd/aginctus-testenv" ];
             ldflags = [ "-X=main.revision=${self.rev or "source-${self.narHash}"}" ];
           };
+          # Standalone opt-in accepted-state tools. Deliberately NOT installed
+          # by NixOS/Home Manager modules and never exposed as an MCP command.
+          # The service remains read-only; the local tool can promote only
+          # explicit pinned workload candidates in its own private same-UID store.
+          state-service = pkgs.buildGoModule {
+            pname = "aginctus-state";
+            version = releaseVersion;
+            src = ./.;
+            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
+            subPackages = [ "./cmd/aginctus-state" ];
+          };
+          state-local = pkgs.buildGoModule {
+            pname = "aginctus-state-local";
+            version = releaseVersion;
+            src = ./.;
+            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
+            subPackages = [ "./cmd/aginctus-state-local" ];
+          };
           aginctus = aginctusCli;
           default = aginctusCli;
           # Expose exactly the runtime used by the workload image for contract tests.
