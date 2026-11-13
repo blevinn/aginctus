@@ -54,7 +54,9 @@ func PlanNativeGatewayDevices(topology NativeGatewayTopology, rootPool, database
 		}
 		litellm["egress"] = map[string]string{
 			"type": "nic", "network": topology.EgressNetwork, "name": "eth1",
-			"ipv4.address": prefix.Addr().String(),
+			// Incus uses CIDR form for static OCI configuration. A bare IP
+			// requests DHCP, which may be disabled on the egress bridge.
+			"ipv4.address": prefix.String(),
 		}
 	}
 	return NativeGatewayDevices{Project: topology.Project, Postgres: postgres, LiteLLM: litellm}, nil
