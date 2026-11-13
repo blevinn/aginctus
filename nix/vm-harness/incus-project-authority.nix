@@ -17,6 +17,7 @@ let
       {
         system.stateVersion = "26.05";
         networking.useDHCP = false;
+        environment.systemPackages = [ pkgs.util-linux ];
       }
     ];
   };
@@ -65,7 +66,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus project create unrelated --config restricted=true")
     machine.succeed("incus network create authz-mgmt ipv4.address=none ipv6.address=none")
     # Explicitly bound access to one host-admin managed shared bridge/pool.
-    machine.succeed("incus project set aginctus-authz restricted.devices.nic=managed restricted.networks.access=authz-mgmt restricted.storage-pools.access=default")
+    machine.succeed("incus project set aginctus-authz restricted.devices.nic=managed restricted.devices.disk=managed restricted.networks.access=authz-mgmt restricted.storage-pools.access=default")
     machine.succeed("incus project get aginctus-authz restricted | grep -qx true")
     machine.succeed("incus project get aginctus-authz features.networks | grep -qx false")
     machine.succeed("incus project get aginctus-authz restricted.networks.access | grep -qx authz-mgmt")
@@ -250,6 +251,67 @@ pkgs.testers.runNixOSTest {
     assert routing in ["", "tls"], "restricted-TLS authorization evaluator was overridden"
     print("INCUS AUTHORITY VERSION: " + machine.succeed("incus version").strip() + "; TLS routing: " + repr(routing))
     assert not failures, "restricted principal completed forbidden actions: " + repr(failures)
+
+    # A second, actually populated project-local image/volume namespace
+    # catches accidental fallback to the default project or CLI-only filtering.
+    # The VM administrator creates the foreign image; no user has permission
+    # to import or list across the project boundary.
+    machine.succeed(
+      "incus image import ${workloadImage.config.system.build.metadata}/tarball/*" +
+      " ${workloadImage.config.system.build.tarball}/tarball/*" +
+      " --alias foreign-image --project unrelated",
+      timeout=180,
+    )
+    image_fingerprint = machine.succeed(
+      "incus image list --project unrelated --format json" +
+      " | jq -er '.[] | select(any(.aliases[]?; .name == \"foreign-image\")) | .fingerprint'"
+    ).strip()
+    assert len(image_fingerprint) == 64, "foreign image positive control absent"
+    assert "foreign-image" in machine.succeed("incus image info foreign-image --project unrelated"), "foreign image not present"
+    status, response = api_get("/1.0/images?project=unrelated&recursion=1", admin=True)
+    assert status == 200 and image_fingerprint in json.dumps(response["metadata"]), "foreign image admin inventory missing"
+    status, response = api_get("/1.0/images?project=unrelated&recursion=1")
+    assert (status == 200 and response["type"] == "sync" and response["metadata"] == []) or (
+      status == 403 and response["type"] == "error" and response["error_code"] == status
+    ), "foreign image disclosed via restricted API"
+    status, response = api_get("/1.0/images/" + image_fingerprint + "?project=unrelated")
+    assert status in [403, 404] and response["type"] == "error" and response["error_code"] == status, "named foreign image readable"
+
+    # An operator must be able to attach an explicitly allowed project-local
+    # managed volume; this is NOT permission for arbitrary host filesystems.
+    # Keep a post-attachment snapshot so a denied foreign alias cannot mutate
+    # the allowed instance or make a missing volume appear to be accessible.
+    machine.succeed(
+      operator + " incus config device add scoped:allowed-instance data disk" +
+      " pool=default source=safe-test path=/mnt/safe --project aginctus-authz"
+    )
+    allowed_volume = machine.succeed(
+      "incus config show allowed-instance --project aginctus-authz --expanded"
+    )
+    assert "safe-test" in allowed_volume and "/mnt/safe" in allowed_volume, "project-local managed volume not attached"
+    machine.succeed(operator + " incus start scoped:allowed-instance --project aginctus-authz", timeout=180)
+    machine.wait_until_succeeds(operator + " incus exec scoped:allowed-instance --project aginctus-authz -- /run/current-system/sw/bin/mountpoint -q /mnt/safe", timeout=60)
+    machine.succeed(operator + " incus stop scoped:allowed-instance --project aginctus-authz --force", timeout=180)
+    # Runtime volatile keys can change during the allowed start/stop.
+    allowed_volume = machine.succeed("incus config show allowed-instance --project aginctus-authz --expanded")
+    status, response = api_get(
+      "/1.0/storage-pools/default/volumes/custom/safe-test?project=aginctus-authz"
+    )
+    assert status == 200 and response["type"] == "sync", "allowed custom volume not visible"
+    status, response = api_get(
+      "/1.0/storage-pools/default/volumes/custom/foreign-sentinel?project=unrelated"
+    )
+    assert status in [403, 404] and response["type"] == "error", "foreign custom volume readable"
+    # A foreign-only alias cannot be interpreted as a same-project volume.
+    deny("incus config device add scoped:allowed-instance foreign-data disk pool=default source=foreign-sentinel path=/mnt/foreign --project aginctus-authz", allow_hidden=True)
+    assert not failures, "foreign volume attachment unexpectedly succeeded: " + repr(failures)
+    assert machine.succeed(
+      "incus config show allowed-instance --project aginctus-authz --expanded"
+    ) == allowed_volume, "failed foreign-volume attach mutated allowed instance"
+    assert machine.succeed(
+      "incus storage volume get default foreign-sentinel user.authz_sentinel --project unrelated"
+    ).strip() == "foreign-only", "foreign volume changed during attachment attempt"
+    print("INCUS PROJECT STORAGE: permitted scoped custom volume attachment; foreign image and volume invisible/denied to restricted TLS client")
 
     # Revocation and re-enrollment must be enforced by Incus, not by a
     # cached CLI project selector. Establish a positive control on the same
