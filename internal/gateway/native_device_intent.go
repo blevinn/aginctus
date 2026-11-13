@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/netip"
 	"regexp"
+
+	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
 
 var nativeDeviceName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
@@ -12,9 +14,9 @@ var nativeDeviceName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 // exactly the two gateway instances. It neither creates nor attaches anything.
 // The project and pool must be independently authorized before execution.
 type NativeGatewayDevices struct {
-	Project string
+	Project  string
 	Postgres map[string]map[string]string
-	LiteLLM map[string]map[string]string
+	LiteLLM  map[string]map[string]string
 }
 
 // PlanNativeGatewayDevices renders an explicit, narrow attachment set after
@@ -26,7 +28,10 @@ func PlanNativeGatewayDevices(topology NativeGatewayTopology, rootPool, database
 	if err := topology.ValidateExecutionShape(); err != nil {
 		return NativeGatewayDevices{}, err
 	}
-	if !nativeDeviceName.MatchString(topology.Project) || !nativeDeviceName.MatchString(topology.Deployment) ||
+	if _, err := incusscope.NewProjectScope(topology.Project); err != nil {
+		return NativeGatewayDevices{}, err
+	}
+	if !nativeDeviceName.MatchString(topology.Deployment) ||
 		!nativeDeviceName.MatchString(topology.DatabaseVolume) ||
 		!nativeDeviceName.MatchString(rootPool) || !nativeDeviceName.MatchString(databasePool) ||
 		!nativeDeviceName.MatchString(topology.ManagementNetwork) ||
@@ -34,13 +39,13 @@ func PlanNativeGatewayDevices(topology NativeGatewayTopology, rootPool, database
 		return NativeGatewayDevices{}, fmt.Errorf("native gateway devices require explicit safe pool and network names")
 	}
 	postgres := map[string]map[string]string{
-		"root": {"type":"disk", "path":"/", "pool":rootPool},
-		"management": {"type":"nic", "network":topology.ManagementNetwork, "name":"eth0", "ipv4.gateway":"none"},
-		"database": {"type":"disk", "pool":databasePool, "source":topology.DatabaseVolume, "path":"/var/lib/postgresql/data"},
+		"root":       {"type": "disk", "path": "/", "pool": rootPool},
+		"management": {"type": "nic", "network": topology.ManagementNetwork, "name": "eth0", "ipv4.gateway": "none"},
+		"database":   {"type": "disk", "pool": databasePool, "source": topology.DatabaseVolume, "path": "/var/lib/postgresql/data"},
 	}
 	litellm := map[string]map[string]string{
-		"root": {"type":"disk", "path":"/", "pool":rootPool},
-		"management": {"type":"nic", "network":topology.ManagementNetwork, "name":"eth0", "ipv4.gateway":"none"},
+		"root":       {"type": "disk", "path": "/", "pool": rootPool},
+		"management": {"type": "nic", "network": topology.ManagementNetwork, "name": "eth0", "ipv4.gateway": "none"},
 	}
 	if topology.EgressNetwork != "" {
 		prefix, err := netip.ParsePrefix(topology.Services[1].Networks[1].IPv4Address)
@@ -48,9 +53,9 @@ func PlanNativeGatewayDevices(topology NativeGatewayTopology, rootPool, database
 			return NativeGatewayDevices{}, fmt.Errorf("native gateway egress address rejected")
 		}
 		litellm["egress"] = map[string]string{
-			"type":"nic", "network":topology.EgressNetwork, "name":"eth1",
-			"ipv4.address":prefix.Addr().String(),
+			"type": "nic", "network": topology.EgressNetwork, "name": "eth1",
+			"ipv4.address": prefix.Addr().String(),
 		}
 	}
-	return NativeGatewayDevices{Project:topology.Project,Postgres:postgres,LiteLLM:litellm},nil
+	return NativeGatewayDevices{Project: topology.Project, Postgres: postgres, LiteLLM: litellm}, nil
 }

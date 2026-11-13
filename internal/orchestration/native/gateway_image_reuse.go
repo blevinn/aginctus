@@ -10,8 +10,8 @@ import (
 // protected, accepted deployment record. Its fields are data, not authority:
 // callers must validate the provenance/revision before using this assessment.
 type GatewayImageEvidence struct {
-	Project string
-	Alias string
+	Project  string
+	Alias    string
 	Identity GatewayOCIIdentity
 }
 
