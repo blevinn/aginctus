@@ -93,7 +93,7 @@ func TestGatewayImageCreatesImmutableSource(t *testing.T) {
 		f.image = &api.Image{Fingerprint: in.Image.IncusFingerprint, Project: in.Project, Type: "container"}
 	}
 	result, err := AcquireGatewayImageWithClient(context.Background(), in, f)
-	if err != nil || !result.Attempted || !result.Verified || f.creates != 1 {
+	if err != nil || !result.Attempted || !result.Verified || result.Image != in.Image || f.creates != 1 {
 		t.Fatalf("create: %+v %v", result, err)
 	}
 	source := f.request.Source
