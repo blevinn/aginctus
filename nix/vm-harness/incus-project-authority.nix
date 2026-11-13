@@ -265,12 +265,15 @@ pkgs.testers.runNixOSTest {
     control_path = "/1.0/instances/scope-control?project=aginctus-authz"
     status, response = api_get(control_path)
     assert status == 200 and response["metadata"]["config"]["user.authz_sentinel"] == "allowed-only", "named read positive control missing"
+    machine.succeed(operator + " incus config set scoped:scope-control user.revocation_control=cli-before --project aginctus-authz")
     status, response = api_get(control_path, patch={"config": {"user.revocation_control": "before"}})
     assert status == 200 and response["type"] == "sync", "pre-revocation write positive control failed"
     control_before = machine.succeed("incus config show scope-control --project aginctus-authz --expanded")
     assert machine.succeed("incus config get scope-control user.revocation_control --project aginctus-authz").strip() == "before"
 
-    # Revoking trust must remove all accepted requests from the old credential.
+    # Newly authenticated resource requests must lose authority after revocation.
+    # This does not cancel previously accepted asynchronous operations or test
+    # a long-lived authenticated connection.
     # The test server itself remains healthy and admin-owned fixtures persist.
     machine.succeed("incus config trust remove " + shlex.quote(client_fingerprint))
     machine.wait_until_succeeds(
@@ -281,11 +284,14 @@ pkgs.testers.runNixOSTest {
       " 'https://127.0.0.1:8443/1.0/instances?project=aginctus-authz&recursion=1' | grep -qx 403",
       timeout=60,
     )
-    deny("incus list scoped: --project aginctus-authz --format json")
+    # After revocation Incus's public /1.0 response omits API extensions, so
+    # the CLI may fail preflight (e.g. missing api_filtering), not authorization.
+    # CLI failure is supplemental only; raw named GET/PATCH below prove denial.
+    machine.fail(operator + " incus list scoped: --project aginctus-authz --format json")
     for patch in [None, {"config": {"user.revocation_control": "forbidden"}}]:
         status, response = api_get(control_path, patch=patch)
         assert status == 403 and response["type"] == "error" and response["error_code"] == status, "revoked certificate retained named read/write authority"
-    deny("incus config set scoped:scope-control user.revocation_control=forbidden --project aginctus-authz")
+    machine.fail(operator + " incus config set scoped:scope-control user.revocation_control=forbidden --project aginctus-authz")
     assert machine.succeed("incus config show scope-control --project aginctus-authz --expanded") == control_before, "revoked write changed the allowed resource"
     assert "scope-control" in json.dumps(instances("/1.0/instances?project=aginctus-authz&recursion=1", admin=True)), "daemon or instance unavailable after revocation"
     assert "foreign-sentinel" in json.dumps(instances("/1.0/instances?project=unrelated&recursion=1", admin=True)), "foreign resources changed during revocation"
