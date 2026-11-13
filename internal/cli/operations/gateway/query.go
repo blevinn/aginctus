@@ -1,4 +1,4 @@
-package cli
+package gatewayops
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"os/exec"
 )
 
-var gatewayEgressQuery = func(ctx context.Context, args ...string) ([]byte, error) {
+func QueryIncusEgress(ctx context.Context, args ...string) ([]byte, error) {
 	command := exec.CommandContext(ctx, "incus", args...)
 	output, err := command.Output()
 	if err != nil {
