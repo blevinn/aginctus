@@ -22,12 +22,31 @@ func socketClient(path string) *http.Client {
 	}
 }
 
-func TestReadOnlyUnixServicePreservesReplacement(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "state")
+// shortUnixServiceTestStore avoids embedding long test names in socket paths.
+// Linux's sockaddr_un.sun_path is only 108 bytes, and Nix CI may set a
+// longer TMPDIR than the normal Go test environment. MkdirTemp still creates
+// a unique, owner-private (0700) directory and cleanup remains test-scoped.
+func shortUnixServiceTestStore(t *testing.T) (*LocalStore, string) {
+	t.Helper()
+	base, err := os.MkdirTemp("", "aginctus-sock-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(base); err != nil {
+			t.Errorf("remove temporary socket directory: %v", err)
+		}
+	})
+	root := filepath.Join(base, "state")
 	store, err := InitializeLocalStore(root)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return store, root
+}
+
+func TestReadOnlyUnixServicePreservesReplacement(t *testing.T) {
+	store, root := shortUnixServiceTestStore(t)
 	path := filepath.Join(root, "status.sock")
 	svc, err := StartReadOnlyUnixService(context.Background(), store, path)
 	if err != nil {
@@ -57,11 +76,7 @@ func TestReadOnlyUnixServicePreservesReplacement(t *testing.T) {
 }
 
 func TestReadOnlyUnixServiceRejectsMissingOrForeignPeer(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "state")
-	store, err := InitializeLocalStore(root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	store, root := shortUnixServiceTestStore(t)
 	svc, err := StartReadOnlyUnixService(context.Background(), store, filepath.Join(root, "status.sock"))
 	if err != nil {
 		t.Fatal(err)
@@ -81,11 +96,7 @@ func TestReadOnlyUnixServiceRejectsMissingOrForeignPeer(t *testing.T) {
 }
 
 func TestReadOnlyUnixServiceRestart(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "state")
-	store, err := InitializeLocalStore(root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	store, root := shortUnixServiceTestStore(t)
 	accepted, err := store.CommitLocal(0, "", validSpec())
 	if err != nil {
 		t.Fatal(err)
