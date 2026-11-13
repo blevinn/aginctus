@@ -26,7 +26,9 @@ func PlanNativeGatewayDevices(topology NativeGatewayTopology, rootPool, database
 	if err := topology.ValidateExecutionShape(); err != nil {
 		return NativeGatewayDevices{}, err
 	}
-	if !nativeDeviceName.MatchString(rootPool) || !nativeDeviceName.MatchString(databasePool) ||
+	if !nativeDeviceName.MatchString(topology.Project) || !nativeDeviceName.MatchString(topology.Deployment) ||
+		!nativeDeviceName.MatchString(topology.DatabaseVolume) ||
+		!nativeDeviceName.MatchString(rootPool) || !nativeDeviceName.MatchString(databasePool) ||
 		!nativeDeviceName.MatchString(topology.ManagementNetwork) ||
 		(topology.EgressNetwork != "" && !nativeDeviceName.MatchString(topology.EgressNetwork)) {
 		return NativeGatewayDevices{}, fmt.Errorf("native gateway devices require explicit safe pool and network names")
