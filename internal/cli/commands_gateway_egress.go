@@ -6,10 +6,14 @@ import (
 	"io"
 
 	egresscmd "github.com/blevinn/aginctus/internal/cli/commands/gateway/egress"
+	gatewayops "github.com/blevinn/aginctus/internal/cli/operations/gateway"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/spf13/cobra"
 )
+
+// Keep an injectable read-only Incus query for network/firewall and gateway tests.
+var gatewayEgressQuery = gatewayops.QueryIncusEgress
 
 // Egress actions receive only prevalidated parameters. Confirmation flags are
 // deliberately leaf-local, never inherited or inferred by another command.
