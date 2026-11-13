@@ -40,3 +40,11 @@ func TestNativeGatewayDevicePlanRejectsUnsafeInputs(t *testing.T) {
 	p.Services[0].Networks=append(p.Services[0].Networks,NativeGatewayNetwork{Name:"egress"})
 	if _,err:=PlanNativeGatewayDevices(p,"root","data");err==nil {t.Fatal("database egress accepted")}
 }
+
+func TestNativeGatewayDevicePlanRejectsMalformedProject(t *testing.T) {
+	p:=nativePinnedFixture()
+	p.Project="../other"
+	if _,err:=PlanNativeGatewayDevices(p,"root","data");err==nil {
+		t.Fatal("unsafe project accepted")
+	}
+}
