@@ -58,7 +58,7 @@ One physical database could eventually store multiple logically separate authori
 
 ## Failure semantics and recovery
 
-- **Operator certificate revoked:** no further operator reads/writes; accepted revision stays intact, reported observation may become unauthorized. Re-enrollment must be a host administrator action, restricted to the original project.
+- **Operator certificate revoked:** newly authenticated operator resource requests must be denied; accepted revision stays intact, reported observation may become unauthorized. The disposable post-operation test opens new requests: it does not prove cancellation of already accepted asynchronous writes or behavior on an existing persistent connection. Journal in-flight outcomes as uncertain until independently observed. Re-enrollment must be a host administrator action, restricted to the original project.
 - **Host bridge/pool removed or modified:** operator accepted revision remains immutable; current state reports missing/drifted/blocked. Do not silently recreate host resources from an operator candidate.
 - **State-service down / volume missing:** fail closed; no fallback to XDG or another project's state. Retain immutable history and provide explicit administrator-guided recovery.
 - **Partial native operations:** journal the attempt and truthfully report `uncertain`; native reconciliation never invents a global rollback across Incus resources.
