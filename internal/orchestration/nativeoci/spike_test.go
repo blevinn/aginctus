@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -171,8 +172,32 @@ func TestDaemonOCI(t *testing.T) {
 			}
 			name := image.name + "-spike"
 			alias := name + "-image"
-			if err := client.CreateImageAlias(api.ImageAliasesPost{ImageAliasesEntry: api.ImageAliasesEntry{Name: alias, ImageAliasesEntryPut: api.ImageAliasesEntryPut{Target: fingerprint}}}); err != nil {
-				t.Fatal(err)
+			// The image alias is created only after the same selected-project
+			// acquisition has returned a verified result. This disposable VM
+			// is single-writer; production requires independently fenced writes.
+			createdAlias, err := native.CreateLocalGatewayImageAlias(ctx,native.GatewayAliasCreateIntent{
+				Project:scope.Name,Alias:alias,Image:identity,Acquisition:acquired,
+			})
+			if err != nil || !createdAlias.Created || !createdAlias.Verified {
+				t.Fatalf("guarded alias create: %+v %v",createdAlias,err)
+			}
+			if _,err:=native.CreateLocalGatewayImageAlias(ctx,native.GatewayAliasCreateIntent{
+				Project:scope.Name,Alias:alias,Image:identity,Acquisition:acquired,
+			});err==nil {
+				t.Fatal("native alias create adopted a preexisting alias")
+			}
+			evidence:=native.GatewayImageEvidence{Project:scope.Name,Alias:alias,Identity:identity}
+			if err:=native.ObserveLocalGatewayImageReuse(ctx,native.GatewayImageAcquireIntent{
+				Project:scope.Name,Image:identity,
+			},alias,evidence);err!=nil {
+				t.Fatalf("observed OCI alias identity mismatch: %v",err)
+			}
+			foreignEvidence:=evidence
+			foreignEvidence.Identity.ConfigDigest="sha256:"+strings.Repeat("d",64)
+			if err:=native.ObserveLocalGatewayImageReuse(ctx,native.GatewayImageAcquireIntent{
+				Project:scope.Name,Image:identity,
+			},alias,foreignEvidence);err==nil {
+				t.Fatal("config-only image identity collision accepted")
 			}
 			config := map[string]string{
 				"environment.AGINCTUS_SPIKE": "synthetic", "user.aginctus.managed": "true",
