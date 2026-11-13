@@ -176,7 +176,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus image list --format json | jq -e 'length == 0'")
     machine.wait_for_unit("firewalld.service")
     machine.succeed("incus network create hm-mgmt ipv4.address=10.247.84.1/24 ipv4.nat=false ipv4.routing=false ipv6.address=none raw.dnsmasq=address=/fixture.incus/10.247.84.1 user.aginctus.managed=true user.aginctus.resource=management-network")
-    machine.succeed("incus project create aginctus -c restricted=true -c features.networks=true")
+    machine.succeed("incus project create aginctus -c restricted=true -c features.images=true -c features.profiles=true -c features.storage.volumes=true -c features.networks=true -c restricted.networks.access=hm-mgmt")
     machine.succeed("incus project create foreign")
     for project in ["default", "aginctus", "foreign"]:
         machine.succeed(f"incus profile create scope-sentinel --project {project}")
@@ -203,7 +203,7 @@ pkgs.testers.runNixOSTest {
     inventories = ["project list", "storage list"] + [
         f"{command} --project {project}"
         for project in ["default", "aginctus", "foreign"]
-        for command in ["list", "image list", "network list", "profile list"]
+        for command in ["list", "image list", "network list", "profile list", "storage volume list default"]
     ]
     before = {command: machine.succeed(f"incus {command} --format json | jq -S .") for command in inventories}
 
@@ -329,17 +329,34 @@ pkgs.testers.runNixOSTest {
         return output
 
     def denied(command, reason):
-        assert reason in report(command, "denied"), "failure did not demonstrate the expected boundary"
+        output = report(command, "denied")
+        print("Denied probe:", command, output)
+        assert reason in output, "failure did not demonstrate the expected boundary"
+
+    def authorization_denied(command):
+        # A generic syntax/configuration error is not proof of denied authority.
+        output = report(command, "denied")
+        # report() checks runtime credential redaction before evidence is logged.
+        print("Authorization probe:", command, output)
+        reasons = ["does not have permission", "Certificate is restricted", "not authorized", "Not authorized"]
+        assert any(reason in output for reason in reasons), "unexpected failure category (not proven authorization denial)"
 
     restricted = report(operator + " env INCUS_PROJECT=foreign /home/operator/.nix-profile/bin/aginctus operator preflight --project aginctus", 0)
     assert "restricted TLS credential; selected project declared permitted (writes unproven)" in restricted
     assert "Incus project: aginctus (instance read allowed)" in restricted
     assert "Write permissions: unverified" in restricted
+    assert "Project confinement: restricted-isolated-candidate" in restricted
     assert "Host bridge, firewall, pool and admin permissions: unverified" in restricted
     report(cli + " operator preflight --project foreign", 1)
     # The CLI refuses default before any probe; direct GET also proves server denial.
     report(cli + " operator preflight --project default", 2)
     machine.succeed(operator + " incus profile show scope-sentinel --project aginctus")
+    # An allowlist does not move a default-project bridge into an isolated
+    # project's network API. The restricted TLS identity also cannot observe
+    # this bridge through default (unlike the inherited profile below). Neither
+    # masked GET is proof of write denial: probe the actual PATCH separately.
+    denied(operator + " incus network show hm-mgmt --project aginctus", "Network not found")
+    denied(operator + " incus network show hm-mgmt --project default", "Network not found")
     for project in ["default", "foreign"]:
         denied(operator + f" incus project show {project}", "does not have permission")
     denied(operator + " incus profile show scope-sentinel --project foreign", "does not have permission")
@@ -351,8 +368,19 @@ pkgs.testers.runNixOSTest {
 
     # Effective write denials belong ONLY in this disposable fixture, never in
     # production preflight. Exact project flags prevent ambient switching.
-    denied(operator + " incus network create hm-denied --type bridge --project aginctus ipv4.address=none ipv6.address=none", "Network type does not support non-default projects")
+    # The explicit network allowlist rejects this name before driver/type
+    # validation; require that policy denial rather than a structural error.
+    denied(operator + " incus network create hm-denied --type bridge --project aginctus ipv4.address=none ipv6.address=none", "Network not allowed in project")
     denied(operator + " incus network create hm-denied --type bridge --project default ipv4.address=none ipv6.address=none", "does not have permission")
+    # Effective-denial probes belong only in the disposable guest; no
+    # production preflight may issue writes. A successful unexpected write
+    # is a test failure and a blocker for user-owned lifecycle services.
+    # Direct PATCH avoids a CLI preliminary GET masking whether the write
+    # endpoint itself refuses the restricted principal.
+    authorization_denied(operator + " incus query --request PATCH '/1.0/networks/hm-mgmt?project=default' --data '{\"config\":{\"user.hm-denied\":\"true\"}}'")
+    authorization_denied(operator + " incus project set aginctus restricted=false")
+    authorization_denied(operator + " incus storage set default user.hm-denied=true")
+    authorization_denied(operator + " incus storage volume create default hm-cross-project --project foreign")
     denied(operator + " incus project create forbidden-project", "Certificate is restricted")
     denied(operator + " incus config set core.https_address=127.0.0.1:9443", "Certificate is restricted")
     machine.fail(operator + " ip link add forbidden-linux type bridge")
@@ -373,6 +401,9 @@ pkgs.testers.runNixOSTest {
     machine.succeed(admin + " incus profile show scope-sentinel --project foreign")
     machine.succeed(admin + " incus network create hm-denied --type bridge --project default ipv4.address=none ipv6.address=none")
     machine.succeed(admin + " incus network delete hm-denied --project default")
+    machine.succeed(admin + " incus network show hm-mgmt --project default")
+    machine.succeed(admin + " incus query --request PATCH '/1.0/networks/hm-mgmt?project=default' --data '{\"config\":{\"user.hm-denied\":\"true\"}}'")
+    machine.succeed(admin + " incus network unset hm-mgmt user.hm-denied --project default")
 
     # Re-activation with restricted credentials still changes no Incus objects.
     firewall_authorized = host_policy()
