@@ -95,9 +95,23 @@ certificate alone is insufficient. With `features.networks=false` and no network
 access allowlist, bridge creation through the selected project can reach shared
 default-project networking. That configuration is not an accepted host/operator
 split. The acceptance fixture
-uses project-owned networks (`features.networks=true`), where Linux bridge
-creation is unavailable. Shared-network authorization needs separate review
-before any operator deployment.
+uses project-owned networks (`features.networks=true`) and an explicit
+`restricted.networks.access=hm-mgmt` allowlist. The bridge remains in `default`:
+the restricted operator's network API returns `Network not found` in both the
+isolated and default projects even with that allowlist. A separate administrator
+can inspect the bridge. Masked reads do not establish write denial, so a direct
+PATCH to its actual default namespace must fail authorization. The VM also
+requires refusal of project restriction changes, storage pool changes and
+foreign-project volume creation, and checks unchanged volume inventories.
+Creation of a non-allowlisted network in the selected project must be refused
+by project policy before network-driver validation.
+An administrator performs the same bridge PATCH and removes its test key as a
+positive control. This narrows the fixture boundary; it does **not** prove NIC
+attachment to that bridge or validate `features.networks=false` project
+delegation or substitute for a server-authorized resource writer. The additional
+policy line in `operator preflight` is read-only project metadata and explicitly
+never upgrades the preflight exit status into write authority. The complete
+controller-exclusivity and accepted-revision gates remain unimplemented.
 
 Denied writes and the administrator's positive control exist only in this VM
 fixture. Production preflight remains read-only. Reports are checked against
