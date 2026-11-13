@@ -127,14 +127,16 @@ pkgs.testers.runNixOSTest {
     # TLS identity. No CLI-side filtering, broken transport, or empty foreign
     # project may masquerade as isolation. Root's guest-local API is only an
     # existence control, never evidence that the operator is confined.
-    def api_get(path, admin=False):
+    def api_get(path, admin=False, patch=None):
         if admin:
             curl = "curl --silent --show-error --unix-socket /var/lib/incus/unix.socket"
             url = "http://localhost" + path
         else:
             curl = operator + " curl --silent --show-error --insecure --cert /home/operator/.config/incus/client.crt --key /home/operator/.config/incus/client.key"
             url = "https://127.0.0.1:8443" + path
-        output = machine.succeed(curl + " --write-out '\\n%{http_code}' " + shlex.quote(url))
+        if patch is not None:
+            curl += " --request PATCH --header 'Content-Type: application/json' --data " + shlex.quote(json.dumps(patch))
+        output = machine.succeed(curl + " --max-time 15 --write-out '\\n%{http_code}' " + shlex.quote(url))
         body, status = output.rsplit("\n", 1)
         response = json.loads(body)
         print("AUTHZ API: " + ("admin " if admin else "operator ") + path + " => HTTP " + status)
@@ -321,6 +323,13 @@ pkgs.testers.runNixOSTest {
     assert len(matching) == 1, "test client certificate missing from trust store"
     assert matching[0].get("restricted") is True and matching[0].get("projects") == ["aginctus-authz"], "unexpected test principal authority"
     assert "scope-control" in json.dumps(instances("/1.0/instances?project=aginctus-authz&recursion=1")), "pre-revocation positive control missing"
+    control_path = "/1.0/instances/scope-control?project=aginctus-authz"
+    status, response = api_get(control_path)
+    assert status == 200 and response["metadata"]["config"]["user.authz_sentinel"] == "allowed-only", "named read positive control missing"
+    status, response = api_get(control_path, patch={"config": {"user.revocation_control": "before"}})
+    assert status == 200 and response["type"] == "sync", "pre-revocation write positive control failed"
+    control_before = machine.succeed("incus config show scope-control --project aginctus-authz --expanded")
+    assert machine.succeed("incus config get scope-control user.revocation_control --project aginctus-authz").strip() == "before"
 
     # Revoking trust must remove all accepted requests from the old credential.
     # The test server itself remains healthy and admin-owned fixtures persist.
@@ -333,7 +342,12 @@ pkgs.testers.runNixOSTest {
       " 'https://127.0.0.1:8443/1.0/instances?project=aginctus-authz&recursion=1' | grep -qx 403",
       timeout=60,
     )
-    machine.fail(operator + " incus list scoped: --project aginctus-authz --format json")
+    deny("incus list scoped: --project aginctus-authz --format json")
+    for patch in [None, {"config": {"user.revocation_control": "forbidden"}}]:
+        status, response = api_get(control_path, patch=patch)
+        assert status == 403 and response["type"] == "error" and response["error_code"] == status, "revoked certificate retained named read/write authority"
+    deny("incus config set scoped:scope-control user.revocation_control=forbidden --project aginctus-authz")
+    assert machine.succeed("incus config show scope-control --project aginctus-authz --expanded") == control_before, "revoked write changed the allowed resource"
     assert "scope-control" in json.dumps(instances("/1.0/instances?project=aginctus-authz&recursion=1", admin=True)), "daemon or instance unavailable after revocation"
     assert "foreign-sentinel" in json.dumps(instances("/1.0/instances?project=unrelated&recursion=1", admin=True)), "foreign resources changed during revocation"
 
@@ -349,9 +363,15 @@ pkgs.testers.runNixOSTest {
       " | jq -e 'any(.[]; .name == \"scope-control\")'",
       timeout=60,
     )
+    status, response = api_get(control_path, patch={"config": {"user.revocation_control": "re-enrolled"}})
+    assert status == 200 and response["type"] == "sync", "re-enrolled scoped write did not recover"
+    assert machine.succeed("incus config get scope-control user.revocation_control --project aginctus-authz").strip() == "re-enrolled"
     assert instances("/1.0/instances?project=unrelated&recursion=1") == [], "revived client gained foreign project visibility"
     status, response = api_get("/1.0/instances/foreign-sentinel?project=unrelated")
     assert status == 403 and response["type"] == "error", "re-enrolled credential gained foreign read"
+    deny("incus config set scoped:foreign-sentinel user.authz_sentinel=changed --project unrelated", allow_hidden=True)
+    assert machine.succeed("incus config show foreign-sentinel --project unrelated --expanded") == foreign_before, "re-enrollment changed foreign resources"
+    assert not failures, "revoked or re-enrolled principal completed forbidden actions: " + repr(failures)
     print("INCUS AUTHORITY REVOCATION: restricted credential denied after removal; scoped permissions restored only after administrator re-enrollment")
 
     # Human-readable evidence never includes private key or cert contents.
