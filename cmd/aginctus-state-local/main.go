@@ -64,10 +64,10 @@ func run(args []string, stdout io.Writer) error {
 	// Validate identity even when the store has no active revision. Status
 	// must reject default/unsafe projects, not silently report empty state.
 	selector := acceptedstate.SelectionManifest{
-		APIVersion: acceptedstate.SelectionAPIVersion,
-		Kind: acceptedstate.SelectionKind,
-		DeploymentID: opts.deployment,
-		IncusProject: opts.project,
+		APIVersion:        acceptedstate.SelectionAPIVersion,
+		Kind:              acceptedstate.SelectionKind,
+		DeploymentID:      opts.deployment,
+		IncusProject:      opts.project,
 		SelectedWorkloads: []string{},
 	}
 	if err := selector.Validate(); err != nil {
