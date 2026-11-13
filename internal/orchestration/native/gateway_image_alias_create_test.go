@@ -90,3 +90,14 @@ func TestGatewayAliasCancellation(t *testing.T){
 	_,err:=CreateGatewayImageAliasWithClient(ctx,in,f)
 	if !errors.Is(err,context.Canceled) || f.creates!=0 {t.Fatalf("cancel: %v",err)}
 }
+
+func TestGatewayAliasRejectsChangedTargetAfterCreate(t *testing.T) {
+	in,f:=gatewayAliasFixture()
+	f.onCreate=func(){f.image.Project="foreign"}
+	result,err:=CreateGatewayImageAliasWithClient(context.Background(),in,f)
+	var typed *GatewayAliasCreateError
+	if !errors.As(err,&typed) || !typed.Uncertain || !typed.Attempted ||
+		!result.Created || result.Verified {
+		t.Fatalf("changed image postflight: %+v %v",result,err)
+	}
+}
