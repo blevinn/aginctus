@@ -61,6 +61,18 @@ func run(args []string, stdout io.Writer) error {
 	if opts.deployment == "" || opts.project == "" {
 		return errors.New("explicit --deployment and --project required")
 	}
+	// Validate identity even when the store has no active revision. Status
+	// must reject default/unsafe projects, not silently report empty state.
+	selector := acceptedstate.SelectionManifest{
+		APIVersion: acceptedstate.SelectionAPIVersion,
+		Kind: acceptedstate.SelectionKind,
+		DeploymentID: opts.deployment,
+		IncusProject: opts.project,
+		SelectedWorkloads: []string{},
+	}
+	if err := selector.Validate(); err != nil {
+		return errors.New("invalid explicit deployment or Incus project identity")
+	}
 	store, err := acceptedstate.OpenLocalStore(opts.stateDir)
 	if err != nil {
 		return err
