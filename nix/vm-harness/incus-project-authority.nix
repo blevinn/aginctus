@@ -268,11 +268,11 @@ pkgs.testers.runNixOSTest {
     status, response = api_get("/1.0/images?project=unrelated&recursion=1", admin=True)
     assert status == 200 and image_fingerprint in json.dumps(response["metadata"]), "foreign image admin inventory missing"
     status, response = api_get("/1.0/images?project=unrelated&recursion=1")
-    assert (status == 200 and image_fingerprint not in json.dumps(response.get("metadata", []))) or (
-      status == 403 and response["type"] == "error"
+    assert (status == 200 and response["type"] == "sync" and response["metadata"] == []) or (
+      status == 403 and response["type"] == "error" and response["error_code"] == status
     ), "foreign image disclosed via restricted API"
     status, response = api_get("/1.0/images/" + image_fingerprint + "?project=unrelated")
-    assert status in [403, 404] and response["type"] == "error", "named foreign image readable"
+    assert status in [403, 404] and response["type"] == "error" and response["error_code"] == status, "named foreign image readable"
 
     # An operator must be able to attach an explicitly allowed project-local
     # managed volume; this is NOT permission for arbitrary host filesystems.
@@ -286,6 +286,11 @@ pkgs.testers.runNixOSTest {
       "incus config show allowed-instance --project aginctus-authz --expanded"
     )
     assert "safe-test" in allowed_volume and "/mnt/safe" in allowed_volume, "project-local managed volume not attached"
+    machine.succeed(operator + " incus start scoped:allowed-instance --project aginctus-authz", timeout=180)
+    machine.succeed(operator + " incus exec scoped:allowed-instance --project aginctus-authz -- mountpoint -q /mnt/safe", timeout=60)
+    machine.succeed(operator + " incus stop scoped:allowed-instance --project aginctus-authz --force", timeout=180)
+    # Runtime volatile keys can change during the allowed start/stop.
+    allowed_volume = machine.succeed("incus config show allowed-instance --project aginctus-authz --expanded")
     status, response = api_get(
       "/1.0/storage-pools/default/volumes/custom/safe-test?project=aginctus-authz"
     )
@@ -295,11 +300,8 @@ pkgs.testers.runNixOSTest {
     )
     assert status in [403, 404] and response["type"] == "error", "foreign custom volume readable"
     # A foreign-only alias cannot be interpreted as a same-project volume.
-    status, msg = machine.execute(
-      operator + " incus config device add scoped:allowed-instance foreign-data disk" +
-      " pool=default source=foreign-sentinel path=/mnt/foreign --project aginctus-authz 2>&1"
-    )
-    assert status != 0 and "unknown flag" not in msg.lower() and "usage:" not in msg.lower(), "foreign volume attachment probe invalid or unexpectedly succeeded"
+    deny("incus config device add scoped:allowed-instance foreign-data disk pool=default source=foreign-sentinel path=/mnt/foreign --project aginctus-authz", allow_hidden=True)
+    assert not failures, "foreign volume attachment unexpectedly succeeded: " + repr(failures)
     assert machine.succeed(
       "incus config show allowed-instance --project aginctus-authz --expanded"
     ) == allowed_volume, "failed foreign-volume attach mutated allowed instance"
