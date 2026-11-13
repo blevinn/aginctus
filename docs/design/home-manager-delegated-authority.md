@@ -18,7 +18,7 @@ The [#750](https://github.com/blevinn/aginctus/pull/750) → [#752](https://gith
 
 The tested project's restrictions included `restricted=true`, `restricted.devices.nic=managed`, exact `restricted.networks.access` and `restricted.storage-pools.access`, selected `features.*` flags and the pinned server's restricted-TLS authorization routing. **Do not** equate this with the current `ProjectScope.DesiredConfig()`, which leaves `restricted` unset and inherits shared networking. No automatic mutation of existing deployments follows from this evidence.
 
-Remaining security tests include revoked identity during and after a write; daemon/state-service restart and mid-flight policy changes; non-empty foreign-image visibility; custom volume attachment; compromised unprivileged workload behavior when AppArmor is enabled; schema/candidate confused-deputy attacks; and permission/version checks at the real mutation boundary.
+Remaining security tests include revoked identity during and after a write (including an already authenticated persistent connection and asynchronous operations already accepted by Incus); daemon/state-service restart and mid-flight policy changes; non-empty foreign-image visibility; custom volume attachment; compromised unprivileged workload behavior when AppArmor is enabled; schema/candidate confused-deputy attacks; and permission/version checks at the real mutation boundary. Post-operation denial of a new TLS request does not establish cancellation or rollback of an in-flight operation.
 
 ## Proposed initial writer authorization contract
 
