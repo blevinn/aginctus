@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -11,7 +12,9 @@ type ExecuteOptions struct {
 }
 
 type Driver interface {
-	Validate(json.RawMessage) error
+	// ValidateContext performs configuration validation and any existing read-only
+	// preflight. Blocking work must cooperate with the caller's cancellation.
+	ValidateContext(context.Context, json.RawMessage) error
 	SupportsDryRun() bool
 	Execute(context.Context, json.RawMessage, ExecuteOptions) error
 }
@@ -39,10 +42,22 @@ func NewEngine(drivers map[string]Driver) *Engine {
 }
 
 func (e *Engine) Validate(plan Plan, options ExecuteOptions) error {
+	return e.ValidateContext(context.Background(), plan, options)
+}
+
+// ValidateContext validates the complete plan before any step may execute.
+// Cancellation stops validation; no partial validation authorizes execution.
+func (e *Engine) ValidateContext(ctx context.Context, plan Plan, options ExecuteOptions) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("orchestration canceled before validation: %w", err)
+	}
 	if err := plan.Validate(); err != nil {
 		return err
 	}
 	for _, step := range plan.Steps {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("orchestration canceled before validating step %q: %w", step.ID, err)
+		}
 		driver, ok := e.drivers[step.Driver]
 		if !ok || driver == nil {
 			return fmt.Errorf("orchestration step %q uses unknown driver %q", step.ID, step.Driver)
@@ -50,18 +65,21 @@ func (e *Engine) Validate(plan Plan, options ExecuteOptions) error {
 		if options.DryRun && !driver.SupportsDryRun() {
 			return fmt.Errorf("orchestration step %q driver %q does not support dry-run", step.ID, step.Driver)
 		}
-		if err := driver.Validate(step.Configuration); err != nil {
+		// Preserve both the validation cause and cancellation, even when a
+		// driver returns nil or an unrelated error after cancellation.
+		validationErr := driver.ValidateContext(ctx, step.Configuration)
+		if err := errors.Join(validationErr, ctx.Err()); err != nil {
 			return fmt.Errorf("validate orchestration step %q (%s): %w", step.ID, step.Driver, err)
 		}
 	}
-	return nil
+	return ctx.Err()
 }
 
 func (e *Engine) Execute(ctx context.Context, plan Plan, options ExecuteOptions) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return Result{}, fmt.Errorf("orchestration canceled before validation: %w", err)
 	}
-	if err := e.Validate(plan, options); err != nil {
+	if err := e.ValidateContext(ctx, plan, options); err != nil {
 		return Result{}, err
 	}
 
