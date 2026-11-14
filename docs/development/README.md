@@ -40,6 +40,9 @@ The flake follows the stable `nixos-26.05` Nixpkgs branch. A committed `flake.lo
 
 ## CLI development
 
+For the experimental external-extension boundary and its current scope, see the
+[public plugin API foundation](plugins.md).
+
 The CLI is written in Go and uses the official Incus Go client. Discover the
 checked-out implementation without loading the host's effective configuration:
 
