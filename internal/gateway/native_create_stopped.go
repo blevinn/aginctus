@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"net/http"
 	"slices"
 
 	incusclient "github.com/lxc/incus/v7/client"
@@ -161,8 +160,3 @@ func sameGatewayPair(a,b NativeGatewayInstancePair)bool{
 	}
 	return eq(a.Postgres,b.Postgres)&&eq(a.LiteLLM,b.LiteLLM)
 }
-
-// Never classify an ambiguous lookup as absence. The SDK-backed reader used
-// above requires an exact NotFound status; this retained reference documents
-// the collision behavior expected from the Incus endpoint.
-var _ = http.StatusConflict
