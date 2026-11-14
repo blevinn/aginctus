@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
 	gatewaycmd "github.com/blevinn/aginctus/internal/cli/commands/gateway"
+	gatewayops "github.com/blevinn/aginctus/internal/cli/operations/gateway"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/gatewaycontrol"
@@ -176,4 +178,11 @@ func addGatewayCoreCommands(
 		Lifecycle: executeGatewayLifecycle,
 		Credential: executeGatewayCredential,
 	})
+}
+
+// Test-visible input seam preserves offline transcript injection.
+var gatewayResponsesInput io.Reader = os.Stdin
+
+func verifyGatewayResponsesStream(args []string, stdout, stderr io.Writer) int {
+	return gatewayops.VerifyResponsesStream(args, stdout, stderr, gatewayResponsesInput)
 }
