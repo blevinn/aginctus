@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/blevinn/aginctus/internal/orchestration"
 	composeclient "github.com/lxc/incus-compose/client"
@@ -40,6 +41,27 @@ func TestValidateRejectsUnknownConfigurationField(t *testing.T) {
 	}`))
 	if err == nil {
 		t.Fatal("Validate() error = nil, want error")
+	}
+}
+
+func TestValidateContextHonorsCancellation(t *testing.T) {
+	for _, want := range []error{context.Canceled, context.DeadlineExceeded} {
+		t.Run(want.Error(), func(t *testing.T) {
+			deadline := time.Now().Add(time.Hour)
+			if want == context.DeadlineExceeded {
+				deadline = time.Now().Add(-time.Second)
+			}
+			ctx, cancel := context.WithDeadline(t.Context(), deadline)
+			if want == context.Canceled {
+				cancel()
+			}
+			defer cancel()
+			driver := New()
+			err := driver.ValidateContext(ctx, json.RawMessage(`{"project":"test","compose":{"services":{"web":{"image":"alpine:latest"}}}}`))
+			if !errors.Is(err, want) {
+				t.Fatalf("error=%v want=%v", err, want)
+			}
+		})
 	}
 }
 
