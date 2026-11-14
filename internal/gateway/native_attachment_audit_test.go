@@ -34,7 +34,7 @@ func (f *fakeGatewayAttachmentReader) GetStoragePoolVolume(_, _, _ string) (*api
 	return f.volume, "", nil
 }
 
-func attachmentFixture(t *testing.T) (NativeGatewayTopology, NativeGatewayDevices, *fakeGatewayAttachmentReader) {
+func nativeAttachmentAuditFixture(t *testing.T) (NativeGatewayTopology, NativeGatewayDevices, *fakeGatewayAttachmentReader) {
 	t.Helper()
 	top := nativePinnedFixture()
 	d, err := PlanNativeGatewayDevices(top, "rootpool", "datapool")
@@ -68,7 +68,7 @@ func attachmentFixture(t *testing.T) (NativeGatewayTopology, NativeGatewayDevice
 	return top, d, f
 }
 func TestNativeGatewayAttachmentAudit(t *testing.T) {
-	top, d, f := attachmentFixture(t)
+	top, d, f := nativeAttachmentAuditFixture(t)
 	if err := ObserveNativeGatewayAttachmentsWithReader(context.Background(), top, d, f); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestNativeGatewayAttachmentAuditRejectsHostDrift(t *testing.T) {
 		"wrong project":    func(f *fakeGatewayAttachmentReader) { f.info.Project = "default" },
 	} {
 		t.Run(name, func(t *testing.T) {
-			top, d, f := attachmentFixture(t)
+			top, d, f := nativeAttachmentAuditFixture(t)
 			mutate(f)
 			if err := ObserveNativeGatewayAttachmentsWithReader(context.Background(), top, d, f); err == nil {
 				t.Fatal("foreign or drifted resource accepted")
