@@ -355,71 +355,73 @@ assert
 # This is an intentionally isolated *builder-local* private accepted-state
 # store; the fixture is pure Nix output. The actual Go parser and read-only
 # comparison are exercised rather than trusting only a Nix attribute shape.
-pkgs.runCommand "aginctus-home-manager-operator-contract" {
-  nativeBuildInputs = [
-    pkgs.jq
-    self.packages.${system}.state-local
-  ];
-} ''
-  set -eu
-  candidate="${withCandidate.xdg.configFile."aginctus/workload-candidate.json".source}"
-  test -f "$candidate"
-  jq --arg sha "${candidateFingerprint}" -e '
-    .apiVersion == "aginctus.dev/accepted/v1alpha1"
-    and .kind == "WorkloadDeployment"
-    and .selection.apiVersion == "aginctus.dev/accepted/v1alpha1"
-    and .selection.kind == "SelectionManifest"
-    and .selection.deploymentID == "hm-deployment"
-    and .selection.incusProject == "hm-operator"
-    and .selection.selectedWorkloads == ["dev"]
-    and (.workloads | length) == 1
-    and .workloads[0].id == "dev"
-    and .workloads[0].instanceName == "hm-dev"
-    and .workloads[0].instanceType == "container"
-    and .workloads[0].imageFingerprint == $sha
-    and .workloads[0].profiles == ["base"]
-    and .workloads[0].ensureRunning == false
-  ' "$candidate" > /dev/null
+pkgs.runCommand "aginctus-home-manager-operator-contract"
+  {
+    nativeBuildInputs = [
+      pkgs.jq
+      self.packages.${system}.state-local
+    ];
+  }
+  ''
+    set -eu
+    candidate="${withCandidate.xdg.configFile."aginctus/workload-candidate.json".source}"
+    test -f "$candidate"
+    jq --arg sha "${candidateFingerprint}" -e '
+      .apiVersion == "aginctus.dev/accepted/v1alpha1"
+      and .kind == "WorkloadDeployment"
+      and .selection.apiVersion == "aginctus.dev/accepted/v1alpha1"
+      and .selection.kind == "SelectionManifest"
+      and .selection.deploymentID == "hm-deployment"
+      and .selection.incusProject == "hm-operator"
+      and .selection.selectedWorkloads == ["dev"]
+      and (.workloads | length) == 1
+      and .workloads[0].id == "dev"
+      and .workloads[0].instanceName == "hm-dev"
+      and .workloads[0].instanceType == "container"
+      and .workloads[0].imageFingerprint == $sha
+      and .workloads[0].profiles == ["base"]
+      and .workloads[0].ensureRunning == false
+    ' "$candidate" > /dev/null
 
-  # The candidate is in the read-only Nix store. Nothing is accepted,
-  # reconciled, or written to Incus by this evaluation/check.
-  aginctus-state-local init --state-dir "$TMPDIR/local" > /dev/null
-  aginctus-state-local status --state-dir "$TMPDIR/local" \
-    --deployment hm-deployment --project hm-operator > "$TMPDIR/status.json"
-  jq -e '.hasAccepted == false' "$TMPDIR/status.json" > /dev/null
-  aginctus-state-local diff --state-dir "$TMPDIR/local" \
-    --deployment hm-deployment --project hm-operator \
-    --candidate "$candidate" > "$TMPDIR/diff.json"
-  jq -e '
-    .hasAccepted == false
-    and .changed == true
-    and .deploymentID == "hm-deployment"
-    and .incusProject == "hm-operator"
-    and .changes.newlySelected == ["dev"]
-  ' "$TMPDIR/diff.json" > /dev/null
-  test ! -e "$TMPDIR/local/active.json"
+    # The candidate is in the read-only Nix store. Nothing is accepted,
+    # reconciled, or written to Incus by this evaluation/check.
+    aginctus-state-local init --state-dir "$TMPDIR/local" > /dev/null
+    aginctus-state-local status --state-dir "$TMPDIR/local" \
+      --deployment hm-deployment --project hm-operator > "$TMPDIR/status.json"
+    jq -e '.hasAccepted == false' "$TMPDIR/status.json" > /dev/null
+    aginctus-state-local diff --state-dir "$TMPDIR/local" \
+      --deployment hm-deployment --project hm-operator \
+      --candidate "$candidate" > "$TMPDIR/diff.json"
+    jq -e '
+      .hasAccepted == false
+      and .changed == true
+      and .deploymentID == "hm-deployment"
+      and .incusProject == "hm-operator"
+      and .changes.newlySelected == ["dev"]
+    ' "$TMPDIR/diff.json" > /dev/null
+    test ! -e "$TMPDIR/local/active.json"
 
-  if aginctus-state-local diff --state-dir "$TMPDIR/local" \
-    --deployment other --project hm-operator \
-    --candidate "$candidate" > /dev/null 2>&1; then
-    echo "candidate bypassed explicit deployment identity" >&2
-    exit 1
-  fi
-  if aginctus-state-local diff --state-dir "$TMPDIR/local" \
-    --deployment hm-deployment --project other \
-    --candidate "$candidate" > /dev/null 2>&1; then
-    echo "candidate bypassed explicit Incus project identity" >&2
-    exit 1
-  fi
+    if aginctus-state-local diff --state-dir "$TMPDIR/local" \
+      --deployment other --project hm-operator \
+      --candidate "$candidate" > /dev/null 2>&1; then
+      echo "candidate bypassed explicit deployment identity" >&2
+      exit 1
+    fi
+    if aginctus-state-local diff --state-dir "$TMPDIR/local" \
+      --deployment hm-deployment --project other \
+      --candidate "$candidate" > /dev/null 2>&1; then
+      echo "candidate bypassed explicit Incus project identity" >&2
+      exit 1
+    fi
 
-  # No explicit --confirm / expected revision, so acceptance must fail and
-  # leave active revision absent. Home Manager never invokes this command.
-  if aginctus-state-local accept --state-dir "$TMPDIR/local" \
-    --deployment hm-deployment --project hm-operator \
-    --candidate "$candidate" > /dev/null 2>&1; then
-    echo "accepted without explicit CAS confirmation" >&2
-    exit 1
-  fi
-  test ! -e "$TMPDIR/local/active.json"
-  touch "$out"
-''
+    # No explicit --confirm / expected revision, so acceptance must fail and
+    # leave active revision absent. Home Manager never invokes this command.
+    if aginctus-state-local accept --state-dir "$TMPDIR/local" \
+      --deployment hm-deployment --project hm-operator \
+      --candidate "$candidate" > /dev/null 2>&1; then
+      echo "accepted without explicit CAS confirmation" >&2
+      exit 1
+    fi
+    test ! -e "$TMPDIR/local/active.json"
+    touch "$out"
+  ''
