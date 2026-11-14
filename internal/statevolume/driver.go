@@ -51,8 +51,18 @@ func parseProvisionConfig(raw json.RawMessage) (ProvisionConfig, error) {
 }
 
 func (d *Driver) Validate(raw json.RawMessage) error {
+	return d.ValidateContext(context.Background(), raw)
+}
+
+func (d *Driver) ValidateContext(ctx context.Context, raw json.RawMessage) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	_, err := parseProvisionConfig(raw)
-	return err
+	if err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 func (d *Driver) SupportsDryRun() bool { return true }

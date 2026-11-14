@@ -319,3 +319,83 @@ func TestApplyCancelsBlockedContextAwareExecution(t *testing.T) {
 		t.Fatal("Apply did not exit after cancellation")
 	}
 }
+
+type blockingPreflightApplyClient struct {
+	fakeApplyClient
+	started chan context.Context
+}
+
+func (c *blockingPreflightApplyClient) PlanContext(ctx context.Context, _ io.Reader) (incusapply.Preview, error) {
+	c.started <- ctx
+	<-ctx.Done()
+	return incusapply.Preview{}, ctx.Err()
+}
+
+func TestEngineCancelsBlockedApplyPreflightBeforeMutation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	client := &blockingPreflightApplyClient{started: make(chan context.Context, 1)}
+	driver := New()
+	driver.newClient = func(incusapply.Options) applyClient { return client }
+	first := &fakeApplyClient{}
+	firstDriver := New()
+	firstDriver.newClient = func(incusapply.Options) applyClient { return first }
+	engine := orchestration.NewEngine(map[string]orchestration.Driver{"first": firstDriver, "blocking": driver})
+	finished := make(chan error, 1)
+	go func() {
+		_, err := engine.Execute(ctx, orchestration.Plan{
+			APIVersion: orchestration.APIVersion, Kind: orchestration.Kind,
+			Metadata: orchestration.Metadata{Name: "canceled-preflight"},
+			Steps: []orchestration.Step{
+				{ID: "first", Driver: "first", Configuration: json.RawMessage(`{"documents":[{"kind":"network","name":"first"}]}`)},
+				{ID: "blocking", Driver: "blocking", Configuration: json.RawMessage(`{"documents":[{"kind":"network","name":"second"}]}`)},
+			},
+		}, orchestration.ExecuteOptions{})
+		finished <- err
+	}()
+	select {
+	case got := <-client.started:
+		if got != ctx {
+			t.Error("Apply PlanContext did not receive caller context")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Apply preflight did not start")
+	}
+	cancel()
+	select {
+	case err := <-finished:
+		if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), `step "blocking" (blocking)`) {
+			t.Fatalf("error=%v, want scoped cancellation", err)
+		}
+		if !first.planned || first.executed || client.executed {
+			t.Fatalf("mutation during preflight: first=%#v blocking=%#v", first, client)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Apply preflight did not exit after cancellation")
+	}
+}
+
+func TestApplyValidateContextRejectsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	driver := New()
+	driver.newClient = func(incusapply.Options) applyClient {
+		t.Fatal("client constructed after cancellation")
+		return nil
+	}
+	cancel()
+	if err := driver.ValidateContext(ctx, json.RawMessage(`{"documents":[{"kind":"network","name":"example"}]}`)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("error=%v, want cancellation", err)
+	}
+}
+
+func TestApplyValidateContextRejectsSuccessAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	client := &cancellationApplyClient{cancel: cancel}
+	driver := New()
+	driver.newClient = func(incusapply.Options) applyClient { return client }
+	err := driver.ValidateContext(ctx, json.RawMessage(`{"documents":[{"kind":"network","name":"example"}]}`))
+	if !errors.Is(err, context.Canceled) || !client.planned || client.executed {
+		t.Fatalf("error=%v planned=%t executed=%t", err, client.planned, client.executed)
+	}
+}
