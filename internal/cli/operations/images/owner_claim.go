@@ -65,7 +65,7 @@ func ClassifyOwnerClaim(images []ObservedClaimedImage, scope incusscope.ProjectS
 		return "ambiguous"
 	}
 	image := matches[0]
-	if !ownedImageFingerprintPattern.MatchString(image.Fingerprint) {
+	if !OwnedFingerprintPattern.MatchString(image.Fingerprint) {
 		return "unverified"
 	}
 	if len(image.Aliases) != 1 {
