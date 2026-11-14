@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"maps"
 	"net/http"
 	"strings"
 	"testing"
@@ -82,9 +83,13 @@ func TestObserveNativeGatewayInstancesAbsentAndOwned(t *testing.T) {
 	}
 	for _, spec := range []NativeGatewayInstanceSpec{pair.Postgres, pair.LiteLLM} {
 		fp := f.aliases[spec.ImageAlias].Target
+		devices := make(api.DevicesMap, len(spec.Devices))
+		for name, device := range spec.Devices {
+			devices[name] = maps.Clone(device)
+		}
 		f.instances[spec.Name] = &api.Instance{
 			Name: spec.Name, Project: spec.Project, Type: string(api.InstanceTypeContainer),
-			InstancePut: api.InstancePut{Profiles: []string{}, Devices: spec.Devices, Config: map[string]string{
+			InstancePut: api.InstancePut{Profiles: []string{}, Devices: devices, Config: map[string]string{
 				"user.aginctus.managed": "true", "user.aginctus.resource": "gateway-instance",
 				"user.aginctus.role": spec.Role, "user.aginctus.deployment": spec.Project,
 				"volatile.base_image": fp,
