@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -45,18 +44,7 @@ func imageFingerprint(metadata, rootfs string) (string, error) {
 
 func runImages(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 1 && (args[0] == "list" || args[0] == "ls") {
-		output, err := runIncusImage(ctx, "image", "list", "--format", "json")
-		if err != nil {
-			fmt.Fprintf(stderr, "list images: %v\n", err)
-			return 1
-		}
-		var images []localImage
-		if err := json.Unmarshal(output, &images); err != nil {
-			fmt.Fprintf(stderr, "parse Incus image list: %v\n", err)
-			return 1
-		}
-		printLocalImages(stdout, images)
-		return 0
+		return imageops.ListLocalImages(ctx, stdout, stderr, runIncusImage)
 	}
 	if len(args) == 3 && args[0] == "update" {
 		if err := updateLocalImage(ctx, args[1], args[2]); err != nil {
@@ -72,15 +60,7 @@ func runImages(ctx context.Context, args []string, stdout, stderr io.Writer) int
 }
 
 func localImages(ctx context.Context) ([]localImage, error) {
-	out, err := runIncusImage(ctx, "image", "list", "--format", "json")
-	if err != nil {
-		return nil, err
-	}
-	var images []localImage
-	if err := json.Unmarshal(out, &images); err != nil {
-		return nil, fmt.Errorf("parse Incus image list: %w", err)
-	}
-	return images, nil
+	return imageops.LocalImages(ctx, runIncusImage)
 }
 
 func temporaryImageAlias(name, role, nonce string) string {
