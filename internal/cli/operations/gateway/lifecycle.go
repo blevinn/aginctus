@@ -13,8 +13,8 @@ import (
 // handling from gateway orchestration, keeping command registration passive.
 type LifecycleActions struct {
 	ConfiguredSpec func(*config.Config) (gateway.Spec, error)
-	Status func(context.Context, []string, io.Writer, io.Writer, *config.Config) int
-	SyncSIWC func(context.Context, *config.Config) error
+	Status         func(context.Context, []string, io.Writer, io.Writer, *config.Config) int
+	SyncSIWC       func(context.Context, *config.Config) error
 }
 
 func ExecuteLifecycle(ctx context.Context, action string, force bool, stdout, stderr io.Writer, effective *config.Config, actions LifecycleActions) int {

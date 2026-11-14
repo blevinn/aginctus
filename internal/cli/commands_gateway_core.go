@@ -22,8 +22,8 @@ func executeGatewayCredential(ctx context.Context, action string, stdout, stderr
 func executeGatewayLifecycle(ctx context.Context, action string, force bool, stdout, stderr io.Writer, effective *config.Config) int {
 	return gatewayops.ExecuteLifecycle(ctx, action, force, stdout, stderr, effective, gatewayops.LifecycleActions{
 		ConfiguredSpec: configuredGatewaySpec,
-		Status: runGatewayStatus,
-		SyncSIWC: syncGatewaySIWC,
+		Status:         runGatewayStatus,
+		SyncSIWC:       syncGatewaySIWC,
 	})
 }
 
@@ -32,8 +32,8 @@ func addGatewayCoreCommands(
 	load func() (*config.Config, error), status *int,
 ) *cobra.Command {
 	return gatewaycmd.Register(root, stdout, stderr, load, status, gatewaycmd.Handlers{
-		Status: runGatewayStatus,
-		Lifecycle: executeGatewayLifecycle,
+		Status:     runGatewayStatus,
+		Lifecycle:  executeGatewayLifecycle,
 		Credential: executeGatewayCredential,
 	})
 }
