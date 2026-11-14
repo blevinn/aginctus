@@ -146,4 +146,3 @@ func TestImageOwnerAuditScopedReadAndRedaction(t *testing.T) {
 		})
 	}
 }
-
