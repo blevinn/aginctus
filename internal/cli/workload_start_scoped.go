@@ -4,16 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
-	"time"
 
+	workloadops "github.com/blevinn/aginctus/internal/cli/operations/workload"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/orchestration/native"
-	"github.com/blevinn/aginctus/internal/workload"
 )
 
-// The scoped transition reconciles through the Incus SDK. It never spawns
-// the incus CLI, and it never leaves the explicitly selected project.
+// Native transition still uses the Incus SDK and never the ambient CLI project.
 var transitionScopedWorkloadState = func(ctx context.Context, intent native.InstanceLifecycleIntent) error {
 	_, err := native.EnsureLocalInstanceState(ctx, intent)
 	return err
@@ -34,117 +31,11 @@ func requireNoKnownLifecycleUnits(ctx context.Context) error {
 }
 
 func runScopedWorkloadStart(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
-	return runScopedWorkloadTransition(ctx, args, out, stderr, cfg, "start", native.InstanceRunning)
+	return workloadops.RunScopedWorkloadStart(ctx, args, out, stderr, cfg, scopedWorkloadActions())
 }
-
 func runScopedWorkloadStop(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config) int {
-	return runScopedWorkloadTransition(ctx, args, out, stderr, cfg, "stop", native.InstanceStopped)
+	return workloadops.RunScopedWorkloadStop(ctx, args, out, stderr, cfg, scopedWorkloadActions())
 }
-
-// Both operations require an explicit project and a confirmed single ID.
-// Read/verify, mutation and postflight run under one cooperative project
-// lease, but independent Incus clients are still not fenced by that lease.
-func runScopedWorkloadTransition(
-	ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config,
-	action string, target native.InstanceState,
-) int {
-	project, rest, err := parseScopedInstanceStatusArgs(args)
-	if err != nil || len(rest) != 2 || rest[0] == "" || rest[1] != "--confirm-"+action {
-		fmt.Fprintf(stderr, "Usage: aginctus workload %s --project NAME WORKLOAD-ID --confirm-%s\n", action, action)
-		return 2
-	}
-	required, completed := "stopped", "running"
-	if action == "stop" {
-		required, completed = "running", "stopped"
-	}
-	prefix := "workload " + action + ": "
-	spec, err := workload.FromConfig(cfg, rest[0])
-	if err != nil {
-		fmt.Fprintln(stderr, prefix+"invalid selected workload configuration")
-		return 1
-	}
-	scope, err := cfg.IncusProjectScope()
-	if err != nil || scope.Name != project {
-		fmt.Fprintln(stderr, prefix+"requested project must match incus.project")
-		return 2
-	}
-	// Share the existing cooperative per-project writer lease with the
-	// opt-in image importers. Legacy v0.1 and external Incus clients do
-	// not honor it, so the checks below must still fail closed.
-	release, err := acquireScopedImageMutationLease(scope)
-	if err != nil {
-		fmt.Fprintln(stderr, prefix+"project writer lease unavailable; no instance transition attempted")
-		return 1
-	}
-	defer release()
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
-	defer cancel()
-
-	if err := requireNoKnownLifecycleUnits(ctx); err != nil {
-		fmt.Fprintln(stderr, prefix+"known or unverified lifecycle controller; refusing manual transition")
-		return 1
-	}
-	_, instances, err := readScopedManagedInstances(ctx, cfg, project)
-	if err != nil {
-		fmt.Fprintln(stderr, prefix+"owned local project inventory unverified")
-		return 1
-	}
-	state, err := findScopedManagedInstance(instances, spec.Name, "workload", "agent-workload", spec.ID)
-	if err != nil {
-		fmt.Fprintln(stderr, prefix+"instance ownership unverified")
-		return 1
-	}
-	switch {
-	case strings.EqualFold(state, completed):
-		fmt.Fprintf(out, "workload %q: already %s in project %q\n", spec.ID, completed, project)
-		return 0
-	case !strings.EqualFold(state, required):
-		fmt.Fprintln(stderr, prefix+"a verified "+required+" instance is required; instance creation/removal is not supported")
-		return 1
-	}
-
-	// Refuse changing identities, policy, state or controller evidence.
-	// These observations happen immediately before the one scoped write;
-	// they are not an Incus transaction or a globally fenced lock.
-	if err := requireNoKnownLifecycleUnits(ctx); err != nil {
-		fmt.Fprintln(stderr, prefix+"lifecycle authority changed or is unverified")
-		return 1
-	}
-	_, instances, err = readScopedManagedInstances(ctx, cfg, project)
-	if err != nil {
-		fmt.Fprintln(stderr, prefix+"project or instance inventory changed before mutation")
-		return 1
-	}
-	state, err = findScopedManagedInstance(instances, spec.Name, "workload", "agent-workload", spec.ID)
-	if err != nil || !strings.EqualFold(state, required) {
-		fmt.Fprintln(stderr, prefix+"instance changed before mutation; no transition attempted")
-		return 1
-	}
-	if err := transitionScopedWorkloadState(ctx, native.InstanceLifecycleIntent{
-		Scope:      scope,
-		Name:       spec.Name,
-		Resource:   "workload",
-		Role:       "agent-workload",
-		WorkloadID: spec.ID,
-		State:      target,
-	}); err != nil {
-		fmt.Fprintln(stderr, prefix+"scoped Incus transition failed; inspect local project before retrying")
-		return 1
-	}
-	_, instances, err = readScopedManagedInstances(ctx, cfg, project)
-	if err != nil {
-		fmt.Fprintln(stderr, prefix+"post-transition project inventory unverified; inspect before retrying")
-		return 1
-	}
-	state, err = findScopedManagedInstance(instances, spec.Name, "workload", "agent-workload", spec.ID)
-	if err != nil || !strings.EqualFold(state, completed) {
-		fmt.Fprintln(stderr, prefix+"expected state not verified; inspect before retrying")
-		return 1
-	}
-	verb := "started"
-	if action == "stop" {
-		verb = "stopped"
-	}
-	fmt.Fprintf(out, "workload %q: %s in project %q\n", spec.ID, verb, project)
-	return 0
+func runScopedWorkloadTransition(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config, action string, target native.InstanceState) int {
+	return workloadops.RunScopedWorkloadTransition(ctx, args, out, stderr, cfg, action, target, scopedWorkloadActions())
 }
