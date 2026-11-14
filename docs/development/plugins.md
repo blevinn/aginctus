@@ -1,7 +1,7 @@
 # Public plugin and contribution contracts
 
-**Status: experimental discovery, configuration and declarative contributions.**
-This covers slices A1–A3 of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
+**Status: experimental declarations, host-bound runtime checks and condition execution.**
+This covers A1–A3 and the implemented A4 increments of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
 for [#798](https://github.com/blevinn/aginctus/issues/798). The broader
 [architecture proposal](../design/plugin-oriented-core.md) remains the target,
 not a claim that deployment plugins are already supported by the CLI.
@@ -92,7 +92,7 @@ resource-incarnation/accepted-revision evidence. Unknown/zero outcomes cannot
 silently become success. Valid findings are not necessarily fresh, correctly
 correlated to current resources, authorized, or sufficient for convergence.
 The host must carry deployment/instance scope alongside the local finding IDs.
-Required failed/unknown/skipped results must block success in the later executor.
+Required failed/unknown/skipped results must block success in the executor.
 Text validation rejects oversized/control-character payloads, but does not scrub
 secrets: producers must emit allowlisted nonsecret diagnostics.
 
@@ -102,8 +102,9 @@ The independently named module under `pkg/plugin/testdata/external/` contains a
 provider/MCP/gateway example plus an external consumer. It contributes a
 container-free catalog target and a dependent two-container helper target, with
 independently configurable image pointers and explicit criteria. The offline
-consumer evaluates candidate schema validity and constructs a structured finding;
-it does not perform the declared guest or live-inference probes. Its
+consumer evaluates candidate schema validity and exercises a runtime lifecycle
+criterion with an explicitly supplied fake container inspector. It does not perform
+the declared guest or live-inference probes. Its
 local `replace` points to the checked-out Aginctus module. Go rejects direct
 imports of Aginctus `internal/` packages from that module. Root tests also inspect
 the public package's transitive imports so an indirect internal dependency cannot
@@ -160,8 +161,8 @@ registration, ambient configuration, infrastructure clients or execution service
 Logical deployment IDs are not Incus project bindings or principal credentials.
 The assembled graph is a declaration snapshot, not accepted state, a scheduler,
 resolved images, scoped runtime services or permission to perform a write.
-Existing commands still use their current product paths. A4 must independently
-bind services, enforce authorization/freshness/correlation and verify conditions.
+Existing commands still use their current product paths. Runtime bindings
+independently enforce declared services and engine policy as described below.
 
 Run the host-adapter tests with the public boundary checks:
 
@@ -170,10 +171,56 @@ nix develop -c go test ./internal/plugins/... ./pkg/plugin/... ./pkg/orchestrati
 nix develop -c go vet ./internal/plugins/... ./pkg/plugin/... ./pkg/orchestration/...
 ```
 
-The host tests use public-contract fake implementations and a declaration-only
+The registration/graph tests use public-contract fake implementations and a declaration-only
 consumer. They verify scoped dependencies, independent image configuration,
 deterministic ordering, metadata/data ownership and failure/cancellation behavior.
 They do not deploy guests, evaluate runtime probes or import concrete products.
+
+## Scoped runtime check services
+
+`plugin.CheckEvaluator` is an optional interface alongside discovery and target
+contributions. `EvaluateCheck(ctx, request, services)` receives detached target/check
+declarations and explicitly supplied capabilities, not an administrator client,
+raw driver payload, configuration/credential store or permission inferred from a
+logical name. Discovery-only plugins remain valid. Runtime callbacks must finish
+their service calls before returning and produce nonsecret findings and safe errors.
+
+The first service is `CheckServices.Containers`, a `ContainerInspector` whose
+`Inspect(localContainerID)` method reads lifecycle state only. The host binds the
+evaluation context, so the plugin cannot supply a longer-lived context. The service
+expires when the callback returns, including when the plugin retains a reference.
+Nil services mean unavailable; there is no ambient fallback. Offline checks receive
+no container service. This API does not execute guest commands or expose network,
+credential, model/tool, secret-reading or mutation capabilities.
+
+`orchestration.ContainerObservation` distinguishes missing, stopped, running and
+unknown, carrying observation time and a nonsecret resource incarnation for present
+containers. Missing/unknown observations cannot establish an incarnation. Running
+is lifecycle evidence, **not application readiness**. Producers must project safe
+metadata; string validation is not secret redaction.
+
+`Registry.BindCheck(scopedTarget, checkID, hostInspector)` validates a selected
+pre/postcondition and returns an existing-engine `BoundCheck`. It rejects missing
+evaluators, undeclared checks, invalid scopes, unavailable services and access
+families not yet supported by this adapter. Binding is I/O-free. Each evaluation
+gets new detached declarations and an invocation-local reader limited to containers
+declared by that target. Invalid, stale or future-dated observations fail closed;
+ignored service errors still make the evaluator fail, preserving safe error causes.
+
+The trusted `hostInspector(ctx, targetKey, localContainerID)` must resolve an exact
+backend resource and **independently authorize every read**, including principal,
+project and ownership requirements. It must not infer authorization from the target
+key or from a prior engine check. Engine effect/opt-in policy still gates the
+evaluation; these are separate boundaries. Bind all applicable checks into
+dependency-first steps, select feasible preflight checks, and set applicable
+`BoundCheck.ResourceIncarnation`/`AcceptedRevision` expectations before execution.
+This binding path supplies neither those expectations nor write-time authority.
+
+The external-module fixture demonstrates the public-only lifecycle evaluator; the
+host tests assemble declarations and bind scoped reads through the existing engine,
+including readiness retries, retained-service refusal and ignored-error handling.
+These use fake host readers. Real backend/CLI adoption and additional service
+families remain follow-up work under #798/#800.
 
 ## Existing engine: cancellation-aware preflight
 
@@ -200,9 +247,9 @@ success. Aggregate apply checks cancellation again before credential initializat
 This increment changes cancellation propagation, not the effects or authority of
 existing preflight: Apply may inspect Incus, Compose may use temporary files, and
 validation is not a new offline-only guarantee. Public plugin configuration and
-contribution construction remain I/O-free. Condition scheduling, probe policy,
-scoped runtime service bindings and postcondition-based convergence are subsequent
-A4 work under [#800](https://github.com/blevinn/aginctus/issues/800).
+contribution construction remain I/O-free. Condition scheduling and probe policy
+are described below; product adoption remains work under
+[#800](https://github.com/blevinn/aginctus/issues/800).
 
 Run the execution and caller regression tests:
 
@@ -295,7 +342,7 @@ Timeouts remain cooperative: trusted callbacks must honor their context.
 Condition-bound engines reject dry run before driver preflight: a simulated
 operation must not manufacture postcondition success. Existing unbound engine
 dry-run behavior is preserved. Ongoing observation scheduling, deployment-wide
-postflight, real product service bindings and CLI adoption remain follow-up work
+postflight, real product adapters and CLI adoption remain follow-up work
 under [#800](https://github.com/blevinn/aginctus/issues/800).
 
 Validate engine gates and the scoped fake-host integration:
@@ -307,8 +354,8 @@ nix develop -c go test -race ./internal/orchestration ./internal/plugins
 
 ## Next slices
 
-Remaining A4 increments add product/runtime service bindings; reporting,
+Further service families and product adoption remain integration work; reporting,
 selection/generation, Nix integration and product extraction follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
-by these foundation slices, and #798 stays open until its remaining host-integration
-acceptance criteria are delivered.
+by these foundation slices. Additional service families should arrive with concrete
+integration needs and preserve the explicit read/write authority boundaries.
