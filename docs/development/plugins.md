@@ -210,9 +210,74 @@ Run the execution and caller regression tests:
 nix develop -c go test ./internal/orchestration/... ./internal/statevolume/... ./internal/cli/... ./internal/gateway/...
 ```
 
+## Existing engine: single-attempt condition gates
+
+The next A4 increment adds opt-in `Engine.WithConditions(stepBindings, policy)`
+to the same ordered executor. These are trusted, in-memory **host bindings**;
+serialized plans and current CLI commands do not acquire evaluator callbacks or
+new authority. A host maps each selected target to a step in dependency-first
+order, retaining `(deployment, instance, target)` in `TargetScope` and local
+target/check IDs in public findings. The fake-host integration test in
+`internal/plugins/execution_test.go` demonstrates this path with container-free
+contributions and no infrastructure access.
+
+- All supplied binding scopes, definitions, evaluator presence, effect policy and
+  evidence-identity expectations validate before driver preflight. Unknown step
+  bindings and duplicate target scopes/check IDs are rejected. Unbound steps
+  retain legacy behavior; the host is responsible for binding **every** applicable
+  required declaration. An omitted binding is not proof of target convergence.
+- A precondition marked `Preflight` runs before any operation and is evaluated
+  again at its operation boundary. Other preconditions are deferred, allowing
+  dependency-produced prerequisites. Postconditions run after the driver returns.
+  A required failed/unknown/skipped/invalid result stops the ordered plan before
+  any later operation, including dependents. Optional diagnostics remain visible.
+- `CheckPolicy` defaults to offline checks. Read-only checks require an explicit
+  check mode and host authorizer; active probes additionally require active mode
+  and every declared opt-in. The authorizer must approve all access requirements
+  for the bound scope. Authorization for the whole selection runs before any
+  evaluator/operation, and is repeated immediately before each evaluation.
+  Authorizers must be cooperative, bounded policy checks that do not require a
+  dependency's resource to exist. Resource ownership/preconditions and independent
+  write-time authority remain the operation adapter's responsibility.
+- Each evaluator receives a timeout-bounded caller context. Evaluation errors,
+  invalid/mismatched evidence, expired observations and future timestamps yield
+  safe structured unknown findings. Required failures retain error causes through
+  `errors.Is`. A callback returning nil after cancellation/timeout cannot establish
+  success, and parent cancellation stops execution even for optional checks.
+- With `MaxAge == 0`, evidence must be observed during the current evaluation;
+  otherwise its age must satisfy the declared maximum. Supplied incarnation and
+  accepted-revision expectations must match. The host must supply these bindings
+  wherever applicable; empty expectations do not verify resource identity. The
+  engine does not resolve accepted state, maintain an observation cache or infer
+  identity from a logical target name.
+- `Result.Conditions` retains scoped phase-tagged findings. `Result.Operations`
+  retains completed driver calls even when a subsequent postcondition fails;
+  `Result.Steps` includes only steps that pass their required postconditions.
+  Neither collection is a durable journal or proof that canceled writes did not
+  reach a server. Recovery still requires appropriate re-observation.
+
+The check mode limits evaluator effects; it does not make legacy driver preflight
+offline or authorize operation writes. Bound callbacks are trusted Go code, not a
+sandbox. Metadata and nested slices are copied at binding and authorization
+boundaries, but closure state remains the host's responsibility.
+
+This increment supports **one bounded attempt** per check. Nonzero retry intervals
+are rejected before mutation rather than silently ignored. Condition-bound engines
+reject dry run before driver preflight: a simulated operation must not manufacture
+postcondition success. Existing unbound engine dry-run behavior is preserved.
+Ongoing observations, readiness polling, real product service bindings and CLI
+adoption remain follow-up work under [#800](https://github.com/blevinn/aginctus/issues/800).
+
+Validate engine gates and the scoped fake-host integration:
+
+```sh
+nix develop -c go test ./internal/orchestration/... ./internal/plugins/... ./pkg/plugin/... ./pkg/orchestration/...
+nix develop -c go test -race ./internal/orchestration ./internal/plugins
+```
+
 ## Next slices
 
-Remaining A4 increments introduce operation preconditions/postconditions; reporting,
+Remaining A4 increments add bounded readiness and product/runtime service bindings; reporting,
 selection/generation, Nix integration and product extraction follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
 by these foundation slices, and #798 stays open until its remaining host-integration
