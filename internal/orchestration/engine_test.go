@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeDriver struct {
@@ -15,11 +16,17 @@ type fakeDriver struct {
 	order          *[]string
 	supportsDryRun bool
 	validateErr    error
+	validate       func(context.Context) error
+	validations    int
 	executeErr     error
 	executions     int
 }
 
-func (d *fakeDriver) Validate(json.RawMessage) error {
+func (d *fakeDriver) ValidateContext(ctx context.Context, _ json.RawMessage) error {
+	d.validations++
+	if d.validate != nil {
+		return d.validate(ctx)
+	}
 	return d.validateErr
 }
 
@@ -147,8 +154,110 @@ func TestEngineRejectsCancellationBeforeFirstStep(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v", err)
 	}
-	if driver.executions != 0 {
-		t.Fatal("driver ran after cancellation")
+	if driver.validations != 0 || driver.executions != 0 {
+		t.Fatal("driver validated or ran after cancellation")
+	}
+}
+
+func TestEngineCompletesPreflightBeforeExecution(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		t.Run(fmt.Sprintf("dry-run=%t", dryRun), func(t *testing.T) {
+			var order []string
+			ctx := t.Context()
+			drivers := map[string]Driver{}
+			for _, name := range []string{"first", "second"} {
+				drivers[name] = &fakeDriver{
+					name: name, order: &order, supportsDryRun: true,
+					validate: func(got context.Context) error {
+						if got != ctx {
+							t.Error("preflight did not receive caller context")
+						}
+						order = append(order, "validate-"+name)
+						return nil
+					},
+				}
+			}
+			result, err := NewEngine(drivers).Execute(ctx, testPlan(
+				Step{ID: "first", Driver: "first", Configuration: []byte(`{}`)},
+				Step{ID: "second", Driver: "second", Configuration: []byte(`{}`)},
+			), ExecuteOptions{DryRun: dryRun})
+			if err != nil || len(result.Steps) != 2 {
+				t.Fatalf("result=%#v error=%v", result, err)
+			}
+			want := []string{"validate-first", "validate-second", fmt.Sprintf("first:%t", dryRun), fmt.Sprintf("second:%t", dryRun)}
+			if !reflect.DeepEqual(order, want) {
+				t.Fatalf("order=%v want=%v", order, want)
+			}
+		})
+	}
+}
+
+func TestEngineRejectsCancellationAfterValidationCallback(t *testing.T) {
+	for _, callbackErr := range []error{nil, errors.New("preflight failed")} {
+		t.Run(fmt.Sprint(callbackErr), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			first := &fakeDriver{validate: func(context.Context) error {
+				cancel()
+				return callbackErr
+			}}
+			second := &fakeDriver{}
+			result, err := NewEngine(map[string]Driver{"first": first, "second": second}).Execute(ctx, testPlan(
+				Step{ID: "first", Driver: "first", Configuration: []byte(`{}`)},
+				Step{ID: "second", Driver: "second", Configuration: []byte(`{}`)},
+			), ExecuteOptions{})
+			if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), `step "first" (first)`) {
+				t.Fatalf("error=%v, want scoped cancellation", err)
+			}
+			if callbackErr != nil && !errors.Is(err, callbackErr) {
+				t.Fatalf("validation cause lost: %v", err)
+			}
+			if len(result.Steps) != 0 || first.executions != 0 || second.executions != 0 || second.validations != 0 {
+				t.Fatalf("work continued after canceled preflight: result=%#v first=%#v second=%#v", result, first, second)
+			}
+		})
+	}
+}
+
+func TestEngineCancelsBlockedPreflight(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	started := make(chan struct{})
+	driver := &fakeDriver{validate: func(ctx context.Context) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	}}
+	engine := NewEngine(map[string]Driver{"blocking": driver})
+	finished := make(chan error, 1)
+	go func() {
+		_, err := engine.Execute(ctx, testPlan(Step{ID: "probe", Driver: "blocking", Configuration: []byte(`{}`)}), ExecuteOptions{})
+		finished <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("preflight did not start")
+	}
+	cancel()
+	select {
+	case err := <-finished:
+		if !errors.Is(err, context.Canceled) || driver.executions != 0 {
+			t.Fatalf("error=%v executions=%d", err, driver.executions)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("preflight did not exit after cancellation")
+	}
+}
+
+func TestEngineValidateContextRejectsExpiredDeadline(t *testing.T) {
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	driver := &fakeDriver{}
+	err := NewEngine(map[string]Driver{"test": driver}).ValidateContext(ctx,
+		testPlan(Step{ID: "test", Driver: "test", Configuration: []byte(`{}`)}), ExecuteOptions{})
+	if !errors.Is(err, context.DeadlineExceeded) || driver.validations != 0 {
+		t.Fatalf("error=%v validations=%d", err, driver.validations)
 	}
 }
 

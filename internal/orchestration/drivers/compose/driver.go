@@ -80,7 +80,17 @@ func (d *Driver) SupportsDryRun() bool {
 }
 
 func (d *Driver) Validate(raw json.RawMessage) error {
-	_, err := parseConfig(context.Background(), raw, validationEnvironment())
+	return d.ValidateContext(context.Background(), raw)
+}
+
+func (d *Driver) ValidateContext(ctx context.Context, raw json.RawMessage) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("compose preflight canceled before preparation: %w", err)
+	}
+	_, err := parseConfig(ctx, raw, validationEnvironment())
+	if cancelErr := ctx.Err(); cancelErr != nil {
+		return fmt.Errorf("compose preflight canceled: %w", cancelErr)
+	}
 	return err
 }
 
