@@ -139,6 +139,79 @@ let
     lib.any (
       assertion: !assertion.assertion && lib.hasPrefix "programs.aginctus.settings.mcp." assertion.message
     ) candidate.assertions;
+  candidateFingerprint = lib.concatStrings (lib.replicate 64 "a");
+  candidateWorkload = {
+    id = "dev";
+    instanceName = "hm-dev";
+    instanceType = "container";
+    imageFingerprint = candidateFingerprint;
+    profiles = [ "base" ];
+    ensureRunning = false;
+  };
+  withCandidate = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      settings.incus.project = "hm-operator";
+      workloadCandidate = {
+        deploymentID = "hm-deployment";
+        workloads = [ candidateWorkload ];
+      };
+    };
+  };
+  duplicateCandidate = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      workloadCandidate = {
+        deploymentID = "hm-deployment";
+        workloads = [
+          candidateWorkload
+          (candidateWorkload // { instanceName = "other-instance"; })
+        ];
+      };
+    };
+  };
+  duplicateProfiles = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      workloadCandidate = {
+        deploymentID = "hm-deployment";
+        workloads = [
+          (
+            candidateWorkload
+            // {
+              profiles = [
+                "base"
+                "base"
+              ];
+            }
+          )
+        ];
+      };
+    };
+  };
+  invalidFingerprint = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      workloadCandidate = {
+        deploymentID = "hm-deployment";
+        workloads = [ (candidateWorkload // { imageFingerprint = "latest"; }) ];
+      };
+    };
+  };
+  invalidSecretField = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      workloadCandidate = {
+        deploymentID = "hm-deployment";
+        workloads = [ (candidateWorkload // { credential = "forbidden"; }) ];
+      };
+    };
+  };
   withMCP = evaluate {
     programs.aginctus = {
       enable = true;
@@ -203,6 +276,26 @@ let
   };
 in
 assert disabled.home.packages == [ ];
+assert !(builtins.hasAttr "aginctus/workload-candidate.json" disabled.xdg.configFile);
+assert !(builtins.hasAttr "aginctus/workload-candidate.json" enabled.xdg.configFile);
+assert withCandidate.programs.aginctus.workloadCandidate.deploymentID == "hm-deployment";
+assert withCandidate.programs.aginctus.settings.incus.project == "hm-operator";
+assert withCandidate.home.packages == [ stub ];
+assert builtins.hasAttr "aginctus/workload-candidate.json" withCandidate.xdg.configFile;
+assert lib.hasInfix "aginctus-hm-workload-candidate.json" (
+  toString withCandidate.xdg.configFile."aginctus/workload-candidate.json".source
+);
+assert lib.all (a: a.assertion) withCandidate.assertions;
+assert lib.any (a: !a.assertion) duplicateCandidate.assertions;
+assert lib.any (a: !a.assertion) duplicateProfiles.assertions;
+assert
+  !(builtins.tryEval (
+    builtins.deepSeq invalidFingerprint.programs.aginctus.workloadCandidate.workloads true
+  )).success;
+assert
+  !(builtins.tryEval (
+    builtins.deepSeq invalidSecretField.programs.aginctus.workloadCandidate.workloads true
+  )).success;
 assert
   withAssets.programs.aginctus.settings.gateway.providers.go.config.models.coding.source
   == "openai/gpt-6-luna";
