@@ -92,8 +92,6 @@ func TestLocalUnverifiedAttemptDoesNotClaimForeignState(t *testing.T) {
 	if _, err := store.ReadLocalUnverifiedAttempt(strings.Repeat("0", 32)); !errors.Is(err, os.ErrNotExist) {
 		// Before any attempt, the operations directory is absent, not a
 		// successful or empty convergence record.
-		if err == nil {
-			t.Fatal("nonexistent journal returned an operation")
-		}
+		t.Fatalf("missing journal was not reported as absent: %v", err)
 	}
 }
