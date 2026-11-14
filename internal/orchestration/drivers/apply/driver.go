@@ -48,6 +48,13 @@ func (d *Driver) SupportsDryRun() bool {
 }
 
 func (d *Driver) Validate(raw json.RawMessage) error {
+	return d.ValidateContext(context.Background(), raw)
+}
+
+func (d *Driver) ValidateContext(ctx context.Context, raw json.RawMessage) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("apply preflight canceled before preparation: %w", err)
+	}
 	cfg, err := parseConfig(raw)
 	if err != nil {
 		return err
@@ -57,8 +64,15 @@ func (d *Driver) Validate(raw json.RawMessage) error {
 		return err
 	}
 	client := d.newClient(clientOptions(cfg))
-	if _, err := client.PlanContext(context.Background(), bytes.NewReader(stream)); err != nil {
-		return fmt.Errorf("preflight incus-apply resources: %w", err)
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("apply preflight canceled before planning: %w", err)
+	}
+	_, planErr := client.PlanContext(ctx, bytes.NewReader(stream))
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("apply preflight canceled: %w", err)
+	}
+	if planErr != nil {
+		return fmt.Errorf("preflight incus-apply resources: %w", planErr)
 	}
 	return nil
 }

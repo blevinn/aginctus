@@ -127,7 +127,7 @@ func ExecutePlan(ctx context.Context, plan orchestration.Plan, effective *config
 		"native":       nativedriver.NewDriver(),
 		"state-volume": statevolume.NewDriver(),
 	})
-	if err := validator.Validate(plan, orchestration.ExecuteOptions{}); err != nil {
+	if err := validator.ValidateContext(ctx, plan, orchestration.ExecuteOptions{}); err != nil {
 		return err
 	}
 	needsEnvironment := false
@@ -149,6 +149,9 @@ func ExecutePlan(ctx context.Context, plan orchestration.Plan, effective *config
 	// The environment is shared by the Compose driver, so authorize every
 	// Compose step before creating secrets or handing any credentials to it.
 	var environment map[string]string
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("aggregate apply canceled before gateway initialization: %w", err)
+	}
 	if needsEnvironment {
 		environment, err = spec.InitializeRuntimeEnvironment()
 		if err != nil {
