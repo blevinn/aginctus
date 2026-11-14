@@ -14,11 +14,11 @@ import (
 // ReplacePlanActions contains only project-local, read-only inputs; this
 // operation never authorizes import or replacement of an image.
 type ReplacePlanActions struct {
-	Verify func(context.Context, incusscope.ProjectScope) error
-	Inventory func(context.Context, incusscope.ProjectScope) ([]ObservedClaimedImage, error)
-	Artifact func(string, string, string) (string, error)
+	Verify      func(context.Context, incusscope.ProjectScope) error
+	Inventory   func(context.Context, incusscope.ProjectScope) ([]ObservedClaimedImage, error)
+	Artifact    func(string, string, string) (string, error)
 	Fingerprint func(string, string) (string, error)
-	Survey func(context.Context, string) string
+	Survey      func(context.Context, string) string
 }
 
 // This is a read-only observation, not an authorization result. Even a clean
