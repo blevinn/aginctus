@@ -175,9 +175,44 @@ consumer. They verify scoped dependencies, independent image configuration,
 deterministic ordering, metadata/data ownership and failure/cancellation behavior.
 They do not deploy guests, evaluate runtime probes or import concrete products.
 
+## Existing engine: cancellation-aware preflight
+
+The first A4 increment addresses [#348](https://github.com/blevinn/aginctus/issues/348)
+in the existing ordered `internal/orchestration` engine. `Driver.ValidateContext`
+is mandatory for every registered engine driver; there is no fallback to a
+context-free validator. `Engine.Execute` and aggregate apply's initial validation
+use `Engine.ValidateContext` with the request context. All steps must pass
+validation before execution begins. Cancellation stops remaining validation and
+execution, including when a callback returns nil after cancellation. Wrapped
+errors retain cancellation/deadline identity for `errors.Is`; the engine also
+retains a simultaneous driver validation error.
+
+Apply forwards the caller context to its existing read-only `PlanContext`;
+Compose forwards it to document/project loading with nonsecret validation
+placeholders. Native network and state-volume configuration checks remain local.
+The context-free `Validate` helpers remain convenience wrappers for standalone
+callers without a request context. Request paths must use `ValidateContext`.
+Blocking operations must cooperate with cancellation; the engine cannot forcibly
+interrupt a driver that ignores its context. Cancellation does not roll back a
+mutation already sent during execution, and a canceled step is not reported as
+success. Aggregate apply checks cancellation again before credential initialization.
+
+This increment changes cancellation propagation, not the effects or authority of
+existing preflight: Apply may inspect Incus, Compose may use temporary files, and
+validation is not a new offline-only guarantee. Public plugin configuration and
+contribution construction remain I/O-free. Condition scheduling, probe policy,
+scoped runtime service bindings and postcondition-based convergence are subsequent
+A4 work under [#800](https://github.com/blevinn/aginctus/issues/800).
+
+Run the execution and caller regression tests:
+
+```sh
+nix develop -c go test ./internal/orchestration/... ./internal/statevolume/... ./internal/cli/... ./internal/gateway/...
+```
+
 ## Next slices
 
-A4 introduces context-aware operation preconditions/postconditions; reporting,
+Remaining A4 increments introduce operation preconditions/postconditions; reporting,
 selection/generation, Nix integration and product extraction follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
 by these foundation slices, and #798 stays open until its remaining host-integration
