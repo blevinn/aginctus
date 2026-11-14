@@ -354,6 +354,43 @@ nix develop -c go test -race ./internal/orchestration ./internal/plugins
 
 ## Ordered execution reporting
 
+### Current-run status snapshots
+
+Reporting also returns `Result.Report.Status`, an authoritative execution snapshot
+independent of retained trace truncation. The host can create
+`internal/observability.NewMonitor()` and pass it in `ExecuteOptions.Monitor` to
+enable reporting and inspect snapshots **during** execution. Share only the public
+`observability.Reader` with authorized consumers. No global registry or cross-run
+subscription grants access to other principals' metadata. A monitor is single-use;
+reusing it leaves its original run unchanged and collects a separate result report.
+Drivers do not receive the host's monitor capability.
+
+Snapshot capture, sequence assignment and projection share one lock. `Watermark`
+includes rejected/omitted sequences; `Dropped` counts retained-history loss, not
+lost execution knowledge. Valid transitions update the projection before bounded
+retention. `Run` and `Finished` preserve terminal status. Detached `Entries` contain
+the latest event per encountered lifecycle/check slot, ordered by sequence, with
+only the latest attempt/activity per check window. New attempts clear previous
+attempt activity. Neither retries nor plugin-selected activity codes grow status
+history. Snapshot size scales with encountered steps/checks, not event volume.
+
+Absent/unstarted slots are **not success**. This initial projection describes
+encountered execution, not the planned graph, accepted-state inventory or ongoing
+health. Observation timestamps are historical and are never refreshed on reads;
+consumers must not reuse a prior pass as current readiness. Core waiting, blocked,
+canceled, optional non-pass and uncertain outcomes retain their original meanings.
+Progress counts cannot override lifecycle findings. Status is ephemeral and remains
+separate from durable recovery/journaling and real backend adoption under #800.
+
+Validate snapshots and engine integration (fake drivers; no infrastructure):
+
+```sh
+nix develop -c go test ./internal/observability/... ./internal/orchestration/... ./pkg/observability/... ./pkg/plugin/...
+nix develop -c go test -race ./internal/observability ./internal/orchestration
+```
+
+### Retained events
+
 The first A5 increment publishes experimental `pkg/observability` events and a
 bounded `Report`. Enable collection explicitly on the existing engine:
 
@@ -398,12 +435,13 @@ is not secret redaction or an audience authorization policy.
   every omitted transition in `Report.Dropped`; sequence gaps expose the loss.
   Dropping reporting events does not drop evaluations or alter execution results.
 
-Collection has no observer callbacks, sinks, goroutines or live subscriptions, so an observer
-cannot block execution or decide its outcome. The report is available after the
-call returns; it is not a live status snapshot, cross-run ordered stream, durable
-journal or restart recovery record. It carries no write authority or accepted-state
-promotion. Current status, subscriptions, slow-sink behavior and CLI/log adapters
-remain follow-up work under [#801](https://github.com/blevinn/aginctus/issues/801).
+Collection never invokes observer callbacks or writers and creates no publisher
+goroutines, so a sink cannot block execution or decide its outcome. The final
+report is available after the call returns; optional host monitors expose the
+independent live execution snapshots described above. Subscription and presentation
+layers are separate from execution. Neither snapshots nor event delivery establish
+cross-run ordering, durable journals, restart recovery, write authority or
+accepted-state promotion.
 
 Validate public envelopes, retention and engine lifecycle behavior:
 
@@ -456,7 +494,8 @@ The collector's short internal lock is not an observer/backpressure interface.
 
 This increment binds progress to existing runtime **checks**. Further operation
 hooks can receive explicit progress capabilities when their product adapters land.
-There is no shared stream, live subscriber, durable delivery or authorization grant.
+Plugin reporters grant neither observation access nor durable delivery or backend
+authorization; host observation handles are separate capabilities.
 
 Validate runtime progress and the external consumer:
 
@@ -467,9 +506,9 @@ nix develop -c go test -race ./internal/plugins ./internal/orchestration ./inter
 
 ## Next slices
 
-Further service families and product adoption remain integration work. Current-status
-projections/subscriptions/renderers,
-selection/generation, Nix integration and product extraction follow in their own
+Further service families, product adoption, planned graph inventory and ongoing
+health remain integration work. Static selection/generation, Nix integration and
+product extraction follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
 by these foundation slices. Additional service families should arrive with concrete
 integration needs and preserve the explicit read/write authority boundaries.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	collection "github.com/blevinn/aginctus/internal/observability"
 	report "github.com/blevinn/aginctus/pkg/observability"
 )
 
@@ -13,6 +14,9 @@ type ExecuteOptions struct {
 	DryRun bool
 	// Reporting collects a bounded, nonsecret lifecycle trace in Result.Report.
 	Reporting bool
+	// Monitor enables reporting and exposes live, read-only status to its host.
+	// Each handle is single-use; reuse cannot mix independent executions.
+	Monitor *collection.Monitor
 }
 
 type Driver interface {
@@ -92,13 +96,15 @@ func (e *Engine) ValidateContext(ctx context.Context, plan Plan, options Execute
 }
 
 func (e *Engine) Execute(ctx context.Context, plan Plan, options ExecuteOptions) (result Result, err error) {
-	if options.Reporting {
-		result.reporting = newExecutionReport(plan, options.DryRun)
+	if options.Reporting || options.Monitor != nil {
+		result.reporting = newExecutionReport(plan, options.DryRun, options.Monitor)
 		defer func() {
 			trace := result.reporting.finish(ctx, err)
 			result.Report, result.reporting = &trace, nil
 		}()
 	}
+	// Drivers do not receive the host's monitor-claim capability.
+	options.Monitor = nil
 	result.phaseStarted(report.Validation)
 	if err := ctx.Err(); err != nil {
 		return result, fmt.Errorf("orchestration canceled before validation: %w", err)

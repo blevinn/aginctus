@@ -27,10 +27,51 @@ func validateReport(t *testing.T, result Result, terminal report.State) []report
 		}
 	}
 	last := events[len(events)-1]
+	if status := result.Report.Status; !status.Finished || status.Run != last || status.Watermark != last.Sequence || status.Dropped != result.Report.Dropped {
+		t.Fatalf("authoritative terminal status differs: %+v", status)
+	}
 	if last.Kind != report.Run || last.State != terminal || last.Sequence != uint64(len(events))+result.Report.Dropped {
 		t.Fatalf("terminal/gap mismatch: %+v dropped=%d", last, result.Report.Dropped)
 	}
 	return events
+}
+
+type inspectingDriver struct {
+	t       *testing.T
+	monitor *collection.Monitor
+}
+
+func (d inspectingDriver) ValidateContext(context.Context, json.RawMessage) error { return nil }
+func (d inspectingDriver) SupportsDryRun() bool                                   { return false }
+func (d inspectingDriver) Execute(_ context.Context, _ json.RawMessage, options ExecuteOptions) error {
+	if options.Monitor != nil {
+		d.t.Fatal("host monitor passed to driver")
+	}
+	s := d.monitor.Snapshot()
+	if s.Finished || s.Run.State != report.Running || s.Entries[len(s.Entries)-1].Kind != report.Operation {
+		d.t.Fatalf("live execution snapshot unavailable: %+v", s)
+	}
+	return nil
+}
+
+func TestMonitorExposesLiveExecutionAndReuseCannotMixRuns(t *testing.T) {
+	engine, _, _, plan := gateEngine(nil, CheckPolicy{})
+	monitor := collection.NewMonitor()
+	engine.drivers[plan.Steps[0].Driver] = inspectingDriver{t, monitor}
+	result, err := engine.Execute(t.Context(), plan, ExecuteOptions{Monitor: monitor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validateReport(t, result, report.Completed)
+	if monitor.Snapshot().RunID != result.Report.RunID || !monitor.Snapshot().Finished {
+		t.Fatal("monitor not bound to result")
+	}
+	// Reuse must not redirect the original reader or influence the next execution.
+	engine, _, _, plan = gateEngine(nil, CheckPolicy{})
+	next, err := engine.Execute(t.Context(), plan, ExecuteOptions{Monitor: monitor})
+	if err != nil || next.Report.RunID == result.Report.RunID || monitor.Snapshot().RunID != result.Report.RunID {
+		t.Fatalf("monitor reuse mixed independent runs: %v", err)
+	}
 }
 
 func TestReportingIsOptInAndRunLocal(t *testing.T) {
