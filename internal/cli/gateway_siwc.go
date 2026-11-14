@@ -22,7 +22,9 @@ func runManagedSIWC(ctx context.Context, effective *config.Config, store *gatewa
 }
 
 func configureSIWCOperations(store *gatewaycontrol.Store, effective *config.Config) {
-	gatewayops.ConfigureSIWCOperations(store, effective, exchangeGatewaySIWC)
+	gatewayops.ConfigureSIWCOperations(store, effective, func(ctx context.Context, attachment gateway.CredentialAttachment, update gateway.CredentialUpdate) error {
+		return exchangeGatewaySIWC(ctx, attachment, update)
+	})
 }
 
 func syncGatewaySIWC(ctx context.Context, effective *config.Config) error {
