@@ -10,6 +10,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/blevinn/aginctus/pkg/observability"
 	"github.com/blevinn/aginctus/pkg/orchestration"
 	"github.com/blevinn/aginctus/pkg/plugin"
 )
@@ -123,12 +124,18 @@ func (Example) EvaluateCheck(ctx context.Context, request plugin.CheckRequest, s
 	if request.Target.ID != "helper" || request.Check.ID != "container-running" || services.Containers == nil {
 		return orchestration.Finding{}, fmt.Errorf("fixture check requires a bound container inspector")
 	}
+	if services.Progress != nil {
+		services.Progress.Report(observability.Progress{Code: "lifecycle-inspection", Total: 1})
+	}
 	observation, err := services.Containers.Inspect("helper")
 	if err != nil {
 		return orchestration.Finding{}, err
 	}
 	if err := observation.Validate(); err != nil {
 		return orchestration.Finding{}, err
+	}
+	if services.Progress != nil {
+		services.Progress.Report(observability.Progress{Code: "lifecycle-inspection", Current: 1, Total: 1})
 	}
 	outcome := orchestration.Unknown
 	switch observation.State {

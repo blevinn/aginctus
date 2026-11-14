@@ -3,17 +3,21 @@
 package observability
 
 import (
+	"context"
 	"slices"
+	"sync"
 	"time"
 
 	contract "github.com/blevinn/aginctus/pkg/observability"
 )
 
-// EventLimit includes the reserved terminal event. The collector has one core
-// writer, no observers and no goroutines; reporting cannot wait for a sink.
+// EventLimit includes the reserved terminal event. Core lifecycle events and
+// concurrent scoped progress share one lock/order. There
+// are no observers or goroutines; reporting cannot wait for a sink.
 const EventLimit = 1024
 
 type Collector struct {
+	mu       sync.Mutex
 	report   contract.Report
 	sequence uint64
 	finished bool
@@ -26,6 +30,12 @@ func New(runID string) *Collector {
 // Record stamps and orders trusted core transitions. Invalid events are dropped
 // without changing execution; their missing sequences count toward Dropped.
 func (c *Collector) Record(event contract.Event) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.record(event)
+}
+
+func (c *Collector) record(event contract.Event) {
 	if c.finished {
 		return
 	}
@@ -41,10 +51,55 @@ func (c *Collector) Record(event contract.Event) {
 	c.finished = terminal
 }
 
-// Report returns detached retained events; only the core writer may call it.
+// Report returns detached retained events under the same ordering lock.
 // A final event remains available even after progress retention is exhausted.
 func (c *Collector) Report() contract.Report {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	report := c.report
 	report.Events = slices.Clone(report.Events)
 	return report
+}
+
+type progressKey struct{}
+
+type progressBinding struct {
+	collector *Collector
+	event     contract.Event
+}
+
+// WithProgress binds host-owned correlation for one actual check attempt. A nil
+// collector explicitly masks inherited bindings when reporting is disabled.
+func WithProgress(ctx context.Context, collector *Collector, event contract.Event) context.Context {
+	return context.WithValue(ctx, progressKey{}, progressBinding{collector, event})
+}
+
+// Progress returns a reporter bound to this exact context, including a runtime
+// adapter's shorter callback lifetime. Only internal hosts can create bindings.
+func Progress(ctx context.Context) contract.Reporter {
+	binding, ok := ctx.Value(progressKey{}).(progressBinding)
+	if !ok || binding.collector == nil {
+		return nil
+	}
+	return scopedProgress{ctx, binding}
+}
+
+type scopedProgress struct {
+	ctx context.Context
+	progressBinding
+}
+
+func (p scopedProgress) Report(progress contract.Progress) {
+	p.collector.mu.Lock()
+	defer p.collector.mu.Unlock()
+	if p.ctx.Err() != nil {
+		return
+	}
+	if deadline, ok := p.ctx.Deadline(); ok && !time.Now().Before(deadline) {
+		return
+	}
+	event := p.event
+	event.Kind, event.State, event.Reason = contract.DomainProgress, contract.Running, contract.NoReason
+	event.Progress = progress
+	p.collector.record(event)
 }

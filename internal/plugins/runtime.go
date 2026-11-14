@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	collection "github.com/blevinn/aginctus/internal/observability"
 	engine "github.com/blevinn/aginctus/internal/orchestration"
 	contract "github.com/blevinn/aginctus/pkg/orchestration"
 	"github.com/blevinn/aginctus/pkg/plugin"
@@ -70,7 +71,7 @@ func (r *Registry) BindCheck(target ScopedTarget, checkID string, inspect Contai
 		invocation, cancel := context.WithCancel(ctx)
 		defer cancel()
 		reader := &containerReader{ctx: invocation, key: target.Key, target: definition, check: check, inspect: inspect}
-		services := plugin.CheckServices{}
+		services := plugin.CheckServices{Progress: collection.Progress(invocation)}
 		if slices.Contains(check.Access, contract.IncusAccess) {
 			services.Containers = reader
 		}

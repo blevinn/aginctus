@@ -15,14 +15,15 @@ const SchemaVersion = "aginctus.dev/events/v1alpha1"
 type Kind string
 
 const (
-	Run           Kind = "run"
-	Validation    Kind = "validation"
-	Authorization Kind = "authorization"
-	Preflight     Kind = "preflight"
-	Step          Kind = "step"
-	Operation     Kind = "operation"
-	Condition     Kind = "condition"
-	CheckAttempt  Kind = "check-attempt"
+	Run            Kind = "run"
+	Validation     Kind = "validation"
+	Authorization  Kind = "authorization"
+	Preflight      Kind = "preflight"
+	Step           Kind = "step"
+	Operation      Kind = "operation"
+	Condition      Kind = "condition"
+	CheckAttempt   Kind = "check-attempt"
+	DomainProgress Kind = "progress"
 )
 
 type State string
@@ -54,6 +55,33 @@ const (
 // Scope is logical correlation, never backend authority or principal identity.
 type Scope struct{ Deployment, Instance, Target string }
 
+// Progress is optional domain activity, never lifecycle success or an observation.
+// Code is a bounded, nonsecret activity identifier, not arbitrary prose, raw
+// errors or secret references. Current/Total are informational; zero/zero means
+// unquantified. Reaching Total does not establish check or operation success.
+type Progress struct {
+	Code    string
+	Current uint64
+	Total   uint64
+}
+
+func (p Progress) Validate() error {
+	if !identifier.MatchString(p.Code) || p.Current > p.Total {
+		return fmt.Errorf("invalid progress activity or counters")
+	}
+	return nil
+}
+
+// Reporter is an invocation-scoped, optional telemetry capability. Report is safe
+// for concurrent calls; callers must finish calls before returning. Invalid,
+// disabled, expired and excess payloads may be discarded without an error or
+// execution effect. A reporter cannot choose correlation IDs, emit lifecycle
+// transitions or extend its host-bound context. Producers own nonsecret codes;
+// shape validation is not secret redaction. No live sink is invoked by Report.
+type Reporter interface {
+	Report(Progress)
+}
+
 // Event is a core-owned transition. Step/operation IDs are run-local opaque IDs,
 // not arbitrary plan names or backend resource names. Attempt is one-based for
 // actual check attempts; a waiting condition references its last attempt. A
@@ -79,6 +107,7 @@ type Event struct {
 	Required         bool
 	AcceptedRevision string
 	ObservedAt       time.Time
+	Progress         Progress
 }
 
 // Report retains a bounded event prefix and the terminal run event. Dropped
@@ -120,7 +149,7 @@ func (e Event) Validate() error {
 		if e.StepID != "" || e.OperationID != "" || e.Scope != (Scope{}) {
 			return fmt.Errorf("run phase cannot claim step scope")
 		}
-	case Step, Operation, Condition, CheckAttempt:
+	case Step, Operation, Condition, CheckAttempt, DomainProgress:
 		if !identifier.MatchString(e.StepID) || !identifier.MatchString(e.OperationID) {
 			return fmt.Errorf("step event requires correlation IDs")
 		}
@@ -139,18 +168,27 @@ func (e Event) Validate() error {
 		allowed = e.State == Running || e.State == Passed || e.State == Failed || e.State == Unknown || e.State == Skipped || e.State == Waiting || e.State == Canceled
 	case CheckAttempt:
 		allowed = e.State == Running || e.State == Passed || e.State == Failed || e.State == Unknown || e.State == Skipped || e.State == Canceled
+	case DomainProgress:
+		allowed = e.State == Running
 	}
 	if !allowed {
 		return fmt.Errorf("invalid state for event kind")
 	}
-	if e.Kind == Condition || e.Kind == CheckAttempt {
+	if e.Kind == Condition || e.Kind == CheckAttempt || e.Kind == DomainProgress {
 		if e.Scope == (Scope{}) || !identifier.MatchString(e.CheckID) || e.Attempt < 0 ||
-			(e.Kind == CheckAttempt && e.Attempt == 0) ||
+			((e.Kind == CheckAttempt || e.Kind == DomainProgress) && e.Attempt == 0) ||
 			(e.Phase != "preflight" && e.Phase != "precondition" && e.Phase != "postcondition") {
 			return fmt.Errorf("invalid check correlation")
 		}
 	} else if e.CheckID != "" || e.Phase != "" || e.Attempt != 0 || e.Required || e.AcceptedRevision != "" || !e.ObservedAt.IsZero() {
 		return fmt.Errorf("non-check event cannot claim check evidence")
+	}
+	if e.Kind == DomainProgress {
+		if e.Progress.Validate() != nil || e.Reason != NoReason || !e.ObservedAt.IsZero() {
+			return fmt.Errorf("invalid domain progress event")
+		}
+	} else if e.Progress != (Progress{}) {
+		return fmt.Errorf("lifecycle event cannot carry domain progress")
 	}
 	return nil
 }
