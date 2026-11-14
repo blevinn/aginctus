@@ -204,6 +204,92 @@ The user still requires separately provisioned Incus authorization to operate
 resources. `incus-admin` access is effectively host-root-equivalent.
 Restricted project identities cannot provision host-level Linux bridges.
 
+## Optional pinned workload candidate (no activation)
+
+A Home Manager operator can optionally render a **nonsecret, workload-only
+configured candidate** that is compatible with the experimental
+[local accepted-state workflow](../accepted-state-local.md).
+This is not the configured-to-accepted promotion of a production deployment,
+a runtime reconciler, or an Incus privilege grant.
+
+The strictly typed option is `programs.aginctus.workloadCandidate` (default
+`null`). For example, inside the same Home Manager module as
+`programs.aginctus.settings`:
+
+```nix
+{
+  programs.aginctus = {
+    enable = true;
+    settings.incus.project = "aginctus";
+
+    workloadCandidate = {
+      deploymentID = "example";
+      workloads = [
+        {
+          id = "dev";
+          instanceName = "example-dev";
+          instanceType = "container";
+          # Synthetic 64-character demonstration fingerprint ONLY.
+          # Replace with an approved, immutable, exact image fingerprint
+          # before using an actual accepted-state experiment.
+          imageFingerprint = builtins.concatStringsSep "" (builtins.genList (_: "a") 64);
+          profiles = [ "default" ];
+          ensureRunning = false;
+        }
+      ];
+    };
+  };
+}
+```
+
+Home Manager writes `~/.config/aginctus/workload-candidate.json` (normally
+an XDG symlink into the Nix store) **only when the option is present**. The
+candidate is exactly `WorkloadDeployment` v1alpha1: explicitly selected IDs,
+immutable lowercase SHA256 image identities, ordered profile names, instance
+types and running-state *intent*. The Incus project is taken from the user's
+**same** `settings.incus.project` option; it cannot be selected separately
+from a CLI ambient default. Duplicate workload IDs/instance names/profiles,
+unbounded selections, image aliases and additional credential/host policy
+fields are rejected. Do not place secrets, OAuth state or private keys in
+this option: Nix outputs are not secret storage.
+
+A normal `home-manager switch` only changes the candidate file. It does
+**not** create a private accepted-state store, accept a revision, start an
+Aginctus user service, or contact Incus. `ensureRunning` describes candidate
+intent; it does not cause a start at login, activation, or package update.
+
+To **inspect** that candidate explicitly in a scratch, same-UID local store,
+install the separately opt-in `state-local` package and run:
+
+```sh
+nix shell .#state-local
+state_dir="$(mktemp -d)"
+chmod 700 "$state_dir"
+aginctus-state-local init --state-dir "$state_dir/accepted"
+aginctus-state-local diff \
+  --state-dir "$state_dir/accepted" \
+  --deployment example --project aginctus \
+  --candidate "$HOME/.config/aginctus/workload-candidate.json"
+```
+
+The project and deployment arguments are **required** and must match the
+candidate. Diff is read-only and reports changed field names, not workload
+values; it cannot modify Incus. Any manual local acceptance requires
+`aginctus-state-local accept` with an exact `--expected-revision` and
+`--confirm`, and is **only** a same-user experimental store operation. It
+does not grant controller ownership or authorize native reconciliation.
+Never run that command as root on behalf of a Home Manager user or point it
+at the pilot/system store.
+
+The authoritative host bridge, storage pools, firewall and root gateway
+credentials remain NixOS-owned. A confined Incus TLS credential can be
+delegated only after the separate [authority review](../../design/home-manager-delegated-authority.md)
+and [controller fence](../../design/controller-ownership.md) pass. The
+disabled-by-default, explicitly triggered **mutating** image/workload services
+remain tracked in [#438](https://github.com/blevinn/aginctus/issues/438)
+and [#439](https://github.com/blevinn/aginctus/issues/439). This candidate
+feature does not implement either one.
+
 ## NixOS: retain host firewall authority without guest orchestration
 
 An existing, approved NixOS host can keep just the NixOS-side Aginctus policy
