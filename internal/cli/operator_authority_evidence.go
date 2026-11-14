@@ -10,14 +10,14 @@ import (
 type operatorReadStatus = operatorops.ReadStatus
 
 const (
-	operatorReadOK operatorReadStatus = operatorops.ReadOK
-	operatorReadDenied operatorReadStatus = operatorops.ReadDenied
-	operatorReadNoIdentity operatorReadStatus = operatorops.ReadNoIdentity
+	operatorReadOK          operatorReadStatus = operatorops.ReadOK
+	operatorReadDenied      operatorReadStatus = operatorops.ReadDenied
+	operatorReadNoIdentity  operatorReadStatus = operatorops.ReadNoIdentity
 	operatorReadUnavailable operatorReadStatus = operatorops.ReadUnavailable
-	operatorReadNoCLI operatorReadStatus = operatorops.ReadNoCLI
-	operatorReadCanceled operatorReadStatus = operatorops.ReadCanceled
-	operatorReadTimeout operatorReadStatus = operatorops.ReadTimeout
-	operatorReadInvalid operatorReadStatus = operatorops.ReadInvalid
+	operatorReadNoCLI       operatorReadStatus = operatorops.ReadNoCLI
+	operatorReadCanceled    operatorReadStatus = operatorops.ReadCanceled
+	operatorReadTimeout     operatorReadStatus = operatorops.ReadTimeout
+	operatorReadInvalid     operatorReadStatus = operatorops.ReadInvalid
 )
 
 func readOperatorAPI(ctx context.Context, path string) (json.RawMessage, operatorReadStatus) {
