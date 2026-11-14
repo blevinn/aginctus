@@ -44,7 +44,10 @@ let
         description = "Pinned Incus instance name, not an ownership claim.";
       };
       instanceType = mkOption {
-        type = types.enum [ "container" "virtual-machine" ];
+        type = types.enum [
+          "container"
+          "virtual-machine"
+        ];
         description = "Pinned workload type.";
       };
       imageFingerprint = mkOption {
@@ -61,8 +64,7 @@ let
       };
     };
   };
-  candidateWorkloads =
-    if cfg.workloadCandidate == null then [ ] else cfg.workloadCandidate.workloads;
+  candidateWorkloads = if cfg.workloadCandidate == null then [ ] else cfg.workloadCandidate.workloads;
   candidateIDs = map (w: w.id) candidateWorkloads;
   candidateInstanceNames = map (w: w.instanceName) candidateWorkloads;
   unique = xs: builtins.length xs == builtins.length (lib.unique xs);
@@ -84,7 +86,14 @@ let
       selectedWorkloads = candidateIDs;
     };
     workloads = map (w: {
-      inherit (w) id instanceName instanceType imageFingerprint profiles ensureRunning;
+      inherit (w)
+        id
+        instanceName
+        instanceType
+        imageFingerprint
+        profiles
+        ensureRunning
+        ;
     }) candidateWorkloads;
   };
 in
@@ -93,18 +102,20 @@ in
     enable = mkEnableOption "Aginctus operator CLI and nonsecret user configuration";
 
     workloadCandidate = mkOption {
-      type = types.nullOr (types.submodule {
-        options = {
-          deploymentID = mkOption {
-            type = candidateName;
-            description = "Explicit deployment identity for offline accepted-state comparison.";
+      type = types.nullOr (
+        types.submodule {
+          options = {
+            deploymentID = mkOption {
+              type = candidateName;
+              description = "Explicit deployment identity for offline accepted-state comparison.";
+            };
+            workloads = mkOption {
+              type = types.listOf candidateWorkload;
+              description = "Pinned, nonsecret workload-only candidate. Omission means no candidate.";
+            };
           };
-          workloads = mkOption {
-            type = types.listOf candidateWorkload;
-            description = "Pinned, nonsecret workload-only candidate. Omission means no candidate.";
-          };
-        };
-      });
+        }
+      );
       default = null;
       description = ''
         Optional nonsecret, strictly typed workload-only candidate rendered
@@ -155,9 +166,10 @@ in
       "aginctus/config.json".source = jsonFormat.generate "aginctus-user-config.json" (
         mcpSettings.renderSettings cfg.settings
       );
-    } // lib.optionalAttrs (cfg.workloadCandidate != null) {
-      "aginctus/workload-candidate.json".source = jsonFormat.generate
-        "aginctus-hm-workload-candidate.json" workloadCandidateSpec;
+    }
+    // lib.optionalAttrs (cfg.workloadCandidate != null) {
+      "aginctus/workload-candidate.json".source =
+        jsonFormat.generate "aginctus-hm-workload-candidate.json" workloadCandidateSpec;
     };
   };
 }
