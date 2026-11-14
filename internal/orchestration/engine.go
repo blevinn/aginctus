@@ -5,10 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	report "github.com/blevinn/aginctus/pkg/observability"
 )
 
 type ExecuteOptions struct {
 	DryRun bool
+	// Reporting collects a bounded, nonsecret lifecycle trace in Result.Report.
+	Reporting bool
 }
 
 type Driver interface {
@@ -32,6 +36,8 @@ type Result struct {
 	// This is not a durable journal or proof that canceled writes did not occur.
 	Operations []StepResult
 	Conditions []ConditionResult
+	Report     *report.Report
+	reporting  *executionReport
 }
 
 type Engine struct {
@@ -85,27 +91,41 @@ func (e *Engine) ValidateContext(ctx context.Context, plan Plan, options Execute
 	return ctx.Err()
 }
 
-func (e *Engine) Execute(ctx context.Context, plan Plan, options ExecuteOptions) (Result, error) {
+func (e *Engine) Execute(ctx context.Context, plan Plan, options ExecuteOptions) (result Result, err error) {
+	if options.Reporting {
+		result.reporting = newExecutionReport(plan, options.DryRun)
+		defer func() {
+			trace := result.reporting.finish(ctx, err)
+			result.Report, result.reporting = &trace, nil
+		}()
+	}
+	result.phaseStarted(report.Validation)
 	if err := ctx.Err(); err != nil {
-		return Result{}, fmt.Errorf("orchestration canceled before validation: %w", err)
+		return result, fmt.Errorf("orchestration canceled before validation: %w", err)
 	}
 	if err := e.ValidateContext(ctx, plan, options); err != nil {
-		return Result{}, err
+		return result, err
 	}
+	result.phaseFinished()
 
-	result := Result{Steps: make([]StepResult, 0, len(plan.Steps))}
+	result.Steps = make([]StepResult, 0, len(plan.Steps))
+	result.phaseStarted(report.Authorization)
 	if err := e.authorizeConditions(ctx, plan); err != nil {
 		return result, err
 	}
+	result.phaseFinished()
+	result.phaseStarted(report.Preflight)
 	for _, step := range plan.Steps {
 		if err := e.runConditions(ctx, step, PreflightPhase, &result); err != nil {
 			return result, err
 		}
 	}
+	result.phaseFinished()
 	for _, step := range plan.Steps {
 		if err := ctx.Err(); err != nil {
 			return result, fmt.Errorf("orchestration canceled before step %q: %w", step.ID, err)
 		}
+		result.stepStarted(step, e.conditions[step.ID].Scope)
 		if err := e.runConditions(ctx, step, PreconditionPhase, &result); err != nil {
 			return result, err
 		}
@@ -113,6 +133,7 @@ func (e *Engine) Execute(ctx context.Context, plan Plan, options ExecuteOptions)
 			return result, fmt.Errorf("orchestration canceled before step %q: %w", step.ID, err)
 		}
 		driver := e.drivers[step.Driver]
+		result.operationStarted()
 		if err := driver.Execute(ctx, step.Configuration, options); err != nil {
 			return result, fmt.Errorf("execute orchestration step %q (%s): %w", step.ID, step.Driver, err)
 		}
@@ -121,6 +142,7 @@ func (e *Engine) Execute(ctx context.Context, plan Plan, options ExecuteOptions)
 		if err := ctx.Err(); err != nil {
 			return result, fmt.Errorf("orchestration canceled during step %q (%s): %w", step.ID, step.Driver, err)
 		}
+		result.operationFinished()
 		completed := StepResult{
 			ID:     step.ID,
 			Driver: step.Driver,
@@ -134,6 +156,7 @@ func (e *Engine) Execute(ctx context.Context, plan Plan, options ExecuteOptions)
 			return result, fmt.Errorf("orchestration canceled during postflight for step %q: %w", step.ID, err)
 		}
 		result.Steps = append(result.Steps, completed)
+		result.stepFinished()
 	}
 	return result, nil
 }

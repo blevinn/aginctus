@@ -1,7 +1,7 @@
 # Public plugin and contribution contracts
 
-**Status: experimental declarations, host-bound runtime checks and condition execution.**
-This covers A1–A3 and the implemented A4 increments of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
+**Status: experimental declarations, runtime checks, condition execution and lifecycle traces.**
+This covers A1–A4 and the first A5 increment of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
 for [#798](https://github.com/blevinn/aginctus/issues/798). The broader
 [architecture proposal](../design/plugin-oriented-core.md) remains the target,
 not a claim that deployment plugins are already supported by the CLI.
@@ -352,9 +352,70 @@ nix develop -c go test ./internal/orchestration/... ./internal/plugins/... ./pkg
 nix develop -c go test -race ./internal/orchestration ./internal/plugins
 ```
 
+## Ordered execution reporting
+
+The first A5 increment publishes experimental `pkg/observability` events and a
+bounded `Report`. Enable collection explicitly on the existing engine:
+
+```go
+result, err := engine.Execute(ctx, plan, orchestration.ExecuteOptions{Reporting: true})
+// result.Report remains inspectable even when err is non-nil.
+```
+
+Default execution does not collect a report or change CLI output. Reporting uses
+the same execution loop, not replay after completion. Core owns run, validation,
+authorization, preflight, step, operation, condition-window and check-attempt
+transitions. These events carry closed kind/state/reason vocabularies, generated
+run IDs, per-run sequence/time, opaque step/operation IDs, logical target scope
+where bound, check phase/ID/required policy, attempt number, observation time and
+the host-bound accepted-revision expectation where supplied.
+
+Step/operation IDs are `step-N`, correlated by one-based plan position within that
+run. Arbitrary plan/step/driver names, configuration, raw errors, finding diagnostic
+codes/text, remediation and guest output are not copied into events. Logical scope
+and accepted revision must already be nonsecret host metadata. Shape validation
+is not secret redaction or an audience authorization policy.
+
+- `completed` means the selected execution finished, **not current application
+  health or deployment convergence**. Unbound/omitted checks remain the host's
+  responsibility. Dry-run operation/step/run completion is `simulated`.
+- Actual attempts are numbered from one within step/phase/check. Condition-window
+  start/finish has attempt zero; `waiting` references the last attempted probe.
+  A timeout while waiting retains the last observation time, reports the deadline
+  reason and adds no fictional attempt or observation.
+- Required non-passes block later operations; optional non-passes remain visible
+  without changing run success. A step completes only after its required
+  postconditions pass, while a prior completed operation remains visible after
+  postflight failure. Cancellation during a wait stops even optional checks.
+- A real driver error or cancellation after driver entry is conservatively
+  `uncertain`, including when a driver returns nil after cancellation. This does
+  not assert that a write happened or rolled back. Cancellation before driver
+  entry and after a known completed operation remains `canceled`.
+- `internal/observability` establishes sequence order with a single core writer.
+  It retains at most **1,024 events per run**, reserving space for the terminal
+  run event. On overflow it keeps the event prefix plus terminal event and counts
+  every omitted transition in `Report.Dropped`; sequence gaps expose the loss.
+  Dropping reporting events does not drop evaluations or alter execution results.
+
+Collection has no callbacks, sinks, goroutines or live subscriptions, so an observer
+cannot block execution or decide its outcome. The report is available after the
+call returns; it is not a live status snapshot, cross-run ordered stream, durable
+journal or restart recovery record. It carries no write authority or accepted-state
+promotion. Current status, subscriptions, slow-sink behavior and CLI/log adapters
+remain follow-up work under [#801](https://github.com/blevinn/aginctus/issues/801),
+alongside a separate scoped plugin domain-progress interface.
+
+Validate public envelopes, retention and engine lifecycle behavior:
+
+```sh
+nix develop -c go test ./pkg/observability/... ./internal/observability/... ./internal/orchestration/... ./internal/plugins/...
+nix develop -c go test -race ./pkg/observability ./internal/observability ./internal/orchestration ./internal/plugins
+```
+
 ## Next slices
 
-Further service families and product adoption remain integration work; reporting,
+Further service families and product adoption remain integration work. Scoped domain
+progress reporting, current-status projections/subscriptions/renderers,
 selection/generation, Nix integration and product extraction follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
 by these foundation slices. Additional service families should arrive with concrete
