@@ -24,7 +24,7 @@ Use this guide to find the **current** operator path, implementation contract or
 
 ## Decisions, proposals and historical evidence
 
-- [Design proposals](design/native-incus-reconciliation.md), [Home Manager authority design](design/home-manager-operator.md), [testenv worker design](design/testenv-incus-backend.md), [local model design](design/local-llms.md) and [workspace-sharing design](design/workspace-sharing.md) are not automatic implementation guarantees.
+- [Design proposals](design/README.md) group core/state, authority and workload/tooling proposals, including the [plugin-oriented core plan](design/plugin-oriented-core.md). These are not automatic implementation guarantees.
 - [Architecture decision records](adr/0001-herdr-client-topology.md) preserve accepted decisions; consult the [second ADR](adr/0002-native-incus-reconciliation.md) for native migration rationale.
 - [v0.1 release notes](releases/v0.1.0.md) state what was observed and what was deferred.
 - [v0.2.0 working release notes](releases/v0.2.0.md) collect merged development changes, unresolved acceptance gates, and candidate evidence (not published). [Historical materials](history/README.md) retain release-specific handoffs and old milestone pointers rather than masquerading as current procedures.
