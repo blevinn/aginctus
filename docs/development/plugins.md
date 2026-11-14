@@ -354,6 +354,43 @@ nix develop -c go test -race ./internal/orchestration ./internal/plugins
 
 ## Ordered execution reporting
 
+### Current-run status snapshots
+
+Reporting also returns `Result.Report.Status`, an authoritative execution snapshot
+independent of retained trace truncation. The host can create
+`internal/observability.NewMonitor()` and pass it in `ExecuteOptions.Monitor` to
+enable reporting and inspect snapshots **during** execution. Share only the public
+`observability.Reader` with authorized consumers. No global registry or cross-run
+subscription grants access to other principals' metadata. A monitor is single-use;
+reusing it leaves its original run unchanged and collects a separate result report.
+Drivers do not receive the host's monitor capability.
+
+Snapshot capture, sequence assignment and projection share one lock. `Watermark`
+includes rejected/omitted sequences; `Dropped` counts retained-history loss, not
+lost execution knowledge. Valid transitions update the projection before bounded
+retention. `Run` and `Finished` preserve terminal status. Detached `Entries` contain
+the latest event per encountered lifecycle/check slot, ordered by sequence, with
+only the latest attempt/activity per check window. New attempts clear previous
+attempt activity. Neither retries nor plugin-selected activity codes grow status
+history. Snapshot size scales with encountered steps/checks, not event volume.
+
+Absent/unstarted slots are **not success**. This initial projection describes
+encountered execution, not the planned graph, accepted-state inventory or ongoing
+health. Observation timestamps are historical and are never refreshed on reads;
+consumers must not reuse a prior pass as current readiness. Core waiting, blocked,
+canceled, optional non-pass and uncertain outcomes retain their original meanings.
+Progress counts cannot override lifecycle findings. Status is ephemeral and remains
+separate from durable recovery/journaling and real backend adoption under #800.
+
+Validate snapshots and engine integration (fake drivers; no infrastructure):
+
+```sh
+nix develop -c go test ./internal/observability/... ./internal/orchestration/... ./pkg/observability/... ./pkg/plugin/...
+nix develop -c go test -race ./internal/observability ./internal/orchestration
+```
+
+### Retained events
+
 The first A5 increment publishes experimental `pkg/observability` events and a
 bounded `Report`. Enable collection explicitly on the existing engine:
 
