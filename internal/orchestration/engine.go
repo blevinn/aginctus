@@ -26,11 +26,18 @@ type StepResult struct {
 }
 
 type Result struct {
+	// Steps includes only operations whose required postconditions passed.
 	Steps []StepResult
+	// Operations also retains completed driver calls when postflight failed.
+	// This is not a durable journal or proof that canceled writes did not occur.
+	Operations []StepResult
+	Conditions []ConditionResult
 }
 
 type Engine struct {
-	drivers map[string]Driver
+	drivers     map[string]Driver
+	conditions  map[string]StepConditions
+	checkPolicy CheckPolicy
 }
 
 func NewEngine(drivers map[string]Driver) *Engine {
@@ -52,6 +59,9 @@ func (e *Engine) ValidateContext(ctx context.Context, plan Plan, options Execute
 		return fmt.Errorf("orchestration canceled before validation: %w", err)
 	}
 	if err := plan.Validate(); err != nil {
+		return err
+	}
+	if err := e.validateConditions(plan, options); err != nil {
 		return err
 	}
 	for _, step := range plan.Steps {
@@ -84,7 +94,21 @@ func (e *Engine) Execute(ctx context.Context, plan Plan, options ExecuteOptions)
 	}
 
 	result := Result{Steps: make([]StepResult, 0, len(plan.Steps))}
+	if err := e.authorizeConditions(ctx, plan); err != nil {
+		return result, err
+	}
 	for _, step := range plan.Steps {
+		if err := e.runConditions(ctx, step, PreflightPhase, &result); err != nil {
+			return result, err
+		}
+	}
+	for _, step := range plan.Steps {
+		if err := ctx.Err(); err != nil {
+			return result, fmt.Errorf("orchestration canceled before step %q: %w", step.ID, err)
+		}
+		if err := e.runConditions(ctx, step, PreconditionPhase, &result); err != nil {
+			return result, err
+		}
 		if err := ctx.Err(); err != nil {
 			return result, fmt.Errorf("orchestration canceled before step %q: %w", step.ID, err)
 		}
@@ -97,11 +121,19 @@ func (e *Engine) Execute(ctx context.Context, plan Plan, options ExecuteOptions)
 		if err := ctx.Err(); err != nil {
 			return result, fmt.Errorf("orchestration canceled during step %q (%s): %w", step.ID, step.Driver, err)
 		}
-		result.Steps = append(result.Steps, StepResult{
+		completed := StepResult{
 			ID:     step.ID,
 			Driver: step.Driver,
 			DryRun: options.DryRun,
-		})
+		}
+		result.Operations = append(result.Operations, completed)
+		if err := e.runConditions(ctx, step, PostconditionPhase, &result); err != nil {
+			return result, err
+		}
+		if err := ctx.Err(); err != nil {
+			return result, fmt.Errorf("orchestration canceled during postflight for step %q: %w", step.ID, err)
+		}
+		result.Steps = append(result.Steps, completed)
 	}
 	return result, nil
 }
