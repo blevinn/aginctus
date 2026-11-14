@@ -91,5 +91,6 @@ A public control-plane API, dashboard, Bubble Tea TUI, multiple independent Incu
 - [Orchestration stream contract](orchestration-streams.md) — plan validation and step ownership.
 - [LiteLLM protected volume](litellm-private-volume.md) — persistent-state placement and trust boundary.
 - [Native ChatGPT OAuth decision](native-chatgpt-oauth.md) — accepted design, not permission to activate a deferred image.
+- [Plugin-oriented core proposal](../design/plugin-oriented-core.md) — planned public plugin boundaries, configurable images, validation and observable orchestration; not implemented by the design document.
 
 These are implementation/architecture references. Use [operator workflows](../operations/README.md) for authorized procedures and [test tiers](../testing/README.md) for evidence limitations.

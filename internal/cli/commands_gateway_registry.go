@@ -4,6 +4,7 @@ import (
 	"io"
 
 	registrycmd "github.com/blevinn/aginctus/internal/cli/commands/gateway/registry"
+	gatewayops "github.com/blevinn/aginctus/internal/cli/operations/gateway"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -41,14 +42,13 @@ func normalizeGatewayRegistryLegacyArgs(args []string) []string {
 	return mapped
 }
 
-
 func addGatewayRegistryCommands(
 	gateway *cobra.Command, stdout, stderr io.Writer,
 	load func() (*config.Config, error), status *int, options config.Options,
 ) {
 	registrycmd.Register(gateway, stdout, stderr, load, status, options, registrycmd.Handlers{
 		CheckMutation: checkGatewayProviderMutation,
-		Register: executeGatewayRegistration,
+		Register:      executeGatewayRegistration,
 		RenderModel: func(cfg *config.Config, provider, name string) ([]byte, error) {
 			store, err := configuredGatewayStore(cfg)
 			if err != nil {
@@ -58,4 +58,16 @@ func addGatewayRegistryCommands(
 		},
 		AddAssets: addGatewayAssetCommands,
 	})
+}
+
+// Registry actions are bound to the local persistence and rendering capabilities.
+// These thin adapters retain the existing CLI test/command contracts.
+func executeGatewayModelRead(action, name string, stdout, stderr io.Writer) int {
+	return gatewayops.ModelRead(action, name, stdout, stderr, renderRegisteredModel)
+}
+func executeGatewayProviderRead(action, name string, stdout, stderr io.Writer) int {
+	return gatewayops.ProviderRead(action, name, stdout, stderr)
+}
+func executeGatewayRegistration(kind, name, provider, source, alias string, dryRun bool, stdout, stderr io.Writer) int {
+	return gatewayops.Registration(kind, name, provider, source, alias, dryRun, stdout, stderr)
 }
