@@ -40,6 +40,31 @@ The executor, **not the Nix module, user configuration, shell wrapper or state-s
 
 A successful read-only preflight is therefore **necessary diagnostic evidence, never sufficient write evidence**. The executor must fail closed when a claim is unknown; there is no `sudo` fallback. An invocation that is merely *serialized* is not necessarily *authorized*.
 
+## Implementation boundary after the local-pinning slice
+
+The merged #772/#776 same-UID accepted revision lock, followed by #814
+(selected accepted-workload snapshots) and #816/#818 (durable immutable
+**unverified** local operation-intention records and process-exit recovery),
+are deliberately limited building blocks. The new PRs are pending review
+and are not an authenticated operation service or an Incus write path.
+
+- **What these cover:** one pinned accepted workload, local cooperating
+  promotion exclusion, private durable operation identities, and conservative
+  reporting of unresolved outcomes on restart.
+- **What they cannot cover:** authentication across root/user trust domains,
+  an authoritative controller grant, noncooperating or other-user writer
+  exclusion, in-flight Incus credential revocation, a root-owned accepted
+  state store, successful mutation verification or a signed audit history.
+- **Required before #438/#439:** implement an authenticated project-scoped
+  executor using the restricted TLS policy proved in disposable Incus;
+  enforce a trusted owner/lease and resource-level policy at the *actual*
+  write boundary; bind execution to the accepted snapshot and a durable
+  journal; test partial/crash behavior, revocation, external-writer conflict
+  and reversible ownership handoff in the VM.
+
+No NixOS/HM module activates these APIs. A successful `SnapshotSelectedWorkload`
+or `RecordLocalUnverifiedAttempt` call does not imply the caller can mutate Incus.
+
 ## Branching choices still open
 
 [#704](https://github.com/blevinn/aginctus/issues/704) must choose and validate whether the operational boundary is (a) project-native credentials with network/volume restrictions, (b) separately authoritative host/project accepted revisions, (c) an independently authenticated single state service with scoped CAS, or (d) a hybrid composite. A composite read view can be shared without merging untrusted user input into privileged host policy.
