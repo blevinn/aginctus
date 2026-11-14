@@ -195,7 +195,9 @@ func TestConditionDefinitionsAreValidatedBeforeDriverPreflight(t *testing.T) {
 			s["second"] = StepConditions{Scope: TargetScope{"lab", "two", "target"}, Postconditions: []BoundCheck{{}}}
 		}},
 		{"missing evaluator", func(s map[string]StepConditions) { s["first"].Postconditions[0].Evaluate = nil }},
-		{"polling unsupported", func(s map[string]StepConditions) { s["first"].Postconditions[0].Check.RetryInterval = time.Millisecond }},
+		{"invalid polling interval", func(s map[string]StepConditions) {
+			s["first"].Postconditions[0].Check.RetryInterval = s["first"].Postconditions[0].Check.Timeout
+		}},
 		{"misplaced preflight", func(s map[string]StepConditions) { s["first"].Postconditions[0].Preflight = true }},
 		{"invalid evidence expectation", func(s map[string]StepConditions) { s["first"].Postconditions[0].AcceptedRevision = "raw\nrevision" }},
 		{"duplicate check", func(s map[string]StepConditions) { c := s["first"]; c.Preconditions = c.Postconditions; s["first"] = c }},
