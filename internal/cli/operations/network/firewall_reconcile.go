@@ -1,36 +1,32 @@
-package cli
+package network
 
 import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/firewall"
 )
 
-// Replaceable for unit tests. Never expose raw firewall utility output.
-var firewallEffectiveUID = os.Geteuid
-var discoverFirewallPolicy = deriveFirewallPolicy
-
-var firewallCommand = func(ctx context.Context, input string, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	if input != "" {
-		cmd.Stdin = strings.NewReader(input)
-	}
-	output, err := cmd.CombinedOutput()
-	return string(output), err
+// FirewallActions provides exactly the privileged capabilities required to
+// reconcile the selected host firewall. The caller supplies the root EUID
+// check, subprocess runner, and verified bridge-policy discovery.
+type FirewallActions struct {
+	EffectiveUID func() int
+	Command      func(context.Context, string, string, ...string) (string, error)
+	Discover     func(context.Context, *config.Config) (firewall.Policy, error)
 }
 
-func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config) int {
-	if firewallEffectiveUID() != 0 {
+// Reconcile requires verified host authority and backend ownership before
+// changing any firewall tables; discovery failures retain fail-closed teardown.
+func Reconcile(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config, actions FirewallActions) int {
+	if actions.EffectiveUID() != 0 {
 		fmt.Fprintln(stderr, "firewall reconciliation requires root (host INPUT mutation)")
 		return 1
 	}
-	ruleset, err := firewallCommand(ctx, "", "nft", "-a", "list", "ruleset")
+	ruleset, err := actions.Command(ctx, "", "nft", "-a", "list", "ruleset")
 	if err != nil {
 		fmt.Fprintln(stderr, "cannot verify effective nftables input backend")
 		return 1
@@ -47,32 +43,32 @@ func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, 
 			return 1
 		}
 	}
-	selectedBackend, err := selectFirewallBackend(ruleset, requestedBackend)
+	selectedBackend, err := SelectFirewallBackend(ruleset, requestedBackend)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	if selectedBackend == "firewalld" {
-		return reconcileFirewalld(ctx, stdout, stderr, cfg)
+		return ReconcileFirewalld(ctx, stdout, stderr, cfg, actions)
 	}
 	if selectedBackend == "nixos-nft" {
-		return reconcileNixosNft(ctx, stdout, stderr, cfg)
+		return ReconcileNixosNft(ctx, stdout, stderr, cfg, actions)
 	}
-	version, err := firewallCommand(ctx, "", "iptables", "--version")
+	version, err := actions.Command(ctx, "", "iptables", "--version")
 	if err != nil || !strings.Contains(version, "(nf_tables)") {
 		fmt.Fprintln(stderr, "unsupported firewall backend: require NixOS iptables-nft")
 		return 1
 	}
-	input, err := firewallCommand(ctx, "", "iptables", "-S", "nixos-fw")
+	input, err := actions.Command(ctx, "", "iptables", "-S", "nixos-fw")
 	if err != nil || !strings.Contains(input, "-j "+firewall.Chain) {
 		fmt.Fprintln(stderr, "Aginctus nixos-fw hook missing; activate the host NixOS module")
 		return 1
 	}
-	if _, err := firewallCommand(ctx, "", "iptables", "-S", firewall.Chain); err != nil {
+	if _, err := actions.Command(ctx, "", "iptables", "-S", firewall.Chain); err != nil {
 		fmt.Fprintln(stderr, "Aginctus firewall chain missing")
 		return 1
 	}
-	policy, discoveryErr := discoverFirewallPolicy(ctx, cfg)
+	policy, discoveryErr := actions.Discover(ctx, cfg)
 	var approved *firewall.Policy
 	if discoveryErr == nil {
 		approved = &policy
@@ -84,7 +80,7 @@ func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, 
 	}
 	// --noflush preserves every foreign chain. The explicit -F clears only
 	// our chain; iptables-nft commits its replacement transaction atomically.
-	if _, err := firewallCommand(ctx, transaction, "iptables-restore", "-w", "--noflush"); err != nil {
+	if _, err := actions.Command(ctx, transaction, "iptables-restore", "-w", "--noflush"); err != nil {
 		fmt.Fprintln(stderr, "Aginctus INPUT transaction failed; no unrelated rules were modified")
 		return 1
 	}
@@ -96,7 +92,7 @@ func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, 
 	return 0
 }
 
-func selectFirewallBackend(ruleset, requested string) (string, error) {
+func SelectFirewallBackend(ruleset, requested string) (string, error) {
 	firewalldPresent := strings.Contains(ruleset, "table inet firewalld")
 	nixosPresent := strings.Contains(ruleset, "table inet nixos-fw")
 	if firewalldPresent && nixosPresent {
@@ -137,9 +133,9 @@ func selectFirewallBackend(ruleset, requested string) (string, error) {
 // reconcileFirewalld uses firewalld's own D-Bus management client. Its
 // nftables table has the owner flag: CAP_NET_ADMIN cannot safely modify it
 // through nft. The declarative zone has a DROP target and no permanent grants.
-func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config) int {
+func ReconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config, actions FirewallActions) int {
 	run := func(args ...string) (string, error) {
-		output, err := firewallCommand(ctx, "", "firewall-cmd", args...)
+		output, err := actions.Command(ctx, "", "firewall-cmd", args...)
 		return strings.TrimSpace(output), err
 	}
 	fail := func(message string) int {
@@ -152,7 +148,7 @@ func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 		return fail("invalid configured Aginctus firewalld zone")
 	}
 	zones, err := run("--get-zones")
-	if err != nil || !containsWord(zones, zoneName) {
+	if err != nil || !ContainsWord(zones, zoneName) {
 		return fail("configured Aginctus-managed firewalld zone is missing; activate the NixOS module")
 	}
 	zone := "--zone=" + zoneName
@@ -164,7 +160,7 @@ func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 		return fail("Aginctus firewalld permanent zone must have the DROP target")
 	}
 	activeZone, err := run(zone, "--list-all")
-	if err != nil || !hasFirewalldDropTarget(activeZone) {
+	if err != nil || !HasFirewalldDropTarget(activeZone) {
 		return fail("Aginctus firewalld runtime zone must have the DROP target")
 	}
 	// We own this dedicated zone. Refuse unexpected runtime configuration
@@ -179,7 +175,7 @@ func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 	if err != nil {
 		return fail("cannot inspect Aginctus firewalld rich rules")
 	}
-	owned, discoveryErr := discoverFirewallPolicy(ctx, cfg)
+	owned, discoveryErr := actions.Discover(ctx, cfg)
 	var rules []string
 	if discoveryErr == nil {
 		rules, err = firewall.FirewalldRules(&owned)
@@ -193,7 +189,7 @@ func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 	}
 	// Leave an unchanged, verified runtime policy intact. The periodic timer
 	// must not interrupt active DNS connections every 30 seconds.
-	if discoveryErr == nil && sameRichRules(current, rules) &&
+	if discoveryErr == nil && SameRichRules(current, rules) &&
 		strings.TrimSpace(interfaces) == owned.Interface {
 		fmt.Fprintf(stdout, "firewalld zone already reconciled for bridge %q\n", owned.Interface)
 		return 0
@@ -230,7 +226,7 @@ func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 			return fail("cannot install Aginctus firewalld DNS/DHCP permissions")
 		}
 	}
-	if !containsWord(interfaces, owned.Interface) {
+	if !ContainsWord(interfaces, owned.Interface) {
 		if _, err := run(zone, "--add-interface="+owned.Interface); err != nil {
 			for _, rule := range rules {
 				_, _ = run(zone, "--remove-rich-rule="+rule)
@@ -242,7 +238,7 @@ func reconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 	return 0
 }
 
-func containsWord(words, target string) bool {
+func ContainsWord(words, target string) bool {
 	for _, word := range strings.Fields(words) {
 		if word == target {
 			return true
@@ -251,7 +247,7 @@ func containsWord(words, target string) bool {
 	return false
 }
 
-func sameRichRules(current string, expected []string) bool {
+func SameRichRules(current string, expected []string) bool {
 	if strings.TrimSpace(current) == "" {
 		return len(expected) == 0
 	}
@@ -274,7 +270,7 @@ func sameRichRules(current string, expected []string) bool {
 	return true
 }
 
-func hasFirewalldDropTarget(details string) bool {
+func HasFirewalldDropTarget(details string) bool {
 	for _, line := range strings.Split(details, "\n") {
 		if strings.TrimSpace(line) == "target: DROP" {
 			return true
@@ -285,23 +281,23 @@ func hasFirewalldDropTarget(details string) bool {
 
 // reconcileNixosNft updates only the child chain predeclared by the NixOS
 // module and reached from its effective input-allow decision path.
-func reconcileNixosNft(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config) int {
-	base, err := firewallCommand(ctx, "", "nft", "-a", "list", "chain", "inet", "nixos-fw", "input")
+func ReconcileNixosNft(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config, actions FirewallActions) int {
+	base, err := actions.Command(ctx, "", "nft", "-a", "list", "chain", "inet", "nixos-fw", "input")
 	if err != nil || !strings.Contains(base, "hook input") ||
 		!strings.Contains(base, "policy drop") || !strings.Contains(base, "input-allow") {
 		fmt.Fprintln(stderr, "unsupported NixOS nftables INPUT chain")
 		return 1
 	}
-	allow, err := firewallCommand(ctx, "", "nft", "-a", "list", "chain", "inet", "nixos-fw", "input-allow")
+	allow, err := actions.Command(ctx, "", "nft", "-a", "list", "chain", "inet", "nixos-fw", "input-allow")
 	if err != nil || !strings.Contains(allow, "jump "+firewall.NixosNftChain) {
 		fmt.Fprintln(stderr, "Aginctus hook missing from NixOS nftables input-allow")
 		return 1
 	}
-	if _, err := firewallCommand(ctx, "", "nft", "list", "chain", "inet", "nixos-fw", firewall.NixosNftChain); err != nil {
+	if _, err := actions.Command(ctx, "", "nft", "list", "chain", "inet", "nixos-fw", firewall.NixosNftChain); err != nil {
 		fmt.Fprintln(stderr, "Aginctus nftables child chain missing; activate the NixOS module")
 		return 1
 	}
-	policy, discoveryErr := discoverFirewallPolicy(ctx, cfg)
+	policy, discoveryErr := actions.Discover(ctx, cfg)
 	var approved *firewall.Policy
 	if discoveryErr == nil {
 		approved = &policy
@@ -311,7 +307,7 @@ func reconcileNixosNft(ctx context.Context, stdout, stderr io.Writer, cfg *confi
 		fmt.Fprintln(stderr, "invalid verified NixOS nftables policy")
 		return 1
 	}
-	if _, err := firewallCommand(ctx, txn, "nft", "-f", "-"); err != nil {
+	if _, err := actions.Command(ctx, txn, "nft", "-f", "-"); err != nil {
 		fmt.Fprintln(stderr, "atomic NixOS nftables child-chain reconciliation failed")
 		return 1
 	}
