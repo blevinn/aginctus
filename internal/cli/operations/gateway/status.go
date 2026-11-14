@@ -22,7 +22,6 @@ type StatusInstance struct {
 	Config map[string]string `json:"config"`
 }
 
-
 // Status reports the gateway's observed services using explicitly supplied
 // read-only Incus queries and fails on foreign instances or ownership markers.
 func Status(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config, inspectProjects func(context.Context) ([]byte, error), inspectInstances func(context.Context, string) ([]byte, error)) int {

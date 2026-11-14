@@ -93,6 +93,7 @@ func runConfiguredImages(ctx context.Context, args []string, stdout, stderr io.W
 // Root shims preserve tests and callers while ownership-claim decisions live
 // with image operations and stay distinct from write authorization.
 var ownedImageFingerprintPattern = imageops.OwnedFingerprintPattern
+
 type observedClaimedImage = imageops.ObservedClaimedImage
 type imageOwnerAuditReport = imageops.OwnerAuditReport
 
