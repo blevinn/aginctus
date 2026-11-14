@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
+	workloadops "github.com/blevinn/aginctus/internal/cli/operations/workload"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/herdrclient"
 	"github.com/blevinn/aginctus/internal/workload"
@@ -22,12 +23,7 @@ var inspectIncusInstances = func(ctx context.Context) ([]byte, error) {
 	return data, nil
 }
 
-type inspectedInstance struct {
-	Name    string            `json:"name"`
-	Status  string            `json:"status"`
-	Config  map[string]string `json:"config"`
-	Project string            `json:"project"`
-}
+type inspectedInstance = workloadops.InspectedInstance
 
 func findManagedInstance(instances []inspectedInstance, name, resource, role, id string) (string, error) {
 	for _, instance := range instances {

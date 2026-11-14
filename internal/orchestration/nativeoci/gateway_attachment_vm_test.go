@@ -51,8 +51,8 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 		nat      string
 		route    string
 	}{
-		{"aginctus-audit-mgmt", "management-network", "10.85.0.1/24", "false", "false"},
-		{"aginctus-audit-egress", "gateway-egress-network", "10.86.0.1/24", "true", "true"},
+		{"ag-aud-mgmt", "management-network", "10.85.0.1/24", "false", "false"},
+		{"ag-aud-egress", "gateway-egress-network", "10.86.0.1/24", "true", "true"},
 	} {
 		err := admin.UseProject("default").CreateNetwork(api.NetworksPost{
 			Name: n.name, Type: "bridge", NetworkPut: api.NetworkPut{Config: map[string]string{
@@ -79,17 +79,17 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 	}
 	top := gateway.NativeGatewayTopology{
 		Deployment: "gateway", Project: scope.Name,
-		ManagementNetwork: "aginctus-audit-mgmt", EgressNetwork: "aginctus-audit-egress",
+		ManagementNetwork: "ag-aud-mgmt", EgressNetwork: "ag-aud-egress",
 		DatabaseVolume: "gateway-postgres",
 		Services: []gateway.NativeGatewayService{
 			{Name: "postgres", ImageReference: "docker.io/library/postgres@sha256:" + strings.Repeat("a", 64),
-				Networks:          []gateway.NativeGatewayNetwork{{Name: "aginctus-audit-mgmt"}},
+				Networks:          []gateway.NativeGatewayNetwork{{Name: "ag-aud-mgmt"}},
 				Volume:            "gateway-postgres",
 				SecretEnvironment: []string{"AGINCTUS_GATEWAY_POSTGRES_PASSWORD"}},
 			{Name: "litellm", ImageReference: "ghcr.io/berriai/litellm@sha256:" + strings.Repeat("b", 64),
 				Networks: []gateway.NativeGatewayNetwork{
-					{Name: "aginctus-audit-mgmt"},
-					{Name: "aginctus-audit-egress", IPv4Address: "10.86.0.12/24"},
+					{Name: "ag-aud-mgmt"},
+					{Name: "ag-aud-egress", IPv4Address: "10.86.0.12/24"},
 				}, DependsOn: []string{"postgres"},
 				SecretEnvironment: []string{
 					"AGINCTUS_GATEWAY_POSTGRES_PASSWORD", "AGINCTUS_GATEWAY_MASTER_KEY", "AGINCTUS_GATEWAY_SALT_KEY",
