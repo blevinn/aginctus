@@ -50,6 +50,10 @@ type Descriptor struct {
 	Name         string
 	Version      string
 	Capabilities []Capability
+	// Dependencies names required compiled implementations, not runtime instances
+	// or target execution dependencies. Registration resolves missing/cyclic
+	// references; inclusion neither enables instances nor grants permissions.
+	Dependencies []string
 }
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
@@ -89,6 +93,13 @@ func (d Descriptor) Validate() error {
 		default:
 			return fmt.Errorf("capability %d has an unknown kind", i)
 		}
+	}
+	dependencies := make(map[string]bool, len(d.Dependencies))
+	for _, dependency := range d.Dependencies {
+		if !namePattern.MatchString(dependency) || dependency == d.Name || dependencies[dependency] {
+			return fmt.Errorf("invalid, self-referencing or duplicate plugin dependency")
+		}
+		dependencies[dependency] = true
 	}
 	return nil
 }

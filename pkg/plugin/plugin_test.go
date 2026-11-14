@@ -59,6 +59,9 @@ func TestDescriptorRejectsAmbiguousOrIncompatibleDiscovery(t *testing.T) {
 		{"invalid capability name", func(d *plugin.Descriptor) { d.Capabilities[0].Name = "/agent" }, nil},
 		{"unknown kind", func(d *plugin.Descriptor) { d.Capabilities[0].Kind = "future" }, nil},
 		{"duplicate name across kinds", func(d *plugin.Descriptor) { d.Capabilities[1].Name = "agent" }, nil},
+		{"invalid dependency", func(d *plugin.Descriptor) { d.Dependencies = []string{"../other"} }, nil},
+		{"self dependency", func(d *plugin.Descriptor) { d.Dependencies = []string{d.Name} }, nil},
+		{"duplicate dependency", func(d *plugin.Descriptor) { d.Dependencies = []string{"other", "other"} }, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
