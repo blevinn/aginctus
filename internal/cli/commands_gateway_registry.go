@@ -42,14 +42,13 @@ func normalizeGatewayRegistryLegacyArgs(args []string) []string {
 	return mapped
 }
 
-
 func addGatewayRegistryCommands(
 	gateway *cobra.Command, stdout, stderr io.Writer,
 	load func() (*config.Config, error), status *int, options config.Options,
 ) {
 	registrycmd.Register(gateway, stdout, stderr, load, status, options, registrycmd.Handlers{
 		CheckMutation: checkGatewayProviderMutation,
-		Register: executeGatewayRegistration,
+		Register:      executeGatewayRegistration,
 		RenderModel: func(cfg *config.Config, provider, name string) ([]byte, error) {
 			store, err := configuredGatewayStore(cfg)
 			if err != nil {
