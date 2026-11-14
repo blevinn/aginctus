@@ -1,0 +1,201 @@
+package workloadops
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"strings"
+
+	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/filestate"
+	"github.com/blevinn/aginctus/internal/workload"
+)
+
+// GatewayProvisionActions restricts credential handoff to the already-owned
+// running target and explicitly discovered management-network service.
+type GatewayProvisionActions struct {
+	CheckWorkload func(context.Context, string, string) (bool, error)
+	InspectProjects func(context.Context) ([]byte, error)
+	InspectInstances func(context.Context, string) ([]byte, error)
+	Service func(string) bool
+	Provision func(context.Context, string, []byte) error
+}
+type GatewayStatusProject struct {
+	Name string `json:"name"`
+	Config map[string]string `json:"config"`
+}
+
+type GatewayDiscoveryInstance struct {
+	Name            string                       `json:"name"`
+	Status          string                       `json:"status"`
+	Config          map[string]string            `json:"config"`
+	ExpandedDevices map[string]map[string]string `json:"expanded_devices"`
+	State           struct {
+		Network map[string]struct {
+			Addresses []struct {
+				Family  string `json:"family"`
+				Address string `json:"address"`
+				Scope   string `json:"scope"`
+			} `json:"addresses"`
+		} `json:"network"`
+	} `json:"state"`
+}
+
+// Only the unique, owned, running LiteLLM service on the configured management
+// NIC is a candidate workload endpoint. An egress NIC may also have a private
+// address, but that is not evidence of an authorized management API. Discovery
+// is metadata validation, never a network or key-scope acceptance check.
+func DiscoverGatewayIPv4(data []byte, project, managementNetwork string, service func(string) bool) (string, error) {
+	if managementNetwork == "" {
+		return "", errors.New("gateway management network not configured")
+	}
+	var instances []GatewayDiscoveryInstance
+	if err := json.Unmarshal(data, &instances); err != nil {
+		return "", fmt.Errorf("decode gateway instances: %w", err)
+	}
+	addresses := map[string]bool{}
+	count := 0
+	managementNICs := 0
+	for _, instance := range instances {
+		if instance.Name != "litellm" && !strings.HasPrefix(instance.Name, "litellm-") {
+			continue
+		}
+		if !service(instance.Name) || instance.Config["user.aginctus.managed"] != "true" ||
+			instance.Config["user.aginctus.resource"] != "compose-instance" ||
+			instance.Config["user.aginctus.deployment"] != project ||
+			!strings.EqualFold(instance.Status, "running") {
+			return "", fmt.Errorf("LiteLLM not running or not owned")
+		}
+		count++
+		// The egress bridge also gives LiteLLM a private IPv4 address. Trust
+		// the configured management attachment, not address classification or
+		// interface ordering (eth0/eth1 can change across configurations).
+		for _, device := range instance.ExpandedDevices {
+			if device["type"] != "nic" || device["network"] != managementNetwork {
+				continue
+			}
+			managementNICs++
+			name := device["name"]
+			if name == "" {
+				return "", errors.New("LiteLLM management NIC lacks a guest interface name")
+			}
+			iface, ok := instance.State.Network[name]
+			if !ok {
+				return "", errors.New("LiteLLM management NIC state unavailable")
+			}
+			for _, address := range iface.Addresses {
+				ip := net.ParseIP(address.Address)
+				if address.Family == "inet" && ip != nil && ip.To4() != nil && ip.IsPrivate() && !ip.IsLoopback() {
+					addresses[ip.String()] = true
+				}
+			}
+		}
+	}
+	if count != 1 || managementNICs != 1 || len(addresses) != 1 {
+		return "", errors.New("expected one owned running LiteLLM with exactly one management NIC and private IPv4")
+	}
+	for address := range addresses {
+		return address, nil
+	}
+	return "", errors.New("LiteLLM management IPv4 unavailable")
+}
+
+func ReadWorkloadKey(path string) (string, error) {
+	raw, err := filestate.ReadPrivateFile(path, 8192)
+	if err != nil {
+		return "", errors.New("workload key unavailable or invalid")
+	}
+	key := strings.TrimSpace(string(raw))
+	if key == "" || strings.ContainsAny(key, "\r\n") {
+		return "", errors.New("invalid workload key")
+	}
+	return key, nil
+}
+
+func RunGatewayProvision(ctx context.Context, args []string, stdout, stderr io.Writer, cfg *config.Config, actions GatewayProvisionActions) int {
+	if len(args) != 3 || !strings.HasPrefix(args[1], "--model=") || !strings.HasPrefix(args[2], "--key-file=") {
+		fmt.Fprintln(stderr, "Usage: aginctus workload gateway provision <workload-id> --model=ALIAS --key-file=PATH")
+		return 2
+	}
+	id := args[0]
+	model := strings.TrimPrefix(args[1], "--model=")
+	keyPath := strings.TrimPrefix(args[2], "--key-file=")
+	if model == "" || strings.TrimSpace(model) != model || strings.ContainsAny(model, "/\r\n") || keyPath == "" {
+		fmt.Fprintln(stderr, "invalid model or key-file option")
+		return 2
+	}
+	target, err := workload.FromConfig(cfg, id)
+	if err != nil {
+		fmt.Fprintln(stderr, "invalid workload configuration")
+		return 1
+	}
+	if target.Runtime != "opencode" || target.Isolation != "container" {
+		fmt.Fprintln(stderr, "only OpenCode containers are supported")
+		return 1
+	}
+	available, err := actions.CheckWorkload(ctx, target.Name, id)
+	if err != nil {
+		fmt.Fprintln(stderr, "cannot inspect workload ownership")
+		return 1
+	}
+	if !available {
+		fmt.Fprintln(stderr, "workload missing, unowned or stopped")
+		return 1
+	}
+	project, err := cfg.String("gateway.compose.project")
+	if err != nil {
+		fmt.Fprintln(stderr, "gateway project missing")
+		return 1
+	}
+	managementNetwork, err := cfg.String("incus.management.network.name")
+	if err != nil || managementNetwork == "" {
+		fmt.Fprintln(stderr, "gateway management network missing")
+		return 1
+	}
+	raw, err := actions.InspectProjects(ctx)
+	if err != nil {
+		fmt.Fprintln(stderr, "cannot inspect gateway ownership")
+		return 1
+	}
+	var projects []GatewayStatusProject
+	if err = json.Unmarshal(raw, &projects); err != nil {
+		fmt.Fprintln(stderr, "invalid gateway project inventory")
+		return 1
+	}
+	owned := false
+	for _, p := range projects {
+		if p.Name == project && p.Config["user.aginctus.managed"] == "true" &&
+			p.Config["user.aginctus.resource"] == "compose-project" && p.Config["user.aginctus.deployment"] == project {
+			owned = true
+		}
+	}
+	if !owned {
+		fmt.Fprintln(stderr, "gateway project not owned by Aginctus")
+		return 1
+	}
+	raw, err = actions.InspectInstances(ctx, project)
+	if err != nil {
+		fmt.Fprintln(stderr, "cannot inspect gateway instances")
+		return 1
+	}
+	address, err := DiscoverGatewayIPv4(raw, project, managementNetwork, actions.Service)
+	if err != nil {
+		fmt.Fprintln(stderr, "private LiteLLM endpoint not uniquely discoverable")
+		return 1
+	}
+	key, err := ReadWorkloadKey(keyPath)
+	if err != nil {
+		fmt.Fprintln(stderr, "workload key unavailable or invalid")
+		return 1
+	}
+	payload, _ := json.Marshal(map[string]string{"endpoint": "http://" + net.JoinHostPort(address, "4000") + "/v1", "model": model, "key": key})
+	if err = actions.Provision(ctx, target.Name, payload); err != nil {
+		fmt.Fprintln(stderr, "workload gateway provisioning failed")
+		return 1
+	}
+	fmt.Fprintf(stdout, "workload %q: private LiteLLM runtime configuration provisioned (reachability not verified)\n", id)
+	return 0
+}
