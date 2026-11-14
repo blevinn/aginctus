@@ -94,12 +94,22 @@ func parseConfig(raw json.RawMessage) (Config, error) {
 
 // Validate checks the step configuration without contacting Incus.
 func (d *Driver) Validate(raw json.RawMessage) error {
+	return d.ValidateContext(context.Background(), raw)
+}
+
+func (d *Driver) ValidateContext(ctx context.Context, raw json.RawMessage) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	cfg, err := parseConfig(raw)
 	if err != nil {
 		return err
 	}
 	_, err = cfg.intent()
-	return err
+	if err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 func (d *Driver) SupportsDryRun() bool { return true }
