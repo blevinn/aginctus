@@ -46,7 +46,7 @@ func ReconcileEgress(ctx context.Context, stdout, stderr io.Writer, cfg *config.
 		}
 		return DiscoverEgressGrant(ctx, cfg, actions)
 	}
-	if err := firewall.ReconcileEgress(ctx, firewall.Busctl{}, egressStateFile("/run/aginctus-firewall/state.json"), bridge, discover); err != nil {
+	if err := firewall.ReconcileEgress(ctx, firewall.Busctl{}, firewall.EgressStateFile("/run/aginctus-firewall/state.json"), bridge, discover); err != nil {
 		fmt.Fprintf(stderr, "egress firewall: %v\n", err)
 		return 1
 	}
