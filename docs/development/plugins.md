@@ -1,7 +1,7 @@
 # Public plugin and contribution contracts
 
 **Status: experimental declarations, runtime checks, condition execution and lifecycle traces.**
-This covers A1–A4 and the first A5 increment of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
+This covers A1–A5 of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
 for [#798](https://github.com/blevinn/aginctus/issues/798). The broader
 [architecture proposal](../design/plugin-oriented-core.md) remains the target,
 not a claim that deployment plugins are already supported by the CLI.
@@ -391,19 +391,19 @@ is not secret redaction or an audience authorization policy.
   `uncertain`, including when a driver returns nil after cancellation. This does
   not assert that a write happened or rolled back. Cancellation before driver
   entry and after a known completed operation remains `canceled`.
-- `internal/observability` establishes sequence order with a single core writer.
+- `internal/observability` serializes core transitions and scoped domain progress
+  under one collector lock, establishing a shared per-run sequence.
   It retains at most **1,024 events per run**, reserving space for the terminal
   run event. On overflow it keeps the event prefix plus terminal event and counts
   every omitted transition in `Report.Dropped`; sequence gaps expose the loss.
   Dropping reporting events does not drop evaluations or alter execution results.
 
-Collection has no callbacks, sinks, goroutines or live subscriptions, so an observer
+Collection has no observer callbacks, sinks, goroutines or live subscriptions, so an observer
 cannot block execution or decide its outcome. The report is available after the
 call returns; it is not a live status snapshot, cross-run ordered stream, durable
 journal or restart recovery record. It carries no write authority or accepted-state
 promotion. Current status, subscriptions, slow-sink behavior and CLI/log adapters
-remain follow-up work under [#801](https://github.com/blevinn/aginctus/issues/801),
-alongside a separate scoped plugin domain-progress interface.
+remain follow-up work under [#801](https://github.com/blevinn/aginctus/issues/801).
 
 Validate public envelopes, retention and engine lifecycle behavior:
 
@@ -412,10 +412,63 @@ nix develop -c go test ./pkg/observability/... ./internal/observability/... ./in
 nix develop -c go test -race ./pkg/observability ./internal/observability ./internal/orchestration ./internal/plugins
 ```
 
+## Scoped plugin domain progress
+
+With engine reporting enabled, `CheckServices.Progress` provides an optional public
+`observability.Reporter` for the current runtime-check invocation:
+
+```go
+if services.Progress != nil {
+    services.Progress.Report(observability.Progress{
+        Code: "lifecycle-inspection", Current: 1, Total: 1,
+    })
+}
+```
+
+`Progress` accepts a bounded ASCII activity identifier and unsigned `Current`/`Total`
+counters (`Current <= Total`; zero/zero is unquantified). It accepts no free-form
+text, raw errors, configuration, timestamps, observation claims or correlation IDs.
+Codes must be nonsecret domain identifiers; syntax checks do not scrub a secret
+that happens to look like an identifier. Counts are informational, not evidence:
+100% progress cannot pass a check, finish an operation or release a dependent.
+
+The engine binds run, step/operation, logical target, phase, check, attempt, required
+policy and revision metadata. Each retained progress event has kind `progress` and
+state `running`, no observation time or failure reason, and the same collector
+sequence as surrounding core transitions. Plugins cannot synthesize lifecycle
+outcomes. The external-module example demonstrates the public interface without
+Aginctus implementation imports; the transitive public-import guard includes it.
+
+The reporter inherits the evaluator's bounded context and expires when that
+callback returns. Retained references cannot report into a later attempt. Calls
+after cancellation or the exact deadline are discarded, including timer-delivery
+gaps; they create neither events nor sequence gaps. Disabled reporting supplies
+nil and explicitly masks inherited bindings in nested engine runs. Progress is
+available to offline checks too, without granting an inspection capability.
+
+`Report` returns no error and invokes no sink. Invalid payloads during an active
+invocation are discarded and counted in `Report.Dropped`; overflow shares the
+existing 1,024-event bound and terminal reservation. Dropped progress cannot change
+convergence. Concurrent calls are supported and serialized with core events; join
+all reporting work before returning from the callback. Ordering among concurrent
+calls follows collector lock acquisition, not a fictional producer wall-clock order.
+The collector's short internal lock is not an observer/backpressure interface.
+
+This increment binds progress to existing runtime **checks**. Further operation
+hooks can receive explicit progress capabilities when their product adapters land.
+There is no shared stream, live subscriber, durable delivery or authorization grant.
+
+Validate runtime progress and the external consumer:
+
+```sh
+nix develop -c go test ./internal/plugins/... ./internal/orchestration/... ./internal/observability/... ./pkg/plugin/... ./pkg/observability/...
+nix develop -c go test -race ./internal/plugins ./internal/orchestration ./internal/observability ./pkg/plugin ./pkg/observability
+```
+
 ## Next slices
 
-Further service families and product adoption remain integration work. Scoped domain
-progress reporting, current-status projections/subscriptions/renderers,
+Further service families and product adoption remain integration work. Current-status
+projections/subscriptions/renderers,
 selection/generation, Nix integration and product extraction follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
 by these foundation slices. Additional service families should arrive with concrete

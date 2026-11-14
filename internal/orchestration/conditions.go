@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	collection "github.com/blevinn/aginctus/internal/observability"
 	report "github.com/blevinn/aginctus/pkg/observability"
 	contract "github.com/blevinn/aginctus/pkg/orchestration"
 )
@@ -264,7 +265,20 @@ func (e *Engine) runCondition(ctx context.Context, stepID string, scope TargetSc
 			return finding, err
 		}
 		result.checkEvent(stepID, scope, phase, check, report.CheckAttempt, report.Running, attempt, contract.Finding{}, nil)
-		observed, cause, retry := e.evaluateCheck(window, scope, check)
+		attemptCtx, done := context.WithCancel(window)
+		var collector *collection.Collector
+		var progressEvent report.Event
+		if result.reporting != nil {
+			collector = result.reporting.collector
+			id := result.reporting.steps[stepID]
+			progressEvent = report.Event{StepID: id, OperationID: id,
+				Scope: report.Scope{Deployment: scope.Deployment, Instance: scope.Instance, Target: scope.Target},
+				Phase: string(phase), CheckID: check.Check.ID, Attempt: attempt,
+				Required: check.Check.Required, AcceptedRevision: check.AcceptedRevision}
+		}
+		attemptCtx = collection.WithProgress(attemptCtx, collector, progressEvent)
+		observed, cause, retry := e.evaluateCheck(attemptCtx, scope, check)
+		done()
 		finding = observed
 		result.checkEvent(stepID, scope, phase, check, report.CheckAttempt, findingState(finding), attempt, finding, cause)
 		result.Conditions = append(result.Conditions, ConditionResult{StepID: stepID, Scope: scope, Phase: phase, Attempt: attempt, Finding: finding})
