@@ -10,8 +10,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/blevinn/aginctus/internal/filestate"
 )
 
 // This helper only runs in a separate test-binary process selected by the
