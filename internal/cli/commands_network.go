@@ -2,8 +2,8 @@ package cli
 
 import (
 	"context"
-	"io"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -28,9 +28,9 @@ func addNetworkCommands(root *cobra.Command, stdout, stderr io.Writer,
 		Status: func(ctx context.Context, out, errOut io.Writer, cfg *config.Config) int {
 			return runNetworkStatus(ctx, nil, out, errOut, cfg)
 		},
-		FirewallPolicy: runNetworkFirewallPolicy,
+		FirewallPolicy:    runNetworkFirewallPolicy,
 		FirewallReconcile: runNetworkFirewallReconcile,
-		FirewallEgress: runNetworkFirewallEgress,
+		FirewallEgress:    runNetworkFirewallEgress,
 	})
 }
 
@@ -48,7 +48,6 @@ var getFirewallNetwork = func(ctx context.Context, name string) (*api.Network, e
 	return network, nil
 }
 
-
 func deriveFirewallPolicy(ctx context.Context, cfg *config.Config) (firewall.Policy, error) {
 	return networkops.DeriveFirewallPolicy(ctx, cfg, getFirewallNetwork)
 }
@@ -62,7 +61,9 @@ var firewallEffectiveUID = os.Geteuid
 var discoverFirewallPolicy = deriveFirewallPolicy
 var firewallCommand = func(ctx context.Context, input string, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
-	if input != "" { cmd.Stdin = strings.NewReader(input) }
+	if input != "" {
+		cmd.Stdin = strings.NewReader(input)
+	}
 	output, err := cmd.CombinedOutput()
 	return string(output), err
 }
@@ -70,8 +71,8 @@ var firewallCommand = func(ctx context.Context, input string, name string, args 
 func firewallActions() networkops.FirewallActions {
 	return networkops.FirewallActions{
 		EffectiveUID: firewallEffectiveUID,
-		Command: firewallCommand,
-		Discover: discoverFirewallPolicy,
+		Command:      firewallCommand,
+		Discover:     discoverFirewallPolicy,
 	}
 }
 
