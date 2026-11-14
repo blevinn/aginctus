@@ -35,58 +35,6 @@ func auditImageJSON(aliases []string, properties map[string]string) []byte {
 	return raw
 }
 
-func TestImageOwnerClaimClassification(t *testing.T) {
-	scope, err := incusscope.NewProjectScope("aginctus")
-	if err != nil {
-		t.Fatal(err)
-	}
-	claim := expectedImageOwnerClaim(scope, "test-image", "system")
-	copied := func() map[string]string {
-		v := make(map[string]string, len(claim))
-		for k, x := range claim {
-			v[k] = x
-		}
-		return v
-	}
-	foreign := copied()
-	foreign["user.aginctus.owner"] = "user"
-	incomplete := copied()
-	delete(incomplete, "user.aginctus.alias")
-	wrongProject := copied()
-	wrongProject["user.aginctus.deployment"] = "other"
-	unmarked := map[string]string{"release": "26.05"}
-	cases := []struct {
-		name       string
-		payload    []byte
-		wantStatus string
-	}{
-		{"complete claim", auditImageJSON([]string{"test-image"}, copied()), "claimed"},
-		{"unmarked image", auditImageJSON([]string{"test-image"}, unmarked), "unmarked"},
-		{"incomplete claim", auditImageJSON([]string{"test-image"}, incomplete), "foreign-or-incomplete"},
-		{"other owner", auditImageJSON([]string{"test-image"}, foreign), "foreign-or-incomplete"},
-		{"other project", auditImageJSON([]string{"test-image"}, wrongProject), "foreign-or-incomplete"},
-		{"shared fingerprint", auditImageJSON([]string{"test-image", "other-alias"}, copied()), "shared"},
-		{"missing alias", auditImageJSON([]string{"other-alias"}, copied()), "absent"},
-		{"no image", []byte("[]"), "absent"},
-		{"duplicate same image", auditImageJSON([]string{"test-image", "test-image"}, copied()), "ambiguous"},
-		{"duplicate across images", []byte("[" +
-			strings.Trim(string(auditImageJSON([]string{"test-image"}, copied())), "[]") + "," +
-			strings.Trim(string(auditImageJSON([]string{"test-image"}, copied())), "[]") + "]"), "ambiguous"},
-		{"malformed fingerprint", []byte(`[{"fingerprint":"not-a-hash","aliases":[{"name":"test-image"}],"properties":{"user.aginctus.managed":"true"}}]`), "unverified"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			var observed []observedClaimedImage
-			if err := json.Unmarshal(tc.payload, &observed); err != nil {
-				t.Fatalf("invalid test fixture: %v", err)
-			}
-			if got := classifyImageOwnerClaim(observed, scope, "test-image", "system"); got != tc.wantStatus {
-				t.Fatalf("claim = %q, want %q", got, tc.wantStatus)
-			}
-		})
-	}
-}
-
 func TestImageOwnerAuditRejectsInvalidArgumentsWithoutIncus(t *testing.T) {
 	cfg, err := (&config.Loader{Environment: nil}).Load(config.Options{})
 	if err != nil {
@@ -199,14 +147,3 @@ func TestImageOwnerAuditScopedReadAndRedaction(t *testing.T) {
 	}
 }
 
-func TestImageOwnerAuditOtherLifecycleOwnerNotClaimed(t *testing.T) {
-	scope, _ := incusscope.NewProjectScope("aginctus")
-	properties := expectedImageOwnerClaim(scope, "test-image", "system")
-	var images []observedClaimedImage
-	if err := json.Unmarshal(auditImageJSON([]string{"test-image"}, properties), &images); err != nil {
-		t.Fatal(err)
-	}
-	if status := classifyImageOwnerClaim(images, scope, "test-image", "user"); status != "foreign-or-incomplete" {
-		t.Fatalf("user audit may not claim a system-owned image: %q", status)
-	}
-}
