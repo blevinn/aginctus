@@ -1,4 +1,4 @@
-package networkops
+package network
 
 import (
 	"context"
