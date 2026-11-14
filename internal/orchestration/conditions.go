@@ -36,7 +36,7 @@ type CheckPolicy struct {
 // BoundCheck binds a public declaration to a trusted host evaluator. Preflight
 // additionally runs a precondition before all operations; it is still rechecked
 // at its operation boundary. Leave dependency-produced preconditions deferred.
-// This increment supports one bounded attempt; polling declarations are rejected.
+// Timeout bounds the entire readiness window, including authorization and waits.
 // Evaluators/authorizers must emit nonsecret findings and safe errors: text
 // validation is not secret redaction, and wrapped error causes remain observable.
 type BoundCheck struct {
@@ -62,9 +62,12 @@ const (
 )
 
 type ConditionResult struct {
-	StepID  string
-	Scope   TargetScope
-	Phase   ConditionPhase
+	StepID string
+	Scope  TargetScope
+	Phase  ConditionPhase
+	// Attempt is one-based within a step/phase/check evaluation window. Every
+	// actual attempt is retained; a deadline during a wait adds no observation.
+	Attempt int
 	Finding contract.Finding
 }
 
@@ -139,9 +142,6 @@ func (e *Engine) validateConditions(plan Plan, options ExecuteOptions) error {
 					return fmt.Errorf("step %q has duplicate, unbound or misplaced conditions", step.ID)
 				}
 				ids[check.Check.ID] = true
-				if check.Check.RetryInterval != 0 {
-					return fmt.Errorf("step %q condition %q requests unsupported readiness polling", step.ID, check.Check.ID)
-				}
 				if err := e.checkAllowed(check.Check); err != nil {
 					return fmt.Errorf("step %q condition %q: %w", step.ID, check.Check.ID, err)
 				}
@@ -194,7 +194,7 @@ func (e *Engine) authorizeConditions(ctx context.Context, plan Plan) error {
 }
 
 func (e *Engine) authorizeCheck(ctx context.Context, scope TargetScope, check contract.Check) error {
-	if err := ctx.Err(); err != nil {
+	if err := conditionContextErr(ctx); err != nil {
 		return err
 	}
 	if check.Effect == contract.Offline {
@@ -204,7 +204,19 @@ func (e *Engine) authorizeCheck(ctx context.Context, scope TargetScope, check co
 	// stored metadata used by subsequent validation, authorization and findings.
 	check.Access = slices.Clone(check.Access)
 	check.OptIns = slices.Clone(check.OptIns)
-	return errors.Join(e.checkPolicy.Authorize(ctx, scope, check), ctx.Err())
+	return errors.Join(e.checkPolicy.Authorize(ctx, scope, check), conditionContextErr(ctx))
+}
+
+// A deadline timer may be due before its cancellation goroutine has run. Do not
+// start another probe or accept late evidence in that timer-delivery gap.
+func conditionContextErr(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	return nil
 }
 
 func (e *Engine) runConditions(ctx context.Context, step Step, phase ConditionPhase, result *Result) error {
@@ -217,12 +229,11 @@ func (e *Engine) runConditions(ctx context.Context, step Step, phase ConditionPh
 		if phase == PreflightPhase && !check.Preflight {
 			continue
 		}
-		if err := ctx.Err(); err != nil {
+		if err := conditionContextErr(ctx); err != nil {
 			return err
 		}
-		finding, cause := e.runCheck(ctx, conditions.Scope, check)
-		result.Conditions = append(result.Conditions, ConditionResult{StepID: step.ID, Scope: conditions.Scope, Phase: phase, Finding: finding})
-		if err := ctx.Err(); err != nil {
+		finding, cause := e.runCondition(ctx, step.ID, conditions.Scope, phase, check, result)
+		if err := conditionContextErr(ctx); err != nil {
 			return fmt.Errorf("step %q condition %q canceled: %w", step.ID, check.Check.ID, errors.Join(err, cause))
 		}
 		if check.Check.Required && finding.Outcome != contract.Passed {
@@ -232,33 +243,64 @@ func (e *Engine) runConditions(ctx context.Context, step Step, phase ConditionPh
 	return nil
 }
 
-func (e *Engine) runCheck(ctx context.Context, scope TargetScope, check BoundCheck) (contract.Finding, error) {
+// runCondition retries evidence, never the operation. Only usable failed/unknown
+// findings are retryable: denial, evaluator errors, unusable evidence and skipped
+// checks are terminal. Optional checks use the same bounded window, but only
+// parent cancellation prevents later operations after an optional non-pass.
+func (e *Engine) runCondition(ctx context.Context, stepID string, scope TargetScope, phase ConditionPhase, check BoundCheck, result *Result) (contract.Finding, error) {
+	window, cancel := context.WithTimeout(ctx, check.Check.Timeout)
+	defer cancel()
+	var finding contract.Finding
+	for attempt := 1; ; attempt++ {
+		if err := conditionContextErr(window); err != nil && attempt > 1 {
+			return finding, err
+		}
+		observed, cause, retry := e.evaluateCheck(window, scope, check)
+		finding = observed
+		result.Conditions = append(result.Conditions, ConditionResult{StepID: stepID, Scope: scope, Phase: phase, Attempt: attempt, Finding: finding})
+		if !retry || check.Check.RetryInterval == 0 {
+			return finding, cause
+		}
+		timer := time.NewTimer(check.Check.RetryInterval)
+		select {
+		case <-window.Done():
+			timer.Stop()
+			return finding, window.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+// evaluateCheck performs one authorized evaluation within the shared deadline.
+// The retry flag is based on validated evidence, not caller-controlled codes.
+func (e *Engine) evaluateCheck(ctx context.Context, scope TargetScope, check BoundCheck) (contract.Finding, error, bool) {
 	unknown := func(code string) contract.Finding {
 		return contract.Finding{TargetID: scope.Target, CheckID: check.Check.ID, Outcome: contract.Unknown,
 			ObservedAt: time.Now(), Code: code, Message: "Condition did not produce usable evidence."}
 	}
-	probeCtx, cancel := context.WithTimeout(ctx, check.Check.Timeout)
-	defer cancel()
-	if err := e.authorizeCheck(probeCtx, scope, check.Check); err != nil {
-		return unknown("authorization-denied"), err
+	if err := e.authorizeCheck(ctx, scope, check.Check); err != nil {
+		return unknown("authorization-denied"), err, false
 	}
 	started := time.Now()
-	finding, evaluateErr := check.Evaluate(probeCtx)
-	if err := errors.Join(evaluateErr, probeCtx.Err()); err != nil {
-		return unknown("evaluation-error"), err
+	finding, evaluateErr := check.Evaluate(ctx)
+	if err := errors.Join(evaluateErr, conditionContextErr(ctx)); err != nil {
+		return unknown("evaluation-error"), err, false
 	}
 	now := time.Now()
 	if err := finding.Validate(); err != nil {
-		return unknown("invalid-finding"), err
+		return unknown("invalid-finding"), err, false
 	}
 	if finding.TargetID != scope.Target || finding.CheckID != check.Check.ID ||
 		(check.ResourceIncarnation != "" && finding.ResourceIncarnation != check.ResourceIncarnation) ||
 		(check.AcceptedRevision != "" && finding.AcceptedRevision != check.AcceptedRevision) {
-		return unknown("evidence-mismatch"), nil
+		return unknown("evidence-mismatch"), nil, false
 	}
 	if finding.ObservedAt.After(now) || (check.Check.MaxAge == 0 && finding.ObservedAt.Before(started)) ||
 		(check.Check.MaxAge > 0 && now.Sub(finding.ObservedAt) > check.Check.MaxAge) {
-		return unknown("stale-finding"), nil
+		return unknown("stale-finding"), nil, false
 	}
-	return finding, nil
+	if err := conditionContextErr(ctx); err != nil {
+		return unknown("evaluation-error"), err, false
+	}
+	return finding, nil, finding.Outcome == contract.Failed || finding.Outcome == contract.Unknown
 }
