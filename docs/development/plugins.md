@@ -501,12 +501,13 @@ is not secret redaction or an audience authorization policy.
   every omitted transition in `Report.Dropped`; sequence gaps expose the loss.
   Dropping reporting events does not drop evaluations or alter execution results.
 
-Collection has no observer callbacks, sinks, goroutines or live subscriptions, so an observer
-cannot block execution or decide its outcome. The report is available after the
-call returns; it is not a live status snapshot, cross-run ordered stream, durable
-journal or restart recovery record. It carries no write authority or accepted-state
-promotion. Current status, subscriptions, slow-sink behavior and CLI/log adapters
-remain follow-up work under [#801](https://github.com/blevinn/aginctus/issues/801).
+Collection never invokes observer callbacks or writers and creates no publisher
+goroutines, so a sink cannot block execution or decide its outcome. The final
+report is available after the call returns; optional host monitors expose the
+independent live execution snapshots described above. Subscription and presentation
+layers are separate from execution. Neither snapshots nor event delivery establish
+cross-run ordering, durable journals, restart recovery, write authority or
+accepted-state promotion.
 
 Validate public envelopes, retention and engine lifecycle behavior:
 
@@ -559,7 +560,8 @@ The collector's short internal lock is not an observer/backpressure interface.
 
 This increment binds progress to existing runtime **checks**. Further operation
 hooks can receive explicit progress capabilities when their product adapters land.
-There is no shared stream, live subscriber, durable delivery or authorization grant.
+Plugin reporters grant neither observation access nor durable delivery or backend
+authorization; host observation handles are separate capabilities.
 
 Validate runtime progress and the external consumer:
 
