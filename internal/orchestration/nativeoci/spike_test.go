@@ -1,5 +1,5 @@
-// Package nativeoci contains disposable feasibility tests, not a production driver.
-package nativeoci
+// Package nativeoci_test contains disposable feasibility tests, not a production driver.
+package nativeoci_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,8 +16,10 @@ import (
 	"github.com/lxc/incus/v7/shared/api"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
+	"github.com/blevinn/aginctus/internal/gateway"
 	agincus "github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/orchestration/native"
+	"github.com/blevinn/aginctus/internal/orchestration/nativeoci"
 )
 
 // TestDaemonOCI deliberately requires a guest-only marker as well as explicit
@@ -86,10 +89,18 @@ func TestDaemonOCI(t *testing.T) {
 	}}}); err != nil {
 		t.Fatal(err)
 	}
+	// Static OCI NIC configuration must work without a DHCP server. This
+	// bridge is guest-local and unrouted; it grants no external connectivity.
+	if err := server.UseProject("default").CreateNetwork(api.NetworksPost{Name: "spike-egress", Type: "bridge", NetworkPut: api.NetworkPut{Config: map[string]string{
+		"ipv4.address": "10.79.0.1/24", "ipv4.dhcp": "false", "ipv4.nat": "false", "ipv4.routing": "false", "ipv6.address": "none",
+	}}}); err != nil {
+		t.Fatal(err)
+	}
 	otherScope, _ := agincus.NewProjectScope("aginctus-native-image-collision")
 	if _, err := native.EnsureLocalProject(ctx, otherScope, native.ProjectCreateAuthorization{Confirmed: true}); err != nil {
 		t.Fatal(err)
 	}
+	pinnedReferences := make(map[string]string)
 	for _, image := range []struct{ name, registry, repository, reference string }{
 		{"postgres", "docker.io", "library/postgres", "17-alpine"},
 		{"litellm", "ghcr.io", "berriai/litellm", "v1.103.0"},
@@ -104,7 +115,7 @@ func TestDaemonOCI(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			resolved, err := ResolvePublic(ctx, Source{
+			resolved, err := nativeoci.ResolvePublic(ctx, nativeoci.Source{
 				Registry: image.registry, Repository: image.repository, Reference: image.reference,
 				Platform: ocispec.Platform{OS: "linux", Architecture: runtime.GOARCH},
 			})
@@ -120,6 +131,7 @@ func TestDaemonOCI(t *testing.T) {
 				ManifestDigest: resolved.ManifestDigest, ConfigDigest: resolved.ConfigDigest,
 				IncusFingerprint: resolved.IncusFingerprint,
 			}
+			pinnedReferences[image.name] = resolved.Registry + "/" + resolved.Repository + "@" + resolved.ManifestDigest
 			acquired, err := native.AcquireLocalGatewayImage(ctx, native.GatewayImageAcquireIntent{
 				Project: scope.Name, Image: identity,
 			})
@@ -171,8 +183,45 @@ func TestDaemonOCI(t *testing.T) {
 			}
 			name := image.name + "-spike"
 			alias := name + "-image"
-			if err := client.CreateImageAlias(api.ImageAliasesPost{ImageAliasesEntry: api.ImageAliasesEntry{Name: alias, ImageAliasesEntryPut: api.ImageAliasesEntryPut{Target: fingerprint}}}); err != nil {
-				t.Fatal(err)
+			// A legitimate acquisition result must not be reused for a different
+			// OCI config merely because its Incus layer fingerprint still matches.
+			mismatched := native.GatewayAliasCreateIntent{
+				Project: scope.Name, Alias: alias, Image: identity, Acquisition: acquired,
+			}
+			mismatched.Image.ConfigDigest = "sha256:" + strings.Repeat("d", 64)
+			rejectedAlias, err := native.CreateLocalGatewayImageAlias(ctx, mismatched)
+			if err == nil || rejectedAlias.Created || rejectedAlias.Verified {
+				t.Fatalf("alias accepted mismatched acquisition identity: %+v %v", rejectedAlias, err)
+			}
+			if _, _, err := client.GetImageAlias(alias); !api.StatusErrorCheck(err, 404) {
+				t.Fatal("mismatched acquisition mutated alias inventory")
+			}
+			// The image alias is created only after the same selected-project
+			// acquisition has returned a verified result. This disposable VM
+			// is single-writer; production requires independently fenced writes.
+			createdAlias, err := native.CreateLocalGatewayImageAlias(ctx, native.GatewayAliasCreateIntent{
+				Project: scope.Name, Alias: alias, Image: identity, Acquisition: acquired,
+			})
+			if err != nil || !createdAlias.Created || !createdAlias.Verified {
+				t.Fatalf("guarded alias create: %+v %v", createdAlias, err)
+			}
+			if _, err := native.CreateLocalGatewayImageAlias(ctx, native.GatewayAliasCreateIntent{
+				Project: scope.Name, Alias: alias, Image: identity, Acquisition: acquired,
+			}); err == nil {
+				t.Fatal("native alias create adopted a preexisting alias")
+			}
+			evidence := native.GatewayImageEvidence{Project: scope.Name, Alias: alias, Identity: identity}
+			if err := native.ObserveLocalGatewayImageReuse(ctx, native.GatewayImageAcquireIntent{
+				Project: scope.Name, Image: identity,
+			}, alias, evidence); err != nil {
+				t.Fatalf("observed OCI alias identity mismatch: %v", err)
+			}
+			foreignEvidence := evidence
+			foreignEvidence.Identity.ConfigDigest = "sha256:" + strings.Repeat("d", 64)
+			if err := native.ObserveLocalGatewayImageReuse(ctx, native.GatewayImageAcquireIntent{
+				Project: scope.Name, Image: identity,
+			}, alias, foreignEvidence); err == nil {
+				t.Fatal("config-only image identity collision accepted")
 			}
 			config := map[string]string{
 				"environment.AGINCTUS_SPIKE": "synthetic", "user.aginctus.managed": "true",
@@ -187,6 +236,27 @@ func TestDaemonOCI(t *testing.T) {
 			}
 			if image.name == "postgres" {
 				devices["data"] = map[string]string{"type": "disk", "pool": "spike", "source": gatewayVolume.Name, "path": "/var/lib/postgresql/data"}
+			} else {
+				// Exercise the actual device planner rather than a hand-written
+				// approximation. Stripping /24 would request DHCP and Incus would
+				// reject this NIC on the DHCP-disabled bridge above.
+				planned, err := gateway.PlanNativeGatewayDevices(gateway.NativeGatewayTopology{
+					Deployment: "spike", Project: scope.Name, ManagementNetwork: "spike-mgmt",
+					EgressNetwork: "spike-egress", DatabaseVolume: gatewayVolume.Name,
+					Services: []gateway.NativeGatewayService{
+						{Name: "postgres", ImageReference: pinnedReferences["postgres"],
+							Networks: []gateway.NativeGatewayNetwork{{Name: "spike-mgmt"}}, Volume: gatewayVolume.Name,
+							SecretEnvironment: []string{"AGINCTUS_GATEWAY_POSTGRES_PASSWORD"}},
+						{Name: "litellm", ImageReference: pinnedReferences["litellm"],
+							Networks:          []gateway.NativeGatewayNetwork{{Name: "spike-mgmt"}, {Name: "spike-egress", IPv4Address: "10.79.0.12/24"}},
+							DependsOn:         []string{"postgres"},
+							SecretEnvironment: []string{"AGINCTUS_GATEWAY_POSTGRES_PASSWORD", "AGINCTUS_GATEWAY_MASTER_KEY", "AGINCTUS_GATEWAY_SALT_KEY"}},
+					},
+				}, "spike", "spike")
+				if err != nil {
+					t.Fatal(err)
+				}
+				devices = planned.LiteLLM
 			}
 			instance := api.InstancesPost{
 				Name: name, Type: api.InstanceTypeContainer,
@@ -202,6 +272,17 @@ func TestDaemonOCI(t *testing.T) {
 			state, _, err := client.GetInstanceState(name)
 			if err != nil || state.StatusCode != api.Running {
 				t.Fatal("OCI service did not remain running")
+			}
+			if image.name == "litellm" {
+				staticAddress := false
+				for _, address := range state.Network["eth1"].Addresses {
+					if address.Family == "inet" && address.Address == "10.79.0.12" && address.Netmask == "24" {
+						staticAddress = true
+					}
+				}
+				if !staticAddress {
+					t.Fatal("planned static OCI egress address missing from independent Incus state")
+				}
 			}
 			intent := native.InstanceIntent{
 				Identity: native.InstanceIdentity{Project: scope.Name, Name: name}, WorkloadID: image.name,
