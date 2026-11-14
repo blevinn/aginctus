@@ -4,6 +4,9 @@ import (
 	"context"
 	"io"
 	"fmt"
+	"os"
+	"os/exec"
+	"strings"
 
 	networkcmd "github.com/blevinn/aginctus/internal/cli/commands/network"
 	networkops "github.com/blevinn/aginctus/internal/cli/operations/network"
@@ -52,4 +55,34 @@ func deriveFirewallPolicy(ctx context.Context, cfg *config.Config) (firewall.Pol
 
 func runNetworkFirewallPolicy(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config) int {
 	return networkops.ReportFirewallPolicy(ctx, stdout, stderr, cfg, getFirewallNetwork)
+}
+
+// Root bindings supply the existing testable host command and authority seams.
+var firewallEffectiveUID = os.Geteuid
+var discoverFirewallPolicy = deriveFirewallPolicy
+var firewallCommand = func(ctx context.Context, input string, name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	if input != "" { cmd.Stdin = strings.NewReader(input) }
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+func firewallActions() networkops.FirewallActions {
+	return networkops.FirewallActions{
+		EffectiveUID: firewallEffectiveUID,
+		Command: firewallCommand,
+		Discover: discoverFirewallPolicy,
+	}
+}
+
+func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config) int {
+	return networkops.Reconcile(ctx, stdout, stderr, cfg, firewallActions())
+}
+
+func selectFirewallBackend(ruleset, requested string) (string, error) {
+	return networkops.SelectFirewallBackend(ruleset, requested)
+}
+
+func hasFirewalldDropTarget(details string) bool {
+	return networkops.HasFirewalldDropTarget(details)
 }
