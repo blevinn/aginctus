@@ -1,4 +1,4 @@
-package cli
+package network
 
 import (
 	"context"
@@ -7,23 +7,12 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/firewall"
-	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 )
 
-var getFirewallNetwork = func(ctx context.Context, name string) (*api.Network, error) {
-	server, err := incusclient.ConnectIncusUnixWithContext(ctx, "", &incusclient.ConnectionArgs{SkipGetServer: true})
-	if err != nil {
-		return nil, fmt.Errorf("connect to Incus: %w", err)
-	}
-	network, _, err := server.GetNetwork(name)
-	if err != nil {
-		return nil, fmt.Errorf("get configured Incus network: %w", err)
-	}
-	return network, nil
-}
-
-func deriveFirewallPolicy(ctx context.Context, cfg *config.Config) (firewall.Policy, error) {
+// DeriveFirewallPolicy requires the caller's explicit Incus network inspection
+// capability; both policy observation and CLI reporting remain read-only.
+func DeriveFirewallPolicy(ctx context.Context, cfg *config.Config, getNetwork func(context.Context, string) (*api.Network, error)) (firewall.Policy, error) {
 	name, err := cfg.String("incus.management.network.name")
 	if err != nil {
 		return firewall.Policy{}, err
@@ -32,15 +21,15 @@ func deriveFirewallPolicy(ctx context.Context, cfg *config.Config) (firewall.Pol
 	if err != nil {
 		return firewall.Policy{}, err
 	}
-	network, err := getFirewallNetwork(ctx, name)
+	network, err := getNetwork(ctx, name)
 	if err != nil {
 		return firewall.Policy{}, err
 	}
 	return firewall.Derive(network, name, address, firewall.InspectLink)
 }
 
-func runNetworkFirewallPolicy(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config) int {
-	p, err := deriveFirewallPolicy(ctx, cfg)
+func ReportFirewallPolicy(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config, getNetwork func(context.Context, string) (*api.Network, error)) int {
+	p, err := DeriveFirewallPolicy(ctx, cfg, getNetwork)
 	if err != nil {
 		fmt.Fprintf(stderr, "authorized firewall policy: %v\n", err)
 		return 1
