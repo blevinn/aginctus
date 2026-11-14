@@ -22,8 +22,8 @@ func executeGatewayCredential(ctx context.Context, action string, stdout, stderr
 func executeGatewayLifecycle(ctx context.Context, action string, force bool, stdout, stderr io.Writer, effective *config.Config) int {
 	return gatewayops.ExecuteLifecycle(ctx, action, force, stdout, stderr, effective, gatewayops.LifecycleActions{
 		ConfiguredSpec: configuredGatewaySpec,
-		Status: runGatewayStatus,
-		SyncSIWC: syncGatewaySIWC,
+		Status:         runGatewayStatus,
+		SyncSIWC:       syncGatewaySIWC,
 	})
 }
 
