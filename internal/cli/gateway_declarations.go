@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	gatewayops "github.com/blevinn/aginctus/internal/cli/operations/gateway"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/gatewaycontrol"
@@ -51,4 +52,18 @@ func configuredGatewaySpec(effective *config.Config) (gateway.Spec, error) {
 	}
 	err = spec.ConfigureSIWC(public)
 	return spec, err
+}
+
+// Preserve the historical private helper used by CLI callers/tests while
+// delegating provider ownership validation to an independent operation.
+func renderRegisteredModel(name string) ([]byte, error) {
+	store, err := gatewaycontrol.DefaultStore(gatewayPlugins())
+	if err != nil {
+		return nil, err
+	}
+	return gatewayops.RenderProviderModel(store, "", name)
+}
+
+func renderProviderModel(store *gatewaycontrol.Store, provider, name string) ([]byte, error) {
+	return gatewayops.RenderProviderModel(store, provider, name)
 }
