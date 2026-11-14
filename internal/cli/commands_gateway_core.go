@@ -15,87 +15,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// executeGatewayCredential keeps the existing private-volume validation
-// and side-effect sequencing independent of CLI argument parsing.
+// Credential volumes are manipulated only through the existing injected
+// gateway capabilities; the operation package handles result formatting.
 func executeGatewayCredential(ctx context.Context, action string, stdout, stderr io.Writer, effective *config.Config) int {
-	switch action {
-	case "audit":
-		id, err := effective.String("gateway.id")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway id: %v\n", err)
-			return 1
-		}
-		project, err := effective.String("gateway.compose.project")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway Compose project: %v\n", err)
-			return 1
-		}
-		pool, err := effective.String("gateway.credentials.storage.pool")
-		if err != nil {
-			fmt.Fprintf(stderr, "credential storage pool: %v\n", err)
-			return 1
-		}
-		spec := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
-		if err := auditGatewayCredentials(ctx, spec); err != nil {
-			fmt.Fprintf(stderr, "credential attachment audit: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "credential volume attachment: owned and exclusive to LiteLLM (metadata only; in-guest permissions, OAuth and runtime readiness not verified)\n")
-		return 0
-	case "attach":
-		id, err := effective.String("gateway.id")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway id: %v\n", err)
-			return 1
-		}
-		project, err := effective.String("gateway.compose.project")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway Compose project: %v\n", err)
-			return 1
-		}
-		pool, err := effective.String("gateway.credentials.storage.pool")
-		if err != nil {
-			fmt.Fprintf(stderr, "credential storage pool: %v\n", err)
-			return 1
-		}
-		spec := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
-		if err := attachGatewayCredentials(ctx, spec); err != nil {
-			fmt.Fprintf(stderr, "credential attachment: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "private credential volume attached exclusively to LiteLLM in Compose project %q (OAuth not activated)\n", project)
-		return 0
-	case "ensure":
-		id, err := effective.String("gateway.id")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage gateway ID: %v\n", err)
-			return 1
-		}
-		project, err := effective.String("gateway.compose.project")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage Compose project: %v\n", err)
-			return 1
-		}
-		pool, err := effective.String("gateway.credentials.storage.pool")
-		if err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage pool: %v\n", err)
-			return 1
-		}
-		a := gateway.CredentialAttachment{GatewayID: id, ComposeProject: project, Pool: pool}
-		if err := a.Validate(); err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage configuration: %v\n", err)
-			return 1
-		}
-		if err := ensureCredentialStorage(ctx, a); err != nil {
-			fmt.Fprintf(stderr, "gateway credential storage: %v\n", err)
-			return 1
-		}
-		fmt.Fprintf(stdout, "gateway credential volume %q: ready in Compose project %q (attachment unchanged; no credentials imported)\n", a.VolumeName(), project)
-		return 0
-	default:
-		fmt.Fprintln(stderr, "unsupported gateway credential operation")
-		return 2
-	}
+	return gatewayops.ExecuteCredential(ctx, action, stdout, stderr, effective, gatewayops.CredentialActions{
+		Audit: auditGatewayCredentials, Attach: attachGatewayCredentials, Ensure: ensureCredentialStorage,
+	})
 }
 
 func executeGatewayLifecycle(ctx context.Context, action string, force bool, stdout, stderr io.Writer, effective *config.Config) int {
@@ -168,14 +93,13 @@ func executeGatewayLifecycle(ctx context.Context, action string, force bool, std
 	}
 }
 
-
 func addGatewayCoreCommands(
 	root *cobra.Command, stdout, stderr io.Writer,
 	load func() (*config.Config, error), status *int,
 ) *cobra.Command {
 	return gatewaycmd.Register(root, stdout, stderr, load, status, gatewaycmd.Handlers{
-		Status: runGatewayStatus,
-		Lifecycle: executeGatewayLifecycle,
+		Status:     runGatewayStatus,
+		Lifecycle:  executeGatewayLifecycle,
 		Credential: executeGatewayCredential,
 	})
 }
