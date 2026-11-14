@@ -345,6 +345,60 @@ func TestDaemonOCI(t *testing.T) {
 			}
 		})
 	}
+	// The OCI fixture has now proved service readiness and durable data
+	// recovery separately. Next prove the new create-only gateway executor
+	// leaves two managed containers STOPPED without injecting credentials.
+	for _, bridge := range []struct{
+		name,resource,cidr,nat,route string
+	}{
+		{"gateway-create-mgmt","management-network","10.91.0.1/24","false","false"},
+		{"gateway-create-egress","gateway-egress-network","10.92.0.1/24","true","true"},
+	} {
+		if err:=server.UseProject("default").CreateNetwork(api.NetworksPost{
+			Name:bridge.name,Type:"bridge",NetworkPut:api.NetworkPut{Config:map[string]string{
+				"ipv4.address":bridge.cidr,"ipv4.nat":bridge.nat,"ipv4.routing":bridge.route,
+				"ipv6.address":"none","user.aginctus.managed":"true",
+				"user.aginctus.resource":bridge.resource,
+			}},
+		});err!=nil {t.Fatalf("gateway create fixture bridge: %v",err)}
+	}
+	topology:=gateway.NativeGatewayTopology{
+		Deployment:"spike",Project:scope.Name,ManagementNetwork:"gateway-create-mgmt",
+		EgressNetwork:"gateway-create-egress",DatabaseVolume:"gateway-postgres",
+		Services:[]gateway.NativeGatewayService{
+			{Name:"postgres",ImageReference:pinnedReferences["postgres"],
+				Networks:[]gateway.NativeGatewayNetwork{{Name:"gateway-create-mgmt"}},
+				Volume:"gateway-postgres",
+				SecretEnvironment:[]string{"AGINCTUS_GATEWAY_POSTGRES_PASSWORD"}},
+			{Name:"litellm",ImageReference:pinnedReferences["litellm"],
+				Networks:[]gateway.NativeGatewayNetwork{
+					{Name:"gateway-create-mgmt"},
+					{Name:"gateway-create-egress",IPv4Address:"10.92.0.12/24"},
+				},DependsOn:[]string{"postgres"},
+				SecretEnvironment:[]string{"AGINCTUS_GATEWAY_POSTGRES_PASSWORD","AGINCTUS_GATEWAY_MASTER_KEY","AGINCTUS_GATEWAY_SALT_KEY"}},
+		},
+	}
+	gatewayDevices,err:=gateway.PlanNativeGatewayDevices(topology,"spike","spike")
+	if err!=nil {t.Fatal(err)}
+	gatewayPair,err:=gateway.PlanNativeGatewayInstances(topology,gatewayDevices,"postgres-spike-image","litellm-spike-image")
+	if err!=nil {t.Fatal(err)}
+	fenceChecks:=0
+	fence:=func(context.Context)error{fenceChecks++;return nil}
+	created,err:=gateway.CreateStoppedGatewayWithClient(ctx,topology,gatewayDevices,gatewayPair,gatewayStoppedVMClient{client},fence)
+	if err!=nil || len(created.Created)!=2 || len(created.Verified)!=2 || fenceChecks!=2 {
+		t.Fatalf("real Incus stopped native gateway create: %+v %v guards=%d",created,err,fenceChecks)
+	}
+	for _,name:=range []string{"postgres-1","litellm-1"} {
+		got,_,err:=client.GetInstance(name)
+		if err!=nil || got.Status!="Stopped" || got.Config["user.aginctus.resource"]!="gateway-instance" {
+			t.Fatalf("native gateway instance not owned and stopped: %s %v",name,err)
+		}
+		if _,found:=got.Config["environment.POSTGRES_PASSWORD"];found {t.Fatal("native create leaked runtime credentials")}
+	}
+	repeat,err:=gateway.CreateStoppedGatewayWithClient(ctx,topology,gatewayDevices,gatewayPair,gatewayStoppedVMClient{client},fence)
+	if err!=nil || len(repeat.Created)!=0 || len(repeat.Verified)!=2 || fenceChecks!=2 {
+		t.Fatalf("native stopped gateway reuse was not a no-op: %+v %v",repeat,err)
+	}
 	images, err := server.UseProject("default").GetImages()
 	if err != nil || len(images) != 0 {
 		t.Fatal("OCI import leaked into the default project")
@@ -369,4 +423,11 @@ func execOCI(ctx context.Context, client incus.InstanceServer, name string, comm
 		return fmt.Errorf("synthetic application probe failed")
 	}
 	return nil
+}
+
+// gatewayStoppedVMClient adapts the real project-scoped Incus SDK to the
+// create-only interface, without adding a production gateway activation path.
+type gatewayStoppedVMClient struct{ incus.InstanceServer }
+func (c gatewayStoppedVMClient) CreateInstance(req api.InstancesPost)(native.InstanceCreateOperation,error) {
+	return c.InstanceServer.CreateInstance(req)
 }
