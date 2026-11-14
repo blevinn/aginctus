@@ -75,4 +75,10 @@ require separate operator authorization under the linked runbooks and gates.
 
 ## Reporting vulnerabilities versus operational limitations
 
-This document describes **technical controls and limitations**; it is not a confidential security-disclosure policy. The maintainer-approved private reporting route and support expectations are tracked separately in [#626](https://github.com/blevinn/aginctus/issues/626). Until that policy is published and verified, do not infer a private intake route from a GitHub issue or post exploit details, credentials or tokens into public tickets. Human contribution/conduct guidance is tracked independently in [#627](https://github.com/blevinn/aginctus/issues/627).
+This page documents **technical security controls and limitations**, not a
+confidential disclosure process. Use the [repository security
+policy](../../SECURITY.md) to submit sensitive vulnerability reports through
+GitHub Private Vulnerability Reporting. Do not post exploit details,
+credentials or tokens in public issues. Ordinary non-sensitive bug and feature
+issues are welcome, but external pull requests are not currently accepted
+([maintainer decision](https://github.com/blevinn/aginctus/issues/627)).

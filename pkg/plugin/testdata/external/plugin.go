@@ -18,6 +18,7 @@ type Example struct{}
 
 var _ plugin.Plugin = Example{}
 var _ plugin.TargetContributor = Example{}
+var _ plugin.CheckEvaluator = Example{}
 
 func (Example) Descriptor() plugin.Descriptor {
 	return plugin.Descriptor{
@@ -106,6 +107,37 @@ func (Example) Targets(ctx context.Context, raw json.RawMessage) ([]orchestratio
 			ID: "guest-ready", Claim: "helper protocol v1 is ready", Scope: "selected helper guest",
 			Required: true, Effect: orchestration.ReadOnly, Access: []orchestration.Access{orchestration.GuestAccess},
 			Timeout: 10 * time.Second, RetryInterval: time.Second,
+		}, {
+			ID: "container-running", Claim: "selected helper container is running", Scope: "selected helper container lifecycle only",
+			Required: true, Effect: orchestration.ReadOnly, Access: []orchestration.Access{orchestration.IncusAccess}, Timeout: time.Second,
 		}}},
 	}, nil
+}
+
+// EvaluateCheck demonstrates the narrow lifecycle capability, not guest protocol
+// readiness or live inference. Those checks need their own explicit services.
+func (Example) EvaluateCheck(ctx context.Context, request plugin.CheckRequest, services plugin.CheckServices) (orchestration.Finding, error) {
+	if err := ctx.Err(); err != nil {
+		return orchestration.Finding{}, err
+	}
+	if request.Target.ID != "helper" || request.Check.ID != "container-running" || services.Containers == nil {
+		return orchestration.Finding{}, fmt.Errorf("fixture check requires a bound container inspector")
+	}
+	observation, err := services.Containers.Inspect("helper")
+	if err != nil {
+		return orchestration.Finding{}, err
+	}
+	if err := observation.Validate(); err != nil {
+		return orchestration.Finding{}, err
+	}
+	outcome := orchestration.Unknown
+	switch observation.State {
+	case orchestration.ContainerRunning:
+		outcome = orchestration.Passed
+	case orchestration.ContainerMissing, orchestration.ContainerStopped:
+		outcome = orchestration.Failed
+	}
+	return orchestration.Finding{TargetID: request.Target.ID, CheckID: request.Check.ID,
+		Outcome: outcome, ObservedAt: observation.ObservedAt, Code: "container-lifecycle",
+		ResourceIncarnation: observation.ResourceIncarnation}, ctx.Err()
 }

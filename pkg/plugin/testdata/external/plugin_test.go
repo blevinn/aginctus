@@ -126,6 +126,41 @@ func TestContributionBoundaryRejectsInvalidOutput(t *testing.T) {
 
 type discoveryOnly struct{}
 
+type containerInspector func(string) (orchestration.ContainerObservation, error)
+
+func (f containerInspector) Inspect(id string) (orchestration.ContainerObservation, error) {
+	return f(id)
+}
+
+func TestPublicRuntimeCheckConsumer(t *testing.T) {
+	implementation := externalplugin.Example{}
+	targets, err := plugin.Contribute(t.Context(), implementation, json.RawMessage(`{"model":"fixture-model"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	helper := targets[1]
+	request := plugin.CheckRequest{Target: helper, Check: helper.Postconditions[1]}
+	for _, state := range []orchestration.ContainerState{orchestration.ContainerRunning, orchestration.ContainerStopped, orchestration.ContainerMissing, orchestration.ContainerUnknown} {
+		services := plugin.CheckServices{Containers: containerInspector(func(id string) (orchestration.ContainerObservation, error) {
+			if id != "helper" {
+				t.Fatalf("unexpected local selection: %s", id)
+			}
+			incarnation := ""
+			if state == orchestration.ContainerRunning || state == orchestration.ContainerStopped {
+				incarnation = "fixture-incarnation"
+			}
+			return orchestration.ContainerObservation{State: state, ObservedAt: time.Now(), ResourceIncarnation: incarnation}, nil
+		})}
+		finding, err := implementation.EvaluateCheck(t.Context(), request, services)
+		if err != nil || finding.Validate() != nil || (finding.Outcome == orchestration.Passed) != (state == orchestration.ContainerRunning) {
+			t.Fatalf("lifecycle result: %+v error=%v", finding, err)
+		}
+	}
+	if _, err := implementation.EvaluateCheck(t.Context(), request, plugin.CheckServices{}); err == nil {
+		t.Fatal("missing service silently fell back to ambient access")
+	}
+}
+
 func (discoveryOnly) Descriptor() plugin.Descriptor                                { return externalplugin.Example{}.Descriptor() }
 func (discoveryOnly) ValidateConfiguration(context.Context, json.RawMessage) error { return nil }
 
