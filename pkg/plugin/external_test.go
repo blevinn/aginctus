@@ -29,7 +29,7 @@ func TestExternalModule(t *testing.T) {
 	run("test", "-count=1", "./...")
 	// An indirect internal dependency would still compile, so check the public
 	// dependency closure too, not just the fixture's direct imports.
-	deps := run("list", "-deps", "-f", "{{.ImportPath}}", "github.com/blevinn/aginctus/pkg/plugin")
+	deps := run("list", "-deps", "-f", "{{.ImportPath}}", "github.com/blevinn/aginctus/pkg/plugin", "github.com/blevinn/aginctus/pkg/orchestration")
 	for _, dependency := range strings.Fields(deps) {
 		if strings.HasPrefix(dependency, "github.com/blevinn/aginctus/internal/") ||
 			strings.HasPrefix(dependency, "github.com/blevinn/aginctus/plugins/") {

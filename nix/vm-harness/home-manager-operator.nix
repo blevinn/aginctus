@@ -26,6 +26,23 @@ let
             settings.gateway.id = gatewayID;
             # User intent cannot alter the separately configured host policy.
             settings.firewall.zone = "trusted";
+            # A pinned, nonsecret candidate is only a profile file. It does
+            # not accept state, launch user units or reconcile Incus.
+            workloadCandidate = {
+              deploymentID = "hm-disposable";
+              workloads = [
+                {
+                  id = "dev";
+                  instanceName = "hm-dev";
+                  instanceType = "container";
+                  imageFingerprint = builtins.concatStringsSep "" (
+                    builtins.genList (_: if gatewayID == "disposable-operator" then "a" else "b") 64
+                  );
+                  profiles = [ "base" ];
+                  ensureRunning = false;
+                }
+              ];
+            };
           };
         }
       ];
@@ -224,9 +241,15 @@ pkgs.testers.runNixOSTest {
     operator_home_manager = operator + " " + home_manager + " --flake /home/operator/home-manager-flake#operator"
     machine.succeed("test -x " + home_manager)
     machine.fail("test -e /home/operator/.config/aginctus/config.json")
+    candidate = "/home/operator/.config/aginctus/workload-candidate.json"
+    machine.fail("test -e " + candidate)
     machine.succeed(operator_home_manager + " build --no-out-link", timeout=600)
     machine.fail("test -e /home/operator/.config/aginctus/config.json")
+    machine.fail("test -e " + candidate)
     machine.succeed(operator_home_manager + " switch", timeout=600)
+    machine.succeed(operator + " test -L " + candidate)
+    machine.succeed(operator + " jq -e --arg fp " + ("a" * 64) +
+                    " '.selection.deploymentID == \"hm-disposable\" and .selection.incusProject == \"aginctus\" and .selection.selectedWorkloads == [\"dev\"] and .workloads[0].imageFingerprint == $fp' " + candidate)
 
     # Retain an explicit repeat activation using the independently evaluated
     # generation closure as a second non-mutating activation path.
@@ -283,14 +306,20 @@ pkgs.testers.runNixOSTest {
     upgrade = operator + " ${upgradedGeneration.activationPackage}/activate"
     machine.succeed(upgraded_home_manager + " switch", timeout=600)
     machine.succeed(cli + " config get gateway.id | grep -q upgraded-operator")
+    machine.succeed(operator + " jq -e --arg fp " + ("b" * 64) +
+                    " '.workloads[0].imageFingerprint == $fp' " + candidate)
     assert machine.succeed(operator + " readlink -f " + active_generation).strip() == "${upgradedGeneration.activationPackage}"
     machine.succeed(operator + " " + original_profile + "/activate", timeout=600)
     assert machine.succeed(operator + " readlink -f " + profile).strip() == "${operatorGeneration.activationPackage}"
     assert machine.succeed(operator + " readlink -f " + active_generation).strip() == "${operatorGeneration.activationPackage}"
     machine.succeed(cli + " config get gateway.id | grep -q disposable-operator")
+    machine.succeed(operator + " jq -e --arg fp " + ("a" * 64) +
+                    " '.workloads[0].imageFingerprint == $fp' " + candidate)
     machine.succeed(cli + " operator package-audit --owner user")
     machine.succeed(upgraded_home_manager + " switch", timeout=600)
     machine.succeed(cli + " config get gateway.id | grep -q upgraded-operator")
+    machine.succeed(operator + " jq -e --arg fp " + ("b" * 64) +
+                    " '.workloads[0].imageFingerprint == $fp' " + candidate)
     machine.succeed(cli + " operator package-audit --owner user")
 
     # Starting a lingering user manager does not start Aginctus units or timers.
