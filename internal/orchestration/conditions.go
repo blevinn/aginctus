@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	report "github.com/blevinn/aginctus/pkg/observability"
 	contract "github.com/blevinn/aginctus/pkg/orchestration"
 )
 
@@ -247,20 +248,30 @@ func (e *Engine) runConditions(ctx context.Context, step Step, phase ConditionPh
 // findings are retryable: denial, evaluator errors, unusable evidence and skipped
 // checks are terminal. Optional checks use the same bounded window, but only
 // parent cancellation prevents later operations after an optional non-pass.
-func (e *Engine) runCondition(ctx context.Context, stepID string, scope TargetScope, phase ConditionPhase, check BoundCheck, result *Result) (contract.Finding, error) {
+func (e *Engine) runCondition(ctx context.Context, stepID string, scope TargetScope, phase ConditionPhase, check BoundCheck, result *Result) (finding contract.Finding, cause error) {
 	window, cancel := context.WithTimeout(ctx, check.Check.Timeout)
 	defer cancel()
-	var finding contract.Finding
+	result.checkEvent(stepID, scope, phase, check, report.Condition, report.Running, 0, contract.Finding{}, nil)
+	defer func() {
+		state := findingState(finding)
+		if conditionContextErr(ctx) != nil {
+			state = report.Canceled
+		}
+		result.checkEvent(stepID, scope, phase, check, report.Condition, state, 0, finding, cause)
+	}()
 	for attempt := 1; ; attempt++ {
 		if err := conditionContextErr(window); err != nil && attempt > 1 {
 			return finding, err
 		}
+		result.checkEvent(stepID, scope, phase, check, report.CheckAttempt, report.Running, attempt, contract.Finding{}, nil)
 		observed, cause, retry := e.evaluateCheck(window, scope, check)
 		finding = observed
+		result.checkEvent(stepID, scope, phase, check, report.CheckAttempt, findingState(finding), attempt, finding, cause)
 		result.Conditions = append(result.Conditions, ConditionResult{StepID: stepID, Scope: scope, Phase: phase, Attempt: attempt, Finding: finding})
 		if !retry || check.Check.RetryInterval == 0 {
 			return finding, cause
 		}
+		result.checkEvent(stepID, scope, phase, check, report.Condition, report.Waiting, attempt, finding, nil)
 		timer := time.NewTimer(check.Check.RetryInterval)
 		select {
 		case <-window.Done():
