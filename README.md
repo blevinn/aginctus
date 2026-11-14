@@ -37,11 +37,27 @@ These are development checks; they do **not** deploy an Incus environment or pro
 ## Documentation
 
 Read the [documentation index](docs/README.md) or jump to the [CLI operations guide](docs/reference/cli.md), [architecture](docs/architecture/README.md), [configuration](docs/reference/configuration.md) and [security controls and limitations](docs/reference/security.md). Individual implemented capabilities, pilot acceptance and deployment reproducibility are distinct: see the [v0.1 release notes](docs/releases/v0.1.0.md) for verified evidence, explicit deferrals and security limitations.
-## Contributing and reporting issues
+## Reporting issues and security vulnerabilities
 
-For normal defects and enhancements, use the [bug report template](.github/ISSUE_TEMPLATE/bug_report.md) or [feature request template](.github/ISSUE_TEMPLATE/feature_request.md). Read the [development guide](docs/development/README.md) for build and validation and [AGENTS.md](AGENTS.md) for the separate rules applying to automated coding agents.
+Bug reports and feature requests are welcome through the existing
+[bug report](.github/ISSUE_TEMPLATE/bug_report.md) and
+[feature request](.github/ISSUE_TEMPLATE/feature_request.md) templates.
+Please omit credentials, private paths, and other sensitive material.
 
-A human contributor guide and conduct decision are being tracked in [#627](https://github.com/blevinn/aginctus/issues/627); do not assume an unapproved DCO/CLA or moderation process. A private security disclosure policy/channel is tracked in [#626](https://github.com/blevinn/aginctus/issues/626). **Do not post credentials, exploit details or confidential vulnerabilities in public issues**; the tracking issue is not itself a secure reporting channel. The [technical security guide](docs/reference/security.md) describes current control limitations, not a vulnerability intake policy.
+**Unsolicited external pull requests are not being accepted at this time.**
+The repository is under active single-maintainer development, and the maintainer
+is not currently able to review and maintain outside code contributions.
+The [development guide](docs/development/README.md) remains available for
+building and evaluating Aginctus; [AGENTS.md](AGENTS.md) contains separate
+instructions for authorized coding agents. No formal external contribution
+or conduct-enforcement process is offered at this stage.
+
+For suspected vulnerabilities, use the [security disclosure policy](SECURITY.md)
+and GitHub's **private vulnerability reporting** flow. Do **not** put
+vulnerability details, exploit reproductions, credentials, or other confidential
+information into public issues or pull requests. The
+[technical security guide](docs/reference/security.md) explains implementation
+controls and limitations; it is not a reporting channel.
 
 ## Development
 
