@@ -210,9 +210,9 @@ Run the execution and caller regression tests:
 nix develop -c go test ./internal/orchestration/... ./internal/statevolume/... ./internal/cli/... ./internal/gateway/...
 ```
 
-## Existing engine: single-attempt condition gates
+## Existing engine: condition gates and bounded readiness
 
-The next A4 increment adds opt-in `Engine.WithConditions(stepBindings, policy)`
+The A4 increments add opt-in `Engine.WithConditions(stepBindings, policy)`
 to the same ordered executor. These are trusted, in-memory **host bindings**;
 serialized plans and current CLI commands do not acquire evaluator callbacks or
 new authority. A host maps each selected target to a step in dependency-first
@@ -229,8 +229,9 @@ contributions and no infrastructure access.
 - A precondition marked `Preflight` runs before any operation and is evaluated
   again at its operation boundary. Other preconditions are deferred, allowing
   dependency-produced prerequisites. Postconditions run after the driver returns.
-  A required failed/unknown/skipped/invalid result stops the ordered plan before
-  any later operation, including dependents. Optional diagnostics remain visible.
+  A required condition must pass before any later operation, including dependents.
+  Failed/unknown readiness evidence may be polled within its declared window;
+  a terminal non-pass stops the plan. Optional diagnostics remain visible.
 - `CheckPolicy` defaults to offline checks. Read-only checks require an explicit
   check mode and host authorizer; active probes additionally require active mode
   and every declared opt-in. The authorizer must approve all access requirements
@@ -239,7 +240,7 @@ contributions and no infrastructure access.
   Authorizers must be cooperative, bounded policy checks that do not require a
   dependency's resource to exist. Resource ownership/preconditions and independent
   write-time authority remain the operation adapter's responsibility.
-- Each evaluator receives a timeout-bounded caller context. Evaluation errors,
+- Each evaluator receives a deadline-bounded caller context. Evaluation errors,
   invalid/mismatched evidence, expired observations and future timestamps yield
   safe structured unknown findings. Required failures retain error causes through
   `errors.Is`. A callback returning nil after cancellation/timeout cannot establish
@@ -250,7 +251,9 @@ contributions and no infrastructure access.
   wherever applicable; empty expectations do not verify resource identity. The
   engine does not resolve accepted state, maintain an observation cache or infer
   identity from a logical target name.
-- `Result.Conditions` retains scoped phase-tagged findings. `Result.Operations`
+- `Result.Conditions` retains scoped phase-tagged findings with one-based `Attempt`
+  numbers, reset for each step/phase/check window. Every attempt is retained,
+  including intermediate non-passes. `Result.Operations`
   retains completed driver calls even when a subsequent postcondition fails;
   `Result.Steps` includes only steps that pass their required postconditions.
   Neither collection is a durable journal or proof that canceled writes did not
@@ -261,12 +264,39 @@ offline or authorize operation writes. Bound callbacks are trusted Go code, not 
 sandbox. Metadata and nested slices are copied at binding and authorization
 boundaries, but closure state remains the host's responsibility.
 
-This increment supports **one bounded attempt** per check. Nonzero retry intervals
-are rejected before mutation rather than silently ignored. Condition-bound engines
-reject dry run before driver preflight: a simulated operation must not manufacture
-postcondition success. Existing unbound engine dry-run behavior is preserved.
-Ongoing observations, readiness polling, real product service bindings and CLI
-adoption remain follow-up work under [#800](https://github.com/blevinn/aginctus/issues/800).
+### Bounded readiness policy
+
+`RetryInterval == 0` requests one attempt. A positive interval enables polling:
+the first attempt runs immediately; later attempts wait the interval **after** the
+previous attempt completes. `Timeout` bounds the entire window, including
+per-attempt authorization, evaluation and waits, rather than resetting on retries.
+Selection-wide authorization has its own bounded check before any operation.
+Every actual attempt is reauthorized and validates evidence freshness and bound
+identity afresh. A preflight pass does not bypass the fresh mutation-boundary
+window. A required dependent remains blocked until its prerequisite passes.
+
+Only valid, correlated, fresh **failed or unknown findings** are retryable.
+Passed and skipped findings, evaluator errors, denied authorization and unusable
+evidence are terminal. Evaluators should represent an observed not-yet-ready
+state as a failed or unknown finding; an evaluator error does not request a retry.
+This policy applies to offline, read-only and explicitly opted-in active checks;
+opting into an active check with a retry interval permits repeated probes within
+the window, potentially including repeated network/model/tool effects and costs.
+Use a zero interval for a probe that should run only once. The engine never
+retries the operation in response to a check result or timeout.
+
+A timeout while waiting preserves the last real observation and returns the
+deadline error for a required check; it does not invent a new observation or
+attempt. A timed-out evaluation yields unknown evidence. Optional checks use the
+same window but do not block later operations on terminal non-passes. Parent
+cancellation stops both required and optional checks, including interval waits.
+Timeouts remain cooperative: trusted callbacks must honor their context.
+
+Condition-bound engines reject dry run before driver preflight: a simulated
+operation must not manufacture postcondition success. Existing unbound engine
+dry-run behavior is preserved. Ongoing observation scheduling, deployment-wide
+postflight, real product service bindings and CLI adoption remain follow-up work
+under [#800](https://github.com/blevinn/aginctus/issues/800).
 
 Validate engine gates and the scoped fake-host integration:
 
@@ -277,7 +307,7 @@ nix develop -c go test -race ./internal/orchestration ./internal/plugins
 
 ## Next slices
 
-Remaining A4 increments add bounded readiness and product/runtime service bindings; reporting,
+Remaining A4 increments add product/runtime service bindings; reporting,
 selection/generation, Nix integration and product extraction follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
 by these foundation slices, and #798 stays open until its remaining host-integration
