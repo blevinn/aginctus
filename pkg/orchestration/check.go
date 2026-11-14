@@ -32,8 +32,9 @@ const (
 
 // Check declares a criterion and its evidence scope. The host chooses when
 // prerequisites are satisfiable and rechecks mutation-boundary conditions.
-// Timeout bounds evaluation; RetryInterval zero requests one attempt, otherwise
-// bounded readiness polling. MaxAge zero disallows cached findings. No polling,
+// Timeout bounds the whole evaluation window, including authorization and waits;
+// RetryInterval zero requests one attempt, otherwise bounded readiness polling.
+// MaxAge zero disallows cached findings. No polling,
 // probing or cache is implemented by this declaration.
 type Check struct {
 	ID            string
