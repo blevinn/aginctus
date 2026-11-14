@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
 	externalplugin "example.com/aginctus-external-plugin"
+	"github.com/blevinn/aginctus/pkg/observability"
 	"github.com/blevinn/aginctus/pkg/orchestration"
 	"github.com/blevinn/aginctus/pkg/plugin"
 )
@@ -128,6 +130,17 @@ type discoveryOnly struct{}
 
 type containerInspector func(string) (orchestration.ContainerObservation, error)
 
+type progressRecorder struct {
+	mu      sync.Mutex
+	entries []observability.Progress
+}
+
+func (r *progressRecorder) Report(progress observability.Progress) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.entries = append(r.entries, progress)
+}
+
 func (f containerInspector) Inspect(id string) (orchestration.ContainerObservation, error) {
 	return f(id)
 }
@@ -141,7 +154,8 @@ func TestPublicRuntimeCheckConsumer(t *testing.T) {
 	helper := targets[1]
 	request := plugin.CheckRequest{Target: helper, Check: helper.Postconditions[1]}
 	for _, state := range []orchestration.ContainerState{orchestration.ContainerRunning, orchestration.ContainerStopped, orchestration.ContainerMissing, orchestration.ContainerUnknown} {
-		services := plugin.CheckServices{Containers: containerInspector(func(id string) (orchestration.ContainerObservation, error) {
+		recorder := &progressRecorder{}
+		services := plugin.CheckServices{Progress: recorder, Containers: containerInspector(func(id string) (orchestration.ContainerObservation, error) {
 			if id != "helper" {
 				t.Fatalf("unexpected local selection: %s", id)
 			}
@@ -154,6 +168,9 @@ func TestPublicRuntimeCheckConsumer(t *testing.T) {
 		finding, err := implementation.EvaluateCheck(t.Context(), request, services)
 		if err != nil || finding.Validate() != nil || (finding.Outcome == orchestration.Passed) != (state == orchestration.ContainerRunning) {
 			t.Fatalf("lifecycle result: %+v error=%v", finding, err)
+		}
+		if !reflect.DeepEqual(recorder.entries, []observability.Progress{{Code: "lifecycle-inspection", Total: 1}, {Code: "lifecycle-inspection", Current: 1, Total: 1}}) {
+			t.Fatalf("public progress callback: %+v", recorder.entries)
 		}
 	}
 	if _, err := implementation.EvaluateCheck(t.Context(), request, plugin.CheckServices{}); err == nil {

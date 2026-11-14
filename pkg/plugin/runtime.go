@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 
+	"github.com/blevinn/aginctus/pkg/observability"
 	"github.com/blevinn/aginctus/pkg/orchestration"
 )
 
@@ -28,6 +29,9 @@ type CheckRequest struct {
 // never ambient fallback. More service families require separate contracts.
 type CheckServices struct {
 	Containers ContainerInspector
+	// Progress is optional even for an authorized evaluator. It is bound to
+	// this callback's lifetime and check attempt, not a lifecycle authority.
+	Progress observability.Reporter
 }
 
 // ContainerInspector reads only a declared local container. The host binds scope,
