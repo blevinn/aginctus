@@ -2,144 +2,43 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
-	"strings"
-	"time"
 
+	workloadops "github.com/blevinn/aginctus/internal/cli/operations/workload"
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/orchestration"
+	incusscope "github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/orchestration/native"
-	"github.com/blevinn/aginctus/internal/workload"
 )
 
-// The envelope intentionally is not an executable orchestration document.
-// It is a review artifact, NOT proof of authority to execute this plan.
-// Never pipe it to legacy top-level 'aginctus apply --from'.
-type scopedWorkloadApplyPreview struct {
-	Kind            string             `json:"kind"`
-	Project         string             `json:"project"`
-	WorkloadID      string             `json:"workloadId"`
-	ObservedState   string             `json:"observedState"`
-	WriteAuthorized bool               `json:"writeAuthorized"`
-	Plan            orchestration.Plan `json:"plan"`
-}
+type scopedWorkloadApplyPreview = workloadops.ScopedApplyPreview
+type scopedWorkloadApplyDiff = workloadops.ScopedApplyDiff
 
-// Injected in hermetic tests: read-only observation and pure planning only.
+// Preserve the existing injected planner for CLI and security regression tests.
 var planScopedExistingWorkloadDiff = native.PlanLocalExistingInstance
 
-type scopedWorkloadApplyDiff struct {
-	Kind            string `json:"kind"`
-	Project         string `json:"project"`
-	WorkloadID      string `json:"workloadId"`
-	ObservedState   string `json:"observedState"`
-	Action          string `json:"action"`
-	ChangeCount     int    `json:"changeCount"`
-	WriteAuthorized bool   `json:"writeAuthorized"`
+func classifyScopedWorkloadDiff(plan native.InstancePlan, identity native.InstanceIdentity) (string, int, error) {
+	return workloadops.ClassifyScopedDiff(plan, identity)
 }
 
-func classifyScopedWorkloadDiff(preview native.InstancePlan, identity native.InstanceIdentity) (string, int, error) {
-	// No raw diff values, notes, resource names, or upstream error detail
-	// are returned. Treat creation, replacement, unknown or multi-resource
-	// previews as errors, even though planning itself never mutates.
-	if preview.Identity != identity || preview.WriteAuthorized {
-		return "", 0, fmt.Errorf("ambiguous scoped workload diff")
-	}
-	switch preview.Action {
-	case native.Unchanged:
-		if len(preview.Changes) != 0 {
-			return "", 0, fmt.Errorf("inconsistent scoped workload diff")
-		}
-		return "unchanged", 0, nil
-	case native.Update:
-		return "would-update", len(preview.Changes), nil
-	default:
-		return "", 0, fmt.Errorf("create, replace or unsupported scoped diff")
+func observeScopedWorkload(ctx context.Context, cfg *config.Config, project, name, resource, role, id string) workloadops.ScopedObservation {
+	_, instances, err := readScopedManagedInstances(ctx, cfg, project)
+	if err != nil { return workloadops.ScopedObservation{InventoryErr: err} }
+	state, err := findScopedManagedInstance(instances, name, resource, role, id)
+	return workloadops.ScopedObservation{State: state, LookupErr: err}
+}
+
+func scopedWorkloadActions() workloadops.ScopedActions {
+	return workloadops.ScopedActions{
+		Parse: parseScopedInstanceStatusArgs,
+		Observe: observeScopedWorkload,
+		Lease: acquireScopedImageMutationLease,
+		GuardControllers: requireNoKnownLifecycleUnits,
+		Plan: planScopedExistingWorkloadDiff,
+		Ensure: ensureScopedExistingWorkload,
+		Transition: transitionScopedWorkloadState,
 	}
 }
 
 func runScopedWorkloadApplyRender(ctx context.Context, args []string, stdout, stderr io.Writer, cfg *config.Config) int {
-	project, rest, err := parseScopedInstanceStatusArgs(args)
-	if err != nil || len(rest) != 2 || rest[0] == "" ||
-		(rest[1] != "--render" && rest[1] != "--dry-run") {
-		fmt.Fprintln(stderr, "Usage: aginctus workload apply --project NAME WORKLOAD-ID --render|--dry-run")
-		return 2
-	}
-	scope, err := cfg.IncusProjectScope()
-	if err != nil || scope.Name != project {
-		fmt.Fprintln(stderr, "workload apply preview: project must match declared incus.project")
-		return 2
-	}
-	spec, err := workload.FromConfig(cfg, rest[0])
-	if err != nil {
-		fmt.Fprintln(stderr, "workload apply preview: invalid workload configuration")
-		return 1
-	}
-	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
-	defer cancel()
-	_, instances, err := readScopedManagedInstances(ctx, cfg, project)
-	if err != nil {
-		fmt.Fprintln(stderr, "workload apply preview: owned local project inventory unverified")
-		return 1
-	}
-	state, err := findScopedManagedInstance(instances, spec.Name, "workload", "agent-workload", spec.ID)
-	if err != nil || (!strings.EqualFold(state, "running") && !strings.EqualFold(state, "stopped")) {
-		fmt.Fprintln(stderr, "workload apply preview: requires an existing, verified running or stopped owned workload")
-		return 1
-	}
-	if rest[1] == "--dry-run" {
-		// This path intentionally calls only the native planner. The
-		// preview is never passed to the orchestration Execute engine.
-		intent, err := spec.NativeExistingIntent(scope)
-		if err != nil {
-			fmt.Fprintln(stderr, "workload apply dry-run: cannot build safe native intent")
-			return 1
-		}
-		preview, err := planScopedExistingWorkloadDiff(ctx, intent)
-		if err != nil {
-			fmt.Fprintln(stderr, "workload apply dry-run: native local-project diff unavailable or rejected")
-			return 1
-		}
-		action, changes, err := classifyScopedWorkloadDiff(preview, intent.Identity)
-		if err != nil {
-			fmt.Fprintln(stderr, "workload apply dry-run: native diff proposes unsafe or ambiguous action")
-			return 1
-		}
-		// Refuse success if the observed owned project or workload changed
-		// while the planner was reading it. No write authority is implied.
-		_, refreshed, err := readScopedManagedInstances(ctx, cfg, project)
-		if err != nil {
-			fmt.Fprintln(stderr, "workload apply dry-run: project or instance state changed during planning")
-			return 1
-		}
-		after, err := findScopedManagedInstance(refreshed, spec.Name, "workload", "agent-workload", spec.ID)
-		if err != nil || after != state {
-			fmt.Fprintln(stderr, "workload apply dry-run: instance identity or state changed during planning")
-			return 1
-		}
-		report := scopedWorkloadApplyDiff{
-			Kind: "ScopedWorkloadApplyDiff", Project: project, WorkloadID: spec.ID,
-			ObservedState: state, Action: action, ChangeCount: changes, WriteAuthorized: false,
-		}
-		if err := json.NewEncoder(stdout).Encode(report); err != nil {
-			fmt.Fprintln(stderr, "workload apply dry-run: unable to encode report")
-			return 1
-		}
-		return 0
-	}
-	plan, err := spec.PlanScopedExisting(scope)
-	if err != nil {
-		fmt.Fprintln(stderr, "workload apply preview: cannot build safe instance-only plan")
-		return 1
-	}
-	report := scopedWorkloadApplyPreview{
-		Kind: "ScopedWorkloadApplyPreview", Project: project, WorkloadID: spec.ID,
-		ObservedState: state, WriteAuthorized: false, Plan: plan,
-	}
-	if err := json.NewEncoder(stdout).Encode(report); err != nil {
-		fmt.Fprintln(stderr, "workload apply preview: unable to encode report")
-		return 1
-	}
-	return 0
+	return workloadops.RunScopedApplyRender(ctx, args, stdout, stderr, cfg, scopedWorkloadActions())
 }
