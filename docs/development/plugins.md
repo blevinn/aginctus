@@ -389,7 +389,36 @@ nix develop -c go test ./internal/observability/... ./internal/orchestration/...
 nix develop -c go test -race ./internal/observability ./internal/orchestration
 ```
 
-### Retained events
+### Bounded live subscriptions
+
+The monitor also implements public `observability.Stream`. Capture `Snapshot()`,
+then `Subscribe(snapshot.Cursor())`. Registration and bounded replay share the
+projection lock: delivery resumes strictly after that watermark or returns an
+explicit `Update.Gap` and ends. Gaps require a fresh snapshot and new subscription;
+they never contain rejected payloads. Foreign/future cursors return `ErrCursor`.
+An old cursor may require a gap when retained history is incomplete or its replay
+exceeds the subscription buffer. There is no durable/exactly-once replay promise.
+
+Each run permits **32 active subscriptions**, each buffering **64 updates**.
+Publication is nonblocking under the ordering lock, after status application and
+retention accounting. A full queue is replaced by a gap and disconnected. Live
+subscribers may see events omitted from the retained prefix; `Report.Dropped`
+counts history loss, not per-subscriber loss. Rejected events create a gap for all
+active subscribers. Observer-specific loss is signaled only on that subscription.
+
+`Subscription.Next(ctx)` blocks only its consumer, returning the context error and
+closing on cancellation. `Close()` is idempotent and safe concurrently with reads;
+consumers must close abandoned subscriptions to release their run slot. One reader
+per subscription drains queued updates and then receives `io.EOF` after close,
+terminal completion or a gap. Queued terminal delivery is best-effort; the final
+snapshot remains authoritative even when a terminal event overflows. No sink,
+writer or observer callback is invoked by the executor, and no goroutine is created
+for publication. Sink errors/disconnection cannot change execution results.
+
+Validate bounded replay, overflow, cancellation and snapshot/publication ordering
+with the snapshot commands above; these tests need no external services.
+
+### Event vocabulary and retention
 
 The first A5 increment publishes experimental `pkg/observability` events and a
 bounded `Report`. Enable collection explicitly on the existing engine:
