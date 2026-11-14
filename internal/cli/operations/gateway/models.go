@@ -1,4 +1,4 @@
-package cli
+package gatewayops
 
 import (
 	"fmt"
@@ -6,16 +6,9 @@ import (
 	"github.com/blevinn/aginctus/internal/gatewaycontrol"
 )
 
-// Rendering delegates to the selected compiled plugin and never accesses keys.
-func renderRegisteredModel(name string) ([]byte, error) {
-	store, err := gatewaycontrol.DefaultStore(gatewayPlugins())
-	if err != nil {
-		return nil, err
-	}
-	return renderProviderModel(store, "", name)
-}
-
-func renderProviderModel(store *gatewaycontrol.Store, provider, name string) ([]byte, error) {
+// RenderProviderModel fails closed on ambiguous providers and requires one
+// native ChatGPT credential owner for LiteLLM model rendering.
+func RenderProviderModel(store *gatewaycontrol.Store, provider, name string) ([]byte, error) {
 	providers, err := store.Providers()
 	if err != nil {
 		return nil, err
