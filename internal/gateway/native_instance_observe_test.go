@@ -83,7 +83,7 @@ func TestObserveNativeGatewayInstancesAbsentAndOwned(t *testing.T) {
 	for _, spec := range []NativeGatewayInstanceSpec{pair.Postgres, pair.LiteLLM} {
 		fp := f.aliases[spec.ImageAlias].Target
 		f.instances[spec.Name] = &api.Instance{
-			Name: spec.Name, Project: spec.Project, Type: api.InstanceTypeContainer,
+			Name: spec.Name, Project: spec.Project, Type: string(api.InstanceTypeContainer),
 			InstancePut: api.InstancePut{Profiles: []string{}, Devices: spec.Devices, Config: map[string]string{
 				"user.aginctus.managed": "true", "user.aginctus.resource": "gateway-instance",
 				"user.aginctus.role": spec.Role, "user.aginctus.deployment": spec.Project,
@@ -108,7 +108,7 @@ func TestObserveNativeGatewayInstancesRejectsLegacyAndForeign(t *testing.T) {
 	}
 	f.info.Project = pair.Postgres.Project
 	f.instances["postgres-1"] = &api.Instance{
-		Name: "postgres-1", Project: pair.Postgres.Project, Type: api.InstanceTypeContainer,
+		Name: "postgres-1", Project: pair.Postgres.Project, Type: string(api.InstanceTypeContainer),
 		InstancePut: api.InstancePut{Config: map[string]string{"user.aginctus.managed": "true", "user.aginctus.resource": "compose-instance"}},
 	}
 	if _, err := ObserveNativeGatewayInstancesWithReader(context.Background(), pair, f); err == nil {
