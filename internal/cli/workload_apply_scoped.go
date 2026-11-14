@@ -6,7 +6,6 @@ import (
 
 	workloadops "github.com/blevinn/aginctus/internal/cli/operations/workload"
 	"github.com/blevinn/aginctus/internal/config"
-	incusscope "github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/orchestration/native"
 )
 
