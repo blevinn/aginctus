@@ -418,7 +418,44 @@ for publication. Sink errors/disconnection cannot change execution results.
 Validate bounded replay, overflow, cancellation and snapshot/publication ordering
 with the snapshot commands above; these tests need no external services.
 
-### Event vocabulary and retention
+### Optional text and structured-log presentation
+
+`internal/observability/presentation` consumes only public reporting vocabulary.
+The host may use `Text(writer)` for quoted, line-oriented execution status or
+`JSONLines(writer)` for structured JSON logs. JSON records have `schema_version`,
+`run_id`, `type` (`snapshot`/`update`) and a typed `snapshot` or `update` payload;
+no prose parsing is needed. Gaps carry run correlation and no rejected payload.
+Snapshot/update validation rejects malformed metadata before writing. Text quotes
+all producer strings and formats timestamps in UTC; JSON escapes control/line
+separators. Producers remain responsible for nonsecret codes, scope and revisions.
+
+For a live view, run `presentation.Follow(consumerCtx, monitor, sink)` in a
+**host-owned consumer goroutine**, separate from the execution context/outcome.
+It registers before writing the initial snapshot, emits events or explicit gaps,
+resnapshots/resubscribes on loss and emits authoritative final status. A consumer
+attaching after completion gets the final snapshot without replaying history.
+Consumer errors are returned only to the host consumer; they must not be joined
+into the execution result. Follow closes every subscription on return/recovery.
+
+An arbitrary blocking `io.Writer` cannot be interrupted by context cancellation.
+The host owns writer deadlines/close and consumer goroutine shutdown. A blocked
+renderer can lose updates but cannot block the executor; final status remains
+inspectable independently. Renderer instances are single-consumer, single-run.
+These are opt-in adapters for hosts/CLI integrations: existing commands do not
+enable reporting, acquire new flags or change stable output. Real product/backend
+adoption, planned graph inventory and reusable ongoing-health observations remain
+integration/#800 work. No durable log/journal guarantee is added.
+
+Validate rendering, JSON round trips, escaping, gap recovery and optional-sink
+isolation against fake engine operations:
+
+```sh
+nix develop -c go test ./internal/observability/... ./internal/orchestration/... ./pkg/observability/... ./pkg/plugin/...
+nix develop -c go test -race ./internal/observability/... ./internal/orchestration
+nix develop -c just check all
+```
+
+### Core lifecycle and retained history
 
 The first A5 increment publishes experimental `pkg/observability` events and a
 bounded `Report`. Enable collection explicitly on the existing engine:
@@ -533,9 +570,9 @@ nix develop -c go test -race ./internal/plugins ./internal/orchestration ./inter
 
 ## Next slices
 
-Further service families and product adoption remain integration work. Current-status
-projections/subscriptions/renderers,
-selection/generation, Nix integration and product extraction follow in their own
+Further service families, product adoption, planned graph inventory and ongoing
+health remain integration work. Static selection/generation, Nix integration and
+product extraction follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
 by these foundation slices. Additional service families should arrive with concrete
 integration needs and preserve the explicit read/write authority boundaries.
