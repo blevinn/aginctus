@@ -90,3 +90,21 @@ func configureSIWCOperations(store *gatewaycontrol.Store, effective *config.Conf
 	}
 	store.Plugins["openai-siwc"] = plugin
 }
+
+// syncGatewaySIWC preserves the existing managed credential preparation and
+// synchronization sequence; the lifecycle operation invokes it after deploy.
+func syncGatewaySIWC(ctx context.Context, effective *config.Config) error {
+	attachment, err := siwcAttachment(effective)
+	if err != nil {
+		return err
+	}
+	if err := prepareGatewaySIWC(ctx, attachment); err != nil {
+		return err
+	}
+	store, err := configuredGatewayStore(effective)
+	if err != nil {
+		return err
+	}
+	_, err = runManagedSIWC(ctx, effective, store, siwc.Operation{Action: "sync"})
+	return err
+}
