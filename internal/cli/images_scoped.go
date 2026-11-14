@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	imageops "github.com/blevinn/aginctus/internal/cli/operations/images"
 	"github.com/blevinn/aginctus/internal/config"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
@@ -87,4 +88,27 @@ func runConfiguredImages(ctx context.Context, args []string, stdout, stderr io.W
 	}
 	printLocalImages(stdout, images)
 	return 0
+}
+
+// Root shims preserve tests and callers while ownership-claim decisions live
+// with image operations and stay distinct from write authorization.
+var ownedImageFingerprintPattern = imageops.OwnedFingerprintPattern
+
+type observedClaimedImage = imageops.ObservedClaimedImage
+type imageOwnerAuditReport = imageops.OwnerAuditReport
+
+func expectedImageOwnerClaim(scope incusscope.ProjectScope, alias, owner string) map[string]string {
+	return imageops.ExpectedOwnerClaim(scope, alias, owner)
+}
+
+func classifyImageOwnerClaim(images []observedClaimedImage, scope incusscope.ProjectScope, alias, owner string) string {
+	return imageops.ClassifyOwnerClaim(images, scope, alias, owner)
+}
+
+func parseImageOwnerAuditArgs(args []string) (string, string, string, error) {
+	return imageops.ParseOwnerAuditArgs(args)
+}
+
+func runImageOwnerAudit(ctx context.Context, args []string, stdout, stderr io.Writer, cfg *config.Config) int {
+	return imageops.RunOwnerAudit(ctx, args, stdout, stderr, cfg, verifyScopedImageProject, inspectScopedImages, maxProjectListBytes)
 }

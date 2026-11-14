@@ -1,4 +1,4 @@
-package cli
+package imageops
 
 import (
 	"context"
@@ -12,13 +12,13 @@ import (
 	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
 
-var ownedImageFingerprintPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+var OwnedFingerprintPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // This is a non-authoritative provenance *claim* recorded as Incus image
 // properties, not an attestation or a lock. It can only support diagnostics:
 // write authorization must additionally prove the active lifecycle owner
 // and check image/alias identity under appropriate concurrency protection.
-func expectedImageOwnerClaim(scope incusscope.ProjectScope, alias, owner string) map[string]string {
+func ExpectedOwnerClaim(scope incusscope.ProjectScope, alias, owner string) map[string]string {
 	return map[string]string{
 		"user.aginctus.managed":    "true",
 		"user.aginctus.resource":   "image",
@@ -28,7 +28,7 @@ func expectedImageOwnerClaim(scope incusscope.ProjectScope, alias, owner string)
 	}
 }
 
-type observedClaimedImage struct {
+type ObservedClaimedImage struct {
 	Fingerprint string            `json:"fingerprint"`
 	Properties  map[string]string `json:"properties"`
 	Aliases     []struct {
@@ -36,19 +36,19 @@ type observedClaimedImage struct {
 	} `json:"aliases"`
 }
 
-type imageOwnerAuditReport struct {
+type OwnerAuditReport struct {
 	Project string `json:"project"`
 	Alias   string `json:"alias"`
 	Owner   string `json:"owner"`
 	Status  string `json:"status"`
 }
 
-// classifyImageOwnerClaim deliberately never returns "authorized".
+// ClassifyOwnerClaim deliberately never returns "authorized".
 // A valid property claim is still self-declared Incus metadata: the actor
 // controlling Incus can edit or forge it. Additional aliases imply that
 // changing this image could affect a different lifecycle owner.
-func classifyImageOwnerClaim(images []observedClaimedImage, scope incusscope.ProjectScope, alias, owner string) string {
-	var matches []observedClaimedImage
+func ClassifyOwnerClaim(images []ObservedClaimedImage, scope incusscope.ProjectScope, alias, owner string) string {
+	var matches []ObservedClaimedImage
 	occurrences := 0
 	for _, image := range images {
 		for _, item := range image.Aliases {
@@ -65,13 +65,13 @@ func classifyImageOwnerClaim(images []observedClaimedImage, scope incusscope.Pro
 		return "ambiguous"
 	}
 	image := matches[0]
-	if !ownedImageFingerprintPattern.MatchString(image.Fingerprint) {
+	if !OwnedFingerprintPattern.MatchString(image.Fingerprint) {
 		return "unverified"
 	}
 	if len(image.Aliases) != 1 {
 		return "shared"
 	}
-	expected := expectedImageOwnerClaim(scope, alias, owner)
+	expected := ExpectedOwnerClaim(scope, alias, owner)
 	marked := false
 	for _, key := range []string{
 		"user.aginctus.managed", "user.aginctus.resource",
@@ -92,10 +92,10 @@ func classifyImageOwnerClaim(images []observedClaimedImage, scope incusscope.Pro
 	return "claimed"
 }
 
-func parseImageOwnerAuditArgs(args []string) (project, owner, alias string, err error) {
+func ParseOwnerAuditArgs(args []string) (project, owner, alias string, err error) {
 	if len(args) != 6 || args[0] != "owner-audit" || args[1] != "--project" ||
 		args[3] != "--owner" || (args[4] != "system" && args[4] != "user") ||
-		!validImageName(args[5]) {
+		!ValidImageName(args[5]) {
 		return "", "", "", fmt.Errorf("explicit project, selected owner and alias required")
 	}
 	if _, err := incusscope.NewProjectScope(args[2]); err != nil {
@@ -106,8 +106,8 @@ func parseImageOwnerAuditArgs(args []string) (project, owner, alias string, err 
 
 // Only read local daemon state with an exact named project and no implicit
 // remote/default fallback. Failures never expose Incus error/output text.
-func runImageOwnerAudit(ctx context.Context, args []string, stdout, stderr io.Writer, cfg *config.Config) int {
-	project, owner, alias, err := parseImageOwnerAuditArgs(args)
+func RunOwnerAudit(ctx context.Context, args []string, stdout, stderr io.Writer, cfg *config.Config, verify func(context.Context, incusscope.ProjectScope) error, inspect func(context.Context, incusscope.ProjectScope) ([]byte, error), maxBytes int) int {
+	project, owner, alias, err := ParseOwnerAuditArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, "Usage: aginctus images owner-audit --project NAME --owner system|user ALIAS")
 		return 2
@@ -119,22 +119,22 @@ func runImageOwnerAudit(ctx context.Context, args []string, stdout, stderr io.Wr
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	if err := verifyScopedImageProject(ctx, scope); err != nil {
+	if err := verify(ctx, scope); err != nil {
 		fmt.Fprintln(stderr, "images owner-audit: project ownership/policy unverified; no image read attempted")
 		return 1
 	}
-	raw, err := inspectScopedImages(ctx, scope)
-	if err != nil || len(raw) > maxProjectListBytes {
+	raw, err := inspect(ctx, scope)
+	if err != nil || len(raw) > maxBytes {
 		fmt.Fprintln(stderr, "images owner-audit: scoped image inventory unavailable")
 		return 1
 	}
-	var images []observedClaimedImage
+	var images []ObservedClaimedImage
 	if err := json.Unmarshal(raw, &images); err != nil || images == nil {
 		fmt.Fprintln(stderr, "images owner-audit: invalid scoped image inventory")
 		return 1
 	}
-	state := classifyImageOwnerClaim(images, scope, alias, owner)
-	if err := json.NewEncoder(stdout).Encode(imageOwnerAuditReport{
+	state := ClassifyOwnerClaim(images, scope, alias, owner)
+	if err := json.NewEncoder(stdout).Encode(OwnerAuditReport{
 		Project: scope.Name, Alias: alias, Owner: owner, Status: state,
 	}); err != nil {
 		fmt.Fprintln(stderr, "images owner-audit: unable to write report")
