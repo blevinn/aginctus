@@ -72,6 +72,20 @@ Call out changes involving sandboxing, network controls, credentials, secrets, M
   opt-in gates. Proposed features, old pilot observations, and green hermetic
   checks are not proof of current production behavior.
 
+## Pre-stability compatibility
+
+- Follow the [pre-stability compatibility policy](docs/development/compatibility.md).
+  Until a separately approved stability commitment lands, do not presume
+  backward compatibility, historical state migration, or preservation of pilot
+  deployments. Prefer clean reinstantiation and direct, coherent changes over
+  speculative legacy shims or migration machinery.
+- Do not treat disposable pilot deployments as permission to destroy resources,
+  bypass authorization or ownership checks, or weaken security, correctness,
+  current-state data integrity, reproducibility, or external API conformance.
+- Document consequential breaks and reinstantiation requirements, but do not
+  introduce historical-version compatibility tests or adapters without a
+  concrete, approved need.
+
 ## Working rules
 
 - Read the relevant repository documentation and nearby code before making non-trivial changes.

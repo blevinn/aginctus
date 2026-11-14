@@ -13,6 +13,11 @@ Aginctus **v0.1** is the initial single-host, operator-controlled NixOS/Incus ag
 
 Five functional criteria in [release acceptance #118](https://github.com/blevinn/aginctus/issues/118) have direct live pilot evidence: Herdr-managed OpenCode read/edited a broken fixture, ran real tests, completed, and used a private scoped LiteLLM gateway route to a real upstream provider. Independent key revocation and owned-resource cleanup were observed. The sixth, reproducible **fresh-host** test remains unchecked and is deferred to v0.2, not claimed as passing. The existing selective gateway configuration is under an explicit host reconciler hold; manual review is required before any convergence or upgrade. This is not an audited or production-hardened multi-tenant platform.
 
+Before an explicit stability policy is adopted, Aginctus does not guarantee
+backward compatibility, migration of historical state, or preservation of pilot
+deployments. See the [pre-stability compatibility policy](docs/development/compatibility.md)
+for engineering defaults and unchanged safety obligations.
+
 ## Build and inspect
 
 ```sh

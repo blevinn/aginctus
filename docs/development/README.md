@@ -2,6 +2,14 @@
 
 Aginctus uses Nix to provide a small, reproducible development environment. For release versioning, human sign-off and publication, use the separate [release process](releasing.md). For CLI behavior and the Incus trust boundary, use the [CLI reference](../reference/cli.md).
 
+## Compatibility expectations
+
+Aginctus has [no general backward-compatibility or forward-migration commitment
+before an explicitly adopted stability policy](compatibility.md), including for
+disposable pilot instances. Breaking changes and clean reinstantiation are
+acceptable development defaults; this does not relax resource ownership,
+authorization, current-version correctness, or destructive-operation safeguards.
+
 ## Prerequisites
 
 You need:
