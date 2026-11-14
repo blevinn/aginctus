@@ -1,7 +1,7 @@
 # Public plugin and contribution contracts
 
 **Status: experimental discovery, configuration and declarative contributions.**
-This covers slices A1–A2 of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
+This covers slices A1–A3 of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
 for [#798](https://github.com/blevinn/aginctus/issues/798). The broader
 [architecture proposal](../design/plugin-oriented-core.md) remains the target,
 not a claim that deployment plugins are already supported by the CLI.
@@ -25,6 +25,10 @@ in-memory contracts, not stable serialized plan/accepted-state/event schemas.
   invalid implementation versions, missing capabilities, duplicate capability
   names and unknown kinds. Implementation versions are opaque printable ASCII
   identifiers without spaces, not semantic-version constraints or verified provenance.
+- `Descriptor.Dependencies` names required compiled plugin implementations.
+  Descriptor validation rejects malformed, duplicate and self references;
+  the host registry checks availability and cycles. These are not runtime
+  instance dependencies and do not enable or authorize anything.
 - `Plugin.ValidateConfiguration` checks the implementation's nonsecret JSON
   configuration schema. It must reject unknown fields/invalid combinations,
   cooperate with context cancellation and emit safe errors. It must not perform
@@ -53,7 +57,7 @@ the supplied nonsecret configuration. It must not resolve images or load secrets
 checks cancellation, each declaration, duplicate target IDs and membership in
 advertised capabilities. It returns no partial contributions on validation error.
 An empty contribution is valid. Missing dependency references and graph cycles
-are deliberately deferred to host-side assembly in A3.
+are checked by host-side assembly, not by this public callback wrapper.
 
 `orchestration.Target` describes a local ID, capability, target dependencies,
 zero or more containers, and preconditions/postconditions/ongoing observations.
@@ -118,10 +122,62 @@ in ordinary `go test ./...`; no separate manual fixture command is required.
 This check uses the local Go toolchain and writable Go build cache, not Incus,
 host privileges, credentials, network services or live models.
 
+## Host-side registration and graph assembly
+
+`internal/plugins` is the application's product-neutral adapter. External plugins
+continue using only public packages. The registry has no product imports, global
+registration, ambient configuration, infrastructure clients or execution services.
+
+- `New(ctx, implementations...)` validates and snapshots explicit descriptors,
+  rejecting nil/duplicate implementations, incompatible APIs, missing compiled
+  dependencies and cycles. `Inventory()` returns detached metadata in
+  dependency-first order with lexical tie-breaking. Registration does not load
+  code, establish verified provenance or instantiate dependencies.
+- `Assemble(ctx, deployment, instances)` accepts an explicit logical deployment
+  ID and selected instance names, plugin references and nonsecret configurations.
+  It rejects unknown implementations and invalid/duplicate instance identities.
+  Every selected configuration passes validation before any target contributor
+  is invoked. Configuration validation may be repeated at the contribution
+  boundary and must remain pure and deterministic.
+- Discovery-only instances validate normally and contribute no targets. Omission
+  is not deletion; an empty selection assembles an empty graph. Compiled-plugin
+  dependencies do not imply runtime instance creation or execution ordering.
+- Each target receives a separate `(deployment, instance, target)` key. Local
+  definition/check IDs remain intact for public finding correlation. Dependency
+  references resolve **only within the contributing instance**: there is no
+  fallback to another instance's similarly named target. Cross-instance edges
+  would require a future explicit scoped-reference contract.
+- Assembly rejects incomplete/cyclic graphs and returns no partial graph on
+  error or cancellation. Targets have deterministic dependency-first order with
+  lexical scoped-key tie-breaking, independent of registration, instance input
+  and target enumeration order. Definition order has no execution semantics.
+- Registered metadata, inventory results and assembled nested declarations use
+  detached slices. The registry copies caller configuration and does not retain
+  candidate bytes in the graph. These ownership guarantees are not a sandbox;
+  trusted implementations remain responsible for pure, cancellation-aware and
+  appropriately concurrency-safe callbacks.
+
+Logical deployment IDs are not Incus project bindings or principal credentials.
+The assembled graph is a declaration snapshot, not accepted state, a scheduler,
+resolved images, scoped runtime services or permission to perform a write.
+Existing commands still use their current product paths. A4 must independently
+bind services, enforce authorization/freshness/correlation and verify conditions.
+
+Run the host-adapter tests with the public boundary checks:
+
+```sh
+nix develop -c go test ./internal/plugins/... ./pkg/plugin/... ./pkg/orchestration/...
+nix develop -c go vet ./internal/plugins/... ./pkg/plugin/... ./pkg/orchestration/...
+```
+
+The host tests use public-contract fake implementations and a declaration-only
+consumer. They verify scoped dependencies, independent image configuration,
+deterministic ordering, metadata/data ownership and failure/cancellation behavior.
+They do not deploy guests, evaluate runtime probes or import concrete products.
+
 ## Next slices
 
-A3 adds instance registration and validated contribution assembly. A4 introduces
-context-aware operation preconditions/postconditions; reporting,
+A4 introduces context-aware operation preconditions/postconditions; reporting,
 selection/generation, Nix integration and product extraction follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
 by these foundation slices, and #798 stays open until its remaining host-integration
