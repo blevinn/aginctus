@@ -32,8 +32,8 @@ func addGatewayCoreCommands(
 	load func() (*config.Config, error), status *int,
 ) *cobra.Command {
 	return gatewaycmd.Register(root, stdout, stderr, load, status, gatewaycmd.Handlers{
-		Status: runGatewayStatus,
-		Lifecycle: executeGatewayLifecycle,
+		Status:     runGatewayStatus,
+		Lifecycle:  executeGatewayLifecycle,
 		Credential: executeGatewayCredential,
 	})
 }

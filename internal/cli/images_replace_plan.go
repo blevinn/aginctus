@@ -45,7 +45,6 @@ func surveyImageControllers(ctx context.Context, owner string) string {
 	}
 }
 
-
 type imageReplacePlanReport = imageops.ReplacePlanReport
 
 func parseImageReplacePlanArgs(args []string) (string, string, string, string, error) {
@@ -62,10 +61,10 @@ func planOwnedImageReplacement(ctx context.Context, scope incusscope.ProjectScop
 
 func runImageReplacePlan(ctx context.Context, args []string, stdout, stderr io.Writer, cfg *config.Config) int {
 	return imageops.RunReplacePlan(ctx, args, stdout, stderr, cfg, imageops.ReplacePlanActions{
-		Verify: verifyScopedImageProject,
-		Inventory: inspectOwnedScopedImageInventory,
-		Artifact: imageArtifact,
+		Verify:      verifyScopedImageProject,
+		Inventory:   inspectOwnedScopedImageInventory,
+		Artifact:    imageArtifact,
 		Fingerprint: imageFingerprint,
-		Survey: surveyImageControllers,
+		Survey:      surveyImageControllers,
 	})
 }

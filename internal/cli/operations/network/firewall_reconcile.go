@@ -15,8 +15,8 @@ import (
 // check, subprocess runner, and verified bridge-policy discovery.
 type FirewallActions struct {
 	EffectiveUID func() int
-	Command func(context.Context, string, string, ...string) (string, error)
-	Discover func(context.Context, *config.Config) (firewall.Policy, error)
+	Command      func(context.Context, string, string, ...string) (string, error)
+	Discover     func(context.Context, *config.Config) (firewall.Policy, error)
 }
 
 // Reconcile requires verified host authority and backend ownership before
