@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
-	"reflect"
 
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
@@ -129,7 +128,7 @@ func ObserveNativeGatewayInstancesWithReader(ctx context.Context, pair NativeGat
 			inst.Config["user.aginctus.role"] != spec.Role ||
 			inst.Config["user.aginctus.deployment"] != scope.Name ||
 			inst.Config["volatile.base_image"] != alias.Target ||
-			!reflect.DeepEqual(inst.Devices, spec.Devices) || len(inst.Profiles) != 0 {
+			!equalNativeDevices(inst.Devices, spec.Devices) || len(inst.Profiles) != 0 {
 			return nil, fmt.Errorf("native gateway existing instance ownership or attachments unverified")
 		}
 		result = append(result, NativeGatewayInstanceObservation{Name: spec.Name, Project: scope.Name, Status: NativeGatewayCompatible})
