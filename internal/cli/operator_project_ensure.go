@@ -30,7 +30,6 @@ var createLocalProject = func(ctx context.Context, scope incusscope.ProjectScope
 	return nil
 }
 
-
 type operatorProjectEnsureReport = operatorops.ProjectEnsureReport
 
 func parseOperatorProjectEnsureArgs(args []string) (incusscope.ProjectScope, error) {
