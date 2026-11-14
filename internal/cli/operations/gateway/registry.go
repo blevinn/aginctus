@@ -1,4 +1,4 @@
-package cli
+package gatewayops
 
 import (
 	"fmt"
@@ -12,9 +12,9 @@ import (
 
 // Registry execution does not parse command words or flags: the caller's
 // leaf-specific Cobra validation already established the operation.
-func executeGatewayModelRead(action, name string, stdout, stderr io.Writer) int {
+func ModelRead(action, name string, stdout, stderr io.Writer, render func(string) ([]byte, error)) int {
 	if action == "render" {
-		definition, err := renderRegisteredModel(name)
+		definition, err := render(name)
 		if err != nil {
 			fmt.Fprintf(stderr, "render registered model: %v\n", err)
 			return 1
@@ -49,7 +49,7 @@ func executeGatewayModelRead(action, name string, stdout, stderr io.Writer) int 
 		return 1
 }
 
-func executeGatewayProviderRead(action, name string, stdout, stderr io.Writer) int {
+func ProviderRead(action, name string, stdout, stderr io.Writer) int {
 		path, err := providerregistry.DefaultPath()
 		if err != nil {
 			fmt.Fprintf(stderr, "provider registry path: %v\n", err)
@@ -76,7 +76,7 @@ func executeGatewayProviderRead(action, name string, stdout, stderr io.Writer) i
 		return 1
 }
 
-func executeGatewayRegistration(kind, name, provider, source, alias string, dryRun bool, stdout, stderr io.Writer) int {
+func Registration(kind, name, provider, source, alias string, dryRun bool, stdout, stderr io.Writer) int {
 		if kind == "provider" {
 			if alias == "" {
 				alias = name
