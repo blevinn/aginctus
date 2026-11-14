@@ -10,12 +10,12 @@ import (
 // service instance. It is not an accepted deployment revision, write grant,
 // secret material, or an API request ready to execute.
 type NativeGatewayInstanceSpec struct {
-	Project string
-	Name string
-	Role string
-	ImageAlias string
-	DependsOn []string
-	Devices map[string]map[string]string
+	Project           string
+	Name              string
+	Role              string
+	ImageAlias        string
+	DependsOn         []string
+	Devices           map[string]map[string]string
 	SecretEnvironment []string
 }
 
@@ -24,7 +24,7 @@ type NativeGatewayInstanceSpec struct {
 // has established storage, runtime configuration, and readiness policy.
 type NativeGatewayInstancePair struct {
 	Postgres NativeGatewayInstanceSpec
-	LiteLLM NativeGatewayInstanceSpec
+	LiteLLM  NativeGatewayInstanceSpec
 }
 
 // PlanNativeGatewayInstances binds the previously validated topology and
@@ -49,32 +49,40 @@ func PlanNativeGatewayInstances(topology NativeGatewayTopology, devices NativeGa
 		return NativeGatewayInstancePair{}, fmt.Errorf("native gateway instance storage plan missing")
 	}
 	expected, err := PlanNativeGatewayDevices(topology, pgRoot["pool"], pgData["pool"])
-	if err != nil || !equalNativeDevices(devices.Postgres,expected.Postgres) ||
-		!equalNativeDevices(devices.LiteLLM,expected.LiteLLM) {
+	if err != nil || !equalNativeDevices(devices.Postgres, expected.Postgres) ||
+		!equalNativeDevices(devices.LiteLLM, expected.LiteLLM) {
 		return NativeGatewayInstancePair{}, fmt.Errorf("native gateway instance devices do not match validated topology")
 	}
 	clone := func(src map[string]map[string]string) map[string]map[string]string {
-		dst:=make(map[string]map[string]string,len(src))
-		for k,v:=range src { dst[k]=maps.Clone(v) }
+		dst := make(map[string]map[string]string, len(src))
+		for k, v := range src {
+			dst[k] = maps.Clone(v)
+		}
 		return dst
 	}
 	return NativeGatewayInstancePair{
-		Postgres:NativeGatewayInstanceSpec{
-			Project:topology.Project,Name:"postgres-1",Role:"postgres",ImageAlias:postgresAlias,
-			Devices:clone(expected.Postgres),
-			SecretEnvironment:slices.Clone(topology.Services[0].SecretEnvironment),
+		Postgres: NativeGatewayInstanceSpec{
+			Project: topology.Project, Name: "postgres-1", Role: "postgres", ImageAlias: postgresAlias,
+			Devices:           clone(expected.Postgres),
+			SecretEnvironment: slices.Clone(topology.Services[0].SecretEnvironment),
 		},
-		LiteLLM:NativeGatewayInstanceSpec{
-			Project:topology.Project,Name:"litellm-1",Role:"litellm",ImageAlias:liteLLMAlias,
-			Devices:clone(expected.LiteLLM),
-			DependsOn:slices.Clone(topology.Services[1].DependsOn),
-			SecretEnvironment:slices.Clone(topology.Services[1].SecretEnvironment),
+		LiteLLM: NativeGatewayInstanceSpec{
+			Project: topology.Project, Name: "litellm-1", Role: "litellm", ImageAlias: liteLLMAlias,
+			Devices:           clone(expected.LiteLLM),
+			DependsOn:         slices.Clone(topology.Services[1].DependsOn),
+			SecretEnvironment: slices.Clone(topology.Services[1].SecretEnvironment),
 		},
-	},nil
+	}, nil
 }
 
-func equalNativeDevices(a,b map[string]map[string]string) bool {
-	if len(a)!=len(b) {return false}
-	for name,expected:=range b { if !maps.Equal(a[name],expected) {return false} }
+func equalNativeDevices(a, b map[string]map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for name, expected := range b {
+		if !maps.Equal(a[name], expected) {
+			return false
+		}
+	}
 	return true
 }
