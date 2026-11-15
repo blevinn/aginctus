@@ -17,6 +17,9 @@ import (
 
 type Example struct{}
 
+// New is the explicit static-composition factory; it performs no I/O.
+func New() plugin.Plugin { return Example{} }
+
 var _ plugin.Plugin = Example{}
 var _ plugin.TargetContributor = Example{}
 var _ plugin.CheckEvaluator = Example{}
