@@ -31,6 +31,7 @@ func (scope ProjectScope) ProposedRestrictedOperatorConfig(bridge, pool string) 
 	cfg := scope.DesiredConfig()
 	cfg["restricted"] = "true"
 	cfg["restricted.devices.nic"] = "managed"
+	cfg["restricted.devices.disk"] = "managed"
 	cfg["restricted.networks.access"] = bridge
 	cfg["restricted.storage-pools.access"] = pool
 	return cfg, nil

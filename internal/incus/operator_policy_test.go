@@ -22,6 +22,7 @@ func TestProposedRestrictedOperatorConfigHasNarrowExplicitGrants(t *testing.T) {
 		"user.aginctus.deployment": "aginctus",
 		"restricted": "true",
 		"restricted.devices.nic": "managed",
+		"restricted.devices.disk": "managed",
 		"restricted.networks.access": "hm-mgmt",
 		"restricted.storage-pools.access": "default",
 		"features.images": "true",
@@ -70,6 +71,7 @@ func TestRestrictedOperatorAssessmentRejectsPolicyWeakeningAndOwnershipChanges(t
 		{"different bridge", "restricted.networks.access", "other-bridge", ProjectDrift},
 		{"wildcard pool", "restricted.storage-pools.access", "*", ProjectDrift},
 		{"broad NIC", "restricted.devices.nic", "allow", ProjectDrift},
+		{"broad disk", "restricted.devices.disk", "allow", ProjectDrift},
 		{"inherited features drift", "features.networks", "true", ProjectDrift},
 		{"owner rewritten", "user.aginctus.deployment", "foreign", ProjectForeign},
 	} {
