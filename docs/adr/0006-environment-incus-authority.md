@@ -1,4 +1,4 @@
-# ADR 0006: Environment-scoped Incus authority and accepted state
+# ADR 0006: Project-scoped Incus authority and environment lifecycle
 
 - Status: **Accepted architectural direction; privileged write integration remains gated**
 - Date: 2026-11-15
@@ -7,7 +7,7 @@
 
 ## Decision
 
-**Incus projects delimit resource authority; Aginctus environments delimit lifecycle; accepted state records environment intent; NixOS governs privileged host capabilities. Configuration origin does not grant permissions.**
+**Incus projects delimit resource authority and own the project-level configured → accepted → observed state lifecycle; Aginctus environments delimit independently managed resource lifecycles within a project; NixOS governs privileged host capabilities. Configuration origin does not grant permissions.**
 
 An environment has a stable immutable ID, a mutable display name, and exactly one verified Incus server/project binding. A project may contain multiple environments; an environment may not span projects. Connection aliases are not server identity. Relocation to a different server/project is an explicit migration, not an override.
 
@@ -19,9 +19,11 @@ Root-managed policy may configure local host services, daemon, pools, bridge/fir
 
 ## State and lifecycle
 
-Keep ADR 0004's configured → explicitly accepted (CAS) → observed/converged separation. Accepted nonsecret intent, immutable revision history, operation metadata and CAS are scoped by **environment identity and its verified project binding**, not system/user mode or local XDG directory. A new invoking client must be able to discover state without the original user's config.
+Keep ADR 0004's configured → explicitly accepted (CAS) → observed/converged separation. The **Incus project is the logical three-layer state authority scope**. Project-scoped state may include project-owned declarations and independently versioned environment records; each environment has its own accepted revision chain, active pointer, operation history and coordinating writer fence *within* the project's authority. We do not require one monolithic accepted revision for all environments in a project. A new invoking client must be able to discover authorized state without the original user's config; system/user configuration origin does not partition that authority.
 
-Project-scoped Incus-accessible persistence is required logically; exact physical store, service topology, transport and project-restricted authentication remain gated by #695/#696/#704. A shared service must not become a more privileged deputy. State promotion is never itself an Incus workload mutation. Host configuration is not a writable portion of environment accepted state. Secrets stay with their existing exclusive owners.
+Project-scoped Incus-accessible persistence is required logically; exact physical store, service topology, transport and project-restricted authentication remain gated by #695/#696/#704. A shared service must not become a more privileged deputy. State promotion is never itself an Incus workload mutation. Project-wide managed resources, if any, require a single explicit lifecycle owner rather than being implicitly shared across environments. Secrets stay with their existing exclusive owners.
+
+**System-scoped state is distinct and left open.** Privileged host configuration remains outside Incus project/environment state and under NixOS/root authorization. A future system-level configured → accepted → observed lifecycle may reuse generic revision/comparison/CAS primitives, but is neither required by this ADR nor permission to replace or change ordinary `nixos-rebuild switch` semantics. No system/user accepted-state merging or cross-scope promotion is introduced. Share state lifecycle primitives where useful, not authorization mechanisms; do not build a generic multi-scope framework prematurely.
 
 Every Aginctus-managed resource has exactly one environment lifecycle owner. Labels (such as `user.aginctus.environment-id`) and names are discovery/collision evidence but **not authority or sufficient adoption proof**. Foreign/unknown resources fail closed; transfer and adoption are explicit. Concurrent cooperating reconcilers need authoritative fencing and per-resource mutation preflight; Incus access held by unrelated admins cannot be prevented by an Aginctus lock. Interrupted operations persist uncertain/partial outcomes for observation-based recovery.
 
@@ -33,7 +35,7 @@ The former Aginctus "profile" / "deployment" scope evolves to "environment", dis
 
 ## Superseded design and retained safety gates
 
-This ADR supersedes ADR 0004's *provisional* shared root/user partial-patch authority and ADR 0005's *proposed* composite host/project accepted view as the default environment model. It **does not** supersede three-layer state, durable CAS, resource ownership, selected-only operation, separate host authority, or credential separation.
+This ADR supersedes ADR 0004's *provisional* shared root/user partial-patch authority and ADR 0005's *proposed* cross-scope composite host/project accepted view as an authorization or writable state model. It **does not** supersede three-layer state, durable CAS, resource ownership, selected-only operation, separate host authority, or credential separation.
 
 Approval of this architecture is **not permission** to activate user→root execution, production multi-principal promotion, automatic workload reconciliation, privileged service credentials, or to mutate the development host. #704 must retain concrete Incus restricted-principal, state-service confused-deputy, in-flight revocation, restart, race, AppArmor and boundary evidence before the associated write gates are lifted.
 
@@ -41,7 +43,7 @@ Approval of this architecture is **not permission** to activate user→root exec
 
 1. Reconcile documentation and tracking (#693–#701, #199, #441).
 2. Establish an environment identity and immutable Incus server/project binding with negative tests.
-3. Make state namespaces and storage adapters environment-scoped; test independent CAS for two environments in one project.
+3. Make accepted-state authority project-scoped, with independently versioned environment namespaces and optional separately owned project-wide records; test independent CAS for two environments in one project.
 4. Expose source-agnostic candidate projection and explicit CLI selection.
 5. Gate authenticated multi-principal persistence and native execution on #704/#696, including tested fencing.
 6. Migrate existing deployments explicitly and accept on disposable Incus before pilot-host changes.
