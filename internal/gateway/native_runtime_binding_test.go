@@ -62,9 +62,13 @@ func TestRuntimeBindingRejectsUnscopedOrEnvironmentGateway(t *testing.T) {
 	b := NativeGatewayRuntimeBinding{ResourceScope: "project", Project: pair.Postgres.Project,
 		AcceptedRevision: strings.Repeat("a", 64), CredentialVersion: "v1",
 		PostgresInstance: "postgres-1", LiteLLMInstance: "litellm-1"}
-	if err := b.Validate(pair); err != nil { t.Fatal(err) }
+	if err := b.Validate(pair); err != nil {
+		t.Fatal(err)
+	}
 	for _, scope := range []string{"", "environment", "user", "system"} {
 		b.ResourceScope = scope
-		if err := b.Validate(pair); err == nil { t.Fatalf("accepted unsupported gateway scope %q", scope) }
+		if err := b.Validate(pair); err == nil {
+			t.Fatalf("accepted unsupported gateway scope %q", scope)
+		}
 	}
 }
