@@ -12,9 +12,13 @@ var gatewayRevisionID = regexp.MustCompile(`^[a-f0-9]{64}$`)
 var gatewayCredentialVersion = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 // NativeGatewayRuntimeBinding names the exact protected accepted revision and
-// credential version for both services. The current fixed-name gateway is\n// explicitly a project-owned resource; this is NOT an environment gateway\n// identity or a grant to modify host or other project resources.\n// It contains no secret bytes or paths.
+// credential version for both services. The current fixed-name gateway is
+// explicitly a project-owned resource; this is NOT an environment gateway
+// identity or a grant to modify host or other project resources.
+// It contains no secret bytes or paths.
 // These identifiers alone are NOT evidence of a delivery or a startup grant.
-type NativeGatewayRuntimeBinding struct {\n\tResourceScope     string `json:"resourceScope"`
+type NativeGatewayRuntimeBinding struct {
+\tResourceScope     string `json:"resourceScope"`
 	Project           string `json:"project"`
 	AcceptedRevision  string `json:"acceptedRevision"`
 	CredentialVersion string `json:"credentialVersion"`
@@ -37,7 +41,8 @@ func (b NativeGatewayRuntimeBinding) Validate(pair NativeGatewayInstancePair) er
 }
 
 // NativeGatewayRuntimeVerifier is implemented by the independently trusted
-// credential delivery authority, distinct from the project-scoped accepted\n// state authority. It must check the exact project-wide record, revision, writer
+// credential delivery authority, distinct from the project-scoped accepted
+// state authority. It must check the exact project-wide record, revision, writer
 // principal/lease, actual guest delivery and matching credential version.
 // This interface does not provide a default verifier or accept a bool receipt.
 // Verifier implementations must avoid returning secret-bearing errors.
