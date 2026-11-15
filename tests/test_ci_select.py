@@ -4,7 +4,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from scripts.checks import ci_select
+from tools.ci import ci_select
 
 
 class NixSelectorTests(unittest.TestCase):
