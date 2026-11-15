@@ -65,6 +65,26 @@ and are not an authenticated operation service or an Incus write path.
 No NixOS/HM module activates these APIs. A successful `SnapshotSelectedWorkload`
 or `RecordLocalUnverifiedAttempt` call does not imply the caller can mutate Incus.
 
+## Host-authored enrollment evidence is not a controller fence
+
+[#865](https://github.com/blevinn/aginctus/pull/865) and
+[#869](https://github.com/blevinn/aginctus/pull/869) introduce a narrow
+root-owned, revocable controller enrollment record for one accepted workload.
+[#867](https://github.com/blevinn/aginctus/pull/867) independently compares
+read-only, daemon-reported Incus TLS/project restriction evidence against the
+enrolled principal. The policy candidate in
+[#866](https://github.com/blevinn/aginctus/pull/866) also requires managed
+disk devices, as exercised by the real authority VM. See the
+[experimental enrollment contract](controller-enrollment.md).
+
+These are **not yet an independently authenticated controller state service
+or an exclusive live writer lease**. Enrollment snapshots may be stale; a
+kernel-authenticated request and reloaded host policy, an actual server-bound
+restricted TLS session, a new monotonic controller fence and mutation-time
+revision/ETag checks all remain necessary. No NixOS or Home Manager user
+reconciliation service consumes these records. No host resource owner is
+transferred, and no old controller is quiesced.
+
 ## Branching choices still open
 
 [#704](https://github.com/blevinn/aginctus/issues/704) must choose and validate whether the operational boundary is (a) project-native credentials with network/volume restrictions, (b) separately authoritative host/project accepted revisions, (c) an independently authenticated single state service with scoped CAS, or (d) a hybrid composite. A composite read view can be shared without merging untrusted user input into privileged host policy.
