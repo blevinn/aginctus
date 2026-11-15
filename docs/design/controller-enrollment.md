@@ -1,18 +1,18 @@
-# Controller enrollment prototype and project-scoped execution gates
+# Retired controller enrollment prototype and project-scoped execution gates
 
-**Status:** Historical non-authorizing prototype; **not the target authorization architecture**. See [ADR 0006 (proposed in #917)](https://github.com/blevinn/aginctus/pull/917), [three-layer state](three-layer-state.md), [#696](https://github.com/blevinn/aginctus/issues/696), and [#704](https://github.com/blevinn/aginctus/issues/704).
+**Status:** Retired experimental prototype; **not a supported authority API**. See [ADR 0006 (proposed in #917)](https://github.com/blevinn/aginctus/pull/917), [three-layer state](three-layer-state.md), [#696](https://github.com/blevinn/aginctus/issues/696), and [#704](https://github.com/blevinn/aginctus/issues/704).
 
-## Existing prototype: documented, not promoted
+## Removed prototype: historical record
 
-The already merged `internal/controllerauthority` package (#865/#869 and later work) records administrator-created *system/user controller enrollments* in an exact root-owned file:
+The formerly merged `internal/controllerauthority` package (#865/#869 and later work) implemented administrator-created *system/user controller enrollments* in an exact root-owned file. Its code and associated unit tests were deleted by the cleanup stack; the implementation remains available in Git history:
 
 ```text
 /etc/aginctus/controller-enrollment.json
 ```
 
-It verifies owner-controlled files, uses explicit create/revoke and epoch/tombstone records, and has narrowly scoped read-only checks. The host exclusion primitive from #897 coordinates cooperating host enrollment operations only. No NixOS/Home Manager activation creates this record or deploys its service, and an enrollment match grants **no** Incus or accepted-state authority.
+It verified owner-controlled files, used explicit create/revoke and epoch/tombstone records, and had narrowly scoped read-only checks. The removed host exclusion primitive from #897 coordinated cooperating host enrollment operations only. No NixOS/Home Manager activation creates this record or deploys its service, and an enrollment match grants **no** Incus or accepted-state authority.
 
-**Do not integrate this prototype into a new root-mediated user lifecycle.** ADR 0006 removes the need to merge system/user configured candidates or enlist a root host broker to decide which user owns a project. Its code and tests should be inventoried for safe removal or narrower extraction once their real consumers are known; avoid deleting security evidence or migration diagnostics prematurely. [PR #900](https://github.com/blevinn/aginctus/pull/900), a proposed root-owned read-only Unix peer-enrollment socket, was closed as superseded without merging.
+**Do not integrate this prototype into a new root-mediated user lifecycle.** ADR 0006 removes the need to merge system/user configured candidates or enlist a root host broker to decide which user owns a project. The prototype had no production Go consumers; its source, tests, and historical security evidence remain accessible in merged PRs and Git history. The project-scoped replacement must reestablish the necessary negative tests for real write paths before activation. [PR #900](https://github.com/blevinn/aginctus/pull/900), a proposed root-owned read-only Unix peer-enrollment socket, was closed as superseded without merging.
 
 The old `domain=host` / `domain=operator` enrollment model is **not** a project authority model. Root-owned configuration may still govern *host* capabilities, but it does not issue a substitute permission grant for project resources.
 
@@ -24,16 +24,16 @@ NixOS/system host policy is a separate root-governed scope. A future independent
 
 Accepted state **never** follows from an `AGINCTUS_*` override, Home Manager switch or NixOS switch. Promotion requires independently authenticated, authorized project-scoped CAS; reconciliation pins an accepted revision and separately checks Incus permissions and resource provenance at mutation time. No user-to-root accepted-state patching or automatic authority handoff is part of this contract.
 
-## Reusable non-authorizing evidence
+## Retained contracts and historical evidence
 
 | Component | Useful, bounded behavior | What it does not establish |
 | --- | --- | --- |
-| `ObserveRestrictedOperatorOverTLS` (#892) | Fresh client-certificate-authenticated HTTPS GET to an exact pinned server, without ambient remote or Unix admin socket | Trusted provisioning of endpoint/pin, accepted-state authority, writer ownership, privilege to mutate |
+| Retired `ObserveRestrictedOperatorOverTLS` (#892) | Historical test/prototype of fresh pinned HTTPS GET against exact Incus TLS identity | No active client API; repeat authorization negative tests in the actual project-scoped transport |
 | `PreviewAcceptedWorkloadLifecycle` (#895) | Pure comparison of one pinned workload and observed resource; blocks unverified ownership, immutable drift and implicit stop/delete | That a caller-supplied snapshot is authentic, that its environment/project binding is enrolled, or write authorization |
-| `AcquireHostEnrollmentExclusion` (#897) | Cooperating root-only enrollment operations do not conflict on the same host-owned file | Project-wide fencing, remote writer exclusion, or an operator's authority to touch Incus |
+| Retired `AcquireHostEnrollmentExclusion` (#897) | Historical test/prototype of same-host cooperating-writer exclusion | No live project-scoped fencing API; do not depend on removed symbols |
 | Incus restricted-principal VM evidence | Relevant API-policy positive/negative observations against the pinned Incus version | Blanket confinement of every API, live-operation revocation, or protection from an unrestricted administrator |
 
-These APIs are **not interchangeable**. An authenticated TLS read, a local revision pointer, a project-name flag, a matching label, a host-admin enrollment, or a cooperative file lock individually or together do not authorize a write.
+These concepts and historical artifacts are **not interchangeable**. An authenticated TLS read, a local revision pointer, a project-name flag, a matching label, a host-admin enrollment, or a cooperative file lock individually or together do not authorize a write.
 
 ## Required project-scoped execution contract
 
