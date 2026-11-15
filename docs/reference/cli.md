@@ -2,6 +2,20 @@
 
 The installed `aginctus help` and `aginctus help <command>` are the source of truth for supported syntax. Help is available without loading the host's configuration. This guide explains **effects and boundaries**, not a duplicated flag-by-flag manual. Check [configuration precedence](configuration.md) and [security limitations](security.md) before provisioning.
 
+## Compiled plugin inventory
+
+`aginctus plugins inventory` prints an experimental JSON document with
+`schema_version: aginctus.dev/compiled-plugins/v1alpha1` and a `plugins` array.
+Entries contain identity, implementation/API versions, named capability kinds
+and compiled dependencies. Output is detached and dependency-first; it does not
+load runtime configuration, contact Incus, read credentials, instantiate targets,
+fetch modules or authorize anything. Writer errors produce a nonzero exit.
+
+The default selection is empty until product migrations; this inventory covers
+only the new contract registry, not legacy product commands, installed guest
+images, runtime instances or current health. See the
+[build-selection workflow](../development/plugins.md#build-time-selection-and-explicit-composition).
+
 ## Local daemon diagnostics and management bridge lifecycle
 
 These semantics are documented here (not in the development environment guide)

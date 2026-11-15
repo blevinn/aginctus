@@ -14,7 +14,8 @@ import (
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/herdrclient"
-	"github.com/blevinn/aginctus/internal/orchestration/managementnetwork"
+	"github.com/blevinn/aginctus/internal/managementnetwork"
+	"github.com/blevinn/aginctus/internal/plugins"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
@@ -55,7 +56,16 @@ func Run(
 	incusClient IncusClient,
 	configLoader ConfigLoader,
 ) int {
-	return runBasicCobra(ctx, args, stdout, stderr, incusClient, configLoader)
+	return RunWithPlugins(ctx, args, stdout, stderr, incusClient, configLoader, nil)
+}
+
+// RunWithPlugins receives the application's already validated compiled registry.
+// Compilation is not runtime enablement. Embedded callers using Run have an empty
+// contract inventory; concrete product commands keep their existing paths.
+func RunWithPlugins(ctx context.Context, args []string, stdout, stderr io.Writer,
+	incusClient IncusClient, configLoader ConfigLoader, registry *plugins.Registry,
+) int {
+	return runBasicCobra(ctx, args, stdout, stderr, incusClient, configLoader, registry)
 }
 
 var setIncusHTTPSAddress = func(ctx context.Context, address string) error {
@@ -84,7 +94,6 @@ type mutationOptions struct {
 var ensureCredentialStorage = gateway.EnsureCredentialVolume
 var attachGatewayCredentials = gateway.AttachCredentialVolume
 var auditGatewayCredentials = gateway.AuditCredentialAttachment
-
 
 // These bindings keep existing CLI dependency-injection seams intact.
 func transitionHerdrClientCommand(ctx context.Context, action string, stdout, stderr io.Writer, effective *config.Config) int {

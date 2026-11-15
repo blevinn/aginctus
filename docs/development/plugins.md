@@ -1,7 +1,7 @@
 # Public plugin and contribution contracts
 
 **Status: experimental public contracts, execution/reporting and static composition.**
-This covers A1–A6 and the A7 composition foundation of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
+This covers A1–A7 foundations of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
 for [#798](https://github.com/blevinn/aginctus/issues/798). The broader
 [architecture proposal](../design/plugin-oriented-core.md) remains the target,
 not a claim that deployment plugins are already supported by the CLI.
@@ -228,14 +228,69 @@ explicit fixtures/development, not evidence of a verified remote source revision
 No module dependency changes or vendor hash changes are needed for the empty
 default selection in this increment.
 
+`cmd/aginctus` composes the registry before dispatching any command and injects
+it into the CLI. `aginctus plugins inventory` emits the experimental
+`aginctus.dev/compiled-plugins/v1alpha1` JSON envelope with dependency-first entries,
+implementation/API versions, sorted named capabilities and dependencies. Empty
+lists are `[]`. Reads use detached registry metadata without callbacks,
+configuration loading, Incus access or credential reads. Descriptor/dependency
+composition failure aborts even before command dispatch. No inventory read creates
+an instance or grants access; implementation version strings are declarations,
+not verified provenance. Existing host-side `Registry.Assemble` rejects unknown
+runtime references before contribution callbacks; generic CLI runtime-instance
+configuration remains future integration work.
+
+```sh
+nix develop -c go run ./cmd/aginctus plugins inventory
+```
+
 The default selection is intentionally empty until products migrate in B–D.
 Existing product commands retain their current implementation paths; an empty
 contract-plugin selection is **not a product-free executable**. Minimal/custom
 selection currently controls only this new composition boundary, not legacy
-product code or image outputs. Binary inventory and selected/omitted build
-fixtures follow in the next A7 increments. Selection never imports guest images,
+product code or image outputs. Selection never imports guest images,
 deploys resources, creates runtime instances or grants host/network/model/MCP
 access. These are trusted in-process implementations, not sandboxed extensions.
+
+### Offline build-selection evidence
+
+Normal root tests include `internal/pluginbuild.TestSelectionBuilds`. This builds
+and runs actual `cmd/aginctus` executables for checked-in default, explicit empty,
+synthetic builtin and custom builtin-plus-external selections. Temporary Go
+overlays and modfiles leave the checkout unchanged. The external author fixture
+is explicitly required at `v1.0.0` and locally replaced with
+`pkg/plugin/testdata/external`; this tests pinned module composition without
+claiming that a remote `v1.0.0` was published or fetched. The fixture uses only
+public contracts. No production module requirement or vendor hash changes.
+
+The tests disable workspace lookup, proxy/sumdb and toolchain downloads, and use
+read-only module inputs. The repository's pinned dependencies must already be in
+the normal Go module cache (as for ordinary development tests). They verify:
+
+- dependency-first JSON inventory from the executable, including independent
+  implementation/API versions and declared dependency identity;
+- dependency closure inclusion/omission for selected builtin/external packages,
+  no generator package in the executable, and inclusion/omission of a unique
+  plugin-owned embedded asset;
+- identical executable bytes on repeat builds with identical pinned inputs,
+  `-trimpath`, VCS stamping disabled and empty build ID;
+- nonzero startup rejection of duplicate identities, missing dependencies,
+  incompatible APIs and dependency cycles, before configuration loading; Go
+  compilation rejects a nonexistent constructor;
+- no edits to root or temporary pinned module inputs or checked-in generated
+  source. Existing registry tests cover unknown runtime references before target
+  contribution callbacks.
+
+```sh
+nix develop -c go test -count=1 -run TestSelectionBuilds -v ./internal/pluginbuild
+nix develop -c go test ./internal/plugins/... ./pkg/plugin/...
+nix develop -c just check all
+```
+
+This is hermetic application build evidence with synthetic capabilities, not
+proof of omitted legacy products, reduced Nix image closures, remote module
+provenance, deployed guest readiness or live-model behavior. Product and image
+migrations remain B–D; verify their individual inclusion/omission as they land.
 
 ## Scoped runtime check services
 
@@ -634,8 +689,8 @@ nix develop -c go test -race ./internal/plugins ./internal/orchestration ./inter
 ## Next slices
 
 Further service families, product adoption, planned graph inventory and ongoing
-health remain integration work. Binary inventory, build fixtures, Nix image
-integration and product extraction follow in their own
+health remain integration work. Nix image integration and product extraction
+follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
 by these foundation slices. Additional service families should arrive with concrete
 integration needs and preserve the explicit read/write authority boundaries.
