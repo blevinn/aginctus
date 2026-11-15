@@ -1,7 +1,8 @@
 # CLI north star: environment-centric command surface
 
-**Status:** Accepted top-level direction (2026-11-15); subcommand trees, wire syntax,
-compatibility and implementation are **not** settled by this document.
+**Status:** Accepted top-level vocabulary and selected command semantics (2026-11-15).
+Additional leaf details, compatibility and implementation remain open. This is a target
+interface, **not** documentation of currently supported CLI syntax.
 
 **Related architecture:** [Project-scoped environment authority](../adr/0006-environment-incus-authority.md),
 [three-layer state](three-layer-state.md), [plugin-oriented core](plugin-oriented-core.md),
@@ -37,15 +38,15 @@ and `aginctus-testenv` worker binary are migration inputs, not settled
 | `images` | Image artifact/dependency inspection; optional imperative primitives | Not a workload class |
 | `ui` | Interact with an environment's frontend through a selected UI method | Client interaction, not frontend provisioning |
 | `console` | Open the console-based UI | Alias for `ui --console` |
-| `state` | Examine and reason over configured, accepted and observed state | Exact comparison/promotion verbs remain open |
+| `state` | Read-only inspection of configured, accepted and observed state | `show`, `diff`, `history`, `explain` |
 | `system` | Host-level administration and diagnostics | Current single-host scope; not an environment |
 | `config` | Inspect fully resolved configuration, provenance and selection rationale | Read-only, across CLI, environment and system scopes |
 | `plugins` | Read-only plugin inventory and usage | Priority 1: inventory/capabilities; priority 2: bindings/usage |
-| `operations` | Provisional operational concept | Name and precise purpose may change; **not** a required plumbing namespace |
-
-`operations` is a consciously provisional name (sometimes shortened to
-`ops` in discussion). Do not use it as a miscellaneous catch-all or infer
-an approved subcommand tree from its presence in this list.
+No generic `operations` / `ops` namespace belongs in the MVP. Reconciliation
+health belongs to environment/resource status, revision context and provenance
+to `state`, and direct imperative resource mutations to gated plumbing commands.
+Operation journals, logs and asynchronous activity might merit a distinct
+resource interface later, but no such public noun is pre-approved.
 
 ### Workload model and convenience aliases
 
@@ -67,6 +68,14 @@ The frontend workload **hosts** user interaction services. `ui` is the
 **client-side interaction** namespace and can eventually expose console,
 web or other methods. `console` is only a convenient spelling for
 `ui --console`; it is not a separately reconciled workload.
+
+Workload names are **unique across the entire environment**, regardless of
+class: `workloads show NAME` must not need class disambiguation. Class aliases
+must fail for a name belonging to another class. Workloads currently form a
+**flat** environment namespace, may depend on other workloads, and may each
+contain multiple containers. Nested workloads are deferred; constituent
+containers are not separate porcelain workloads. A class change must not
+silently reinterpret an existing workload as a different class.
 
 ## Environment selection and authority
 
@@ -99,6 +108,115 @@ actions: the target environment determines its authoritative Incus binding.
 Explicit project/image-store inspection and administrative host commands are
 distinct scopes. Their exact selector syntax and conflict rules remain open.
 
+## Declarative environment and resource lifecycle
+
+Environment-wide and targeted resource operations share one porcelain vocabulary:
+
+| Verb | Environment | Resource |
+| --- | --- | --- |
+| `list` | Discover environments | List logical workloads |
+| `show` | Show environment identity/configuration | Inspect a workload and its components |
+| `status` | Health and convergence | Aggregate workload/component health |
+| `accept [--plan]` | Promote eligible configured additions/changes to accepted state | Promote only a selected workload's eligible changes |
+| `reconcile [--plan]` | Request convergence toward accepted state | Reconcile only the selected workload |
+| `remove [--plan]` | Authorize removal of an environment absent from configured state | Authorize removal of a workload absent from configured state |
+
+No standalone `environment plan` and no porcelain `apply`. Acceptance,
+reconciliation and removal have different state effects:
+
+- `accept` updates **accepted state** from configured state. It must not implicitly
+  authorize deletion of configured-absent resources; such resources stay accepted
+  until separately removed. It does not directly reconcile observed resources.
+  Accepted modifications can still require restarts or replacements during later
+  convergence; plans must disclose material consequences.
+- `remove` deletes the selected declaration from **accepted state** only if it
+  is **already absent from configured state**. This authorizes subsequent
+  physical removal through reconciliation, potentially by an automatic controller.
+  `remove` does not itself imperatively destroy the observed resource.
+  Exceptional forced actions belong in plumbing.
+- `reconcile` changes **observed state** toward the currently accepted revision,
+  never rewrites accepted state. A controller is normally expected to reconcile
+  automatically; the CLI requests a targeted or aggregate pass using the same
+  engine, without competing with the owning controller.
+- `--plan` on each transition is strictly read-only, showing that transition's
+  proposed effects without granting authorization for execution. Actual mutation
+  revalidates state, target and authority at execution time.
+- Targeted acceptance/removal modifies the relevant item in the environment's
+  authoritative revision chain, not a separate per-class state database. Targeted
+  reconciliation may **inspect dependencies** but must not mutate a different
+  workload to satisfy them. Unsatisfied dependencies cause a clear failure;
+  environment-wide reconciliation handles dependency ordering.
+
+Examples of target syntax, subject to final argument and flag design:
+
+```sh
+aginctus environment accept dev --plan
+aginctus environment accept dev
+aginctus agents reconcile researcher --plan
+aginctus agents reconcile researcher
+aginctus agents remove researcher --plan
+```
+
+Resource-level `exec` and `shell` are **ordinary porcelain operations**,
+despite being imperative: they provide tactical access to a managed workload,
+not direct Incus configuration manipulation.
+
+```sh
+aginctus workloads exec researcher -- ps aux
+aginctus gateways shell inference --component postgres
+```
+
+Both operate on a workload's constituent component using the caller's
+authorized identity. The only component can be selected implicitly; for a
+multi-container workload, an explicitly declared unambiguous interactive
+default may be selected, otherwise require `--component NAME`. A missing
+or ambiguous component is an error, not a guess. `shell` may share execution
+machinery with `exec`. Neither changes accepted state or triggers reconciliation.
+
+## Frontend interaction and selection
+
+`frontends` is the frontend-class workload alias, whereas `ui` invokes a
+frontend interaction method and `console` means `ui --console`.
+Resolve the frontend in this order:
+
+1. Explicit `--frontend NAME`.
+2. Configured default frontend in the selected environment.
+3. The sole frontend if exactly one exists.
+4. Otherwise fail with available choices, or report no configured frontend.
+
+An invalid configured default is an error, not permission to fall back.
+The selected frontend plugin defines its **native/default UI method**:
+bare `aginctus ui` invokes that method. `ui --console` requests a
+console method only if supported, and future `ui --web` is possible.
+The CLI handles resolution, capability validation and authorization, not
+a hardcoded Herdr client implementation.
+
+## Read-only inspection vocabulary
+
+`aginctus state` exposes `show`, `diff`, `history`, `explain`.
+It is read-only and defaults to the active environment, with explicitly
+selected project-wide inspection where appropriate. `show` selects a state
+layer; `diff` compares layers or accepted revisions; `history` inspects
+accepted revision history; `explain` traces differences and provenance
+without inventing unavailable causality. Acceptance, reconciliation and removal
+remain on environment/resource nouns.
+
+`aginctus system` initially exposes only `status` and `doctor` for
+host readiness and diagnostics. Do not add `system config` as a duplicate
+of cross-cutting `config`, or an abstract `system resources` catch-all.
+Future host-scoped reconciliation or state lifecycle is not an MVP assumption.
+
+`aginctus config` initially exposes `show`, `get`, `explain`.
+It is read-only: fully resolved values and source precedence must match
+actual CLI execution, with secrets redacted. Possible future `set`/`unset`
+convenience would edit local configured inputs only, **not** automatically
+accept or reconcile their changes.
+
+`aginctus plugins` initially exposes `list` and `show` for Pri1
+compiled inventory/capabilities, and `usage` for Pri2 environment-scoped
+implementation bindings and consumers. All are read-only. Inventory does
+not require environment selection; usage defaults to the active environment.
+
 ## Cross-cutting introspection
 
 **`config`** answers *what would Aginctus use, where did the effective
@@ -109,9 +227,9 @@ sensitive values redacted; it does not change the underlying configuration.
 
 **`state`** answers *what was configured/proposed, what was accepted, what is
 observed, and how do they compare?* It is not a synonym for `config` or
-runtime `status`. Acceptance/promotion may require mutation and separately
-scoped authority; exact verbs and UX are deferred. Deliberate observed drift
-does not itself alter accepted state.
+runtime `status`. Its agreed read-only verbs are specified above;
+acceptance/removal remain on resource and environment commands. Deliberate
+observed drift does not itself alter accepted state.
 
 **`plugins`** is read-only. Priority 1 is inventory of compiled plugins,
 versions, dependencies and capabilities, independent of an environment.
@@ -119,25 +237,51 @@ Priority 2 is inspection of which implementations are selected and used by
 environment resources, and how they bind to workloads. Plugin inclusion is
 neither runtime activation nor authorization.
 
-## Images: agreed split
+## Images: inspection, environment pins and explicit GC
 
 `images` is top-level because immutable image artifacts can be reused by
 multiple environments and may be shared at an Incus project/image-store
 scope. Images are not container workloads.
 
-The **normal** interface starts with `images list` and `images show`:
-`list` defaults to images referenced by the selected/active environment;
-`show` explains definition/source, immutable artifact identity, provenance
-and aliases as available. An explicitly selected Incus project can expose
-its image-store inventory, which is **not** interchangeable with one
-environment's image dependencies. Do not add `images status` without a
-distinct, justified health model.
+The normal image interface initially has `list`, `show`, `pin`, `unpin`,
+`gc` and `gc --plan`:
 
-**Explicit image builds require plumbing mode.** The same is true of manual
-imports, removals and alias mutations. Normal reconciliation may build/reuse
-images as needed. Exact build arguments and the image-store targeting syntax
-are deferred. Distinguish image definitions, immutable image artifacts (for
-example, fingerprint) and mutable aliases.
+- `list` defaults to images referenced by the selected/active environment;
+  `show` explains image definition/source, immutable artifact identity,
+  provenance and aliases. Explicit project-level image-store inventory is
+  distinct from environment references; exact selector syntax remains open.
+- `pin` and `unpin` express **environment-owned retention policy** and
+  reference immutable artifact identities, not aliases. More than one
+  environment may independently pin the same image; deleting an environment
+  removes **its** pins without necessarily deleting shared artifacts.
+  Where the pin enters configured versus accepted state is still open.
+- `gc --plan` is read-only, showing eligible artifacts and their retention
+  reasoning. `gc` is an **explicitly invoked** porcelain cleanup pass.
+  No automatic GC service, trigger or schedule is presumed in the MVP.
+  GC examines the actual shared store scope, honoring pins in all relevant
+  environments, configured/accepted references, running/stopped consumers,
+  ownership and retention rules. Missing or untrustworthy evidence prevents
+  deletion; eligibility is rechecked before each mutation.
+- Do not add `images status` without a separate health model, or generalize
+  `gc` to other resource families without a concrete need.
+
+`build`, `import`, direct `remove`, and mutable alias management are
+**plumbing-only** imperative image operations. Explicit builds therefore
+require `--plumbing`, even though ordinary environment reconciliation can
+build or reuse the same artifacts. `images remove` directly deletes an
+artifact and must not be confused with porcelain resource `remove`, which
+changes accepted state.
+
+Illustrative target syntax:
+
+```sh
+aginctus images list
+aginctus images pin IMAGE
+aginctus images unpin IMAGE
+aginctus images gc --plan
+aginctus images gc
+aginctus --plumbing images build IMAGE
+```
 
 ## Porcelain and plumbing
 
@@ -176,16 +320,21 @@ aginctus --plumbing images build IMAGE
 
 This document does **not** prescribe:
 
-- Concrete `environment`, `workloads`, `state`, `system`,
-  `operations` or plugin leaf-command trees, lifecycle verbs, JSON schemas,
-  or exit-status conventions.
-- Whether `operations` should be renamed or eventually disappear.
-- Precise environment selection precedence, read-only project inventory
-  targeting, frontend choice where several exist, or image identifiers.
-- Plumbing command placement beyond the opt-in model; confirmation/preview
-  syntax, recovery procedures, or the specific eligible primitive catalog.
-- Migration deadlines for current legacy CLI spellings or detailed
+- Exact leaf argument/flag placement, output schemas, error and exit codes,
+  migration dates or compatibility adapters.
+- Exact precedence between environment variables and configuration for the
+  active environment, project-specific selectors or identity resolution.
+- The concrete request/enqueue mechanics of controller-mediated reconciliation,
+  dependency readiness thresholds, or ownership/adoption migration procedures.
+- Whether image pins are initially staged in configured state or changed
+  directly through an authorized accepted-state operation, and how GC records
+  tombstones/retention evidence.
+- Detailed plumbing primitives, confirmations or recovery procedures, or
   `aginctus-dev` command/binary consolidation.
+
+The absence of a generic `operations` command in the MVP is intentional;
+a future operation-history interface needs concrete requirements before it
+gains a top-level namespace.
 
 Implementation work should begin with a separate CLI migration map comparing
 existing commands to this vocabulary. Preserve old behavior and safety gates
