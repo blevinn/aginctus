@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
 
 var (
@@ -43,8 +45,8 @@ func (d Descriptor) Validate() error {
 	if len(d.Binding.ServerID) > 256 || strings.ContainsAny(d.Binding.ServerID, "\x00\n\r\t") {
 		return errors.New("invalid Incus server identity")
 	}
-	if !namePattern.MatchString(d.Binding.Project) {
-		return errors.New("invalid explicit Incus project")
+	if _, err := incusscope.NewProjectScope(d.Binding.Project); err != nil {
+		return fmt.Errorf("invalid explicit Incus project: %w", err)
 	}
 	return nil
 }
