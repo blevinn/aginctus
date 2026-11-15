@@ -185,10 +185,7 @@ func mutateAt(ctx context.Context, dir string, owner uint32, edit func([]Enrollm
 	}
 	// An error after rename is potentially an uncertain durable outcome.
 	// Never report it as a definitely failed change; reread host policy.
-	dirFile := os.NewFile(uintptr(fd), "host enrollment parent directory")
-	// fd is still managed by the deferred syscall.Close; do not close it
-	// through a second owner.
-	if err := dirFile.Sync(); err != nil {
+	if err := syscall.Fsync(fd); err != nil {
 		return result, fmt.Errorf("host enrollment publication may be durable; reread before retry: %w", err)
 	}
 	return result, nil
