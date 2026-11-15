@@ -1,6 +1,6 @@
 # Three-layer state and durable Aginctus control plane
 
-> **Architecture update (2026-11-15):** [ADR 0006](../adr/0006-environment-incus-authority.md) adopts environment-scoped Incus project authority. Historical system/user composite or separate-mode proposals below are superseded; retained state/host safety gates remain in force. Do not implement cross-principal partial merges or privileged write APIs from this historical design.
+> **Architecture update (2026-11-15):** [ADR 0006](../adr/0006-environment-incus-authority.md) adopts Incus-project-scoped three-layer state authority with independently managed environments, and leaves separate root-owned system-level three-layer state possible. Historical system/user composite or separate-mode proposals below are superseded; retained state/host safety gates remain in force. Do not implement cross-principal partial merges or privileged write APIs from this historical design.
 
 
 **Status:** Proposed architectural design, **not yet implemented**. Companion: [ADR 0004](../adr/0004-three-layer-state.md). Tracking: [#693](https://github.com/blevinn/aginctus/issues/693), implementation slices [#694](https://github.com/blevinn/aginctus/issues/694)–[#701](https://github.com/blevinn/aginctus/issues/701).
