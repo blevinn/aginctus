@@ -13,7 +13,8 @@ import re
 import stat
 from pathlib import Path
 
-from scripts.checks import ci_summary, local_acceptance, vm_evidence
+from scripts.checks import local_acceptance, vm_evidence
+from tools.ci import ci_summary
 
 MAX_INPUT_BYTES = 65536
 TARGET = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\Z")

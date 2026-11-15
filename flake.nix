@@ -42,32 +42,14 @@
         let
           pkgs = import nixpkgs { inherit system; };
           herdrPackage = herdr.packages.${system}.herdr;
-          herdrClientCommand = import ./nix/herdr-client-command.nix { inherit pkgs herdrPackage; };
+          herdrClientCommand = import ./nix/workloads/herdr-client-command.nix { inherit pkgs herdrPackage; };
           releaseVersion = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./internal/cli/VERSION);
-          aginctusCli = pkgs.buildGoModule {
-            pname = "aginctus";
-            version = "${releaseVersion}+${self.shortRev or "source"}";
-            src = ./.;
-            # Dirty trees and non-Git sources get content identity, not a false commit claim.
-            ldflags = [
-              "-X=github.com/blevinn/aginctus/internal/cli.Revision=${self.rev or "source-${self.narHash}"}"
-            ];
-            # Recalculate after Go module graph changes. A stale hash can reuse
-            # an incompatible vendor tree even when go.mod is newer.
-            vendorHash = "sha256-0k7OkHckPVEZEbFkQ1ojBbIEc7Lj0nvfWsYWOy18AdI=";
-            subPackages = [ "./cmd/aginctus" ];
-            nativeBuildInputs = [ pkgs.makeWrapper ];
-            postInstall = ''
-              wrapProgram "$out/bin/aginctus" --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.incus ]}"
-            '';
+          goPackages = import ./nix/packages/go.nix {
+            inherit pkgs releaseVersion self;
+            sourceRoot = ./.;
           };
-          oauthGatewayDaemon = pkgs.buildGoModule {
-            pname = "aginctus-oauth-gateway";
-            version = releaseVersion;
-            src = ./.;
-            vendorHash = "sha256-0k7OkHckPVEZEbFkQ1ojBbIEc7Lj0nvfWsYWOy18AdI=";
-            subPackages = [ "./cmd/aginctus-oauth-gateway" ];
-          };
+          aginctusCli = goPackages.aginctusCli;
+          oauthGatewayDaemon = goPackages.oauthGatewayDaemon;
           sshClientIdentityHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-client-identity";
             runtimeInputs = [
@@ -108,7 +90,7 @@
             inherit system;
             modules = [
               "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
-              (import ./nix/guest-state-bindings.nix {
+              (import ./nix/workloads/guest-state-bindings.nix {
                 bindings = [
                   {
                     class = "system";
@@ -194,7 +176,7 @@
           '';
 
           # Scoped source patch for the flake-pinned CLI event-consumer join.
-          aginctusPinnedOpenCode = import ./nix/patched-opencode.nix { inherit pkgs; };
+          aginctusPinnedOpenCode = import ./nix/workloads/patched-opencode.nix { inherit pkgs; };
 
           # Runtime-only gateway configuration: no endpoint, model or key is
           # materialized into the Nix store. Herdr's PATH resolves this wrapper.
@@ -343,32 +325,10 @@
         in
         {
           # Separate operator-only CLI; never registered by aginctus/MCP.
-          testenv-cli = pkgs.buildGoModule {
-            pname = "aginctus-testenv";
-            version = releaseVersion;
-            src = ./.;
-            vendorHash = "sha256-0k7OkHckPVEZEbFkQ1ojBbIEc7Lj0nvfWsYWOy18AdI=";
-            subPackages = [ "./cmd/aginctus-testenv" ];
-            ldflags = [ "-X=main.revision=${self.rev or "source-${self.narHash}"}" ];
-          };
-          # Standalone opt-in accepted-state tools. Deliberately NOT installed
-          # by NixOS/Home Manager modules and never exposed as an MCP command.
-          # The service remains read-only; the local tool can promote only
-          # explicit pinned workload candidates in its own private same-UID store.
-          state-service = pkgs.buildGoModule {
-            pname = "aginctus-state";
-            version = releaseVersion;
-            src = ./.;
-            vendorHash = "sha256-0k7OkHckPVEZEbFkQ1ojBbIEc7Lj0nvfWsYWOy18AdI=";
-            subPackages = [ "./cmd/aginctus-state" ];
-          };
-          state-local = pkgs.buildGoModule {
-            pname = "aginctus-state-local";
-            version = releaseVersion;
-            src = ./.;
-            vendorHash = "sha256-0k7OkHckPVEZEbFkQ1ojBbIEc7Lj0nvfWsYWOy18AdI=";
-            subPackages = [ "./cmd/aginctus-state-local" ];
-          };
+          # Testenv and accepted-state tools remain explicit, opt-in package outputs.
+          testenv-cli = goPackages.testenv-cli;
+          state-service = goPackages.state-service;
+          state-local = goPackages.state-local;
           aginctus = aginctusCli;
           default = aginctusCli;
           # Expose exactly the runtime used by the workload image for contract tests.
@@ -506,15 +466,15 @@
       checks = forAllSystems (
         system:
         {
-          nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
-          home-manager-module = import ./nix/home-manager-module-check.nix { inherit self nixpkgs system; };
-          operator-settings-parity = import ./nix/operator-settings-parity-check.nix {
+          nixos-module = import ./tests/nix/module-check.nix { inherit self nixpkgs system; };
+          home-manager-module = import ./tests/nix/home-manager-module-check.nix { inherit self nixpkgs system; };
+          operator-settings-parity = import ./tests/nix/operator-settings-parity-check.nix {
             inherit self nixpkgs system;
           };
-          gateway-config-parity = import ./nix/gateway-config-parity-check.nix {
+          gateway-config-parity = import ./tests/nix/gateway-config-parity-check.nix {
             inherit self nixpkgs system;
           };
-          opencode-workload-socket-alignment = import ./nix/opencode-workload-check.nix {
+          opencode-workload-socket-alignment = import ./tests/nix/opencode-workload-check.nix {
             inherit self nixpkgs system;
           };
         }

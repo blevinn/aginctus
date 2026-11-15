@@ -12,7 +12,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/blevinn/aginctus/internal/acceptedstate"
+	"github.com/blevinn/aginctus/internal/orchestration/state"
 )
 
 type localOptions struct {
