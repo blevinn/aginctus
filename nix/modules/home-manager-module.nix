@@ -18,13 +18,6 @@ let
   knownSettingsOptions = import ./settings-options.nix { inherit lib jsonFormat; };
   # Render the MCP subtree in the shape the Aginctus Go schema accepts.
   mcpSettings = import ./mcp-settings.nix { inherit lib; };
-  # Export the declared user CLI package, never credentials or environment.
-  operatorPackageManifest = jsonFormat.generate "aginctus-user-package.json" {
-    schema = 1;
-    authority = "user";
-    package = toString cfg.package;
-  };
-
   # Both dotted keys and nested objects are possible in the freeform JSON
   # layer. Reject runtime credential paths before writing the Nix store.
   configuredSecretPaths = import ./runtime-secret-paths.nix { inherit lib; } cfg.settings;
@@ -162,7 +155,6 @@ in
 
     home.packages = [ cfg.package ];
     xdg.configFile = {
-      "aginctus/operator-package.json".source = operatorPackageManifest;
       "aginctus/config.json".source = jsonFormat.generate "aginctus-user-config.json" (
         mcpSettings.renderSettings cfg.settings
       );
