@@ -2,13 +2,10 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	imageops "github.com/blevinn/aginctus/internal/cli/operations/images"
 )
@@ -68,71 +65,10 @@ func temporaryImageAlias(name, role, nonce string) string {
 }
 
 func updateLocalImage(ctx context.Context, name, dir string) error {
-	if !validImageName(name) {
-		return fmt.Errorf("invalid image alias %q", name)
-	}
-	metadata, err := imageArtifact(dir, "metadata", ".tar.xz")
-	if err != nil {
-		return err
-	}
-	rootfs, err := imageArtifact(dir, "rootfs", ".squashfs")
-	if err != nil {
-		return err
-	}
-	fingerprint, err := imageFingerprint(metadata, rootfs)
-	if err != nil {
-		return fmt.Errorf("fingerprint image: %w", err)
-	}
-	images, err := localImages(ctx)
-	if err != nil {
-		return fmt.Errorf("inspect existing images: %w", err)
-	}
-	present := false
-	exists := false
-	for _, image := range images {
-		if image.Fingerprint == fingerprint {
-			present = true
-		}
-		for _, alias := range image.Aliases {
-			if alias.Name == name {
-				exists = true
-				if image.Fingerprint == fingerprint {
-					return nil // The intended image is already active.
-				}
-			}
-		}
-	}
-	nonce := fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano())
-	stage := temporaryImageAlias(name, "staged", nonce)
-	backup := temporaryImageAlias(name, "previous", nonce)
-	if present {
-		_, err = runIncusImage(ctx, "image", "alias", "create", stage, fingerprint)
-	} else {
-		_, err = runIncusImage(ctx, "image", "import", metadata, rootfs, "--alias", stage)
-	}
-	if err != nil {
-		return fmt.Errorf("stage replacement: %w", err)
-	}
-	defer func() { _, _ = runIncusImage(context.Background(), "image", "alias", "delete", stage) }()
-	moved := false
-	if exists {
-		if _, err = runIncusImage(ctx, "image", "alias", "rename", name, backup); err != nil {
-			return fmt.Errorf("preserve existing alias: %w", err)
-		}
-		moved = true
-	}
-	if _, err = runIncusImage(ctx, "image", "alias", "rename", stage, name); err != nil {
-		if moved {
-			if _, restoreErr := runIncusImage(context.Background(), "image", "alias", "rename", backup, name); restoreErr != nil {
-				return errors.Join(fmt.Errorf("promote replacement: %w", err), fmt.Errorf("rollback failed; old image remains under %s: %w", backup, restoreErr))
-			}
-		}
-		return fmt.Errorf("promote replacement: %w", err)
-	}
-	if moved {
-		if _, err = runIncusImage(ctx, "image", "alias", "delete", backup); err != nil {
-			return fmt.Errorf("replacement active, but previous alias cleanup failed: %w", err)
-		}
-	}
-	return nil
+	return imageops.UpdateLocalImage(ctx, name, dir, imageops.LegacyUpdateActions{
+		Run: runIncusImage,
+		Artifact: imageArtifact,
+		Fingerprint: imageFingerprint,
+		LocalImages: localImages,
+	})
 }

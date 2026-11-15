@@ -20,8 +20,12 @@ type executionReport struct {
 	dryRun    bool
 }
 
-func newExecutionReport(plan Plan, dryRun bool) *executionReport {
-	r := &executionReport{collector: collection.New(rand.Text()), steps: make(map[string]string), dryRun: dryRun}
+func newExecutionReport(plan Plan, dryRun bool, monitor *collection.Monitor) *executionReport {
+	collector := monitor.Claim()
+	if collector == nil {
+		collector = collection.New(rand.Text())
+	}
+	r := &executionReport{collector: collector, steps: make(map[string]string), dryRun: dryRun}
 	for i, step := range plan.Steps {
 		r.steps[step.ID] = fmt.Sprintf("step-%d", i+1)
 	}

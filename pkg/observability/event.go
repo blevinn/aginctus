@@ -112,12 +112,14 @@ type Event struct {
 
 // Report retains a bounded event prefix and the terminal run event. Dropped
 // counts omitted transitions, not omitted execution. Sequence gaps are explicit;
-// sequences have no ordering meaning across independent runs. This ephemeral
-// report is neither a current-status snapshot nor a durable operation journal.
+// sequences have no ordering meaning across independent runs. Status separately
+// preserves execution knowledge; neither is a durable operation journal.
 type Report struct {
 	RunID   string
 	Events  []Event
 	Dropped uint64
+	// Status is independent of the retained prefix, including on overflow.
+	Status Snapshot
 }
 
 var identifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)

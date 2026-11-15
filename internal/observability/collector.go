@@ -13,18 +13,21 @@ import (
 
 // EventLimit includes the reserved terminal event. Core lifecycle events and
 // concurrent scoped progress share one lock/order. There
-// are no observers or goroutines; reporting cannot wait for a sink.
+// are no sink callbacks or publisher goroutines; reporting cannot wait for a sink.
 const EventLimit = 1024
 
 type Collector struct {
-	mu       sync.Mutex
-	report   contract.Report
-	sequence uint64
-	finished bool
+	mu          sync.Mutex
+	report      contract.Report
+	sequence    uint64
+	finished    bool
+	run         contract.Event
+	status      map[slot]contract.Event
+	subscribers map[*subscription]struct{}
 }
 
 func New(runID string) *Collector {
-	return &Collector{report: contract.Report{RunID: runID}}
+	return &Collector{report: contract.Report{RunID: runID}, status: make(map[slot]contract.Event), subscribers: make(map[*subscription]struct{})}
 }
 
 // Record stamps and orders trusted core transitions. Invalid events are dropped
@@ -43,12 +46,19 @@ func (c *Collector) record(event contract.Event) {
 	event.SchemaVersion, event.RunID = contract.SchemaVersion, c.report.RunID
 	event.Sequence, event.Time = c.sequence, time.Now()
 	terminal := event.Kind == contract.Run && event.State != contract.Running
-	if event.Validate() != nil || (!terminal && len(c.report.Events) >= EventLimit-1) {
+	if event.Validate() != nil {
 		c.report.Dropped++
+		c.publishGap()
 		return
 	}
-	c.report.Events = append(c.report.Events, event)
+	c.apply(event)
 	c.finished = terminal
+	if !terminal && len(c.report.Events) >= EventLimit-1 {
+		c.report.Dropped++
+	} else {
+		c.report.Events = append(c.report.Events, event)
+	}
+	c.publish(event)
 }
 
 // Report returns detached retained events under the same ordering lock.
@@ -58,6 +68,7 @@ func (c *Collector) Report() contract.Report {
 	defer c.mu.Unlock()
 	report := c.report
 	report.Events = slices.Clone(report.Events)
+	report.Status = c.snapshot()
 	return report
 }
 
