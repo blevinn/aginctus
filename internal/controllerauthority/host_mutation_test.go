@@ -12,6 +12,7 @@ func TestHostEnrollmentCreateAndDurableRevokeWithoutAutomaticHandoff(t *testing.
 	dir:=t.TempDir()
 	owner:=uint32(os.Geteuid())
 	record:=testRecord()
+	record.Epoch=1
 	added,err:=createAt(context.Background(),dir,owner,record)
 	if err!=nil||added.ControllerID!=record.ControllerID||added.Epoch!=1 {t.Fatalf("create: %+v %v",added,err)}
 	if _,err:=createAt(context.Background(),dir,owner,record);err==nil{
@@ -59,22 +60,24 @@ func TestHostEnrollmentCreateAndDurableRevokeWithoutAutomaticHandoff(t *testing.
 func TestHostEnrollmentCreationFailsClosedOnCancellationAndUnsafeFilesystem(t *testing.T){
 	dir:=t.TempDir()
 	owner:=uint32(os.Geteuid())
+	record:=testRecord()
+	record.Epoch=1
 	ctx,cancel:=context.WithCancel(context.Background());cancel()
-	if _,err:=createAt(ctx,dir,owner,testRecord());!errors.Is(err,context.Canceled){
+	if _,err:=createAt(ctx,dir,owner,record);!errors.Is(err,context.Canceled){
 		t.Fatalf("accepted canceled admin enrollment: %v",err)
 	}
 	if _,err:=os.Lstat(filepath.Join(dir,hostEnrollmentFile));!errors.Is(err,os.ErrNotExist){
 		t.Fatal("canceled request wrote host manifest")
 	}
 	if err:=os.Chmod(dir,0o777);err!=nil{t.Fatal(err)}
-	if _,err:=createAt(context.Background(),dir,owner,testRecord());err==nil{
+	if _,err:=createAt(context.Background(),dir,owner,record);err==nil{
 		t.Fatal("accepted writable host directory")
 	}
 	if err:=os.Chmod(dir,0o700);err!=nil{t.Fatal(err)}
 	foreign:=filepath.Join(t.TempDir(),"foreign.json")
 	if err:=os.WriteFile(foreign,[]byte("sentinel"),0o600);err!=nil{t.Fatal(err)}
 	if err:=os.Symlink(foreign,filepath.Join(dir,hostEnrollmentFile));err!=nil{t.Fatal(err)}
-	if _,err:=createAt(context.Background(),dir,owner,testRecord());err==nil{
+	if _,err:=createAt(context.Background(),dir,owner,record);err==nil{
 		t.Fatal("adopted foreign symlink as trusted manifest")
 	}
 	if content,err:=os.ReadFile(foreign);err!=nil||string(content)!="sentinel"{
