@@ -38,7 +38,7 @@ func startFixture(t *testing.T) (NativeGatewayTopology, NativeGatewayDevices, Na
 		t.Fatal(err)
 	}
 	b := NativeGatewayRuntimeBinding{
-		Project: top.Project, AcceptedRevision: strings.Repeat("a", 64), CredentialVersion: "v1",
+		ResourceScope: "project", Project: top.Project, AcceptedRevision: strings.Repeat("a", 64), CredentialVersion: "v1",
 		PostgresInstance: "postgres-1", LiteLLMInstance: "litellm-1",
 	}
 	return top, devices, pair, &gatewayStartFake{fakeGatewayStoppedClient: client}, b
