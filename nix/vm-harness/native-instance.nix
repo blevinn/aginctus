@@ -14,7 +14,7 @@ let
     pname = "aginctus-native-instance-tests";
     version = "0";
     src = self;
-    vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
+    vendorHash = "sha256-t8f/esHxMnV6Pbt3N3gMPqiwg4sQEMG5UHAQAm5N6Cw=";
     doCheck = false;
     buildPhase = ''
       runHook preBuild
