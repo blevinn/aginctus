@@ -79,13 +79,13 @@ nix:
 # Offline local targets and heading fragments in tracked Markdown.
 [no-cd]
 markdown:
-    python3 scripts/check_markdown_links.py
+    python3 tools/docs/check_markdown_links.py
 
 # Only validates shell commands in canonical docs against CLI help.
 # Never executes any command copied from a document.
 [no-cd]
 docs-examples:
-    go run ./cmd/aginctus help | python3 scripts/check_docs_examples.py
+    go run ./cmd/aginctus help | python3 tools/docs/check_docs_examples.py
 
 
 # Standard concise suite reporting. The @ prefix suppresses Just's recipe
