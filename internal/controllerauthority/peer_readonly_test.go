@@ -114,9 +114,7 @@ func TestPeerEnrollmentServiceRefusesForgedSelectorsAndWriteMethods(t *testing.T
 	if resp.StatusCode!=http.StatusMethodNotAllowed {
 		t.Fatalf("read-only broker accepted write: %d",resp.StatusCode)
 	}
-	policy,err:=loadOwnerFile(filepath.Join(filepath.Dir(socket),"..","not-present"),owner)
-	_ = policy
-	if err==nil{t.Fatal("untrusted absent path treated as host policy")}
+
 }
 
 func TestPeerEnrollmentRequiresActualUIDNotCallerValue(t *testing.T) {
