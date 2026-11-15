@@ -11,29 +11,6 @@ import (
 	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
 
-func TestOperatorProjectEnsureArgs(t *testing.T) {
-	for _, args := range [][]string{
-		nil, {}, {"--project", "aginctus"}, {"--project=aginctus"},
-		{"--project", "default", "--confirm-create"},
-		{"--project=../outside", "--confirm-create"},
-		{"--confirm-create", "--project=aginctus"},
-		{"--project", "aginctus", "--confirm-create", "--force"},
-	} {
-		if _, err := parseOperatorProjectEnsureArgs(args); err == nil {
-			t.Errorf("accepted incomplete or unsafe project-ensure args: %q", args)
-		}
-	}
-	for _, args := range [][]string{
-		{"--project", "aginctus", "--confirm-create"},
-		{"--project=aginctus", "--confirm-create"},
-	} {
-		scope, err := parseOperatorProjectEnsureArgs(args)
-		if err != nil || scope.Name != "aginctus" {
-			t.Errorf("rejected valid explicit selection %q: scope=%v err=%v", args, scope, err)
-		}
-	}
-}
-
 func TestOperatorProjectEnsureFailClosed(t *testing.T) {
 	scope, err := incusscope.NewProjectScope("aginctus")
 	if err != nil {

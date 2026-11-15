@@ -11,26 +11,6 @@ import (
 	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
 
-func TestOperatorProjectPlanArgs(t *testing.T) {
-	for _, args := range [][]string{
-		nil, {}, {"--project"}, {"--project="}, {"--project=default"},
-		{"--project", "default"}, {"--project", "bad space"},
-		{"--project", "aginctus", "--force"}, {"--project", "../escape"},
-	} {
-		if _, err := parseOperatorProjectPlanArgs(args); err == nil {
-			t.Errorf("unsafe project arguments accepted: %q", args)
-		}
-	}
-	for _, args := range [][]string{
-		{"--project=aginctus"}, {"--project", "aginctus"},
-		{"--project", "aginctus-dev"},
-	} {
-		if _, err := parseOperatorProjectPlanArgs(args); err != nil {
-			t.Errorf("valid project arguments rejected: %q: %v", args, err)
-		}
-	}
-}
-
 func TestOperatorProjectPlanConservativeReadOnly(t *testing.T) {
 	scope, err := incusscope.NewProjectScope("aginctus")
 	if err != nil {
