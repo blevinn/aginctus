@@ -116,7 +116,7 @@ jobs:
           RELEASE_PREVIEW_RESULT: ${{ steps.release_preview.outcome }}
           WHITESPACE_RESULT: ${{ steps.whitespace.outcome }}
         run: |
-          python3 scripts/checks/ci_summary.py
+          python3 tools/ci/ci_summary.py
 
   # Advisory while the legacy required gate runs; #708 will convert the
   # existing required context into a fail-closed aggregator.
@@ -256,7 +256,7 @@ jobs:
         id: classify
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: python3 scripts/checks/ci_select.py --base "$BASE_SHA"
+        run: python3 tools/ci/ci_select.py --base "$BASE_SHA"
 
   nix-contracts:
     name: targeted Nix security contracts (ubuntu)
