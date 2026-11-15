@@ -1,6 +1,6 @@
 # Controller enrollment prototype and project-scoped execution gates
 
-**Status:** Historical non-authorizing prototype; **not the target authorization architecture**. See [ADR 0006](../adr/0006-environment-incus-authority.md), [three-layer state](three-layer-state.md), [#696](https://github.com/blevinn/aginctus/issues/696), and [#704](https://github.com/blevinn/aginctus/issues/704).
+**Status:** Historical non-authorizing prototype; **not the target authorization architecture**. See [ADR 0006 (proposed in #917)](https://github.com/blevinn/aginctus/pull/917), [three-layer state](three-layer-state.md), [#696](https://github.com/blevinn/aginctus/issues/696), and [#704](https://github.com/blevinn/aginctus/issues/704).
 
 ## Existing prototype: documented, not promoted
 
