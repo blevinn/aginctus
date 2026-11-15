@@ -31,11 +31,12 @@ case "$1" in
     # Existing, private XDG state location. No paths supplied by an agent or
     # implicit writes under the repository; do not follow caller-chosen roots.
     root="${XDG_STATE_HOME:-$HOME/.local/state}/aginctus"
-    if [[ -L "$root" || -L "$(dirname "$root")" ]]; then
-      printf 'Refusing symlinked report directory.\n' >&2; exit 1
+    if [[ ! -d "$root" || -L "$root" || -L "$(dirname "$root")" ]]; then
+      printf 'Provide an existing non-symlinked, private state directory first.\n' >&2; exit 1
     fi
-    mkdir -p -- "$root"
-    chmod 700 -- "$root"
+    if [[ "$(stat -c %u -- "$root")" != "$(id -u)" || "$(stat -c %a -- "$root")" != 700 ]]; then
+      printf 'State directory must be operator-owned with mode 0700.\n' >&2; exit 1
+    fi
     run_dir="$(mktemp -d "$root/manual-host-acceptance.XXXXXXXX")"
     report="$run_dir/worksheet.md"
     revision="unavailable"
