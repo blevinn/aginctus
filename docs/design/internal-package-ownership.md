@@ -29,7 +29,7 @@ This is a **structural inventory and migration decision log**, not an instructio
 | `validation` | 11 | 11 | 5 | Retain evidence semantics; consider `testing/validation` |
 | `workload` | 4 | 4 | 2 | Generic assembly in orchestration; product behavior in plugins |
 
-**Baseline:** 22 immediate subtrees, 494 tracked blobs, 483 Go files, 242 Go test files. These counts include nested subpackages; fixtures are not Go files.
+**Baseline:** 22 immediate subtrees, 494 tracked blobs, 478 Go files, 237 Go test files. These counts include nested subpackages; fixtures are not Go files.
 
 ## Direction and migration sequencing
 
