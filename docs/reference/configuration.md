@@ -472,7 +472,7 @@ Both network lifecycle commands support `--dry-run` and `--force`. Dry-run repor
 
 ### Where a default comes from
 
-Two registries describe the same effective configuration: the CLI's `defaults` map in `internal/config/config.go` and the module's typed options in `nix/nixos-module.nix`. The module renders its defaults into `/etc/aginctus/config.json`, which overrides the CLI fallbacks, so a value that differs between the two registries changes behavior depending on which layer supplies it.
+Two registries describe the same effective configuration: the CLI's `defaults` map in `internal/config/config.go` and the module's typed options in `nix/modules/nixos-module.nix`. The module renders its defaults into `/etc/aginctus/config.json`, which overrides the CLI fallbacks, so a value that differs between the two registries changes behavior depending on which layer supplies it.
 
 `TestDefaultsMatchNixOSModule` (`internal/config/nix_defaults_parity_test.go`) fails when the registries disagree in either direction. The `gateway-config-parity` flake check runs it against the module's actual rendered output; plain `go test ./internal/config` runs it against the committed snapshot in `internal/config/testdata`. Adding a default therefore requires adding it to both registries, or recording it as a CLI-only fallback.
 
