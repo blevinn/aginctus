@@ -3,10 +3,7 @@ package assetscmd
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
 	"sort"
-	"syscall"
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/gatewaycontrol"
@@ -21,15 +18,16 @@ type gatewayAssetBuilder struct {
 	options config.Options
 	load    func() (*config.Config, error)
 	openStore func(*config.Config) (*gatewaycontrol.Store, error)
+	readConfig func(string, string, any) error
 }
 
 // Register contributes the plugin/provider/model/MCP/catalog subtrees. Store
 // opening stays behind an injected trusted host boundary rather than importing cli.
 func Register(gateway, providers, models *cobra.Command, status *int, options config.Options,
 	load func() (*config.Config, error), openStore func(*config.Config) (*gatewaycontrol.Store, error),
-	plugins gatewaycontrol.Plugins,
+	plugins gatewaycontrol.Plugins, readConfig func(string, string, any) error,
 ) {
-	b := gatewayAssetBuilder{plugins: plugins, status: status, options: options, load: load, openStore: openStore}
+	b := gatewayAssetBuilder{plugins: plugins, status: status, options: options, load: load, openStore: openStore, readConfig: readConfig}
 	b.addPlugins(gateway)
 	b.addProviders(providers)
 	b.addModels(models)
@@ -103,7 +101,7 @@ func (b gatewayAssetBuilder) addProviders(providers *cobra.Command) {
 			name = definition.DefaultProvider
 		}
 		var configuration gatewaycontrol.Configuration
-		if err := readGatewayConfig(providerConfig, providerFile, &configuration); err != nil {
+		if err := b.readConfig(providerConfig, providerFile, &configuration); err != nil {
 			return nil, err
 		}
 		provider := gatewaycontrol.Provider{Name: name, Plugin: plugin, Config: configuration}
@@ -279,7 +277,7 @@ func (b gatewayAssetBuilder) addMCPs(gateway *cobra.Command) {
 	mcpApply := add(mcps, "apply [MCP]", selectorArgs(&applyMCP), func(_ *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
 		name, _ := selected(applyMCP, args)
 		var raw json.RawMessage
-		if err := readGatewayConfig(mcpConfig, mcpFile, &raw); err != nil {
+		if err := b.readConfig(mcpConfig, mcpFile, &raw); err != nil {
 			return nil, err
 		}
 		if err := s.ApplyMCP(name, raw); err != nil {
@@ -355,7 +353,7 @@ func (b gatewayAssetBuilder) addCatalogs(gateway *cobra.Command) {
 	catalogApply := add(catalogs, "apply [CATALOG]", selectorArgs(&applyCatalog), func(_ *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
 		name, _ := selected(applyCatalog, args)
 		var catalog gatewaycontrol.Catalog
-		if err := readGatewayConfig(catalogConfig, catalogFile, &catalog); err != nil {
+		if err := b.readConfig(catalogConfig, catalogFile, &catalog); err != nil {
 			return nil, err
 		}
 		if err := s.ApplyCatalog(name, catalog); err != nil {
@@ -419,31 +417,6 @@ func configFlags(cmd *cobra.Command, inline, file *string, required bool) {
 	if required {
 		cmd.MarkFlagsOneRequired("config", "config-file")
 	}
-}
-func readGatewayConfig(inline, file string, result any) error {
-	data := []byte(inline)
-	if file != "" {
-		input, err := os.OpenFile(file, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
-		if err != nil {
-			return fmt.Errorf("configuration file unavailable")
-		}
-		defer input.Close()
-		info, err := input.Stat()
-		if err != nil || !info.Mode().IsRegular() {
-			return fmt.Errorf("configuration must be a regular file")
-		}
-		data, err = io.ReadAll(io.LimitReader(input, 1<<20+1))
-		if err != nil {
-			return fmt.Errorf("configuration file unavailable")
-		}
-	}
-	if len(data) == 0 {
-		data = []byte(`{}`)
-	}
-	if len(data) > 1<<20 {
-		return fmt.Errorf("configuration exceeds size limit")
-	}
-	return gatewaycontrol.Decode(data, result)
 }
 func findProvider(store *gatewaycontrol.Store, name string) (gatewaycontrol.Provider, error) {
 	all, err := store.Providers()

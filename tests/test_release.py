@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts/release/check.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "tools/release/check.py"
 
 
 class ReleaseCheckTests(unittest.TestCase):
