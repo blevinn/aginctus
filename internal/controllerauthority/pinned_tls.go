@@ -24,6 +24,7 @@ const maxIncusGETBytes int64 = 1 << 20
 type PinnedTLSProbe struct {
 	Endpoint                string
 	ServerCertificateSHA256 string
+	ServerCertificateDER    []byte
 	ClientCertificate       tls.Certificate
 }
 
@@ -54,20 +55,29 @@ func ObserveRestrictedOperatorOverTLS(
 	if len(config.ClientCertificate.Certificate) == 0 || config.ClientCertificate.PrivateKey == nil {
 		return DaemonTLSObservation{}, errors.New("pinned TLS inspection requires an explicit client certificate and private key")
 	}
+	serverCertificate, err := x509.ParseCertificate(config.ServerCertificateDER)
+	if err != nil {
+		return DaemonTLSObservation{}, errors.New("pinned TLS inspection requires the pinned server certificate")
+	}
+	serverSum := sha256.Sum256(serverCertificate.Raw)
+	if hex.EncodeToString(serverSum[:]) != config.ServerCertificateSHA256 {
+		return DaemonTLSObservation{}, errors.New("pinned TLS server certificate does not match its fingerprint")
+	}
 	clientLeaf, err := x509.ParseCertificate(config.ClientCertificate.Certificate[0])
 	if err != nil || time.Now().Before(clientLeaf.NotBefore) || time.Now().After(clientLeaf.NotAfter) {
 		return DaemonTLSObservation{}, errors.New("pinned TLS client certificate is invalid or expired")
 	}
 	clientSum := sha256.Sum256(clientLeaf.Raw)
 	clientFingerprint := hex.EncodeToString(clientSum[:])
+	serverRoots := x509.NewCertPool()
+	serverRoots.AddCert(serverCertificate)
 	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ServerName: base.Hostname(),
+		MinVersion:   tls.VersionTLS12,
+		ServerName:   base.Hostname(),
+		RootCAs:      serverRoots,
 		Certificates: []tls.Certificate{config.ClientCertificate},
-		// Exact pinned leaf validation replaces public CA validation in this
-		// explicitly self-signed Incus use case. VerifyConnection is called
-		// for every fresh handshake; a wrong pin always fails closed.
-		InsecureSkipVerify: true, // #nosec G402 -- verified leaf SHA256 below
+		// The pinned certificate is the only trust anchor; normal TLS chain,
+		// validity, and hostname checks remain enabled.
 		VerifyConnection: func(state tls.ConnectionState) error {
 			if len(state.PeerCertificates) == 0 {
 				return errors.New("incus server certificate unavailable")
@@ -85,7 +95,7 @@ func ObserveRestrictedOperatorOverTLS(
 	defer transport.CloseIdleConnections()
 	httpClient := &http.Client{
 		Transport: transport,
-		Timeout: 15 * time.Second,
+		Timeout:   15 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return errors.New("incus GET redirect refused")
 		},
@@ -119,10 +129,10 @@ func ObserveRestrictedOperatorOverTLS(
 			return nil, errors.New("restricted incus GET oversized or unavailable")
 		}
 		var envelope struct {
-			Type string `json:"type"`
-			StatusCode int `json:"status_code"`
-			ErrorCode int `json:"error_code"`
-			Metadata json.RawMessage `json:"metadata"`
+			Type       string          `json:"type"`
+			StatusCode int             `json:"status_code"`
+			ErrorCode  int             `json:"error_code"`
+			Metadata   json.RawMessage `json:"metadata"`
 		}
 		if json.Unmarshal(raw, &envelope) != nil || envelope.Type != "sync" ||
 			envelope.StatusCode != 200 || envelope.ErrorCode != 0 ||
