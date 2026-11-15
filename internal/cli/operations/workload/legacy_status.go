@@ -1,0 +1,151 @@
+package workloadops
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/herdrclient"
+	"github.com/blevinn/aginctus/internal/workload"
+)
+
+// LegacyStatusActions preserves the ambient all-projects v0.1 status
+// observation boundary, independent of project-scoped lifecycle operations.
+type LegacyStatusActions struct {
+	Inspect func(context.Context) ([]InspectedInstance, error)
+	Find func([]InspectedInstance, string, string, string, string) (string, error)
+}
+
+func FindManagedInstance(instances []InspectedInstance, name, resource, role, id string) (string, error) {
+	for _, instance := range instances {
+		if instance.Name != name {
+			continue
+		}
+		if instance.Config["user.aginctus.managed"] != "true" ||
+			instance.Config["user.aginctus.resource"] != resource ||
+			(role != "" && instance.Config["user.aginctus.role"] != role) ||
+			(id != "" && instance.Config["user.aginctus.workload"] != id) {
+			return "", fmt.Errorf("instance %q exists but ownership markers do not match", name)
+		}
+		if instance.Project != "" && instance.Project != "default" {
+			return "", fmt.Errorf("instance %q exists in unexpected project %q", name, instance.Project)
+		}
+		return instance.Status, nil
+	}
+	return "", nil
+}
+
+func StatusInstances(ctx context.Context, inspect func(context.Context) ([]byte, error)) ([]InspectedInstance, error) {
+	data, err := inspect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var instances []InspectedInstance
+	if err := json.Unmarshal(data, &instances); err != nil {
+		return nil, fmt.Errorf("decode Incus instances: %w", err)
+	}
+	return instances, nil
+}
+
+func RunHerdrClientStatus(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config, actions LegacyStatusActions) int {
+	if len(args) != 0 {
+		fmt.Fprintln(stderr, "Usage: aginctus herdr client status")
+		return 2
+	}
+	spec, err := herdrclient.FromConfig(cfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "Herdr client configuration: %v\n", err)
+		return 1
+	}
+	instances, err := actions.Inspect(ctx)
+	if err == nil {
+		var status string
+		status, err = actions.Find(instances, spec.Name, "infrastructure", "herdr-client", "")
+		if err == nil {
+			if status == "" {
+				status = "absent"
+			}
+			fmt.Fprintf(out, "Herdr client %q: %s\n", spec.Name, status)
+			return 0
+		}
+	}
+	fmt.Fprintf(stderr, "Herdr client status: %v\n", err)
+	return 1
+}
+
+func RunWorkloadStatus(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config, actions LegacyStatusActions) int {
+	if len(args) > 1 {
+		fmt.Fprintln(stderr, "Usage: aginctus workload status [name]")
+		return 2
+	}
+	ids := IDs(cfg)
+	if len(args) == 1 {
+		ids = []string{args[0]}
+	}
+	specs := make([]workload.Spec, 0, len(ids))
+	for _, id := range ids {
+		spec, err := workload.FromConfig(cfg, id)
+		if err != nil {
+			fmt.Fprintf(stderr, "workload %q configuration: %v\n", id, err)
+			return 1
+		}
+		specs = append(specs, spec)
+	}
+	instances, err := actions.Inspect(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "workload status: %v\n", err)
+		return 1
+	}
+	// Check all requested names before presenting any results.
+	results := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		state, err := actions.Find(instances, spec.Name, "workload", "agent-workload", spec.ID)
+		if err != nil {
+			fmt.Fprintf(stderr, "workload %q status: %v\n", spec.ID, err)
+			return 1
+		}
+		if state == "" {
+			state = "absent"
+		}
+		results = append(results, fmt.Sprintf("workload %q: %s", spec.ID, state))
+	}
+	for _, result := range results {
+		fmt.Fprintln(out, result)
+	}
+	return 0
+}
+
+func RunActiveWorkloadList(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config, actions LegacyStatusActions) int {
+	if len(args) != 0 {
+		fmt.Fprintln(stderr, "Usage: aginctus workload ls")
+		return 2
+	}
+	instances, err := actions.Inspect(ctx)
+	if err != nil {
+		fmt.Fprintf(stderr, "list active workloads: %v\n", err)
+		return 1
+	}
+	var active []string
+	for _, id := range IDs(cfg) {
+		spec, err := workload.FromConfig(cfg, id)
+		if err != nil {
+			fmt.Fprintf(stderr, "workload %q configuration: %v\n", id, err)
+			return 1
+		}
+		state, err := actions.Find(instances, spec.Name, "workload", "agent-workload", spec.ID)
+		if err != nil {
+			fmt.Fprintf(stderr, "workload %q: %v\n", id, err)
+			return 1
+		}
+		if strings.EqualFold(state, "running") {
+			active = append(active, id)
+		}
+	}
+	for _, id := range active {
+		fmt.Fprintln(out, id)
+	}
+	return 0
+}
