@@ -97,7 +97,7 @@ func VerifyNativeGatewayPostgresReadyWithClient(ctx context.Context, project str
 			inst.Config["user.aginctus.resource"] != "gateway-instance" ||
 			inst.Config["user.aginctus.role"] != "postgres" ||
 			inst.Config["user.aginctus.deployment"] != project ||
-\t\t\tinst.Config["user.aginctus.environment-id"] != "" {
+			inst.Config["user.aginctus.environment-id"] != "" {
 			return nil, fmt.Errorf("gateway PostgreSQL readiness owned running guest unverified")
 		}
 		return inst, nil
