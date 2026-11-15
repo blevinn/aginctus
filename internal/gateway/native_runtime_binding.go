@@ -14,7 +14,7 @@ var gatewayCredentialVersion = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,
 // NativeGatewayRuntimeBinding names the exact protected accepted revision and
 // credential version for both services. The current fixed-name gateway is\n// explicitly a project-owned resource; this is NOT an environment gateway\n// identity or a grant to modify host or other project resources.\n// It contains no secret bytes or paths.
 // These identifiers alone are NOT evidence of a delivery or a startup grant.
-type NativeGatewayRuntimeBinding struct {\n\tResourceScope string `json:"resourceScope"`
+type NativeGatewayRuntimeBinding struct {\n\tResourceScope     string `json:"resourceScope"`
 	Project           string `json:"project"`
 	AcceptedRevision  string `json:"acceptedRevision"`
 	CredentialVersion string `json:"credentialVersion"`
