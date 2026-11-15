@@ -91,7 +91,7 @@ rather than overriding the legacy check's successful result.
 
 ## Targeted Nix PR applicability (#708)
 
-`scripts/checks/ci_select.py` compares the PR base commit to the full PR
+`tools/ci/ci_select.py` compares the PR base commit to the full PR
 merge checkout using a NUL-terminated Git diff with rename detection
 disabled. Only Markdown below `docs/` and the root `README.md` can exempt
 focused Nix security contract builds. Any other file, an empty diff,
