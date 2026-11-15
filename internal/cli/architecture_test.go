@@ -18,18 +18,11 @@ func TestCLICommandAndOperationImportBoundaries(t *testing.T) {
 	}{
 		{
 			root: "commands",
-			forbidden: func(path string) bool {
-				return path == "github.com/blevinn/aginctus/internal/cli" ||
-					strings.HasPrefix(path, "github.com/blevinn/aginctus/internal/cli/operations/")
-			},
+			forbidden: func(path string) bool { return cliImportForbidden("commands", path) },
 		},
 		{
 			root: "operations",
-			forbidden: func(path string) bool {
-				return path == "github.com/blevinn/aginctus/internal/cli" ||
-					path == "github.com/spf13/cobra" ||
-					strings.HasPrefix(path, "github.com/blevinn/aginctus/internal/cli/commands/")
-			},
+			forbidden: func(path string) bool { return cliImportForbidden("operations", path) },
 		},
 	} {
 		t.Run(tc.root, func(t *testing.T) {
