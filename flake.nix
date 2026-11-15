@@ -506,15 +506,15 @@
       checks = forAllSystems (
         system:
         {
-          nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
-          home-manager-module = import ./nix/home-manager-module-check.nix { inherit self nixpkgs system; };
-          operator-settings-parity = import ./nix/operator-settings-parity-check.nix {
+          nixos-module = import ./tests/nix/module-check.nix { inherit self nixpkgs system; };
+          home-manager-module = import ./tests/nix/home-manager-module-check.nix { inherit self nixpkgs system; };
+          operator-settings-parity = import ./tests/nix/operator-settings-parity-check.nix {
             inherit self nixpkgs system;
           };
-          gateway-config-parity = import ./nix/gateway-config-parity-check.nix {
+          gateway-config-parity = import ./tests/nix/gateway-config-parity-check.nix {
             inherit self nixpkgs system;
           };
-          opencode-workload-socket-alignment = import ./nix/opencode-workload-check.nix {
+          opencode-workload-socket-alignment = import ./tests/nix/opencode-workload-check.nix {
             inherit self nixpkgs system;
           };
         }
