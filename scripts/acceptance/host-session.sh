@@ -41,7 +41,7 @@ case "$1" in
     report="$run_dir/worksheet.md"
     revision="unavailable"
     if git rev-parse --verify HEAD >/dev/null 2>&1; then revision="$(git rev-parse HEAD)"; fi
-    printf '# Aginctus manual host acceptance\n\nRevision: `%s`\n\n' "$revision" > "$report"
+    printf '%s\n\nRevision: %s%s%s\n\n' '# Aginctus manual host acceptance' '`' "$revision" '`' > "$report"
     for phase in baseline first-contact topology provisioning coding configuration recovery reporting cleanup; do
       printf '## %s\n\nStatus: not_run\n\nExpected:\n\nObserved:\n\nFriction:\n\nEvidence (redacted references only):\n\n' "$phase" >> "$report"
     done
