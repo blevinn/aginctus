@@ -63,7 +63,7 @@ func TestHermeticSuiteParity(t *testing.T) {
 			t.Fatalf("just check recipe %q is missing", suite.Recipe)
 		}
 	}
-	ci := readSource(t, "scripts/checks/ci_summary.py")
+	ci := readSource(t, "tools/ci/ci_summary.py")
 	requireSame(t, "CI summary suite IDs", quotedItems(manifestBody(t, ci, "EXPECTED_SUITES = (", "\n)")), ids)
 }
 
