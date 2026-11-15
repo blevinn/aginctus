@@ -16,7 +16,7 @@ class NixSelectorTests(unittest.TestCase):
         for path in (
             ".github/workflows/hermetic.yml",
             "scripts/checks/ci_select.py",
-            "nix/nixos-module.nix",
+            "nix/modules/nixos-module.nix",
             "flake.nix",
             "flake.lock",
             "internal/config/config.go",

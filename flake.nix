@@ -26,14 +26,14 @@
     in
     {
       nixosModules = {
-        aginctus = import ./nix/nixos-module.nix { inherit self; };
+        aginctus = import ./nix/modules/nixos-module.nix { inherit self; };
         aginctusTestenvRecovery = import ./nix/testenv/recovery-worker.nix { inherit self; };
         aginctusTestenvWorker = import ./nix/testenv/installed-worker.nix { inherit self; };
         default = self.nixosModules.aginctus;
       };
 
       homeManagerModules = {
-        aginctus = import ./nix/home-manager-module.nix { inherit self; };
+        aginctus = import ./nix/modules/home-manager-module.nix { inherit self; };
         default = self.homeManagerModules.aginctus;
       };
 
