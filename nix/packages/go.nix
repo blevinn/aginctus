@@ -1,7 +1,7 @@
 { pkgs, releaseVersion, self, sourceRoot }:
 let
   # One locked Go module graph shared by all independently built commands.
-  inherit vendorHash;
+  vendorHash = "sha256-0k7OkHckPVEZEbFkQ1ojBbIEc7Lj0nvfWsYWOy18AdI=";
 in
 {
           aginctusCli = pkgs.buildGoModule {
