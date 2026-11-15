@@ -44,13 +44,11 @@ func (e *NativeGatewayStartError) Error() string {
 // secret delivery; readiness MUST authenticate services without returning
 // sensitive outputs. No production entry point supplies these yet.
 //
-// This fixed-name gateway topology currently supports *one project-owned*
-// gateway pair. The accepted revision is sourced from the project state
-// authority, while protected credential delivery is independently verified.
-// Environment-specific gateway instances require a separately designed
-// topology with unambiguous environment resource identities; do not relabel
-// this project-wide path or treat a host/root credential owner as its state
-// authority.
+// The current planner still emits fixed legacy instance names, while runtime
+// authorization requires exact environment-owned guest identities. Binding
+// validation therefore fails closed until the planner and instance lifecycle
+// carry environment identity end to end. Do not weaken that check or treat a
+// project-wide accepted revision as resource ownership.
 //
 // Postgres is started and authenticated before LiteLLM; each subsequent
 // operation rechecks all resource identities, lease and credential version.

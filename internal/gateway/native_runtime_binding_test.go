@@ -15,9 +15,11 @@ func (f runtimeVerifierFunc) VerifyGatewayRuntime(ctx context.Context, b NativeG
 
 func TestRuntimeBindingRequiresIndependentVerifier(t *testing.T) {
 	pair, _ := instanceReaderFixture(t)
-	b := NativeGatewayRuntimeBinding{ResourceScope: "project", Project: pair.Postgres.Project,
+	pair.Postgres.Name = "env-alpha-postgres"
+	pair.LiteLLM.Name = "env-alpha-litellm"
+	b := NativeGatewayRuntimeBinding{ResourceScope: "environment", EnvironmentID: "env-alpha", Project: pair.Postgres.Project,
 		AcceptedRevision: strings.Repeat("a", 64), CredentialVersion: "v1",
-		PostgresInstance: "postgres-1", LiteLLMInstance: "litellm-1"}
+		PostgresInstance: "env-alpha-postgres", LiteLLMInstance: "env-alpha-litellm"}
 	calls := 0
 	verifier := runtimeVerifierFunc(func(_ context.Context, got NativeGatewayRuntimeBinding) error {
 		calls++
@@ -39,9 +41,11 @@ func TestRuntimeBindingRequiresIndependentVerifier(t *testing.T) {
 }
 func TestRuntimeBindingRejectsForeignOrRevokedAndRedactsErrors(t *testing.T) {
 	pair, _ := instanceReaderFixture(t)
-	b := NativeGatewayRuntimeBinding{ResourceScope: "project", Project: pair.Postgres.Project,
+	pair.Postgres.Name = "env-alpha-postgres"
+	pair.LiteLLM.Name = "env-alpha-litellm"
+	b := NativeGatewayRuntimeBinding{ResourceScope: "environment", EnvironmentID: "env-alpha", Project: pair.Postgres.Project,
 		AcceptedRevision: strings.Repeat("a", 64), CredentialVersion: "v1",
-		PostgresInstance: "postgres-1", LiteLLMInstance: "litellm-1"}
+		PostgresInstance: "env-alpha-postgres", LiteLLMInstance: "env-alpha-litellm"}
 	secret := "synthetic-private-token"
 	deny := runtimeVerifierFunc(func(context.Context, NativeGatewayRuntimeBinding) error { return errors.New(secret) })
 	err := VerifyNativeGatewayRuntimeBinding(context.Background(), pair, b, deny)
@@ -54,21 +58,52 @@ func TestRuntimeBindingRejectsForeignOrRevokedAndRedactsErrors(t *testing.T) {
 	}
 }
 
-// Current fixed-name gateway lifecycle is intentionally project-owned only.
-// Environment-specific gateway resources need explicit environment identity,
-// namespacing and ownership in a future topology, not a second ACL.
-func TestRuntimeBindingRejectsUnscopedOrEnvironmentGateway(t *testing.T) {
+// Only environment-owned gateway bindings are valid; project-scope accepted
+// state does not establish gateway resource ownership.
+func TestRuntimeBindingRejectsUnscopedOrProjectGateway(t *testing.T) {
 	pair, _ := instanceReaderFixture(t)
-	b := NativeGatewayRuntimeBinding{ResourceScope: "project", Project: pair.Postgres.Project,
+	pair.Postgres.Name = "env-alpha-postgres"
+	pair.LiteLLM.Name = "env-alpha-litellm"
+	b := NativeGatewayRuntimeBinding{ResourceScope: "environment", EnvironmentID: "env-alpha", Project: pair.Postgres.Project,
 		AcceptedRevision: strings.Repeat("a", 64), CredentialVersion: "v1",
-		PostgresInstance: "postgres-1", LiteLLMInstance: "litellm-1"}
+		PostgresInstance: "env-alpha-postgres", LiteLLMInstance: "env-alpha-litellm"}
 	if err := b.Validate(pair); err != nil {
 		t.Fatal(err)
 	}
-	for _, scope := range []string{"", "environment", "user", "system"} {
+	for _, scope := range []string{"", "project", "user", "system"} {
 		b.ResourceScope = scope
 		if err := b.Validate(pair); err == nil {
 			t.Fatalf("accepted unsupported gateway scope %q", scope)
 		}
+	}
+}
+
+func TestRuntimeBindingRejectsCrossEnvironmentAndLegacyNames(t *testing.T) {
+	pair, _ := instanceReaderFixture(t)
+	pair.Postgres.Name = "env-alpha-postgres"
+	pair.LiteLLM.Name = "env-alpha-litellm"
+	b := NativeGatewayRuntimeBinding{
+		ResourceScope: "environment", EnvironmentID: "env-alpha", Project: pair.Postgres.Project,
+		AcceptedRevision: strings.Repeat("a", 64), CredentialVersion: "v1",
+		PostgresInstance: pair.Postgres.Name, LiteLLMInstance: pair.LiteLLM.Name,
+	}
+	b.EnvironmentID = ""
+	if err := b.Validate(pair); err == nil {
+		t.Fatal("missing environment accepted")
+	}
+	b.EnvironmentID = "env-alpha"
+	b.PostgresInstance = "postgres-1"
+	if err := b.Validate(pair); err == nil {
+		t.Fatal("legacy project gateway accepted")
+	}
+	b.PostgresInstance = pair.Postgres.Name
+	b.LiteLLMInstance = b.PostgresInstance
+	if err := b.Validate(pair); err == nil {
+		t.Fatal("duplicate guest identities accepted")
+	}
+	b.LiteLLMInstance = pair.LiteLLM.Name
+	pair.Postgres.Name = "env-beta-postgres"
+	if err := b.Validate(pair); err == nil {
+		t.Fatal("foreign guest accepted")
 	}
 }
