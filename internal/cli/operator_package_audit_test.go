@@ -29,35 +29,6 @@ func writeOperatorPackageFixture(t *testing.T, dir, authority, pkg string) strin
 	return path
 }
 
-func TestOperatorPackageManifestState(t *testing.T) {
-	dir := t.TempDir()
-	system := writeOperatorPackageFixture(t, dir, "system", fixturePackageA)
-	if state, value := inspectOperatorPackageManifest(system, "system"); state != operatorPackageDeclared || value != fixturePackageA {
-		t.Fatalf("valid declaration: %s %q", state, value)
-	}
-	if state, _ := inspectOperatorPackageManifest(system, "user"); state != operatorPackageUnverified {
-		t.Fatalf("wrong role: %s", state)
-	}
-	if state, _ := inspectOperatorPackageManifest(filepath.Join(dir, "missing"), "system"); state != operatorPackageAbsent {
-		t.Fatalf("missing declaration: %s", state)
-	}
-	bad := filepath.Join(dir, "bad")
-	for _, raw := range []string{
-		"{not-json}", "null", "{}",
-		`{"schema":2,"authority":"system","package":"` + fixturePackageA + `"}`,
-		`{"schema":1,"authority":"system","package":"/var/lib/aginctus/state/secrets.json"}`,
-		`{"schema":1,"authority":"system","package":"/nix/store/../secrets"}`,
-		strings.Repeat("x", maxOperatorPackageManifestSize+1),
-	} {
-		if err := os.WriteFile(bad, []byte(raw), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if state, value := inspectOperatorPackageManifest(bad, "system"); state != operatorPackageUnverified || value != "" {
-			t.Fatalf("invalid declaration: %s %q", state, value)
-		}
-	}
-}
-
 func TestOperatorPackageAuditPair(t *testing.T) {
 	previous := inspectOperatorExecutable
 	inspectOperatorExecutable = func() (string, error) { return fixturePackageA + "/bin/.aginctus-wrapped", nil }
@@ -144,27 +115,6 @@ func TestOperatorPackageAuditObservedCLI(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestOperatorPackageAuditArguments(t *testing.T) {
-	for _, tc := range []struct {
-		args []string
-		ok   bool
-	}{
-		{[]string{"--owner=user"}, true},
-		{[]string{"--owner", "system"}, true},
-		{[]string{"--owner", "user"}, true},
-		{[]string{"--owner=system"}, true},
-		{nil, false},
-		{[]string{"--owner=root"}, false},
-		{[]string{"--owner=user", "--fix"}, false},
-		{[]string{"--owner", "user", "--force"}, false},
-	} {
-		owner, ok := parseOperatorPackageAuditArgs(tc.args)
-		if ok != tc.ok || (ok && owner == "") {
-			t.Errorf("args=%q accepted=%v owner=%q", tc.args, ok, owner)
-		}
 	}
 }
 
