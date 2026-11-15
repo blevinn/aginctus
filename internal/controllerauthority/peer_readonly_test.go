@@ -85,7 +85,7 @@ func TestPeerEnrollmentServiceReadsKernelPeerAndLiveHostPolicy(t *testing.T) {
 }
 
 func TestPeerEnrollmentServiceRefusesForgedSelectorsAndWriteMethods(t *testing.T) {
-	_,socket,owner,rec,_ := readOnlyPeerFixture(t)
+	_,socket,_,rec,_ := readOnlyPeerFixture(t)
 	client := peerReadOnlyClient(socket)
 	base := peerReadOnlyURL(rec)
 	cases := []struct {name,path string; status int}{
