@@ -147,7 +147,7 @@ An optional read-only audit can verify the current host's routing inventory
 without contacting firewalld/Incus or invoking reconciliation:
 
 ```sh
-AGINCTUS_READONLY_ROUTING_AUDIT=1 nix --quiet develop -c go test ./internal/firewall \
+AGINCTUS_READONLY_ROUTING_AUDIT=1 nix --quiet develop -c go test ./internal/host/net/firewall \
   -run '^TestEgressRoutingReadOnlyHostInventory$' -count=1 -v
 ```
 

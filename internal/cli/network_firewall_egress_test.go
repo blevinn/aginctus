@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/firewall"
+	"github.com/blevinn/aginctus/internal/host/net/firewall"
 	"github.com/lxc/incus/v7/shared/api"
 )
 
@@ -154,7 +154,7 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 			firewallCommand = func(_ context.Context, _ string, name string, args ...string) (string, error) {
 				if strings.Join(args, " ") == "-j -4 rule show" {
 					if strings.HasPrefix(drift, "tailscale") {
-						raw, err := os.ReadFile("../firewall/testdata/tailscale-ipv4-rules.json")
+						raw, err := os.ReadFile("../host/net/firewall/testdata/tailscale-ipv4-rules.json")
 						return string(raw), err
 					}
 					if drift == "policy routing" {
