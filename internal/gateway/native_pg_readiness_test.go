@@ -83,3 +83,13 @@ func TestPostgresReadinessRejectsForeignAndUntrustedTransport(t *testing.T) {
 		t.Fatal("wrong project exec permitted")
 	}
 }
+
+// Fixed postgres-1 is currently the explicitly project-owned gateway only.
+// A future environment gateway must use a different scoped identity/probe.
+func TestPostgresReadinessRejectsEnvironmentOwnedGuest(t *testing.T) {
+	f := pgProbeFixture()
+	f.instance.Config["user.aginctus.environment-id"] = "7c82e6d1-1212-4123-8123-0123456789ab"
+	if err := VerifyNativeGatewayPostgresReadyWithClient(context.Background(), "gateway-test", f); err == nil || f.calls != 0 {
+		t.Fatal("environment-owned guest treated as the project-wide gateway")
+	}
+}
