@@ -86,6 +86,7 @@ func TestAcceptedLifecyclePreviewBlocksUnverifiedOrForeignResources(t *testing.T
 		{"missing-owner",func(_ *acceptedstate.PinnedWorkloadSnapshot,o *InstanceObservation){delete(o.Config,"user.aginctus.managed")},"ownership-unverified"},
 		{"wrong-deployment",func(_ *acceptedstate.PinnedWorkloadSnapshot,o *InstanceObservation){o.Config["user.aginctus.deployment"]="foreign"},"ownership-unverified"},
 		{"legacy-deployment",func(_ *acceptedstate.PinnedWorkloadSnapshot,o *InstanceObservation){delete(o.Config,"user.aginctus.deployment")},"ownership-unverified"},
+		{"environment-owned-same-project",func(_ *acceptedstate.PinnedWorkloadSnapshot,o *InstanceObservation){o.Config["user.aginctus.environment-id"]="7c82e6d1-1212-4123-8123-0123456789ab"},"ownership-unverified"},
 		{"unknown-state",func(_ *acceptedstate.PinnedWorkloadSnapshot,o *InstanceObservation){o.State="Error"},"lifecycle-unverified"},
 		{"wrong-type",func(_ *acceptedstate.PinnedWorkloadSnapshot,o *InstanceObservation){o.Type="virtual-machine"},"replacement-or-profile-change-required"},
 		{"wrong-profiles",func(_ *acceptedstate.PinnedWorkloadSnapshot,o *InstanceObservation){o.Profiles=[]string{"other"}},"replacement-or-profile-change-required"},
