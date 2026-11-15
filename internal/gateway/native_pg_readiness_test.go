@@ -37,7 +37,7 @@ func pgProbeFixture()*fakePGProbeClient{
 	return &fakePGProbeClient{
 		info:&incusclient.ConnectionInfo{Project:project,Protocol:"incus",SocketPath:"/run/incus/unix.socket"},
 		instance:&api.Instance{
-			Name:"postgres-1",Project:project,Status:"Running",
+			Name:"postgres-1",Project:project,Status:"Running",Type:"container",
 			InstancePut:api.InstancePut{Config:map[string]string{
 				"user.aginctus.managed":"true","user.aginctus.resource":"gateway-instance",
 				"user.aginctus.role":"postgres","user.aginctus.deployment":project,
