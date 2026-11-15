@@ -348,7 +348,7 @@ func TestClientHeaderForwardingRenderAndPinnedParser(t *testing.T) {
 					t.Fatalf("forwarding policy = %#v, want %#v", got, want)
 				}
 				if tc.name == "pilot" {
-					raw, err := os.ReadFile(filepath.Join("..", "..", "deploy", "litellm-go", "model-group-forwarding.yaml"))
+					raw, err := os.ReadFile(filepath.Join("..", "..", "tests", "gateway", "fixtures", "model-group-forwarding.yaml"))
 					if err != nil {
 						t.Fatal(err)
 					}
