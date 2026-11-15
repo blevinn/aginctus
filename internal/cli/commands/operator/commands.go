@@ -35,7 +35,7 @@ func Register(root *cobra.Command, stdout, stderr io.Writer,
 				return fmt.Errorf("%s: configuration overrides are not supported", cmd.CommandPath())
 			}
 			if owner != nil && *owner != "system" && *owner != "user" {
-				return fmt.Errorf("--owner must be system or user")
+				return fmt.Errorf("--location must be system or user")
 			}
 			if project != nil && !cmd.Flags().Changed("project") {
 				return fmt.Errorf("explicit --project NAME is required")
@@ -67,14 +67,14 @@ func Register(root *cobra.Command, stdout, stderr io.Writer,
 		action := verb
 		owner := ""
 		cmd := add(action, true, &owner, nil, nil, func(cmd *cobra.Command, config *config.Config) int {
-			args := []string{"--owner", owner}
+			args := []string{"--location", owner}
 			return handlers.StateAudit(append([]string{"state-audit"}, args...), stdout, stderr, config)
 		})
-		cmd.Flags().StringVar(&owner, "owner", "", "Legacy credential state owner: system or user")
+		cmd.Flags().StringVar(&owner, "location", "", "Credential storage location: system or user")
 		prior := cmd.PreRunE
 		cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 			if !cmd.Flags().Changed("owner") {
-				return fmt.Errorf("--owner system|user is required")
+				return fmt.Errorf("--location system|user is required")
 			}
 			return prior(cmd, args)
 		}
