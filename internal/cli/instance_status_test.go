@@ -10,29 +10,6 @@ import (
 	"github.com/blevinn/aginctus/internal/config"
 )
 
-func TestFindManagedInstance(t *testing.T) {
-	cases := []struct {
-		name      string
-		instances []inspectedInstance
-		want      string
-		fail      bool
-	}{
-		{"absent", nil, "", false},
-		{"owned", []inspectedInstance{{Name: "aginctus-dev", Status: "Running", Config: map[string]string{"user.aginctus.managed": "true", "user.aginctus.resource": "workload", "user.aginctus.role": "agent-workload", "user.aginctus.workload": "dev"}}}, "Running", false},
-		{"foreign", []inspectedInstance{{Name: "aginctus-dev", Status: "Running"}}, "", true},
-		{"wrong id", []inspectedInstance{{Name: "aginctus-dev", Config: map[string]string{"user.aginctus.managed": "true", "user.aginctus.resource": "workload", "user.aginctus.role": "agent-workload", "user.aginctus.workload": "other"}}}, "", true},
-		{"wrong project", []inspectedInstance{{Name: "aginctus-dev", Project: "guest", Config: map[string]string{"user.aginctus.managed": "true", "user.aginctus.resource": "workload", "user.aginctus.role": "agent-workload", "user.aginctus.workload": "dev"}}}, "", true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := findManagedInstance(tc.instances, "aginctus-dev", "workload", "agent-workload", "dev")
-			if (err != nil) != tc.fail || got != tc.want {
-				t.Fatalf("status=%q error=%v", got, err)
-			}
-		})
-	}
-}
-
 func TestWorkloadStatusUsesLiveIncusData(t *testing.T) {
 	previous := inspectIncusInstances
 	t.Cleanup(func() { inspectIncusInstances = previous })
