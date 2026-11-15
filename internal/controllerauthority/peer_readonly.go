@@ -155,10 +155,11 @@ func startPeerEnrollmentAt(ctx context.Context, policyDir, socket string, owner 
 			raw, err := unix.SyscallConn()
 			if err != nil { return ctx }
 			var cred *syscall.Ucred
-			err = raw.Control(func(fd uintptr) {
-				cred, err = syscall.GetsockoptUcred(int(fd), syscall.SOL_SOCKET, syscall.SO_PEERCRED)
+			var peerErr error
+			controlErr := raw.Control(func(fd uintptr) {
+				cred, peerErr = syscall.GetsockoptUcred(int(fd), syscall.SOL_SOCKET, syscall.SO_PEERCRED)
 			})
-			if err != nil || cred == nil { return ctx }
+			if controlErr != nil || peerErr != nil || cred == nil { return ctx }
 			return context.WithValue(ctx, authorityPeerUIDKey{}, cred.Uid)
 		},
 	}
