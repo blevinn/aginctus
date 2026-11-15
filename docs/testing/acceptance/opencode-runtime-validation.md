@@ -83,7 +83,7 @@ for mode in incremental buffered; do
     -v "$PWD:/probe:ro" -v /nix/store:/nix/store:ro \
     --entrypoint /app/.venv/bin/python "$IMAGE" \
     /probe/scripts/gateway/probe_pinned_litellm_responses.py \
-    /probe/deploy/litellm-go/model-group-forwarding.yaml --direct-only \
+    /probe/tests/gateway/fixtures/model-group-forwarding.yaml --direct-only \
     --production-launcher /probe/guest/opencode/launch.py \
     --opencode "$RUNTIME" --delivery-mode "$mode" || break
 
@@ -94,7 +94,7 @@ for mode in incremental buffered; do
     -v /nix/store:/nix/store:ro \
     --entrypoint /app/.venv/bin/python "$IMAGE" \
     /probe/scripts/gateway/probe_pinned_litellm_responses.py \
-    /probe/deploy/litellm-go/model-group-forwarding.yaml --packaged-hook /bundle \
+    /probe/tests/gateway/fixtures/model-group-forwarding.yaml --packaged-hook /bundle \
     --production-launcher /probe/guest/opencode/launch.py \
     --opencode "$RUNTIME" --postgres-bin "$POSTGRES_BIN" \
     --delivery-mode "$mode" || break
