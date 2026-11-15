@@ -1,0 +1,5 @@
+{
+  "api_version": "aginctus.dev/plugin-build/v1alpha1",
+  "package": "appplugins",
+  "plugins": []
+}
