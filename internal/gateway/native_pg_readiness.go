@@ -41,50 +41,7 @@ type GatewayPostgresProbeClient interface {
 // No passwords, host paths, tokens or arbitrary commands are accepted here.
 // pg_isready alone is insufficient; psql -w SELECT 1 fails closed if password
 // auth fails. This probe does not establish the credential-file's provenance.
-var gatewayOwnerID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}package gateway
-
-import (
-	"context"
-	"fmt"
-	"io"
-	"path/filepath"
-	"regexp"
-	"time"
-
-	incusclient "github.com/lxc/incus/v7/client"
-	"github.com/lxc/incus/v7/shared/api"
-
-	incusscope "github.com/blevinn/aginctus/internal/incus"
-)
-
-// GatewayGuestExecOperation is the bounded Incus operation observation needed
-// to establish an authenticated PostgreSQL query exit status.
-type GatewayGuestExecOperation interface {
-	WaitContext(context.Context) error
-	Get() api.Operation
-}
-
-// GatewayPostgresProbeClient exposes project-scoped reads and a guest exec.
-// No host shell, environment secret, file upload, or instance update is used.
-type GatewayPostgresProbeClient interface {
-	GetConnectionInfo() (*incusclient.ConnectionInfo, error)
-	GetInstance(string) (*api.Instance, string, error)
-	ExecGuest(string, api.InstanceExecPost, *incusclient.InstanceExecArgs) (GatewayGuestExecOperation, error)
-}
-
-// VerifyNativeGatewayPostgresReadyWithClient tests a real TCP password-auth
-// connection as the expected litellm database principal. Using 127.0.0.1
-// deliberately avoids Postgres's potentially trust-authenticated local Unix
-// socket. PGPASSFILE is a fixed in-guest path: the separately trusted delivery
-// authority must prepare it with restrictive permissions and version binding.
-//
-// The caller must provide the exact environment-owned guest identity and a
-// separately authenticated, restricted project transport. This helper never
-// treats project selection as permission or verifies credential provenance.
-// No passwords, host paths, tokens or arbitrary commands are accepted here.
-// pg_isready alone is insufficient; psql -w SELECT 1 fails closed if password
-// auth fails. This probe does not establish the credential-file's provenance.
-)
+var gatewayOwnerID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 
 func VerifyNativeGatewayPostgresReadyWithClient(ctx context.Context, project, environmentID, instanceName string, client GatewayPostgresProbeClient) error {
 	if _, err := incusscope.NewProjectScope(project); err != nil {
