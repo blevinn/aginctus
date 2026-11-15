@@ -69,7 +69,7 @@ func VerifyNativeGatewayPostgresReadyWithClient(ctx context.Context,project stri
 		if err:=ctx.Err();err!=nil{return nil,err}
 		inst,_,err:=client.GetInstance("postgres-1")
 		if err!=nil || inst==nil || inst.Name!="postgres-1" || inst.Project!=project ||
-			inst.Status!="Running" || inst.Config["user.aginctus.managed"]!="true" ||
+			inst.Status!="Running" || string(inst.Type)!="container" || inst.Config["user.aginctus.managed"]!="true" ||
 			inst.Config["user.aginctus.resource"]!="gateway-instance" ||
 			inst.Config["user.aginctus.role"]!="postgres" ||
 			inst.Config["user.aginctus.deployment"]!=project {
