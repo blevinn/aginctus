@@ -41,7 +41,7 @@ func (c sdkGatewayPostgresProbe) ExecGuest(n string, p api.InstanceExecPost, a *
 }
 
 // VerifyLocalNativeGatewayPostgresReady binds the real guest exec to an
-// explicitly selected project, without ever passing credential bytes in
+// explicitly selected project for the **project-owned fixed-name gateway**;\n// it deliberately uses local administrator transport for this legacy\n// unactivated probe. The caller must not interpret it as project confinement\n// or use it for an environment-owned gateway. Without ever passing\n// credential bytes in
 // Incus API request parameters or logging a daemon error body.
 func VerifyLocalNativeGatewayPostgresReady(ctx context.Context, project string) error {
 	if _, err := incusscope.NewProjectScope(project); err != nil {
@@ -64,7 +64,7 @@ func VerifyLocalNativeGatewayPostgresReady(ctx context.Context, project string) 
 // socket. PGPASSFILE is a fixed in-guest path: the separately trusted delivery
 // authority must prepare it with restrictive permissions and version binding.
 //
-// No passwords, host paths, tokens or arbitrary commands are accepted here.
+// This legacy fixed-name API recognizes only the project-owned gateway.\n// Environment-specific gateways require separately verified names, owner\n// metadata and selected-project transport; never repurpose postgres-1.\n// No passwords, host paths, tokens or arbitrary commands are accepted here.
 // pg_isready alone is insufficient; psql -w SELECT 1 fails closed if password
 // auth fails. This probe does not establish the credential-file's provenance.
 func VerifyNativeGatewayPostgresReadyWithClient(ctx context.Context, project string, client GatewayPostgresProbeClient) error {
@@ -89,7 +89,7 @@ func VerifyNativeGatewayPostgresReadyWithClient(ctx context.Context, project str
 			inst.Status != "Running" || string(inst.Type) != "container" || inst.Config["user.aginctus.managed"] != "true" ||
 			inst.Config["user.aginctus.resource"] != "gateway-instance" ||
 			inst.Config["user.aginctus.role"] != "postgres" ||
-			inst.Config["user.aginctus.deployment"] != project {
+			inst.Config["user.aginctus.deployment"] != project ||\n\t\t\tinst.Config["user.aginctus.environment-id"] != "" {
 			return nil, fmt.Errorf("gateway PostgreSQL readiness owned running guest unverified")
 		}
 		return inst, nil
