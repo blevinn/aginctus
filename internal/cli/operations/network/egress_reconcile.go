@@ -7,7 +7,7 @@ import (
 	"net"
 
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/firewall"
+	"github.com/blevinn/aginctus/internal/host/net/firewall"
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/lxc/incus/v7/shared/api"
 )
