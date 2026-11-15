@@ -44,7 +44,7 @@ func (e *NativeGatewayStartError) Error() string {
 // secret delivery; readiness MUST authenticate services without returning
 // sensitive outputs. No production entry point supplies these yet.
 //
-// Postgres is started and authenticated before LiteLLM; each subsequent
+// This fixed-name gateway topology currently supports *one project-owned*\n// gateway pair. The accepted revision is sourced from the project state\n// authority, while protected credential delivery is independently verified.\n// Environment-specific gateway instances require a separately designed\n// topology with unambiguous environment resource identities; do not relabel\n// this project-wide path or treat a host/root credential owner as its state\n// authority.\n//\n// Postgres is started and authenticated before LiteLLM; each subsequent
 // operation rechecks all resource identities, lease and credential version.
 // Existing Running states still require the authenticated readiness probe.
 func StartNativeGatewayWithClient(ctx context.Context, top NativeGatewayTopology, devices NativeGatewayDevices, pair NativeGatewayInstancePair,
