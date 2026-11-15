@@ -50,7 +50,7 @@ Merging release tooling does not pass acceptance or authorize publication.
    ```sh
    nix --quiet develop --no-update-lock-file -c just check-all
    nix --quiet build --no-update-lock-file --no-link .#aginctus
-   python3 scripts/release/check.py --tag vX.Y.Z
+   python3 tools/release/check.py --tag vX.Y.Z
    git diff --check origin/main...HEAD
    ```
 
@@ -69,14 +69,14 @@ The release automation never creates or moves tags. Example for `v0.1.0`:
 git fetch origin --tags
 git switch main
 git pull --ff-only
-python3 scripts/release/check.py --tag v0.1.0
+python3 tools/release/check.py --tag v0.1.0
 # If configured with signing, prefer: git tag -s v0.1.0 -m "Aginctus v0.1.0"
 git tag -a v0.1.0 -m "Aginctus v0.1.0"
 git push origin refs/tags/v0.1.0
 ```
 
 The ordinary `hermetic` CI workflow also builds and verifies the Linux amd64
-archive with `scripts/release/package.sh` using the current source version
+archive with `tools/release/package.sh` using the current source version
 (`0.0.0-dev` on the development branch). This is a **non-publishing**
 preview: it checks the CLI's embedded version and exact Git revision, archive
 contents, and SHA256 checksum without creating a tag or GitHub release.
