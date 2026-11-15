@@ -14,8 +14,9 @@ Start from the repository root:
 
 ```sh
 just check host-acceptance-preflight
-# Explicitly create a private local worksheet; this writes ONLY under
-# your existing, operator-owned XDG state directory.
+# One-time private state-directory preparation, outside the repository:
+install -d -m 0700 "${XDG_STATE_HOME:-$HOME/.local/state}/aginctus"
+# Explicitly create a private local worksheet under that existing directory:
 just check host-acceptance-init
 ```
 
