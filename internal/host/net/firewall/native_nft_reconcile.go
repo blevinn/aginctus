@@ -6,6 +6,12 @@ import (
 	"strings"
 )
 
+// NixosNftRefusal preserves legacy user-facing refusal text while providing
+// a distinct typed error from host firewall policy, not a CLI exit code.
+type NixosNftRefusal string
+
+func (e NixosNftRefusal) Error() string { return string(e) }
+
 // NixosNftReconcileActions are the narrowly scoped host capabilities required
 // for owned NixOS nftables child-chain reconciliation. The CLI supplies host
 // authority and an independently verified bridge policy; this function does
@@ -34,10 +40,10 @@ func ReconcileOwnedNixosNft(ctx context.Context, actions NixosNftReconcileAction
 	}
 	allow, err := actions.Command(ctx, "", "nft", "-a", "list", "chain", "inet", "nixos-fw", "input-allow")
 	if err != nil || !strings.Contains(allow, "jump "+NixosNftChain) {
-		return "", fmt.Errorf("Aginctus hook missing from NixOS nftables input-allow")
+		return "", NixosNftRefusal("Aginctus hook missing from NixOS nftables input-allow")
 	}
 	if _, err := actions.Command(ctx, "", "nft", "list", "chain", "inet", "nixos-fw", NixosNftChain); err != nil {
-		return "", fmt.Errorf("Aginctus nftables child chain missing; activate the NixOS module")
+		return "", NixosNftRefusal("Aginctus nftables child chain missing; activate the NixOS module")
 	}
 	policy, discoveryErr := actions.Discover(ctx)
 	var approved *Policy
@@ -52,7 +58,7 @@ func ReconcileOwnedNixosNft(ctx context.Context, actions NixosNftReconcileAction
 		return "", fmt.Errorf("atomic NixOS nftables child-chain reconciliation failed")
 	}
 	if discoveryErr != nil {
-		return "", fmt.Errorf("Aginctus NixOS nftables exceptions cleared (fail closed): %v", discoveryErr)
+		return "", NixosNftRefusal(fmt.Sprintf("Aginctus NixOS nftables exceptions cleared (fail closed): %v", discoveryErr))
 	}
 	return policy.Interface, nil
 }
