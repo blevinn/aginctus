@@ -407,6 +407,13 @@ func TestDaemonOCI(t *testing.T) {
 	if err != nil || len(repeat.Created) != 0 || len(repeat.Verified) != 2 || fenceChecks != 2 {
 		t.Fatalf("native stopped gateway reuse was not a no-op: %+v %v", repeat, err)
 	}
+	// Read-only native status must recognize both owned stopped service
+	// containers while preserving the existing image and volume inventory.
+	status,err:=gateway.InspectNativeGatewayStatusWithReader(ctx,topology,gatewayDevices,gatewayPair,gatewayStopVMClient{client})
+	if err!=nil || !status.AllStopped || status.AllRunning || len(status.Services)!=2 ||
+		status.Services[0].Name!="postgres-1" || status.Services[1].Name!="litellm-1" {
+		t.Fatalf("native gateway real-Incus status failed: %+v %v",status,err)
+	}
 	// Stop is tested as a non-destructive no-op on the new stopped service
 	// containers. We deliberately do NOT start unconfigured containers merely
 	// to test the stop operation in this disposable VM.
@@ -433,6 +440,9 @@ func TestDaemonOCI(t *testing.T) {
 	if _,err:=gateway.StopNativeGatewayWithClient(ctx,topology,gatewayDevices,gatewayPair,
 		gatewayStopVMClient{client},func(context.Context)error{return nil});err==nil {
 		t.Fatal("stop accepted foreign existing gateway ownership")
+	}
+	if _,err:=gateway.InspectNativeGatewayStatusWithReader(ctx,topology,gatewayDevices,gatewayPair,gatewayStopVMClient{client});err==nil {
+		t.Fatal("native status accepted foreign existing gateway ownership")
 	}
 	if _,_,err:=client.GetStoragePoolVolume("spike","custom","gateway-postgres");err!=nil {
 		t.Fatal("failed stop must preserve database volume")
