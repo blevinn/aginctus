@@ -51,7 +51,7 @@ type EgressStore interface {
 	Save(EgressState) error
 }
 
-// EgressObjects is the ownership contract shared with nix/nixos-module.nix.
+// EgressObjects is the ownership contract shared with nix/modules/nixos-module.nix.
 // NixOS owns all structure and empty permanent grants. Only the two grant
 // policies' rich_rules and the HTTPS policy's egress_zones may change at runtime.
 func EgressObjects(bridge string) map[string]Settings {
