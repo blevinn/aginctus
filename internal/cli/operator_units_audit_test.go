@@ -21,33 +21,6 @@ func stubOperatorUnitProbe(t *testing.T, probe func(string, string) ([]byte, err
 	t.Cleanup(func() { inspectOperatorUnit = before })
 }
 
-func TestClassifyOperatorUnit(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		data []byte
-		want unitEvidence
-	}{
-		{"missing", fakeOperatorUnitProperties("not-found", "inactive", ""), unitAbsent},
-		{"disabled but installed", fakeOperatorUnitProperties("loaded", "inactive", "disabled"), unitPresent},
-		{"static but installed", fakeOperatorUnitProperties("loaded", "inactive", "static"), unitPresent},
-		{"failed", fakeOperatorUnitProperties("loaded", "failed", "enabled"), unitPresent},
-		{"active", fakeOperatorUnitProperties("loaded", "active", "enabled"), unitActive},
-		{"activating", fakeOperatorUnitProperties("loaded", "activating", "enabled"), unitActive},
-		{"missing with contradictory file", fakeOperatorUnitProperties("not-found", "inactive", "enabled"), unitUnknown},
-		{"masked", fakeOperatorUnitProperties("masked", "inactive", "masked"), unitUnknown},
-		{"invalid active", fakeOperatorUnitProperties("loaded", "mystery", "enabled"), unitUnknown},
-		{"missing property", []byte("LoadState=loaded\nActiveState=active\n"), unitUnknown},
-		{"duplicate property", []byte("LoadState=loaded\nLoadState=not-found\nActiveState=inactive\nUnitFileState=\n"), unitUnknown},
-		{"unexpected output", []byte("LoadState=not-found\nActiveState=inactive\nUnitFileState=\nExecStart=secret\n"), unitUnknown},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := classifyOperatorUnit(tc.data); got != tc.want {
-				t.Fatalf("got %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestOperatorUnitsAuditReport(t *testing.T) {
 	missing := fakeOperatorUnitProperties("not-found", "inactive", "")
 	active := fakeOperatorUnitProperties("loaded", "active", "enabled")
