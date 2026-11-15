@@ -54,7 +54,7 @@
             ];
             # Recalculate after Go module graph changes. A stale hash can reuse
             # an incompatible vendor tree even when go.mod is newer.
-            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
+            vendorHash = "sha256-O6QRbT0ugoSvWh01AXAsB6QLABPqOqwehTZ2Y/1YvWs=";
             subPackages = [ "./cmd/aginctus" ];
             nativeBuildInputs = [ pkgs.makeWrapper ];
             postInstall = ''
@@ -65,7 +65,7 @@
             pname = "aginctus-oauth-gateway";
             version = releaseVersion;
             src = ./.;
-            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
+            vendorHash = "sha256-O6QRbT0ugoSvWh01AXAsB6QLABPqOqwehTZ2Y/1YvWs=";
             subPackages = [ "./cmd/aginctus-oauth-gateway" ];
           };
           sshClientIdentityHelper = pkgs.writeShellApplication {
@@ -347,7 +347,7 @@
             pname = "aginctus-testenv";
             version = releaseVersion;
             src = ./.;
-            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
+            vendorHash = "sha256-O6QRbT0ugoSvWh01AXAsB6QLABPqOqwehTZ2Y/1YvWs=";
             subPackages = [ "./cmd/aginctus-testenv" ];
             ldflags = [ "-X=main.revision=${self.rev or "source-${self.narHash}"}" ];
           };
@@ -359,14 +359,14 @@
             pname = "aginctus-state";
             version = releaseVersion;
             src = ./.;
-            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
+            vendorHash = "sha256-O6QRbT0ugoSvWh01AXAsB6QLABPqOqwehTZ2Y/1YvWs=";
             subPackages = [ "./cmd/aginctus-state" ];
           };
           state-local = pkgs.buildGoModule {
             pname = "aginctus-state-local";
             version = releaseVersion;
             src = ./.;
-            vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
+            vendorHash = "sha256-O6QRbT0ugoSvWh01AXAsB6QLABPqOqwehTZ2Y/1YvWs=";
             subPackages = [ "./cmd/aginctus-state-local" ];
           };
           aginctus = aginctusCli;

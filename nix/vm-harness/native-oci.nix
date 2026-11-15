@@ -10,7 +10,7 @@ let
     pname = "aginctus-native-oci-spike";
     version = "0";
     src = self;
-    vendorHash = "sha256-KUyM9QZ11nS6I1V2Abkdpxp5L6DSKLpmFfNvGBaqMWA=";
+    vendorHash = "sha256-O6QRbT0ugoSvWh01AXAsB6QLABPqOqwehTZ2Y/1YvWs=";
     doCheck = false;
     buildPhase = ''
       runHook preBuild
