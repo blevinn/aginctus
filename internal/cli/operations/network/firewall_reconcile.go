@@ -92,42 +92,9 @@ func Reconcile(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config
 	return 0
 }
 
+// Compatibility adapter: backend evidence is owned by host/net/firewall.
 func SelectFirewallBackend(ruleset, requested string) (string, error) {
-	firewalldPresent := strings.Contains(ruleset, "table inet firewalld")
-	nixosPresent := strings.Contains(ruleset, "table inet nixos-fw")
-	if firewalldPresent && nixosPresent {
-		return "", fmt.Errorf("multiple independently rejecting nftables host firewalls detected; fail closed")
-	}
-	switch requested {
-	case "nixos-nft":
-		if !nixosPresent {
-			return "", fmt.Errorf("NixOS native nftables input table not ready")
-		}
-		return "nixos-nft", nil
-	case "firewalld":
-		if !firewalldPresent {
-			return "", fmt.Errorf("firewalld nftables table not ready; retry after firewalld startup")
-		}
-		return "firewalld", nil
-	case "iptables-nft":
-		if firewalldPresent || nixosPresent {
-			return "", fmt.Errorf("configured iptables-nft backend conflicts with active nftables host firewall")
-		}
-		return "iptables-nft", nil
-	case "":
-		// Interactive CLI usage retains read-only automatic selection.
-		if firewalldPresent {
-			return "firewalld", nil
-		}
-		if nixosPresent {
-			// Systemd explicitly pins the native backend. Automatic selection
-			// must not authorize host mutation on an incidental table match.
-			return "", fmt.Errorf("NixOS native nftables backend requires an explicit backend selection")
-		}
-		return "iptables-nft", nil
-	default:
-		return "", fmt.Errorf("unsupported firewall backend selection")
-	}
+	return firewall.SelectFirewallBackend(ruleset, requested)
 }
 
 // reconcileFirewalld uses firewalld's own D-Bus management client. Its
@@ -238,83 +205,27 @@ func ReconcileFirewalld(ctx context.Context, stdout, stderr io.Writer, cfg *conf
 	return 0
 }
 
-func ContainsWord(words, target string) bool {
-	for _, word := range strings.Fields(words) {
-		if word == target {
-			return true
-		}
-	}
-	return false
-}
-
-func SameRichRules(current string, expected []string) bool {
-	if strings.TrimSpace(current) == "" {
-		return len(expected) == 0
-	}
-	existing := strings.Split(strings.TrimSpace(current), "\n")
-	if len(existing) != len(expected) {
-		return false
-	}
-	for _, rule := range expected {
-		found := false
-		for _, installed := range existing {
-			if strings.TrimSpace(installed) == rule {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
-}
-
-func HasFirewalldDropTarget(details string) bool {
-	for _, line := range strings.Split(details, "\n") {
-		if strings.TrimSpace(line) == "target: DROP" {
-			return true
-		}
-	}
-	return false
-}
+// Existing CLI callers retain these adapters while their tests migrate.
+func ContainsWord(words, target string) bool { return firewall.ContainsWord(words, target) }
+func SameRichRules(current string, expected []string) bool { return firewall.SameRichRules(current, expected) }
+func HasFirewalldDropTarget(details string) bool { return firewall.HasFirewalldDropTarget(details) }
 
 // reconcileNixosNft updates only the child chain predeclared by the NixOS
 // module and reached from its effective input-allow decision path.
+// ReconcileNixosNft translates the host-owned typed transaction into the
+// preexisting CLI output and exit-code contract.
 func ReconcileNixosNft(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config, actions FirewallActions) int {
-	base, err := actions.Command(ctx, "", "nft", "-a", "list", "chain", "inet", "nixos-fw", "input")
-	if err != nil || !strings.Contains(base, "hook input") ||
-		!strings.Contains(base, "policy drop") || !strings.Contains(base, "input-allow") {
-		fmt.Fprintln(stderr, "unsupported NixOS nftables INPUT chain")
-		return 1
-	}
-	allow, err := actions.Command(ctx, "", "nft", "-a", "list", "chain", "inet", "nixos-fw", "input-allow")
-	if err != nil || !strings.Contains(allow, "jump "+firewall.NixosNftChain) {
-		fmt.Fprintln(stderr, "Aginctus hook missing from NixOS nftables input-allow")
-		return 1
-	}
-	if _, err := actions.Command(ctx, "", "nft", "list", "chain", "inet", "nixos-fw", firewall.NixosNftChain); err != nil {
-		fmt.Fprintln(stderr, "Aginctus nftables child chain missing; activate the NixOS module")
-		return 1
-	}
-	policy, discoveryErr := actions.Discover(ctx, cfg)
-	var approved *firewall.Policy
-	if discoveryErr == nil {
-		approved = &policy
-	}
-	txn, err := firewall.RenderNixosNft(approved)
+	iface, err := firewall.ReconcileOwnedNixosNft(ctx, firewall.NixosNftReconcileActions{
+		EffectiveUID: actions.EffectiveUID,
+		Command: actions.Command,
+		Discover: func(ctx context.Context) (firewall.Policy, error) {
+			return actions.Discover(ctx, cfg)
+		},
+	})
 	if err != nil {
-		fmt.Fprintln(stderr, "invalid verified NixOS nftables policy")
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if _, err := actions.Command(ctx, txn, "nft", "-f", "-"); err != nil {
-		fmt.Fprintln(stderr, "atomic NixOS nftables child-chain reconciliation failed")
-		return 1
-	}
-	if discoveryErr != nil {
-		fmt.Fprintf(stderr, "Aginctus NixOS nftables exceptions cleared (fail closed): %v\n", discoveryErr)
-		return 1
-	}
-	fmt.Fprintf(stdout, "NixOS nftables INPUT reconciled for verified bridge %q (DNS/DHCP only)\n", policy.Interface)
+	fmt.Fprintf(stdout, "NixOS nftables INPUT reconciled for verified bridge %q (DNS/DHCP only)\n", iface)
 	return 0
 }

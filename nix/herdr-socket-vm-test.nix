@@ -94,7 +94,7 @@ pkgs.testers.runNixOSTest {
 
   nodes.client = {
     imports = [
-      (import ./guest-state-bindings.nix {
+      (import ./workloads/guest-state-bindings.nix {
         bindings = [
           {
             class = "system";
@@ -111,7 +111,7 @@ pkgs.testers.runNixOSTest {
     ];
     system.stateVersion = "26.05";
     environment.systemPackages = [
-      (import ./herdr-client-command.nix { inherit pkgs herdrPackage; })
+      (import ./workloads/herdr-client-command.nix { inherit pkgs herdrPackage; })
       pkgs.openssh
     ];
     programs.ssh.extraConfig = ''

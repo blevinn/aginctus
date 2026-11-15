@@ -7,7 +7,7 @@ let
   lib = nixpkgs.lib;
   pkgs = import nixpkgs { inherit system; };
   stub = pkgs.writeShellScriptBin "aginctus" "exit 0";
-  cases = builtins.fromJSON (builtins.readFile ../internal/config/testdata/operator-settings.json);
+  cases = builtins.fromJSON (builtins.readFile ../../internal/config/testdata/operator-settings.json);
   nixos =
     settings:
     (lib.nixosSystem {

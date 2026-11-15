@@ -1,5 +1,5 @@
 # Guest-only NixOS module; the Incus host does not need NixOS.
-# Use: import ./guest-state-bindings.nix { inherit bindings; }
+# Use: import ./workloads/guest-state-bindings.nix { inherit bindings; }
 { bindings }:
 { lib, pkgs, ... }:
 let
