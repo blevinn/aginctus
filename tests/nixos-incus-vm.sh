@@ -4,7 +4,7 @@
 set -euo pipefail
 
 command -v nix >/dev/null || { echo 'nix is required' >&2; exit 1; }
-[[ -f flake.nix && -f nix/nixos-module.nix ]] || {
+[[ -f flake.nix && -f nix/modules/nixos-module.nix ]] || {
   echo 'Run from the Aginctus repository root' >&2
   exit 1
 }
