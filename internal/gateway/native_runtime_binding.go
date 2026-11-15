@@ -18,7 +18,7 @@ var gatewayCredentialVersion = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,
 // It contains no secret bytes or paths.
 // These identifiers alone are NOT evidence of a delivery or a startup grant.
 type NativeGatewayRuntimeBinding struct {
-\tResourceScope     string `json:"resourceScope"`
+	ResourceScope     string `json:"resourceScope"`
 	Project           string `json:"project"`
 	AcceptedRevision  string `json:"acceptedRevision"`
 	CredentialVersion string `json:"credentialVersion"`
