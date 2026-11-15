@@ -306,7 +306,7 @@ assert disabled.xdg.configFile == { };
 assert !(builtins.hasAttr "aginctus/operator-package.json" disabled.xdg.configFile);
 assert disabled.assertions == [ ];
 assert enabled.home.packages == [ stub ];
-# Even permissive user CLI intent emits only user package/config declarations.
+# Even permissive user CLI intent emits only unprivileged configuration declarations.
 # The fixture has no system policy options: a privileged output fails evaluation.
 assert userPolicyIntent.home.packages == [ stub ];
 assert
