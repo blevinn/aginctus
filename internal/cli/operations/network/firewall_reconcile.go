@@ -212,40 +212,20 @@ func HasFirewalldDropTarget(details string) bool { return firewall.HasFirewalldD
 
 // reconcileNixosNft updates only the child chain predeclared by the NixOS
 // module and reached from its effective input-allow decision path.
+// ReconcileNixosNft translates the host-owned typed transaction into the
+// preexisting CLI output and exit-code contract.
 func ReconcileNixosNft(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config, actions FirewallActions) int {
-	base, err := actions.Command(ctx, "", "nft", "-a", "list", "chain", "inet", "nixos-fw", "input")
-	if err != nil || !strings.Contains(base, "hook input") ||
-		!strings.Contains(base, "policy drop") || !strings.Contains(base, "input-allow") {
-		fmt.Fprintln(stderr, "unsupported NixOS nftables INPUT chain")
-		return 1
-	}
-	allow, err := actions.Command(ctx, "", "nft", "-a", "list", "chain", "inet", "nixos-fw", "input-allow")
-	if err != nil || !strings.Contains(allow, "jump "+firewall.NixosNftChain) {
-		fmt.Fprintln(stderr, "Aginctus hook missing from NixOS nftables input-allow")
-		return 1
-	}
-	if _, err := actions.Command(ctx, "", "nft", "list", "chain", "inet", "nixos-fw", firewall.NixosNftChain); err != nil {
-		fmt.Fprintln(stderr, "Aginctus nftables child chain missing; activate the NixOS module")
-		return 1
-	}
-	policy, discoveryErr := actions.Discover(ctx, cfg)
-	var approved *firewall.Policy
-	if discoveryErr == nil {
-		approved = &policy
-	}
-	txn, err := firewall.RenderNixosNft(approved)
+	iface, err := firewall.ReconcileOwnedNixosNft(ctx, firewall.NixosNftReconcileActions{
+		EffectiveUID: actions.EffectiveUID,
+		Command: actions.Command,
+		Discover: func(ctx context.Context) (firewall.Policy, error) {
+			return actions.Discover(ctx, cfg)
+		},
+	})
 	if err != nil {
-		fmt.Fprintln(stderr, "invalid verified NixOS nftables policy")
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	if _, err := actions.Command(ctx, txn, "nft", "-f", "-"); err != nil {
-		fmt.Fprintln(stderr, "atomic NixOS nftables child-chain reconciliation failed")
-		return 1
-	}
-	if discoveryErr != nil {
-		fmt.Fprintf(stderr, "Aginctus NixOS nftables exceptions cleared (fail closed): %v\n", discoveryErr)
-		return 1
-	}
-	fmt.Fprintf(stdout, "NixOS nftables INPUT reconciled for verified bridge %q (DNS/DHCP only)\n", policy.Interface)
+	fmt.Fprintf(stdout, "NixOS nftables INPUT reconciled for verified bridge %q (DNS/DHCP only)\n", iface)
 	return 0
 }
