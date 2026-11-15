@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	clihelp "github.com/blevinn/aginctus/internal/cli/help"
 	configops "github.com/blevinn/aginctus/internal/cli/operations/config"
 	"github.com/blevinn/aginctus/internal/config"
+	"github.com/blevinn/aginctus/internal/plugins"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +19,7 @@ import (
 // parser; all command families are registered here and reuse shared services.
 func runBasicCobra(
 	ctx context.Context, args []string, stdout, stderr io.Writer,
-	incusClient IncusClient, loader ConfigLoader,
+	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
 ) int {
 	var options config.Options
 	root := &cobra.Command{
@@ -52,6 +54,17 @@ func runBasicCobra(
 		},
 	})
 	overrides := &configOverrideFlag{values: &options.Overrides}
+	pluginCmd := &cobra.Command{
+		Use: "plugins", Short: "Inspect compiled contract plugins", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+	}
+	pluginCmd.AddCommand(&cobra.Command{
+		Use: "inventory", Short: "Print local compiled plugin inventory as JSON", Args: cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return json.NewEncoder(stdout).Encode(registry.Compiled())
+		},
+	})
+	root.AddCommand(pluginCmd)
 	root.PersistentFlags().Var(overrides, "config", "Override one path=value (repeatable)")
 	root.PersistentFlags().Var(overrides, "configure", "Alias for --config")
 	root.PersistentFlags().StringVar(&options.ConfigurationFile, "configuration-file", "", "Explicit JSON configuration file")

@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/blevinn/aginctus/internal/firewall"
+	"github.com/blevinn/aginctus/internal/host/net/firewall"
 )
 
 type FirewalldExecutor func(context.Context, ...string) (string, error)

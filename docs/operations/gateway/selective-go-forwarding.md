@@ -56,7 +56,7 @@ nix --quiet shell nixpkgs#podman -c podman run \
   -v "$PWD:/probe:ro" --entrypoint /app/.venv/bin/python \
   ghcr.io/berriai/litellm:v1.103.0 \
   /probe/scripts/gateway/probe_pinned_litellm_responses.py \
-  /probe/deploy/litellm-go/model-group-forwarding.yaml --require-safe
+  /probe/tests/gateway/fixtures/model-group-forwarding.yaml --require-safe
 ```
 
 Its expected nonzero strict verdict rejects unsafe forwarding, not transport
@@ -220,14 +220,14 @@ Require successful exports before running either probe:
   -v "$PWD:/probe:ro" -v "$WORK/bundle:/bundle:ro" \
   --entrypoint /app/.venv/bin/python "$IMAGE" \
   /probe/scripts/gateway/probe_pinned_litellm_responses.py \
-  /probe/deploy/litellm-go/model-group-forwarding.yaml --packaged-hook /bundle
+  /probe/tests/gateway/fixtures/model-group-forwarding.yaml --packaged-hook /bundle
 
 "$PODMAN" run --rm --pull=never --network none \
   -e AGINCTUS_ISOLATED_LITELLM_PROBE=1 -e LITELLM_LOCAL_MODEL_COST_MAP=True \
   -v "$PWD:/probe:ro" -v "$WORK/deployment:/bundle:ro" -v /nix/store:/nix/store:ro \
   --entrypoint /app/.venv/bin/python "$IMAGE" \
   /probe/scripts/gateway/probe_pinned_litellm_responses.py \
-  /probe/deploy/litellm-go/model-group-forwarding.yaml --packaged-hook /bundle \
+  /probe/tests/gateway/fixtures/model-group-forwarding.yaml --packaged-hook /bundle \
   --production-launcher /probe/guest/opencode/launch.py \
   --opencode "$RUNTIME" --postgres-bin "$POSTGRES_BIN"
 
