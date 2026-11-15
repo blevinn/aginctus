@@ -59,7 +59,7 @@ func ObserveRestrictedOperator(ctx context.Context, project, bridge, pool string
 		}
 		raw, err := read(ctx, path)
 		if err != nil || len(raw) == 0 || len(raw) > 1<<20 {
-			return errors.New("Incus identity evidence unavailable")
+			return errors.New("incus identity evidence unavailable")
 		}
 		if err := json.Unmarshal(raw, output); err != nil {
 			return errors.New("invalid Incus identity evidence")
@@ -87,7 +87,7 @@ func ObserveRestrictedOperator(ctx context.Context, project, bridge, pool string
 	}
 	if cert.Fingerprint != server.Fingerprint || cert.Restricted == nil || !*cert.Restricted ||
 		len(cert.Projects) != 1 || cert.Projects[0] != project {
-		return DaemonTLSObservation{}, errors.New("Incus certificate is not confined to the exact operator project")
+		return DaemonTLSObservation{}, errors.New("incus certificate is not confined to the exact operator project")
 	}
 	var observed struct {
 		Name   string            `json:"name"`
@@ -97,7 +97,7 @@ func ObserveRestrictedOperator(ctx context.Context, project, bridge, pool string
 		return DaemonTLSObservation{}, err
 	}
 	if observed.Name != project || observed.Config == nil {
-		return DaemonTLSObservation{}, errors.New("Incus project identity or policy unavailable")
+		return DaemonTLSObservation{}, errors.New("incus project identity or policy unavailable")
 	}
 	for key, expected := range required {
 		if observed.Config[key] != expected {
