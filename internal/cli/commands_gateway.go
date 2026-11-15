@@ -64,7 +64,7 @@ func gatewayPlugins() gatewaycontrol.Plugins {
 func addGatewayAssetCommands(gateway, providers, models *cobra.Command,
 	status *int, options config.Options, load func() (*config.Config, error),
 ) {
-	assetscmd.Register(gateway, providers, models, status, options, load, configuredGatewayStore, gatewayPlugins())
+	assetscmd.Register(gateway, providers, models, status, options, load, configuredGatewayStore, gatewayPlugins(), gatewayops.ReadAssetConfig)
 }
 
 // Keep an injectable read-only Incus query for network/firewall and gateway tests.

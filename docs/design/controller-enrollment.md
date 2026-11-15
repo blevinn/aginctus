@@ -1,111 +1,51 @@
-# Experimental host controller enrollment record
+# Retired controller enrollment prototype and project-scoped execution gates
 
-**Status:** implementation candidate only; **not write authorization**. Tracks
-[#441](https://github.com/blevinn/aginctus/issues/441),
-[#696](https://github.com/blevinn/aginctus/issues/696),
-[#704](https://github.com/blevinn/aginctus/issues/704), and
-[ADR 0005](../adr/0005-provisional-authority-topology.md).
+**Status:** Retired experimental prototype; **not a supported authority API**. See [ADR 0006 (proposed in #917)](https://github.com/blevinn/aginctus/pull/917), [three-layer state](three-layer-state.md), [#696](https://github.com/blevinn/aginctus/issues/696), and [#704](https://github.com/blevinn/aginctus/issues/704).
 
-## What is implemented
+## Removed prototype: historical record
 
-The internal `controllerauthority` package introduced by #865 and #869
-models a host-administrator-authored, **nonsecret** controller enrollment
-record. It has a deliberately fixed pathname:
+The formerly merged `internal/controllerauthority` package (#865/#869 and later work) implemented administrator-created *system/user controller enrollments* in an exact root-owned file. Its code and associated unit tests were deleted by the cleanup stack; the implementation remains available in Git history:
 
-```
+```text
 /etc/aginctus/controller-enrollment.json
 ```
 
-The reader requires the final directory and file to be real, owner-controlled
-objects (no symlinks, group/world writes or ambiguous hard links). The file
-must be a regular file owned by **root** and the parent directory must be
-root-owned and non-writable by less privileged principals. The root-only
-administrative API can create an enrollment or explicitly revoke one under
-a persistent, cooperating-writer flock, with atomic write/rename and fsync.
+It verified owner-controlled files, used explicit create/revoke and epoch/tombstone records, and had narrowly scoped read-only checks. The removed host exclusion primitive from #897 coordinated cooperating host enrollment operations only. No NixOS/Home Manager activation creates this record or deploys its service, and an enrollment match grants **no** Incus or accepted-state authority.
 
-**There is no automatic bootstrap of this file.** Normal NixOS and Home
-Manager modules do not install or activate it. The NixOS module's ordinary
-`environment.etc` output is typically a Nix-store symlink, which the current
-reader intentionally rejects. Any future NixOS integration must provision
-a genuine, independently trusted root-owned file without treating user
-declarations or Nix store contents as an authorization channel.
+**Do not integrate this prototype into a new root-mediated user lifecycle.** ADR 0006 removes the need to merge system/user configured candidates or enlist a root host broker to decide which user owns a project. The prototype had no production Go consumers; its source, tests, and historical security evidence remain accessible in merged PRs and Git history. The project-scoped replacement must reestablish the necessary negative tests for real write paths before activation. [PR #900](https://github.com/blevinn/aginctus/pull/900), a proposed root-owned read-only Unix peer-enrollment socket, was closed as superseded without merging.
 
-Illustrative *synthetic* record (not a production grant):
+The old `domain=host` / `domain=operator` enrollment model is **not** a project authority model. Root-owned configuration may still govern *host* capabilities, but it does not issue a substitute permission grant for project resources.
 
-```json
-{
-  "apiVersion": "aginctus.dev/controller-enrollment/v1alpha1",
-  "enrollments": [
-    {
-      "controllerID": "operator-controller",
-      "domain": "operator",
-      "uid": 1000,
-      "certificateFingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "deploymentID": "demo",
-      "incusProject": "aginctus",
-      "workloadID": "dev",
-      "revisionID": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "generation": 1,
-      "epoch": 1,
-      "actions": ["start", "stop"],
-      "status": "active"
-    }
-  ]
-}
-```
+## Current authority and state model
 
-Every field is required. Root-owned host controllers use `domain=host`,
-`uid=0`, and an **empty** certificate fingerprint; operator controllers
-use a nonroot UID and exactly one pinned restricted-TLS certificate.
-Unknown actions, keys, defaults, broad project selectors, duplicate resources
-or simultaneous host and operator claims fail closed.
+**Incus projects are the authorization and three-layer state scopes** for environment resources. A single project may contain several environments, each with its own accepted-revision pointer, immutable history, resource ownership and cooperating-writer fence. Environment labels, display names and revision records are not independent security principals. Project-wide resources, where supported, require an explicit lifecycle owner rather than implicit sharing across environments.
 
-The root-side create operation accepts only a new exact workload, never an
-implicit takeover. Revocation compares the exact owner/resource and prior
-epoch and writes a retained `revoked` tombstone with an incremented epoch.
-It does not silently delete that history or let a different owner enroll
-in its place. **A tombstone is not evidence that the old process stopped.**
+NixOS/system host policy is a separate root-governed scope. A future independent configured → accepted → observed system-state lifecycle is possible, but neither combines with project revisions nor changes ordinary NixOS activation semantics.
 
-## Live Incus authority is independent
+Accepted state **never** follows from an `AGINCTUS_*` override, Home Manager switch or NixOS switch. Promotion requires independently authenticated, authorized project-scoped CAS; reconciliation pins an accepted revision and separately checks Incus permissions and resource provenance at mutation time. No user-to-root accepted-state patching or automatic authority handoff is part of this contract.
 
-The read-only #867 path separately requests **daemon-reported** facts
-through the exact restricted operator's current TLS session:
-`/1.0?project=NAME`, that identity's `/1.0/certificates/FINGERPRINT`,
-and the exact `/1.0/projects/NAME`. It checks trusted TLS, certificate
-restriction to **only** the selected project, expected Aginctus ownership
-labels and explicit restricted bridge/pool/NIC/disk policy. The host-owned
-policy candidate in #866 includes `restricted.devices.disk=managed` to
-match the executed disposable Incus VM matrix.
+## Retained contracts and historical evidence
 
-The current read callback is an injected, read-only diagnostic interface,
-**not** a cryptographically authenticated session owned by a protected
-executor. A caller could fabricate its output, and an enrollment-only
-match is intentionally named
-`enrollment-matched-not-authorized`. Neither result produces a write token.
+| Component | Useful, bounded behavior | What it does not establish |
+| --- | --- | --- |
+| Retired `ObserveRestrictedOperatorOverTLS` (#892) | Historical test/prototype of fresh pinned HTTPS GET against exact Incus TLS identity | No active client API; repeat authorization negative tests in the actual project-scoped transport |
+| `PreviewAcceptedWorkloadLifecycle` (#895) | Pure comparison of one pinned workload and observed resource; blocks unverified ownership, immutable drift and implicit stop/delete | That a caller-supplied snapshot is authentic, that its environment/project binding is enrolled, or write authorization |
+| Retired `AcquireHostEnrollmentExclusion` (#897) | Historical test/prototype of same-host cooperating-writer exclusion | No live project-scoped fencing API; do not depend on removed symbols |
+| Incus restricted-principal VM evidence | Relevant API-policy positive/negative observations against the pinned Incus version | Blanket confinement of every API, live-operation revocation, or protection from an unrestricted administrator |
 
-## Outstanding trusted writer protocol
+These concepts and historical artifacts are **not interchangeable**. An authenticated TLS read, a local revision pointer, a project-name flag, a matching label, a host-admin enrollment, or a cooperative file lock individually or together do not authorize a write.
 
-Before enabling #438/#439, the execution boundary must actually enforce:
+## Required project-scoped execution contract
 
-1. A kernel-verified peer (or independently authenticated service identity)
-   bound to the root-published enrollment, including a genuinely restricted
-   Incus TLS transport whose private key cannot reach the system/root
-   administrator socket.
-2. Current accepted revision, explicit workload and allowed action checked
-   under one authoritative operation, with independent resource provenance,
-   observed project policy, Incus ETag and host-capability dependency checks.
-3. A monotonically fenced, live exclusive owner across all participating
-   NixOS and Home Manager writers, plus an explicit policy for manual,
-   renamed or uncooperative actors. An enrollment epoch or flock alone
-   cannot satisfy this.
-4. Durable operation journaling *before* the first Incus mutation,
-   cancellation/revocation and partial-result handling; no fictional
-   rollback of an already accepted asynchronous Incus operation.
-5. Disposable VM exercises of host/user conflicts, in-flight TLS revocation,
-   project-policy drift, service crash/recovery, and explicit handoff/rollback
-   while preserving gateway/volume/secret owners.
+1. **Explicit selected project/environment.** Resolve immutable environment identity under the verified Incus server/project authority. Project credentials authorize access; environment ownership and versioned records supply lifecycle correctness. A project admin may act outside Aginctus, so resource labels are never ACLs.
+2. **Project-owned accepted state.** Promote typed, nonsecret candidate intent through independently authenticated per-environment CAS, using project-scoped storage/service access; preserve optional explicit project-wide records. The state service may not hold a blanket host-admin credential and act on untrusted selectors.
+3. **Pinned operation.** Observe resources from the same verified project authority and pin the selected accepted environment revision before planning. Reject stale pins, cross-environment collisions, foreign resources, unauthorized adoption and ambiguous shared ownership.
+4. **Mutation-time authorization and fencing.** Use independently authenticated Incus credentials, action-specific preflight, a cooperating-controller fence with revision and resource checks, fresh ETags, and independent host-capability observation. Root host capability dependencies cannot be repaired from untrusted environment declarations.
+5. **Durable uncertainty.** Record operations before potentially mutating; mark partial, cancelled, revoked or crashed operations uncertain until independently observed. Incus operations are not transactions and do not automatically roll back.
+6. **Independent system boundary.** Host firewall, daemon, pool and trusted host capabilities stay under NixOS/root. A future system-level three-layer history may share generic CAS/revision primitives, **not** project authorization credentials or cross-principal merging.
 
-ADR 0005 and #704 remain proposed/open. Do not infer security sign-off from
-merged implementation code, a policy match, a successful hermetic test or
-post-operation TLS denial. No pilot-host or production Incus state is changed
-by this experimental package.
+## Acceptance before activating a writer
+
+Disposable Incus testing must show: two environments in one project with independent CAS/fencing and collision refusal; restricted vs unrestricted principal behavior including forged project/environment selectors; host-policy and cross-project denial; revision changes during execution; in-flight TLS revocation and asynchronous-operation uncertainty; state-service restart/backup; and no secret or protected-volume disclosure. Preserve AppArmor and transport assumptions in the test evidence.
+
+[#704](https://github.com/blevinn/aginctus/issues/704) remains a security gate. No production system/user handoff, Home Manager mutating unit, privileged proxy or pilot-host mutation is authorized by this document. The implementation should avoid creating a new broker merely to preserve the obsolete root/user enrollment prototype.

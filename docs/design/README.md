@@ -12,6 +12,11 @@ implemented contracts, operator procedures and evidence requirements.
 - [Native OCI feasibility](native-oci-feasibility.md) — experimental image/runtime investigation.
 - [Three-layer state](three-layer-state.md) — configured, accepted and current state, promotion and recovery.
 
+## CLI design
+
+- [Environment-centric CLI north star](cli-north-star.md) — agreed top-level vocabulary, active environment selection, state introspection, images and explicit plumbing opt-in.
+- [Domain-owned CLI migration](cli-domain-ownership.md) — decomposition of existing Cobra operation adapters into domain-owned implementations.
+
 ## Authority and operator integration
 
 - [Home Manager operator](home-manager-operator.md) — standalone and combined operator surfaces.
