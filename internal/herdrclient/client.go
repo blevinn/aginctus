@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/managementnetwork"
+	"github.com/blevinn/aginctus/internal/orchestration/managementnetwork"
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	nativedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/native"

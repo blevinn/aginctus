@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/blevinn/aginctus/internal/acceptedstate"
+	"github.com/blevinn/aginctus/internal/orchestration/state"
 	"github.com/blevinn/aginctus/internal/filestate"
 )
 

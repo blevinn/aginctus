@@ -10,7 +10,8 @@ import unittest
 from pathlib import Path
 
 from scripts.acceptance import local_report
-from scripts.checks import ci_summary, coverage, local_acceptance
+from scripts.checks import coverage, local_acceptance
+from tools.ci import ci_summary
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_ID = "aginctus-acceptance.ABCD1234"
