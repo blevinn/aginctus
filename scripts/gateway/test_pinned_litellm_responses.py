@@ -109,7 +109,7 @@ class PinnedResponsesProbeTests(unittest.TestCase):
 
     def test_probe_image_matches_aginctus_gateway_pin(self):
         repo_root = Path(__file__).resolve().parents[2]
-        gateway_settings = (repo_root / "nix/settings-options.nix").read_text(
+        gateway_settings = (repo_root / "nix/modules/settings-options.nix").read_text(
             encoding="utf-8")
         self.assertIn('default = "ghcr.io/berriai/litellm:v1.103.0";',
                       gateway_settings)
