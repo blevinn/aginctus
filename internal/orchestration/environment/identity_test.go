@@ -42,3 +42,20 @@ func TestMultipleEnvironmentsInProject(t *testing.T) {
 	if err := b.Validate(); err != nil { t.Fatal(err) }
 	if a.SameEnvironment(b) { t.Fatal("environments in same project collapsed together") }
 }
+
+func TestBindingProjectMatchesIncusProjectScope(t *testing.T) {
+	for _, project := range []string{"dev_team", "Team.1", "A-2", "a"} {
+		d := sample()
+		d.Binding.Project = project
+		if err := d.Validate(); err != nil {
+			t.Fatalf("Incus-accepted project %q rejected: %v", project, err)
+		}
+	}
+	for _, project := range []string{"default", "", "../escape", "bad/name", " bad", "bad\nname"} {
+		d := sample()
+		d.Binding.Project = project
+		if err := d.Validate(); err == nil {
+			t.Fatalf("accepted invalid or unsupported Incus project %q", project)
+		}
+	}
+}
