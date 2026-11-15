@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"slices"
 
-	"github.com/blevinn/aginctus/internal/acceptedstate"
+	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
 )
 
 // AcceptedLifecycleClass is a pure, read-only intent classification. It is
@@ -13,10 +13,10 @@ import (
 type AcceptedLifecycleClass string
 
 const (
-	AcceptedBlocked AcceptedLifecycleClass = "blocked"
-	AcceptedUnchanged AcceptedLifecycleClass = "unchanged"
+	AcceptedBlocked          AcceptedLifecycleClass = "blocked"
+	AcceptedUnchanged        AcceptedLifecycleClass = "unchanged"
 	AcceptedNoStartRequested AcceptedLifecycleClass = "no-start-requested"
-	AcceptedWouldStart AcceptedLifecycleClass = "would-start-if-authorized"
+	AcceptedWouldStart       AcceptedLifecycleClass = "would-start-if-authorized"
 )
 
 type AcceptedLifecyclePreview struct {
@@ -54,12 +54,12 @@ func PreviewAcceptedWorkloadLifecycle(
 	w := snapshot.Workload
 	spec := acceptedstate.DeploymentSpec{
 		APIVersion: acceptedstate.DeploymentAPIVersion,
-		Kind: acceptedstate.DeploymentKind,
+		Kind:       acceptedstate.DeploymentKind,
 		Selection: acceptedstate.SelectionManifest{
-			APIVersion: acceptedstate.SelectionAPIVersion,
-			Kind: acceptedstate.SelectionKind,
-			DeploymentID: snapshot.DeploymentID,
-			IncusProject: snapshot.IncusProject,
+			APIVersion:        acceptedstate.SelectionAPIVersion,
+			Kind:              acceptedstate.SelectionKind,
+			DeploymentID:      snapshot.DeploymentID,
+			IncusProject:      snapshot.IncusProject,
 			SelectedWorkloads: []string{w.ID},
 		},
 		Workloads: []acceptedstate.WorkloadSpec{w},
@@ -87,9 +87,9 @@ func PreviewAcceptedWorkloadLifecycle(
 		return result, nil
 	}
 	expected := map[string]string{
-		"user.aginctus.managed": "true",
+		"user.aginctus.managed":  "true",
 		"user.aginctus.resource": "workload",
-		"user.aginctus.role": "agent-workload",
+		"user.aginctus.role":     "agent-workload",
 		"user.aginctus.workload": w.ID,
 		// Require exact accepted deployment provenance for future delegated
 		// writers. Legacy project-only markers need explicit migration.
@@ -102,10 +102,10 @@ func PreviewAcceptedWorkloadLifecycle(
 		}
 	}
 	if observed.Config["user.aginctus.environment-id"] != "" {
-\t\tresult.Reason = "ownership-unverified"
-\t\treturn result, nil
-\t}
-\tif observed.State != "Running" && observed.State != "Stopped" {
+		result.Reason = "ownership-unverified"
+		return result, nil
+	}
+	if observed.State != "Running" && observed.State != "Stopped" {
 		result.Reason = "lifecycle-unverified"
 		return result, nil
 	}
