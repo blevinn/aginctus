@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -71,6 +72,36 @@ func TestMonitorExposesLiveExecutionAndReuseCannotMixRuns(t *testing.T) {
 	next, err := engine.Execute(t.Context(), plan, ExecuteOptions{Monitor: monitor})
 	if err != nil || next.Report.RunID == result.Report.RunID || monitor.Snapshot().RunID != result.Report.RunID {
 		t.Fatalf("monitor reuse mixed independent runs: %v", err)
+	}
+}
+
+func TestAbandonedObserverCannotBlockExecutionOrHideTerminalStatus(t *testing.T) {
+	engine, _, _, plan := gateEngine(nil, CheckPolicy{})
+	monitor := collection.NewMonitor()
+	s, err := monitor.Subscribe(monitor.Snapshot().Cursor())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	// Enough independent operations to exceed both subscriber and trace bounds.
+	first := plan.Steps[0]
+	plan.Steps = nil
+	for i := range collection.EventLimit {
+		step := first
+		step.ID = fmt.Sprintf("operation-%d", i)
+		plan.Steps = append(plan.Steps, step)
+	}
+	result, err := engine.Execute(t.Context(), plan, ExecuteOptions{Monitor: monitor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	validateReport(t, result, report.Completed)
+	if !monitor.Snapshot().Finished || len(result.Operations) != len(plan.Steps) {
+		t.Fatal("observer changed execution")
+	}
+	u, err := s.Next(t.Context())
+	if err != nil || !u.Gap {
+		t.Fatalf("slow observer was not disconnected with a gap: %+v %v", u, err)
 	}
 }
 
