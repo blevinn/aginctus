@@ -36,6 +36,26 @@ func TestExternalConsumer(t *testing.T) {
 	}
 }
 
+// Public-only reporting consumers need no internal collector or product host.
+func TestPublicSnapshotConsumer(t *testing.T) {
+	snapshot := observability.Snapshot{SchemaVersion: observability.SchemaVersion, RunID: "external-run"}
+	if err := snapshot.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	cursor := snapshot.Cursor()
+	if cursor.RunID != snapshot.RunID || cursor.Sequence != snapshot.Watermark {
+		t.Fatal("cursor lost snapshot identity")
+	}
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var received observability.Snapshot
+	if err := json.Unmarshal(encoded, &received); err != nil || received.Validate() != nil {
+		t.Fatalf("invalid public snapshot: %v", err)
+	}
+}
+
 func TestPublicTargetAndCheckConsumer(t *testing.T) {
 	ctx := context.Background()
 	raw := json.RawMessage(`{"model":"fixture-model","image":"custom:helper-v2","database_image":"custom:store-v3"}`)
