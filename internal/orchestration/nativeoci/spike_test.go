@@ -407,6 +407,36 @@ func TestDaemonOCI(t *testing.T) {
 	if err != nil || len(repeat.Created) != 0 || len(repeat.Verified) != 2 || fenceChecks != 2 {
 		t.Fatalf("native stopped gateway reuse was not a no-op: %+v %v", repeat, err)
 	}
+	// Stop is tested as a non-destructive no-op on the new stopped service
+	// containers. We deliberately do NOT start unconfigured containers merely
+	// to test the stop operation in this disposable VM.
+	noopGuardCalls:=0
+	noopStop,err:=gateway.StopNativeGatewayWithClient(ctx,topology,gatewayDevices,gatewayPair,
+		gatewayStopVMClient{client},func(context.Context)error{noopGuardCalls++;return nil})
+	if err!=nil || len(noopStop.Changed)!=0 || len(noopStop.Verified)!=2 || noopGuardCalls!=0 {
+		t.Fatalf("native stopped service noop: %+v %v guards=%d",noopStop,err,noopGuardCalls)
+	}
+	if _,err:=gateway.StopNativeGatewayWithClient(ctx,topology,gatewayDevices,gatewayPair,
+		gatewayStopVMClient{client},nil);err==nil {
+		t.Fatal("stop permitted missing authorization guard")
+	}
+	// Alter the ownership marker through the disposable test administrator
+	// only. The guarded stop must refuse the foreign instance and retain all
+	// resources. No attempt is made to repair/adopt it.
+	foreignInstance,etag,err:=client.GetInstance("litellm-1")
+	if err!=nil {t.Fatal(err)}
+	foreignPut:=foreignInstance.Writable()
+	foreignPut.Config["user.aginctus.resource"]="foreign"
+	op,err:=client.UpdateInstance("litellm-1",foreignPut,etag)
+	if err!=nil {t.Fatal(err)}
+	if err:=op.WaitContext(ctx);err!=nil {t.Fatal(err)}
+	if _,err:=gateway.StopNativeGatewayWithClient(ctx,topology,gatewayDevices,gatewayPair,
+		gatewayStopVMClient{client},func(context.Context)error{return nil});err==nil {
+		t.Fatal("stop accepted foreign existing gateway ownership")
+	}
+	if _,_,err:=client.GetStoragePoolVolume("spike","custom","gateway-postgres");err!=nil {
+		t.Fatal("failed stop must preserve database volume")
+	}
 	images, err := server.UseProject("default").GetImages()
 	if err != nil || len(images) != 0 {
 		t.Fatal("OCI import leaked into the default project")
@@ -439,4 +469,9 @@ type gatewayStoppedVMClient struct{ incus.InstanceServer }
 
 func (c gatewayStoppedVMClient) CreateInstance(req api.InstancesPost) (native.InstanceCreateOperation, error) {
 	return c.InstanceServer.CreateInstance(req)
+}
+
+type gatewayStopVMClient struct{ incus.InstanceServer }
+func (c gatewayStopVMClient) UpdateInstanceState(name string,state api.InstanceStatePut,etag string)(native.InstanceOperation,error) {
+	return c.InstanceServer.UpdateInstanceState(name,state,etag)
 }
