@@ -89,7 +89,7 @@ jobs:
 
       - name: release packaging preview (no tag or publish)
         id: release_preview
-        run: nix --quiet develop --no-update-lock-file -c bash scripts/release/package.sh "$RUNNER_TEMP/release-preview"
+        run: nix --quiet develop --no-update-lock-file -c bash tools/release/package.sh "$RUNNER_TEMP/release-preview"
 
       - name: diff check
         id: whitespace
