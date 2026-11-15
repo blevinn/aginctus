@@ -83,3 +83,30 @@ func TestNativeGatewayStartStopsAfterCredentialRevocation(t *testing.T) {
 		t.Fatalf("credential revocation did not fence second service: %+v %v",res,err)
 	}
 }
+
+func TestNativeGatewayStartRejectsRevokedCredentialBeforeWrites(t *testing.T) {
+	top,devices,pair,client,b:=startFixture(t)
+	secret:="synthetic-private-credential"
+	deny:=runtimeVerifierFunc(func(context.Context,NativeGatewayRuntimeBinding)error{return fmt.Errorf(secret)})
+	ready:=gatewayReadyFunc(func(context.Context,string,string)error{t.Fatal("readiness called after failed delivery");return nil})
+	res,err:=StartNativeGatewayWithClient(context.Background(),top,devices,pair,client,
+		func(context.Context)error{return nil},b,deny,ready)
+	if err==nil || len(res.Started)!=0 || len(client.transitions)!=0 ||
+		strings.Contains(err.Error(),secret) {t.Fatalf("revoked evidence not fenced or redacted: %+v %v",res,err)}
+}
+func TestNativeGatewayStartFencesSecondServiceAfterGuardLoss(t *testing.T) {
+	top,devices,pair,client,b:=startFixture(t)
+	verify:=runtimeVerifierFunc(func(context.Context,NativeGatewayRuntimeBinding)error{return nil})
+	ready:=gatewayReadyFunc(func(context.Context,string,string)error{return nil})
+	calls:=0
+	guard:=func(context.Context)error{
+		calls++
+		if calls==2{return fmt.Errorf("writer lease revoked")}
+		return nil
+	}
+	res,err:=StartNativeGatewayWithClient(context.Background(),top,devices,pair,client,guard,b,verify,ready)
+	if err==nil || len(res.Started)!=1 || len(res.Ready)!=1 ||
+		len(client.transitions)!=1 || client.transitions[0]!="postgres-1" {
+		t.Fatalf("second service not fenced after guard loss: %+v %v",res,err)
+	}
+}
