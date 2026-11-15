@@ -8,7 +8,7 @@ fresh-host deployment, provider billing or human release approval.
 
 Executed against clean Aginctus source
 `57c2da642f5bcb400bdc4430b8102c2a181e877b`, with its unchanged lockfile.
-`nix/patched-opencode.nix` appends the event-drain source patch and asserts
+`nix/workloads/patched-opencode.nix` appends the event-drain source patch and asserts
 OpenCode `1.15.10`. The exported runtime and workload use the same binding.
 
 ```sh
