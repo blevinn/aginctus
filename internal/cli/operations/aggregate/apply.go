@@ -15,7 +15,7 @@ import (
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
 	nativedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/native"
-	"github.com/blevinn/aginctus/internal/statevolume"
+	"github.com/blevinn/aginctus/internal/incus/statevolume"
 	"github.com/blevinn/aginctus/internal/workload"
 )
 

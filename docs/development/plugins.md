@@ -370,7 +370,7 @@ are described below; product adoption remains work under
 Run the execution and caller regression tests:
 
 ```sh
-nix develop -c go test ./internal/orchestration/... ./internal/statevolume/... ./internal/cli/... ./internal/gateway/...
+nix develop -c go test ./internal/orchestration/... ./internal/incus/statevolume/... ./internal/cli/... ./internal/gateway/...
 ```
 
 ## Existing engine: condition gates and bounded readiness

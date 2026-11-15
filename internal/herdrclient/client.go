@@ -9,7 +9,7 @@ import (
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	nativedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/native"
-	"github.com/blevinn/aginctus/internal/statevolume"
+	"github.com/blevinn/aginctus/internal/incus/statevolume"
 )
 
 type Spec struct {
