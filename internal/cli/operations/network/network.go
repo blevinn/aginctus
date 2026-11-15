@@ -6,7 +6,7 @@ import (
 	"io"
 
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/managementnetwork"
+	"github.com/blevinn/aginctus/internal/orchestration/managementnetwork"
 )
 
 type Options struct {

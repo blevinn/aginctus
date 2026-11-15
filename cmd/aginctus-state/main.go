@@ -12,7 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/blevinn/aginctus/internal/acceptedstate"
+	"github.com/blevinn/aginctus/internal/orchestration/state"
 )
 
 func run(ctx context.Context, stateDir, socket string) error {
