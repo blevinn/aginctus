@@ -40,7 +40,7 @@ var acceptedFingerprint = regexp.MustCompile(`^[0-9a-f]{64}$`)
 //
 // A caller-provided snapshot can be forged: only LocalRevisionPin can
 // establish its same-UID provenance, and neither that provenance nor this
-// preview grants controller authority. Even "would-start" is contingent on
+// preview grants controller authority. This v1alpha1 workload-only preview\n// recognizes legacy deployment markers and intentionally refuses a resource\n// that already carries a new environment ownership marker: a project may\n// contain multiple independently versioned environments, so migration must\n// establish and verify the full project/environment binding first. Even\n// "would-start" is contingent on
 // separately validated server-restricted TLS, volume/device/host capability
 // policy, exclusive controller fencing and fresh mutation-time ETags.
 func PreviewAcceptedWorkloadLifecycle(
@@ -96,7 +96,7 @@ func PreviewAcceptedWorkloadLifecycle(
 			return result, nil
 		}
 	}
-	if observed.State != "Running" && observed.State != "Stopped" {
+	if observed.Config["user.aginctus.environment-id"] != "" {\n\t\tresult.Reason = "ownership-unverified"\n\t\treturn result, nil\n\t}\n\tif observed.State != "Running" && observed.State != "Stopped" {
 		result.Reason = "lifecycle-unverified"
 		return result, nil
 	}
