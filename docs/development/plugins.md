@@ -228,12 +228,28 @@ explicit fixtures/development, not evidence of a verified remote source revision
 No module dependency changes or vendor hash changes are needed for the empty
 default selection in this increment.
 
+`cmd/aginctus` composes the registry before dispatching any command and injects
+it into the CLI. `aginctus plugins inventory` emits the experimental
+`aginctus.dev/compiled-plugins/v1alpha1` JSON envelope with dependency-first entries,
+implementation/API versions, sorted named capabilities and dependencies. Empty
+lists are `[]`. Reads use detached registry metadata without callbacks,
+configuration loading, Incus access or credential reads. Descriptor/dependency
+composition failure aborts even before command dispatch. No inventory read creates
+an instance or grants access; implementation version strings are declarations,
+not verified provenance. Existing host-side `Registry.Assemble` rejects unknown
+runtime references before contribution callbacks; generic CLI runtime-instance
+configuration remains future integration work.
+
+```sh
+nix develop -c go run ./cmd/aginctus plugins inventory
+```
+
 The default selection is intentionally empty until products migrate in B–D.
 Existing product commands retain their current implementation paths; an empty
 contract-plugin selection is **not a product-free executable**. Minimal/custom
 selection currently controls only this new composition boundary, not legacy
-product code or image outputs. Binary inventory and selected/omitted build
-fixtures follow in the next A7 increments. Selection never imports guest images,
+product code or image outputs. Selected/omitted build fixtures follow in the next
+A7 increment. Selection never imports guest images,
 deploys resources, creates runtime instances or grants host/network/model/MCP
 access. These are trusted in-process implementations, not sandboxed extensions.
 
@@ -634,7 +650,7 @@ nix develop -c go test -race ./internal/plugins ./internal/orchestration ./inter
 ## Next slices
 
 Further service families, product adoption, planned graph inventory and ongoing
-health remain integration work. Binary inventory, build fixtures, Nix image
+health remain integration work. Build fixtures, Nix image
 integration and product extraction follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
 by these foundation slices. Additional service families should arrive with concrete
