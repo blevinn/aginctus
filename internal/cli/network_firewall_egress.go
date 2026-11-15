@@ -6,7 +6,7 @@ import (
 
 	networkops "github.com/blevinn/aginctus/internal/cli/operations/network"
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/firewall"
+	"github.com/blevinn/aginctus/internal/host/net/firewall"
 )
 
 type egressStateFile = firewall.EgressStateFile

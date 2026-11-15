@@ -25,7 +25,7 @@ let
   egressTest = self.packages.${system}.aginctus.overrideAttrs (_: {
     buildPhase = ''
       runHook preBuild
-      go test -c ./internal/firewall -o aginctus-firewall-test
+      go test -c ./internal/host/net/firewall -o aginctus-firewall-test
       runHook postBuild
     '';
     installPhase = ''
