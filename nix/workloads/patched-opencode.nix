@@ -4,6 +4,6 @@
 assert pkgs.opencode.version == "1.15.10";
 pkgs.opencode.overrideAttrs (old: {
   patches = (old.patches or [ ]) ++ [
-    ./patches/opencode-1.15.10-run-event-drain.patch
+    ../patches/opencode-1.15.10-run-event-drain.patch
   ];
 })
