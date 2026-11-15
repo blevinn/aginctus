@@ -42,7 +42,7 @@
         let
           pkgs = import nixpkgs { inherit system; };
           herdrPackage = herdr.packages.${system}.herdr;
-          herdrClientCommand = import ./nix/herdr-client-command.nix { inherit pkgs herdrPackage; };
+          herdrClientCommand = import ./nix/workloads/herdr-client-command.nix { inherit pkgs herdrPackage; };
           releaseVersion = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./internal/cli/VERSION);
           goPackages = import ./nix/packages/go.nix {
             inherit pkgs releaseVersion self;
@@ -90,7 +90,7 @@
             inherit system;
             modules = [
               "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
-              (import ./nix/guest-state-bindings.nix {
+              (import ./nix/workloads/guest-state-bindings.nix {
                 bindings = [
                   {
                     class = "system";
@@ -176,7 +176,7 @@
           '';
 
           # Scoped source patch for the flake-pinned CLI event-consumer join.
-          aginctusPinnedOpenCode = import ./nix/patched-opencode.nix { inherit pkgs; };
+          aginctusPinnedOpenCode = import ./nix/workloads/patched-opencode.nix { inherit pkgs; };
 
           # Runtime-only gateway configuration: no endpoint, model or key is
           # materialized into the Nix store. Herdr's PATH resolves this wrapper.
