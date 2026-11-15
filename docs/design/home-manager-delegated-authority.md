@@ -1,5 +1,8 @@
 # Delegated Home Manager execution: proposed authority disposition
 
+> **Architecture update (2026-11-15):** [ADR 0006](../adr/0006-environment-incus-authority.md) adopts environment-scoped Incus project authority. Historical system/user composite or separate-mode proposals below are superseded; retained state/host safety gates remain in force. Do not implement cross-principal partial merges or privileged write APIs from this historical design.
+
+
 Status: **proposed, not approved for cross-principal writes**. Parent: [#704](https://github.com/blevinn/aginctus/issues/704). Related: [#441](https://github.com/blevinn/aginctus/issues/441), [#696](https://github.com/blevinn/aginctus/issues/696), [#426](https://github.com/blevinn/aginctus/issues/426), [ADR 0004](../adr/0004-three-layer-state.md), [executed Incus evidence](incus-project-authority-evidence.md).
 
 ## Recommendation after the 7.5.1 disposable tests
