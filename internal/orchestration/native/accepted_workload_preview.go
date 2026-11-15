@@ -62,10 +62,7 @@ func PreviewAcceptedWorkloadLifecycle(
 	if err := spec.Validate(); err != nil {
 		return AcceptedLifecyclePreview{}, errors.New("invalid pinned workload preview selection")
 	}
-	if snapshot.Revision.APIVersion != acceptedstate.RevisionAPIVersion ||
-		snapshot.Revision.Generation == 0 ||
-		!acceptedFingerprint.MatchString(snapshot.Revision.ID) ||
-		!acceptedFingerprint.MatchString(snapshot.Revision.SpecDigest) {
+	if snapshot.Revision.ValidateIdentity() != nil {
 		return AcceptedLifecyclePreview{}, errors.New("missing or invalid accepted revision identity")
 	}
 	result := AcceptedLifecyclePreview{
