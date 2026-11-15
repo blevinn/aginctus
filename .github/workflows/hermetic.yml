@@ -173,7 +173,7 @@ jobs:
           GOSUMDB: "off"
         run: |
           set -euo pipefail
-          go run ./cmd/aginctus help | python3 scripts/check_docs_examples.py
+          go run ./cmd/aginctus help | python3 tools/docs/check_docs_examples.py
 
   static-fast:
     if: ${{ github.event_name == 'pull_request' }}
@@ -235,7 +235,7 @@ jobs:
           bash scripts/acceptance/opencode-test.sh
           bash scripts/acceptance/opencode-live-adapter-test.sh
       - name: local Markdown links
-        run: python3 scripts/check_markdown_links.py
+        run: python3 tools/docs/check_markdown_links.py
 
   # A failed/ambiguous selector must never exempt a Nix-sensitive change.
   # This separate result is advisory until the required gate migrates in #709.

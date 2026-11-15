@@ -6,7 +6,7 @@ from pathlib import Path
 
 from markdown_it import MarkdownIt
 
-from scripts import check_docs_examples, check_markdown_links
+from tools.docs import check_docs_examples, check_markdown_links
 
 HELP = """Usage:
   aginctus [command]
