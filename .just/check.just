@@ -138,3 +138,13 @@ coverage hermetic_json:
 [no-cd]
 coverage-json hermetic_json:
     @env GOFLAGS= GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go run ./cmd/aginctus-check --format json --coverage --hermetic-json {{quote(hermetic_json)}}
+
+# Operator-initiated local-only setup for the human host acceptance runbook.
+# Not dependencies of ci/all; no Incus queries, activation, or inference.
+[no-cd]
+host-acceptance-preflight:
+    @bash scripts/acceptance/host-session.sh preflight
+
+[no-cd]
+host-acceptance-init:
+    @bash scripts/acceptance/host-session.sh init
