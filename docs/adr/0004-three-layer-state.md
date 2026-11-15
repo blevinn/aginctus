@@ -1,5 +1,8 @@
 # ADR 0004: Separate configured, accepted, and current state
 
+> **Architecture update (2026-11-15):** [ADR 0006](../adr/0006-environment-incus-authority.md) adopts environment-scoped Incus project authority. Historical system/user composite or separate-mode proposals below are superseded; retained state/host safety gates remain in force. Do not implement cross-principal partial merges or privileged write APIs from this historical design.
+
+
 - Status: Proposed (three-layer contract agreed in principle; system/user authorization provisional pending #704)
 - Date: 2026-11-08
 - Tracking: [#693](https://github.com/blevinn/aginctus/issues/693)
