@@ -455,7 +455,7 @@ nix develop -c go test -race ./internal/observability/... ./internal/orchestrati
 nix develop -c just check all
 ```
 
-### Core lifecycle and retained history
+### Core lifecycle, event vocabulary and retained history
 
 The first A5 increment publishes experimental `pkg/observability` events and a
 bounded `Report`. Enable collection explicitly on the existing engine:
