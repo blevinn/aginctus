@@ -1,68 +1,24 @@
-# Lifecycle unit ownership audit (system vs Home Manager)
+# Read-only Aginctus unit inventory
 
-The read-only `operator units-audit` CLI helps identify competing Aginctus
-**image-update and workload-reconciliation** systemd units before any
-operator control-plane handoff ([#441](https://github.com/blevinn/aginctus/issues/441)).
+The `aginctus operator units-audit` command observes known Aginctus systemd units in the **host system manager and the calling user's manager**. This inventory is **not a system/user controller handoff check** and confers no Incus write authority.
 
-From the **unprivileged operator account** whose future Home Manager user
-services would run:
+Run it as the unprivileged account whose user units you want to inspect:
 
 ```sh
-aginctus operator units-audit --owner system
-# or, for a proposed user-owned lifecycle:
-aginctus operator units-audit --owner user
+aginctus operator units-audit
 ```
 
-This command does not read Nix/Aginctus configuration. It rejects global
-configuration overrides or `--configuration-file`, never calls `sudo`
-or `systemctl start/stop/enable`, and does not read secrets or invoke
-Incus. It executes only `systemctl --system show` and
-`systemctl --user show`, with a bounded timeout, against this **fixed
-allowlist of lifecycle service names**:
+The command rejects `--owner`, configuration overrides and root invocation. It never invokes `sudo`, mutates systemd state, queries Incus, reads service environment/argv or opens protected credentials. It queries only `LoadState`, `ActiveState`, and `UnitFileState` with a bounded timeout for:
 
 - `aginctus-image-herdr-client.service`
 - `aginctus-image-opencode-workload.service`
-- `aginctus-image-update.service` (reserved user-side generic name)
+- `aginctus-image-update.service`
 - `aginctus-reconcile.service`
 
-The returned properties are restricted to `LoadState`, `ActiveState`,
-and `UnitFileState`; execution commands, environment variables, drop-ins,
-and raw systemctl errors are neither requested nor printed. `active`
-and `installed` both count as possible competing authorities, even if
-the installed service is currently disabled. `not-found` with consistent
-inactive metadata is `absent`; unexpected, denied, offline, masked or
-inconsistent replies are `unverified`. Conflicts or any unverified
-unit yield a nonzero exit status. The selected owner's own known units
-may be installed; another owner's must be absent.
+Installed and active are **observations**. Neither is evidence of competing authority or of exclusive controller ownership; both manager inventories may contain the same names. Unsupported/ambiguous/denied systemctl responses are `unverified` and cause nonzero exit. `not-found` with consistent inactive evidence is `absent`.
 
-This is **not** evidence of a globally exclusive controller. It inspects
-only the caller's user manager and the system manager, not another
-user account's `systemd --user`, templated/renamed services, manual
-CLI processes, unattended external controllers, image aliases, or Incus
-project/resource ownership. A successful report must not authorize
-writes; future opt-in user units require mutation-time guards and
-explicit project capability checks before any reconciliation. If the
-user manager is unavailable (for example, no user bus or lingering),
-the result is *unverified*, never permission to proceed.
+A complete report covers only these **two managers**. It cannot enumerate other users, renamed/templated units, manual reconciler processes, Incus administrators, projects, remote clients or environments. Project authority follows Incus credentials; each environment has its own accepted revision history and lifecycle ownership within its project. Authenticating project-state writers, fencing mutations and recovering from crashes remain requirements under [#696](https://github.com/blevinn/aginctus/issues/696) and [#704](https://github.com/blevinn/aginctus/issues/704).
 
-Host-only Aginctus DNS/DHCP/egress firewall services are intentionally
-**excluded**: keeping those root-owned alongside an operator lifecycle
-is a supported combined design, not a competing workload controller.
+Host firewall and network enforcement units are outside this workload inventory because they remain independently root-owned. The separate [gateway credential metadata audit](operator-state-audit.md) has historical `--owner` semantics pending its own host-diagnostic replacement; it never authorizes Incus mutation.
 
-Use [gateway state audit](operator-state-audit.md) separately to detect
-credential-state collisions. Neither diagnostic copies, reads, or moves
-gateway credentials. Reversible ownership migration belongs to [#442](https://github.com/blevinn/aginctus/issues/442).
-
-
-## Package-version diagnostics
-
-The former `operator package-audit --owner system|user` command and its
-NixOS/Home Manager `operator-package.json` parity manifests were retired.
-They compared package *declarations* to the current CLI executable, not to
-running services, authenticated project sessions or protocol compatibility.
-An ordinary Nix profile switch remains an installation concern; it is not
-an accepted-state promotion or Incus project authorization grant.
-
-Inspect actual running service identity, project-level accepted revisions and
-independently authenticated Incus credentials through their owning subsystems.
-No replacement package-identity check has been activated in this cleanup.
+The former `operator package-audit --owner system|user` and its Nix package declaration manifests have been retired. A process's declared Nix output is not verification of running-service protocol compatibility or project authority.
