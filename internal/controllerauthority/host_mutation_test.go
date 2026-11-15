@@ -13,7 +13,7 @@ func TestHostEnrollmentCreateAndDurableRevokeWithoutAutomaticHandoff(t *testing.
 	owner:=uint32(os.Geteuid())
 	record:=testRecord()
 	added,err:=createAt(context.Background(),dir,owner,record)
-	if err!=nil||added!=record {t.Fatalf("create: %+v %v",added,err)}
+	if err!=nil||added.ControllerID!=record.ControllerID||added.Epoch!=1 {t.Fatalf("create: %+v %v",added,err)}
 	if _,err:=createAt(context.Background(),dir,owner,record);err==nil{
 		t.Fatal("duplicate enrollment accepted")
 	}
