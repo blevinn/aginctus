@@ -119,6 +119,8 @@ func TestAcceptedLifecyclePreviewRejectsInvalidAcceptedIntentAndNoObservation(t 
 		{"implicit-profiles",func(s *acceptedstate.PinnedWorkloadSnapshot){s.Workload.Profiles=nil}},
 		{"absent-revision",func(s *acceptedstate.PinnedWorkloadSnapshot){s.Revision.ID=""}},
 		{"missing-digest",func(s *acceptedstate.PinnedWorkloadSnapshot){s.Revision.SpecDigest=""}},
+		{"forged-generation",func(s *acceptedstate.PinnedWorkloadSnapshot){s.Revision.Generation++}},
+		{"forged-digest",func(s *acceptedstate.PinnedWorkloadSnapshot){s.Revision.SpecDigest=strings.Repeat("f",64)}},
 	}{
 		t.Run(tc.name,func(t *testing.T){
 			s,_:=acceptedPreviewFixture(t)
