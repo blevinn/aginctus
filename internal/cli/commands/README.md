@@ -1,31 +1,36 @@
 # Cobra command packages
 
-The public `aginctus` command tree is composed by
-`internal/cli/commands_basic.go`. Command registration lives in directories
-named for the corresponding top-level CLI command and, where useful, nested
-families. Each registration package owns flags, help text, argument validation
-and Cobra command construction, while the `internal/cli` layer owns its
-existing domain execution functions and dependency injection.
+The public `aginctus` command tree is assembled afresh by
+`internal/cli/commands_basic.go`. Registration is owned by
+`internal/cli/commands/<family>`; each package owns flags, help,
+syntax/confirmation validation and presentation. `internal/cli`
+provides the typed execution capabilities and dependencies.
 
 ## Dependency direction
 
+```text
+cmd/aginctus -> internal/cli
+                  |
+                  +-> internal/cli/commands/* (Cobra parsing, typed callbacks)
+                  +-> internal/cli/operations/* (application behavior)
+                                      |
+                                      +-> internal/<domain>/*
 ```
-cmd/aginctus -> internal/cli (root + execution adapters)
-                   |
-                   +-> internal/cli/commands/{testenv,network,operator,...}
-                   |          (Cobra syntax, handler interfaces)
-                   +-> internal/{config,workload,gateway,testenv,...}
-                              (domain behavior)
-```
 
-Subpackages must **not** import `internal/cli`: doing so would create an
-import cycle and mix parsing with privileged execution. Avoid global Cobra
-commands, `init()` registration and generic name-to-action switches.
-Construct a new tree for each invocation; isolate stateful flag variables to
-that invocation. Typed `Handlers` structs bind to the existing implementation
-and keep side effects behind leaf-specific parsing and confirmation checks.
+Registration packages must never import `internal/cli` or its operation
+packages, and must not open files, run host commands, or register global Cobra
+command trees. The runtime composes capabilities at individual command
+leaves, after argument and confirmation validation. This dependency rule is
+exercised by the CLI architecture tests.
 
-Do not place dedicated-worker operations under `aginctus testenv`: those
-belong exclusively to the distinct operator-only `aginctus-testenv` binary.
+The gateway asset family still composes some provider/model/MCP/catalog
+actions using an injected `gatewaycontrol.Store`. That coupling is
+documented as follow-up architecture debt under #755; do not use it as a
+precedent for adding new store or OS access in registration packages.
+Configuration-file reads are delegated to an injected gateway operation.
 
-See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the broader root/operation/domain ownership and safety contract, tracked in issue #725.
+Do not place dedicated-worker operations under public `aginctus testenv`:
+they belong to the operator-only `aginctus-testenv` binary.
+
+See [`../ARCHITECTURE.md`](../ARCHITECTURE.md) for the root inventory,
+privilege boundaries, completion criteria and justified exceptions.
