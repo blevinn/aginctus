@@ -84,7 +84,7 @@ A future explicitly supported replace-container command should stop the client, 
 ## Development validation
 
 ```bash
-nix develop -c go test ./internal/statevolume ./internal/herdrclient -count=1
+nix develop -c go test ./internal/incus/statevolume ./internal/herdrclient -count=1
 nix develop -c go test ./...
 nix flake check
 nix build .#herdr-client --no-link

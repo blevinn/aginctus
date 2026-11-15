@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/blevinn/aginctus/internal/statevolume"
+	"github.com/blevinn/aginctus/internal/incus/statevolume"
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 )

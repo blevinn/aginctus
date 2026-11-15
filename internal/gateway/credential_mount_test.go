@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/blevinn/aginctus/internal/statevolume"
+	"github.com/blevinn/aginctus/internal/incus/statevolume"
 	"github.com/lxc/incus/v7/shared/api"
 )
 

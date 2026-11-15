@@ -1,7 +1,7 @@
 # Public plugin and contribution contracts
 
-**Status: experimental declarations, runtime checks, condition execution and lifecycle traces.**
-This covers A1–A5 of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
+**Status: experimental public contracts, execution/reporting and static composition.**
+This covers A1–A6 and the A7 composition foundation of the [stacked plan](https://github.com/blevinn/aginctus/issues/797#issuecomment-6871452026)
 for [#798](https://github.com/blevinn/aginctus/issues/798). The broader
 [architecture proposal](../design/plugin-oriented-core.md) remains the target,
 not a claim that deployment plugins are already supported by the CLI.
@@ -176,6 +176,67 @@ consumer. They verify scoped dependencies, independent image configuration,
 deterministic ordering, metadata/data ownership and failure/cancellation behavior.
 They do not deploy guests, evaluate runtime probes or import concrete products.
 
+## Build-time selection and explicit composition
+
+`internal/appplugins/plugins.json` is the application's build manifest, separate
+from runtime configuration. `aginctus-plugin-gen` emits checked-in Go source at
+that composition point. Each selection names an `import_path` and exported
+parameterless `constructor` returning `plugin.Plugin` or an implementing concrete
+type. For example, a selected package can expose `func New() plugin.Plugin`.
+
+```json
+{
+  "api_version": "aginctus.dev/plugin-build/v1alpha1",
+  "package": "appplugins",
+  "plugins": [
+    {"import_path": "example.org/team/integration", "constructor": "New"}
+  ]
+}
+```
+
+Factories must be deterministic, I/O-free constructors. They receive no runtime
+configuration, services or grants. Generated imports use stable aliases and sorted
+package/factory order. There is no blank-import registration, global registry or
+runtime loading. Ordinary Go package initialization still executes for selected
+packages: trusted code must not use `init` for registration or ambient effects.
+Factories must not depend on constructor order. The existing registry validates
+actual descriptors, duplicate identities, API compatibility, missing dependencies
+and cycles, and exposes dependency-first inventory with lexical tie-breaking.
+Dependency declarations do not silently select missing packages.
+
+Generate and verify from the repository root:
+
+```sh
+nix develop -c go generate ./internal/appplugins
+nix develop -c go run ./cmd/aginctus-plugin-gen -manifest internal/appplugins/plugins.json -out internal/appplugins/generated.go -check
+nix develop -c go test ./internal/pluginbuild/... ./internal/appplugins/... ./cmd/aginctus-plugin-gen/... ./internal/plugins/...
+```
+
+Generation validates source-safe selections and rejects unknown fields, repeated
+factories and extra JSON documents. It neither downloads modules nor invokes
+implementations; factory signatures/import availability are checked by Go, and
+descriptor/dependency errors by composition before runtime work. The generated
+source freshness test runs in normal root tests. `-check` only reads files.
+
+For an external package, first review and explicitly pin its module at a release
+or pseudo-version using the ordinary Go module workflow. Commit the manifest,
+generated source, `go.mod`/`go.sum` and any vendor inputs together, and recalculate
+**every affected Nix `vendorHash`** in `flake.nix`. Generation and normal builds
+must not opportunistically edit the module graph. Use `-mod=readonly` or vendored
+builds with the pinned toolchain. Local `replace` directives are suitable for
+explicit fixtures/development, not evidence of a verified remote source revision.
+No module dependency changes or vendor hash changes are needed for the empty
+default selection in this increment.
+
+The default selection is intentionally empty until products migrate in B–D.
+Existing product commands retain their current implementation paths; an empty
+contract-plugin selection is **not a product-free executable**. Minimal/custom
+selection currently controls only this new composition boundary, not legacy
+product code or image outputs. Binary inventory and selected/omitted build
+fixtures follow in the next A7 increments. Selection never imports guest images,
+deploys resources, creates runtime instances or grants host/network/model/MCP
+access. These are trusted in-process implementations, not sandboxed extensions.
+
 ## Scoped runtime check services
 
 `plugin.CheckEvaluator` is an optional interface alongside discovery and target
@@ -254,7 +315,7 @@ are described below; product adoption remains work under
 Run the execution and caller regression tests:
 
 ```sh
-nix develop -c go test ./internal/orchestration/... ./internal/statevolume/... ./internal/cli/... ./internal/gateway/...
+nix develop -c go test ./internal/orchestration/... ./internal/incus/statevolume/... ./internal/cli/... ./internal/gateway/...
 ```
 
 ## Existing engine: condition gates and bounded readiness
@@ -573,8 +634,8 @@ nix develop -c go test -race ./internal/plugins ./internal/orchestration ./inter
 ## Next slices
 
 Further service families, product adoption, planned graph inventory and ongoing
-health remain integration work. Static selection/generation, Nix integration and
-product extraction follow in their own
+health remain integration work. Binary inventory, build fixtures, Nix image
+integration and product extraction follow in their own
 reviewed PRs. The existing provider plugin machinery is not switched to this API
 by these foundation slices. Additional service families should arrive with concrete
 integration needs and preserve the explicit read/write authority boundaries.
