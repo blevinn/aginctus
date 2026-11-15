@@ -4,7 +4,7 @@
 set -euo pipefail
 
 if [[ "$#" -ne 1 || -z "$1" ]]; then
-  echo "Usage: scripts/release/package.sh OUTPUT_DIRECTORY" >&2
+  echo "Usage: tools/release/package.sh OUTPUT_DIRECTORY" >&2
   exit 2
 fi
 

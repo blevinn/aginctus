@@ -4,7 +4,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from scripts.checks import ci_select
+from tools.ci import ci_select
 
 
 class NixSelectorTests(unittest.TestCase):
@@ -15,7 +15,7 @@ class NixSelectorTests(unittest.TestCase):
     def test_unknown_or_security_paths_run_checks(self):
         for path in (
             ".github/workflows/hermetic.yml",
-            "scripts/checks/ci_select.py",
+            "tools/ci/ci_select.py",
             "nix/modules/nixos-module.nix",
             "flake.nix",
             "flake.lock",
