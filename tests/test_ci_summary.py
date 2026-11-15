@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts/checks/ci_summary.py"
+SCRIPT = ROOT / "tools/ci/ci_summary.py"
 SPEC = importlib.util.spec_from_file_location("ci_summary", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 ci_summary = importlib.util.module_from_spec(SPEC)
