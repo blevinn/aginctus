@@ -11,6 +11,10 @@ This page is the **canonical testing entry point** for Aginctus. Different test 
 | Opt-in owned Herdr lifecycle | [OpenCode stage 3](acceptance/README.md#3-opt-in-real-herdr-lifecycle-not-yet-the-full-agent-task) | Mutates run-owned workspaces only with explicit approval | Selected lifecycle behavior | End-to-end coding task or inference |
 | Live provider and agent acceptance | [OpenCode stage 4](acceptance/README.md#4-operator-authorized-live-nine-phase-acceptance); [gateway smoke](../operations/gateway/gateway-inference-smoke.md) | Separately approved potentially billable requests, credentials and cleanup | Only the specific observed route, key and task evidence | General platform safety, durable network isolation or fresh-host repeatability |
 
+## Manual product acceptance on a development host
+
+For human usability feedback on the **actual NixOS development host**, follow the [manual host acceptance runbook](manual-host-acceptance.md). It provides read-only preflight and private worksheet helpers, with separate explicit approval gates for any writes or real model calls. It does not replace the staged OpenCode acceptance procedure or count as clean-host release signoff.
+
 ## Operational decisions
 
 1. **Do you need safe code changes validated?** Run `just check ci` or `just check report` in the pinned development shell. The structured `just check report-json` variant is intended for machine exchange; never treat it as live acceptance.
