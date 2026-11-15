@@ -146,11 +146,12 @@ observations, not proof of a running gateway's credential identity or an
 authorization/migration acceptance.
 
 Lifecycle unit-inventory acceptance starts harmless sleep fixtures under a known
-Aginctus lifecycle unit name in the real system/current-user managers. Installed
-inactive and active competing units cause refusal; simultaneous system/user
-fixtures refuse either authority selection. Removing both fixtures restores the
-no-known-conflict result, while stopping the user manager yields unverified
-evidence and refusal. Root firewall-only units remain outside that allowlist.
+Aginctus lifecycle unit name in the real system/current-user managers. Installed,
+inactive and active units are reported without being interpreted as competing
+project authorities; even simultaneous system/user fixtures are observational.
+Removing both fixtures restores an absent inventory, while stopping the user
+manager yields unverified evidence and a nonzero result. Root firewall-only units
+remain outside that allowlist.
 This verifies read-only diagnostics, not mutation-time guards, real reconciler
 behavior, other-user visibility, or exclusion of manual/renamed controllers.
 
