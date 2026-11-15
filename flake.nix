@@ -104,81 +104,18 @@
             text = builtins.readFile ./guest/ssh/authorize.sh;
           };
 
-          herdrClientSystem = nixpkgs.lib.nixosSystem {
-            inherit system;
-            modules = [
-              "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
-              (import ./nix/guest-state-bindings.nix {
-                bindings = [
-                  {
-                    class = "system";
-                    subdir = "herdr";
-                    target = "/var/lib/herdr";
-                  }
-                  {
-                    class = "system";
-                    subdir = "ssh";
-                    target = "/var/lib/aginctus/ssh";
-                  }
-                ];
-              })
-              (
-                { ... }:
-                {
-                  system.stateVersion = "26.05";
-
-                  environment.systemPackages = [
-                    herdrClientCommand
-                    pkgs.openssh
-                    sshClientIdentityHelper
-                    sshHostTrustHelper
-                    sshMachineConfigHelper
-                  ];
-
-                  # Only the managed Herdr client consumes this guest-owned
-                  # persistent SSH config. All identity and host-key settings
-                  # are recorded under the protected state-system volume.
-                  programs.ssh.extraConfig = ''
-                    Include /var/lib/aginctus/ssh/machines/*.conf
-                  '';
-
-                  environment.variables = {
-                    XDG_CONFIG_HOME = "/var/lib/herdr/config";
-                    XDG_RUNTIME_DIR = "/run/herdr";
-                    XDG_STATE_HOME = "/var/lib/herdr";
-                  };
-
-                  systemd.services.herdr = {
-                    description = "Herdr headless server";
-                    wantedBy = [ "multi-user.target" ];
-                    after = [
-                      "network-online.target"
-                      "var-lib-herdr.mount"
-                      "var-lib-aginctus-ssh.mount"
-                    ];
-                    wants = [ "network-online.target" ];
-                    requires = [
-                      "var-lib-herdr.mount"
-                      "var-lib-aginctus-ssh.mount"
-                    ];
-
-                    serviceConfig = {
-                      Environment = [
-                        "HOME=/root"
-                        "XDG_CONFIG_HOME=/var/lib/herdr/config"
-                        "XDG_RUNTIME_DIR=/run/herdr"
-                        "XDG_STATE_HOME=/var/lib/herdr"
-                      ];
-                      ExecStart = "${herdrPackage}/bin/herdr server";
-                      Restart = "on-failure";
-                      RestartSec = "2s";
-                      RuntimeDirectory = "herdr";
-                      StateDirectory = "herdr";
-                    };
-                  };
-                }
-              )
-            ];
+          herdrClientImage = import ./plugins/herdr/images/client.nix {
+            inherit
+              nixpkgs
+              system
+              pkgs
+              herdrPackage
+              herdrClientCommand
+              sshClientIdentityHelper
+              sshHostTrustHelper
+              sshMachineConfigHelper
+              ;
+            guestStateBindings = import ./nix/guest-state-bindings.nix;
           };
 
           # Bundle the OpenCode guest Python scripts into a single store
@@ -336,8 +273,6 @@
           oauthGatewayRootfs = oauthGatewaySystem.config.system.build.squashfs;
           oauthGatewayMetadata = oauthGatewaySystem.config.system.build.metadata;
 
-          herdrClientRootfs = herdrClientSystem.config.system.build.squashfs;
-          herdrClientMetadata = herdrClientSystem.config.system.build.metadata;
           opencodeWorkloadRootfs = opencodeWorkloadSystem.config.system.build.squashfs;
           opencodeWorkloadMetadata = opencodeWorkloadSystem.config.system.build.metadata;
         in
@@ -401,11 +336,7 @@
             ln -s ${oauthGatewayMetadata} "$out/metadata"
           '';
 
-          herdr-client = pkgs.runCommand "aginctus-herdr-client-image" { } ''
-            mkdir -p "$out"
-            ln -s ${herdrClientRootfs} "$out/rootfs"
-            ln -s ${herdrClientMetadata} "$out/metadata"
-          '';
+          herdr-client = herdrClientImage.image;
 
           opencode-workload = pkgs.runCommand "aginctus-opencode-workload-image" { } ''
             mkdir -p "$out"
@@ -476,6 +407,7 @@
             inherit self nixpkgs system;
           };
           herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
+            herdrClientModule = herdrClientImage.guestModule;
             inherit
               self
               nixpkgs
@@ -507,6 +439,9 @@
         system:
         {
           nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
+          herdr-image-selection = import ./tests/nix/herdr-image-check.nix {
+            inherit self nixpkgs system;
+          };
           home-manager-module = import ./nix/home-manager-module-check.nix { inherit self nixpkgs system; };
           operator-settings-parity = import ./nix/operator-settings-parity-check.nix {
             inherit self nixpkgs system;
