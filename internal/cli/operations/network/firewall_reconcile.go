@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/firewall"
+	"github.com/blevinn/aginctus/internal/host/net/firewall"
 )
 
 // FirewallActions provides exactly the privileged capabilities required to

@@ -11,7 +11,7 @@ import (
 	networkcmd "github.com/blevinn/aginctus/internal/cli/commands/network"
 	networkops "github.com/blevinn/aginctus/internal/cli/operations/network"
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/firewall"
+	"github.com/blevinn/aginctus/internal/host/net/firewall"
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 	"github.com/spf13/cobra"

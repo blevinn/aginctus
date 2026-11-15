@@ -13,6 +13,18 @@ From highest priority to lowest:
 
 Higher-priority sources override lower-priority sources.
 
+## Compiled selection is separate from runtime configuration
+
+The [build manifest](../development/plugins.md#build-time-selection-and-explicit-composition)
+selects compiled plugin-contract implementations; none of the precedence sources
+above can load an absent implementation. `aginctus plugins inventory` reports that
+local compiled registry as JSON without loading configuration or inspecting host
+resources. It is not a runtime instance list or a permission grant. The default
+contract selection is currently empty; existing product configuration and commands
+continue through their current paths until product migrations. Generic runtime
+instance CLI configuration is future work; host `Registry.Assemble` already
+rejects references to implementations absent from its explicit registry.
+
 ## Command-line overrides
 
 Use dotted paths:
