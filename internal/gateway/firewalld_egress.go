@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"regexp"
 
-	"github.com/blevinn/aginctus/internal/firewall"
+	"github.com/blevinn/aginctus/internal/host/net/firewall"
 )
 
 // EgressFirewalldPlan describes a directional HTTPS exception. It is advisory:

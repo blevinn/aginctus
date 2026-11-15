@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/firewall"
+	"github.com/blevinn/aginctus/internal/host/net/firewall"
 	"github.com/lxc/incus/v7/shared/api"
 )
 

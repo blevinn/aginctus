@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
-	"github.com/blevinn/aginctus/internal/firewall"
+	"github.com/blevinn/aginctus/internal/host/net/firewall"
 )
 
 func firewallReconcileFixture(t *testing.T) *config.Config {
