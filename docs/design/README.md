@@ -16,6 +16,7 @@ implemented contracts, operator procedures and evidence requirements.
 
 - [Environment-centric CLI north star](cli-north-star.md) — agreed top-level vocabulary, active environment selection, state introspection, images and explicit plumbing opt-in.
 - [Domain-owned CLI migration](cli-domain-ownership.md) — decomposition of existing Cobra operation adapters into domain-owned implementations.
+- [Go client and structured CLI output](cli-go-client-output.md) — in-process public API, versioned projection schemas, error semantics, and standard output formats.
 
 ## Authority and operator integration
 
