@@ -42,6 +42,13 @@ func (r Revision) validateDigest(spec DeploymentSpec) error {
 	return r.validateIdentity()
 }
 
+// ValidateIdentity verifies the complete immutable revision envelope and
+// content-addressed ID. It proves internal consistency, NOT who accepted the
+// revision or whether the caller owns the selected Incus resource.
+func (r Revision) ValidateIdentity() error {
+	return r.validateIdentity()
+}
+
 func (r Revision) validateIdentity() error {
 	if r.APIVersion != RevisionAPIVersion || r.Generation == 0 ||
 		(r.Generation == 1) != (r.ParentID == "") ||
