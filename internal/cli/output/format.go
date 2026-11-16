@@ -4,10 +4,10 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
-
-	"encoding/json"
+	"reflect"
 
 	"github.com/blevinn/aginctus/pkg/api"
 	"sigs.k8s.io/yaml"
@@ -46,7 +46,7 @@ func WriteStructured(w io.Writer, format Format, document api.Document) error {
 	if format != JSON && format != YAML {
 		return fmt.Errorf("output format %q is not a structured format", format)
 	}
-	if w == nil || document == nil {
+	if w == nil || document == nil || (reflect.ValueOf(document).Kind() == reflect.Pointer && reflect.ValueOf(document).IsNil()) {
 		return fmt.Errorf("structured output requires a writer and document")
 	}
 	meta := document.TypeMetadata()
@@ -67,8 +67,12 @@ func WriteStructured(w io.Writer, format Format, document api.Document) error {
 	if len(encoded) == 0 || encoded[len(encoded)-1] != '\n' {
 		encoded = append(encoded, '\n')
 	}
-	if _, err := w.Write(encoded); err != nil {
+	n, err := w.Write(encoded)
+	if err != nil {
 		return fmt.Errorf("write structured output: %w", err)
+	}
+	if n != len(encoded) {
+		return fmt.Errorf("write structured output: %w", io.ErrShortWrite)
 	}
 	return nil
 }
