@@ -54,48 +54,15 @@ credential-state collisions. Neither diagnostic copies, reads, or moves
 gateway credentials. Reversible ownership migration belongs to [#442](https://github.com/blevinn/aginctus/issues/442).
 
 
-## Declared and observed CLI package compatibility
+## Package-version diagnostics
 
-The NixOS and Home Manager modules also publish **nonsecret package
-declarations** when enabled. The host writes
-`/etc/aginctus/operator-package.json`; Home Manager writes
-`~/.config/aginctus/operator-package.json` through XDG. Each contains
-only schema version, authority (`system` or `user`) and the precise
-Nix store package output path chosen for its Aginctus CLI. These files
-contain **no passwords, runtime keys, gateway state or unit environment**.
+The former `operator package-audit --owner system|user` command and its
+NixOS/Home Manager `operator-package.json` parity manifests were retired.
+They compared package *declarations* to the current CLI executable, not to
+running services, authenticated project sessions or protocol compatibility.
+An ordinary Nix profile switch remains an installation concern; it is not
+an accepted-state promotion or Incus project authorization grant.
 
-From the ordinary user account, inspect the intended authority:
-
-```sh
-aginctus operator package-audit --owner system
-# or, for a planned Home Manager-owned operator lifecycle:
-aginctus operator package-audit --owner user
-```
-
-The audit does not load application configuration or accept overrides.
-It reads only these two fixed, bounded JSON files and asks the OS for the
-current process's executable path. It requires the
-selected authority to have a valid declaration; missing declarations
-for the *other* authority are allowed for single-owner installations.
-When both exist, the package store paths must be **exactly equal**.
-Malformed/unreadable declarations and different package outputs fail
-conservatively. The observed CLI must also be the `bin/aginctus` or packaged
-`bin/.aginctus-wrapped` executable under that exact selected Nix output.
-An unrelated package, development build, deleted executable or unavailable
-OS observation fails closed. Invoke the selected profile's CLI and repeat the
-read-only audit to resolve a mismatch; the audit never switches profiles.
-It does not trust `PATH`, command-line names or a self-reported version string
-as running identity. Output does not print absolute paths, raw lookup errors
-or manifest contents.
-
-**This compares declarations with the current CLI's OS-observed executable
-path, not running-service revision identity or binary attestation.** An external
-unit, override in a unit drop-in, stale service generation or another user's
-service can still run a different revision. Declarations remain self-declared
-metadata, not proof of runtime Incus authorization. Differences in package derivation also need not
-imply protocol incompatibility; until a cross-version compatibility
-contract exists, this diagnostic treats them as unverified rather than
-assuming safety. It is **not an authorization oracle or write guard**.
-Use it alongside `operator units-audit` and `operator state-audit`;
-project-scoped alias and mutation-time checks remain prerequisites
-before introducing user-owned reconcilers (#200, #437, #441).
+Inspect actual running service identity, project-level accepted revisions and
+independently authenticated Incus credentials through their owning subsystems.
+No replacement package-identity check has been activated in this cleanup.
