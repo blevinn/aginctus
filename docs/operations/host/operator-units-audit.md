@@ -22,3 +22,20 @@ A complete report covers only these **two managers**. It cannot enumerate other 
 Host firewall and network enforcement units are outside this workload inventory because they remain independently root-owned. The separate [gateway credential metadata audit](operator-state-audit.md) has historical `--owner` semantics pending its own host-diagnostic replacement; it never authorizes Incus mutation.
 
 The former `operator package-audit --owner system|user` and its Nix package declaration manifests have been retired. A process's declared Nix output is not verification of running-service protocol compatibility or project authority.
+Use [gateway state audit](operator-state-audit.md) separately to detect
+credential-state collisions. Neither diagnostic copies, reads, or moves
+gateway credentials. Reversible ownership migration belongs to [#442](https://github.com/blevinn/aginctus/issues/442).
+
+
+## Package-version diagnostics
+
+The former `operator package-audit --owner system|user` command and its
+NixOS/Home Manager `operator-package.json` parity manifests were retired.
+They compared package *declarations* to the current CLI executable, not to
+running services, authenticated project sessions or protocol compatibility.
+An ordinary Nix profile switch remains an installation concern; it is not
+an accepted-state promotion or Incus project authorization grant.
+
+Inspect actual running service identity, project-level accepted revisions and
+independently authenticated Incus credentials through their owning subsystems.
+No replacement package-identity check has been activated in this cleanup.

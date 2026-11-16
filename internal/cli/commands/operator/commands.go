@@ -12,11 +12,11 @@ import (
 // Operator diagnostics deliberately never use ambient or implicit project
 // selection. Offline and host-only operations reject configuration overrides.
 type Handlers struct {
-	UnitsAudit func(context.Context, []string, io.Writer, io.Writer) int
-	StateAudit func([]string, io.Writer, io.Writer, *config.Config) int
-	Preflight func(context.Context, []string, io.Writer, io.Writer) int
+	UnitsAudit    func(context.Context, []string, io.Writer, io.Writer) int
+	StateAudit    func([]string, io.Writer, io.Writer, *config.Config) int
+	Preflight     func(context.Context, []string, io.Writer, io.Writer) int
 	ProjectEnsure func(context.Context, []string, io.Writer, io.Writer) int
-	ProjectPlan func(context.Context, []string, io.Writer, io.Writer) int
+	ProjectPlan   func(context.Context, []string, io.Writer, io.Writer) int
 }
 
 // Register keeps owner/project checks in the Cobra leaves, before any
