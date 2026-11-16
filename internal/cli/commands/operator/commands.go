@@ -13,7 +13,6 @@ import (
 // selection. Offline and host-only operations reject configuration overrides.
 type Handlers struct {
 	UnitsAudit func(context.Context, []string, io.Writer, io.Writer) int
-	PackageAudit func([]string, io.Writer, io.Writer) int
 	StateAudit func([]string, io.Writer, io.Writer, *config.Config) int
 	Preflight func(context.Context, []string, io.Writer, io.Writer) int
 	ProjectEnsure func(context.Context, []string, io.Writer, io.Writer) int
@@ -61,7 +60,7 @@ func Register(root *cobra.Command, stdout, stderr io.Writer,
 		operator.AddCommand(cmd)
 		return cmd
 	}
-	for _, verb := range []string{"units-audit", "package-audit", "state-audit"} {
+	for _, verb := range []string{"units-audit", "state-audit"} {
 		action := verb
 		owner := ""
 		cfg := action == "state-audit"
@@ -73,8 +72,6 @@ func Register(root *cobra.Command, stdout, stderr io.Writer,
 			switch action {
 			case "units-audit":
 				return handlers.UnitsAudit(cmd.Context(), args, stdout, stderr)
-			case "package-audit":
-				return handlers.PackageAudit(args, stdout, stderr)
 			default:
 				return handlers.StateAudit(append([]string{"state-audit"}, args...), stdout, stderr, config)
 			}

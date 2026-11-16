@@ -15,7 +15,6 @@ func addOperatorCommands(root *cobra.Command, stdout, stderr io.Writer,
 ) {
 	operatorcmd.Register(root, stdout, stderr, load, status, options, operatorcmd.Handlers{
 		UnitsAudit: runOperatorUnitsAudit,
-		PackageAudit: runOperatorPackageAudit,
 		StateAudit: runOperatorStateAudit,
 		Preflight: runOperatorPreflight,
 		ProjectEnsure: runOperatorProjectEnsure,

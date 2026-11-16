@@ -14,7 +14,7 @@ func TestCobraOperatorInvalidInputDoesNotReadConfigOrInspectIncus(t *testing.T) 
 		{"operator", "project-plan"},
 		{"operator", "units-audit"},
 		{"operator", "units-audit", "--owner=bad"},
-		{"operator", "package-audit", "--owner=user", "--unexpected"},
+		{"operator", "package-audit", "--owner=user"},
 		{"operator", "state-audit", "--owner=bad"},
 		{"--config=incus.project=other", "operator", "project-plan", "--project=aginctus"},
 	} {

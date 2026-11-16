@@ -306,13 +306,12 @@ assert disabled.xdg.configFile == { };
 assert !(builtins.hasAttr "aginctus/operator-package.json" disabled.xdg.configFile);
 assert disabled.assertions == [ ];
 assert enabled.home.packages == [ stub ];
-# Even permissive user CLI intent emits only user package/config declarations.
+# Even permissive user CLI intent emits only unprivileged configuration declarations.
 # The fixture has no system policy options: a privileged output fails evaluation.
 assert userPolicyIntent.home.packages == [ stub ];
 assert
   builtins.attrNames userPolicyIntent.xdg.configFile == [
     "aginctus/config.json"
-    "aginctus/operator-package.json"
   ];
 assert
   builtins.attrNames userPolicyIntent == [
@@ -330,10 +329,6 @@ assert enabled.programs.aginctus.settings.gateway.id == "local";
 assert enabled.programs.aginctus.settings.firewall.zone == "aginctus-dns";
 assert enabled.programs.aginctus.settings.workloads.dev.runtime.type == "opencode";
 assert builtins.hasAttr "aginctus/config.json" enabled.xdg.configFile;
-assert builtins.hasAttr "aginctus/operator-package.json" enabled.xdg.configFile;
-assert lib.hasInfix "aginctus-user-package.json" (
-  toString enabled.xdg.configFile."aginctus/operator-package.json".source
-);
 assert !rejected enabled;
 assert rejected invalidNested;
 assert rejected invalidDotted;
