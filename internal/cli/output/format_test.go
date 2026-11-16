@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -88,8 +89,10 @@ func TestWriteStructuredRejectsInvalidInputsWithoutWriting(t *testing.T) {
 			t.Errorf("expected error and no output for %s", format)
 		}
 	}
+	var typedNil *fixture
 	for _, document := range []api.Document{
 		nil,
+		typedNil,
 		fixture{TypeMeta: api.TypeMeta{Kind: "FixtureList"}},
 		fixture{TypeMeta: api.TypeMeta{APIVersion: api.APIVersionV1Alpha1}},
 	} {
@@ -109,5 +112,16 @@ func TestWriteStructuredPreservesWriterError(t *testing.T) {
 	err := WriteStructured(rejectWriter{err: expected}, JSON, testDocument())
 	if !errors.Is(err, expected) {
 		t.Fatalf("writer error lost: %v", err)
+	}
+}
+
+type shortWriter struct{}
+
+func (shortWriter) Write(p []byte) (int, error) { return len(p) / 2, nil }
+
+func TestWriteStructuredRejectsShortWrite(t *testing.T) {
+	err := WriteStructured(shortWriter{}, JSON, testDocument())
+	if !errors.Is(err, io.ErrShortWrite) {
+		t.Fatalf("expected short write, got %v", err)
 	}
 }
