@@ -42,7 +42,7 @@
         let
           pkgs = import nixpkgs { inherit system; };
           herdrPackage = herdr.packages.${system}.herdr;
-          herdrClientCommand = import ./nix/herdr-client-command.nix { inherit pkgs herdrPackage; };
+          herdrClientCommand = import ./nix/workloads/herdr-client-command.nix { inherit pkgs herdrPackage; };
           releaseVersion = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./internal/cli/VERSION);
           aginctusCli = pkgs.buildGoModule {
             pname = "aginctus";
@@ -115,7 +115,7 @@
               sshHostTrustHelper
               sshMachineConfigHelper
               ;
-            guestStateBindings = import ./nix/guest-state-bindings.nix;
+            guestStateBindings = import ./nix/workloads/guest-state-bindings.nix;
           };
 
           # Bundle the OpenCode guest Python scripts into a single store
@@ -131,7 +131,7 @@
           '';
 
           # Scoped source patch for the flake-pinned CLI event-consumer join.
-          aginctusPinnedOpenCode = import ./nix/patched-opencode.nix { inherit pkgs; };
+          aginctusPinnedOpenCode = import ./nix/workloads/patched-opencode.nix { inherit pkgs; };
 
           # Runtime-only gateway configuration: no endpoint, model or key is
           # materialized into the Nix store. Herdr's PATH resolves this wrapper.
@@ -438,18 +438,20 @@
       checks = forAllSystems (
         system:
         {
-          nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
+          nixos-module = import ./tests/nix/module-check.nix { inherit self nixpkgs system; };
           herdr-image-selection = import ./tests/nix/herdr-image-check.nix {
             inherit self nixpkgs system;
           };
-          home-manager-module = import ./nix/home-manager-module-check.nix { inherit self nixpkgs system; };
-          operator-settings-parity = import ./nix/operator-settings-parity-check.nix {
+          home-manager-module = import ./tests/nix/home-manager-module-check.nix {
             inherit self nixpkgs system;
           };
-          gateway-config-parity = import ./nix/gateway-config-parity-check.nix {
+          operator-settings-parity = import ./tests/nix/operator-settings-parity-check.nix {
             inherit self nixpkgs system;
           };
-          opencode-workload-socket-alignment = import ./nix/opencode-workload-check.nix {
+          gateway-config-parity = import ./tests/nix/gateway-config-parity-check.nix {
+            inherit self nixpkgs system;
+          };
+          opencode-workload-socket-alignment = import ./tests/nix/opencode-workload-check.nix {
             inherit self nixpkgs system;
           };
         }

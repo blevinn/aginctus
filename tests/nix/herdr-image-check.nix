@@ -55,7 +55,7 @@ let
       sshClientIdentityHelper = stub;
       sshHostTrustHelper = stub;
       sshMachineConfigHelper = stub;
-      guestStateBindings = import ../../nix/guest-state-bindings.nix;
+      guestStateBindings = import ../../nix/workloads/guest-state-bindings.nix;
     }).guest.config;
   mounts = map (mount: mount.where) guest.systemd.mounts;
 in

@@ -65,31 +65,28 @@ and are not an authenticated operation service or an Incus write path.
 No NixOS/HM module activates these APIs. A successful `SnapshotSelectedWorkload`
 or `RecordLocalUnverifiedAttempt` call does not imply the caller can mutate Incus.
 
-## Host-authored enrollment evidence is not a controller fence
+## Retired host-enrollment prototype
 
-[#865](https://github.com/blevinn/aginctus/pull/865) and
-[#869](https://github.com/blevinn/aginctus/pull/869) introduce a narrow
-root-owned, revocable controller enrollment record for one accepted workload.
-[#867](https://github.com/blevinn/aginctus/pull/867) independently compares
-read-only, daemon-reported Incus TLS/project restriction evidence against the
-enrolled principal. The policy candidate in
-[#866](https://github.com/blevinn/aginctus/pull/866) also requires managed
-disk devices, as exercised by the real authority VM. See the
-[experimental enrollment contract](controller-enrollment.md).
+The former `internal/controllerauthority` package (#865/#869/#892/#897)
+implemented experimental, non-authorizing host-owned enrollment and
+restricted-principal evidence. It had no production Go consumers, and the
+prototype was deleted to avoid keeping a separate root/user controller
+registry as a parallel authorization architecture. See the
+[retirement record](controller-enrollment.md). The unmerged peer-UID broker
+proposal [#900](https://github.com/blevinn/aginctus/pull/900) was also closed.
 
-These are **not yet an independently authenticated controller state service
-or an exclusive live writer lease**. Enrollment snapshots may be stale; a
-kernel-authenticated request and reloaded host policy, an actual server-bound
-restricted TLS session, a new monotonic controller fence and mutation-time
-revision/ETag checks all remain necessary. No NixOS or Home Manager user
-reconciliation service consumes these records. No host resource owner is
-transferred, and no old controller is quiesced.
+**Project-scoped accepted state remains a three-layer mechanism.** Incus
+projects supply the authority scope; environments have separate revision
+histories and lifecycle ownership within that project, but not separate
+Incus security principals. NixOS host policy is independently root-owned,
+and a future system-level state lifecycle may be added without any
+system/user candidate merge or root-mediated project broker.
 
-## Branching choices still open
-
-[#704](https://github.com/blevinn/aginctus/issues/704) must choose and validate whether the operational boundary is (a) project-native credentials with network/volume restrictions, (b) separately authoritative host/project accepted revisions, (c) an independently authenticated single state service with scoped CAS, or (d) a hybrid composite. A composite read view can be shared without merging untrusted user input into privileged host policy.
-
-Do **not** encode a permanent root/user merge rule, deploy an HM writer, implement root-proxy calls, or force `features.networks=true` on existing installations before that choice. The current project-policy flags in #200 are not secretly a capability grant.
+Project-authorized execution still requires a real Incus authenticated
+session, verified environment ownership, a pinned accepted revision,
+participating-writer fencing, fresh ETags and a durable operation journal.
+Deleting unused prototype code is **not** security approval or evidence
+that these gates have been implemented.
 
 ## Validation and closure
 
@@ -98,4 +95,4 @@ Do **not** encode a permanent root/user merge rule, deploy an HM writer, impleme
 - **Real controller conflict tests** must cover both managers, an inactive installed competing unit, another-user/manual writer, and losing/revoked ownership during an Incus write. Include partial or canceled execution; no fabricated rollback.
 - **End-to-end handoff** must verify backup, quiescence, a single active owner, preserved database/workload volumes and identities, and explicit rollback in a disposable VM before #442 closes.
 
-The above is a **design and acceptance contract**, not code-level controller fencing, project delegation approval, or a grant for #438/#439. Tracking issues remain open until the corresponding real executor and negative tests pass.
+The above is a **design and acceptance contract**, not code-level controller fencing, project authorization approval, or a grant for #438/#439. Tracking issues remain open until the corresponding real executor and negative tests pass.

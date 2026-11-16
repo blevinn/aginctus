@@ -64,7 +64,7 @@ not disable reconciliation or the separate OpenCode image import. It does not
 build/import a missing alias on demand. Standalone image builds and the safe Nix
 checks do not import images, reconcile resources or authorize host mutation.
 
-The NixOS guest image imports reusable `nix/guest-state-bindings.nix`. The module takes an allowlisted list of state class, subdirectory and destination; it generates a preparation service and systemd bind mount units. No `guest/state/bind-system.sh` is shipped.
+The NixOS guest image imports reusable `nix/workloads/guest-state-bindings.nix`. The module takes an allowlisted list of state class, subdirectory and destination; it generates a preparation service and systemd bind mount units. No `guest/state/bind-system.sh` is shipped.
 
 The Herdr image alone declares:
 
