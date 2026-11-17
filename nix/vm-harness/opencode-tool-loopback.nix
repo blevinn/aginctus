@@ -10,7 +10,7 @@ let
   pkgs = import nixpkgs { inherit system; };
   toolsFixture = pkgs.runCommand "aginctus-opencode-tool-loopback" { } ''
     mkdir -p "$out/guest" "$out/scripts"
-    cp -R ${../../guest/opencode} "$out/guest/opencode"
+    cp -R ${../../plugins/opencode/guest} "$out/plugins/opencode/guest"
     cp -R ${../../scripts/vm_harness} "$out/scripts/vm_harness"
   '';
 in
@@ -49,7 +49,7 @@ pkgs.testers.runNixOSTest {
       "timeout 300 ${pkgs.util-linux}/bin/runuser -u testenv-agent -- "
       "env AGINCTUS_TESTENV_TOOL_WORKER=DISPOSABLE_VM_ONLY "
       "${pkgs.python3}/bin/python3 "
-      "${toolsFixture}/guest/opencode/test_real_runtime.py "
+      "${toolsFixture}/plugins/opencode/guest/test_real_runtime.py "
       "${pkgs.opencode}/bin/opencode --execute-tools"
     )
   '';
