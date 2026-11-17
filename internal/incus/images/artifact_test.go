@@ -1,4 +1,4 @@
-package imageops
+package images
 
 import (
 	"os"
