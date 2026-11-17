@@ -73,7 +73,7 @@ func Register(root *cobra.Command, stdout, stderr io.Writer,
 		cmd.Flags().StringVar(&owner, "location", "", "Credential storage location: system or user")
 		prior := cmd.PreRunE
 		cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-			if !cmd.Flags().Changed("owner") {
+			if !cmd.Flags().Changed("location") {
 				return fmt.Errorf("--location system|user is required")
 			}
 			return prior(cmd, args)
