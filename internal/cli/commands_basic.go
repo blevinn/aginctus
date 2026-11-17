@@ -126,6 +126,9 @@ func runBasicCobra(
 			return fmt.Errorf("--configuration-file requires a path")
 		}
 		if root.PersistentFlags().Changed("output") {
+			if outputFormat == "" {
+				return fmt.Errorf("--output requires a format")
+			}
 			if _, err := clioutput.ParseFormat(outputFormat); err != nil {
 				return err
 			}
