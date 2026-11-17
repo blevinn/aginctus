@@ -25,7 +25,7 @@ class ValidationDispatchTests(unittest.TestCase):
                 f"python3 -m unittest discover -s {directory} -p test_*.py -v"
                 for directory in (
                     "scripts/vm_harness",
-                    "guest/opencode", "guest/ssh", "scripts/acceptance",
+                    "plugins/opencode/guest", "guest/ssh", "scripts/acceptance",
                     "scripts/gateway", "tests",
                 )
             ],
