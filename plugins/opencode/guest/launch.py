@@ -1,0 +1,79 @@
+"""Launch OpenCode with an Aginctus-only provider, never persisting credentials in Nix."""
+import json
+import os
+import stat
+import sys
+from pathlib import Path
+
+from gateway_endpoint import validate_endpoint, validate_model
+
+DEFAULT_DIR = "/var/lib/aginctus/opencode"
+GO_ALIAS = "aginctus-go-pilot"
+SESSION_PLUGIN = Path(__file__).with_name("go_session_plugin.js")
+SIWC_PLUGIN = Path(__file__).with_name("siwc_plugin.js")
+
+
+def load(directory):
+    settings = Path(directory) / "gateway.json"
+    key_path = Path(directory) / "workload-key"
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    endpoint = data.get("endpoint")
+    model = data.get("model")
+    protocol = data.get("protocol", "responses")
+    if not isinstance(endpoint, str) or not isinstance(model, str):
+        raise ValueError("gateway endpoint and model must be strings")
+    validate_endpoint(endpoint)
+    validate_model(model)
+    if protocol not in ("responses", "chat-completions"):
+        raise ValueError("unsupported gateway protocol")
+    info = key_path.lstat()
+    if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077:
+        raise ValueError("workload-key must be a private regular file (mode 0600)")
+    key = key_path.read_text(encoding="utf-8").strip()
+    if not key or "\n" in key or "\r" in key:
+        raise ValueError("missing or invalid workload key")
+    return endpoint, model, protocol, key
+
+
+def main():
+    # Only a pinned binary is used in the production image. This script is
+    # intentionally simple enough to test with a mock executable.
+    if len(sys.argv) < 2:
+        raise ValueError("OpenCode executable path is required")
+    endpoint, model, protocol, key = load(os.environ.get("AGINCTUS_OPENCODE_DIR", DEFAULT_DIR))
+    provider = {
+        "npm": "@ai-sdk/openai" if protocol == "responses" else "@ai-sdk/openai-compatible",
+        "name": "Aginctus LiteLLM",
+        "options": {"baseURL": endpoint, "apiKey": "{env:AGINCTUS_LITELLM_KEY}"},
+        "models": {model: {"name": model}},
+    }
+    environment = os.environ.copy()
+    environment["AGINCTUS_LITELLM_KEY"] = key
+    config = {
+        "$schema": "https://opencode.ai/config.json",
+        "model": "aginctus/" + model,
+        "provider": {"aginctus": provider},
+    }
+    if protocol == "responses" and model == GO_ALIAS:
+        # The custom provider does not get OpenCode's native
+        # x-opencode-session header automatically. Load a local,
+        # Nix-packaged hook that receives OpenCode's own sessionID.
+        # Never fabricate a synthetic identifier or embed a key in config.
+        if not SESSION_PLUGIN.is_file():
+            raise ValueError("OpenCode Go session plugin unavailable")
+        config["plugin"] = [SESSION_PLUGIN.resolve().as_uri()]
+    if model.startswith("siwc-"):
+        if protocol != "responses" or not SIWC_PLUGIN.is_file():
+            raise ValueError("SIWC requires Responses and its packaged request profile")
+        config["plugin"] = [SIWC_PLUGIN.resolve().as_uri()]
+    environment["OPENCODE_CONFIG_CONTENT"] = json.dumps(config)
+    os.execve(sys.argv[1], sys.argv[1:], environment)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, ValueError, json.JSONDecodeError):
+        # Do not print paths, source JSON or credential-bearing exceptions.
+        print("aginctus opencode: gateway configuration unavailable or invalid", file=sys.stderr)
+        sys.exit(1)
