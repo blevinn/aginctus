@@ -9,7 +9,7 @@
 let
   pkgs = import nixpkgs { inherit system; };
   toolsFixture = pkgs.runCommand "aginctus-opencode-tool-loopback" { } ''
-    mkdir -p "$out/guest" "$out/scripts"
+    mkdir -p "$out/plugins/opencode" "$out/scripts"
     cp -R ${../../plugins/opencode/guest} "$out/plugins/opencode/guest"
     cp -R ${../../scripts/vm_harness} "$out/scripts/vm_harness"
   '';
