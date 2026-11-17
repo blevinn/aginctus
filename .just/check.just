@@ -55,7 +55,7 @@ shell-lint:
 python:
     python3 -m unittest discover -s scripts/vm_harness -p 'test_*.py' -v
     python3 -m unittest discover -s guest/opencode -p 'test_*.py' -v
-    python3 -m unittest discover -s guest/ssh -p 'test_*.py' -v
+    python3 -m unittest discover -s nix/guest/ssh -p 'test_*.py' -v
     python3 -m unittest discover -s scripts/acceptance -p 'test_*.py' -v
     python3 -m unittest discover -s scripts/gateway -p 'test_*.py' -v
     python3 -m unittest discover -s tests -p 'test_*.py' -v
