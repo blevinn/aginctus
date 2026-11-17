@@ -30,10 +30,10 @@ func ReconcileOwnedIptablesNft(ctx context.Context, actions IptablesNftReconcile
 	}
 	input, err := actions.Command(ctx, "", "iptables", "-S", "nixos-fw")
 	if err != nil || !strings.Contains(input, "-j "+Chain) {
-		return "", fmt.Errorf("Aginctus nixos-fw hook missing; activate the host NixOS module")
+		return "", fmt.Errorf("aginctus nixos-fw hook missing; activate the host NixOS module")
 	}
 	if _, err := actions.Command(ctx, "", "iptables", "-S", Chain); err != nil {
-		return "", fmt.Errorf("Aginctus firewall chain missing")
+		return "", fmt.Errorf("aginctus firewall chain missing")
 	}
 	policy, discoveryErr := actions.Discover(ctx)
 	var approved *Policy
@@ -41,10 +41,10 @@ func ReconcileOwnedIptablesNft(ctx context.Context, actions IptablesNftReconcile
 	transaction, err := Render(approved)
 	if err != nil { return "", fmt.Errorf("invalid firewall policy") }
 	if _, err := actions.Command(ctx, transaction, "iptables-restore", "-w", "--noflush"); err != nil {
-		return "", fmt.Errorf("Aginctus INPUT transaction failed; no unrelated rules were modified")
+		return "", fmt.Errorf("aginctus INPUT transaction failed; no unrelated rules were modified")
 	}
 	if discoveryErr != nil {
-		return "", fmt.Errorf("Aginctus INPUT exceptions cleared (fail closed): %v", discoveryErr)
+		return "", fmt.Errorf("aginctus INPUT exceptions cleared (fail closed): %v", discoveryErr)
 	}
 	return policy.Interface, nil
 }
