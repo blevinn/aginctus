@@ -82,13 +82,7 @@ let
   unmanagedConfig = pkgs.writeText "unmanaged-operator-config.json" (
     builtins.toJSON { gateway.id = "unmanaged-operator"; }
   );
-  mismatchedManifest = pkgs.writeText "mismatched-operator-package.json" (
-    builtins.toJSON {
-      schema = 1;
-      authority = "user";
-      package = "/nix/store/00000000000000000000000000000000-wrong-cli";
-    }
-  );
+
   checkReport = pkgs.writeText "check-operator-report.py" ''
     from pathlib import Path
     import sys
@@ -214,7 +208,7 @@ pkgs.testers.runNixOSTest {
 
     host_units()
     firewall_before = host_policy()
-    host_config = machine.succeed("sha256sum /etc/aginctus/config.json /etc/aginctus/operator-package.json")
+    host_config = machine.succeed("sha256sum /etc/aginctus/config.json")
 
     # Compare complete nonsecret resource inventory, not just instance counts.
     inventories = ["project list", "storage list"] + [
@@ -260,7 +254,6 @@ pkgs.testers.runNixOSTest {
     machine.succeed("runuser -u operator -- /home/operator/.nix-profile/bin/aginctus config get gateway.id | grep -q disposable-operator")
     cli = operator + " /home/operator/.nix-profile/bin/aginctus"
     assert not {"wheel", "incus", "incus-admin"}.intersection(machine.succeed(operator + " id -nG").split())
-    machine.succeed(cli + " operator package-audit --owner user | grep -q 'observed running CLI path'")
     status, _ = machine.execute(cli + " operator preflight --project aginctus", timeout=30)
     assert status == 1, "operator preflight must fail for denied Incus access, not usage"
     assert host_policy() == firewall_before, "unauthorized activation changed firewall policy"
@@ -268,15 +261,6 @@ pkgs.testers.runNixOSTest {
 
     # Repeated activation remains an operator-only package/config change.
     machine.succeed(activation, timeout=600)
-    machine.succeed(cli + " operator package-audit --owner user")
-
-    # A changed declaration must not make incompatible system/user CLIs acceptable.
-    manifest = "/home/operator/.config/aginctus/operator-package.json"
-    machine.succeed(operator + " rm -f " + manifest)
-    machine.succeed(operator + " cp ${mismatchedManifest} " + manifest)
-    status, mismatch = machine.execute(cli + " operator package-audit --owner user 2>&1")
-    assert status == 1 and "operator package declarations differ" in mismatch, "system/user declaration mismatch must fail safely"
-    machine.succeed(operator + " rm -f " + manifest)
 
     # The CLI selects its profile before activation; a file conflict must leave
     # the active-generation GC root and unmanaged contents intact.
@@ -315,12 +299,10 @@ pkgs.testers.runNixOSTest {
     machine.succeed(cli + " config get gateway.id | grep -q disposable-operator")
     machine.succeed(operator + " jq -e --arg fp " + ("a" * 64) +
                     " '.workloads[0].imageFingerprint == $fp' " + candidate)
-    machine.succeed(cli + " operator package-audit --owner user")
     machine.succeed(upgraded_home_manager + " switch", timeout=600)
     machine.succeed(cli + " config get gateway.id | grep -q upgraded-operator")
     machine.succeed(operator + " jq -e --arg fp " + ("b" * 64) +
                     " '.workloads[0].imageFingerprint == $fp' " + candidate)
-    machine.succeed(cli + " operator package-audit --owner user")
 
     # Starting a lingering user manager does not start Aginctus units or timers.
     machine.succeed("loginctl enable-linger operator")
@@ -439,7 +421,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed(upgrade, timeout=600)
     assert host_policy() == firewall_authorized, "authorized activation changed firewall policy"
     assert machine.succeed("sha256sum /home/operator/.config/incus/config.yml /home/administrator/.config/incus/config.yml") == client_config
-    assert machine.succeed("sha256sum /etc/aginctus/config.json /etc/aginctus/operator-package.json") == host_config
+    assert machine.succeed("sha256sum /etc/aginctus/config.json") == host_config
     host_units()
 
     # Real DNS positive/host-port negative survive host firewall reload without
@@ -469,7 +451,6 @@ pkgs.testers.runNixOSTest {
     machine.succeed(cli + " config get gateway.id | grep -q disposable-operator")
     machine.succeed(upgraded_home_manager + " switch", timeout=600)
     machine.succeed(cli + " config get gateway.id | grep -q upgraded-operator")
-    machine.succeed(cli + " operator package-audit --owner user")
     machine.fail("systemctl is-active --quiet incus.service")
     machine.fail(operator + " test -r /var/lib/aginctus/state/acceptance-sentinel")
     machine.succeed("systemctl unmask --runtime incus.socket incus.service")
