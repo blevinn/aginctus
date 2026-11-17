@@ -36,7 +36,7 @@ func TestPluginListTypedDetachedAndEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.TypeMeta.Kind != "PluginList" || len(result.Items) != 1 ||
+	if result.Kind != "PluginList" || len(result.Items) != 1 ||
 		result.Items[0].Capabilities[0].Kind != "agent" {
 		t.Fatalf("unexpected projection: %#v", result)
 	}
