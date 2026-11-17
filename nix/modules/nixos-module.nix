@@ -182,10 +182,10 @@ in
   };
 
   config = mkIf cfg.enable {
-    environment.etc = lib.optionalAttrs (cfg.environmentCandidate != null) {
-      "aginctus/environment-candidate.json".source =
-        jsonFormat.generate "aginctus-nixos-environment-candidate.json" environmentCandidateSpec;
-    };
+    environment.etc."aginctus/environment-candidate.json" =
+      lib.mkIf (cfg.environmentCandidate != null) {
+        source = jsonFormat.generate "aginctus-nixos-environment-candidate.json" environmentCandidateSpec;
+      };
     assertions = [
       {
         assertion = cfg.environmentCandidate == null || environmentSchema.valid cfg.environmentCandidate;
