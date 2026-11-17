@@ -3,6 +3,7 @@
   nixpkgs,
   herdr,
   system,
+  herdrClientModule,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
@@ -94,29 +95,8 @@ pkgs.testers.runNixOSTest {
 
   nodes.client = {
     imports = [
-      (import ./workloads/guest-state-bindings.nix {
-        bindings = [
-          {
-            class = "system";
-            subdir = "herdr";
-            target = "/var/lib/herdr";
-          }
-          {
-            class = "system";
-            subdir = "ssh";
-            target = "/var/lib/aginctus/ssh";
-          }
-        ];
-      })
+      herdrClientModule
     ];
-    system.stateVersion = "26.05";
-    environment.systemPackages = [
-      (import ./workloads/herdr-client-command.nix { inherit pkgs herdrPackage; })
-      pkgs.openssh
-    ];
-    programs.ssh.extraConfig = ''
-      Include /var/lib/aginctus/ssh/machines/*.conf
-    '';
     # Disposable stand-in for an Incus-attached filesystem, never pilot storage.
     systemd.mounts = [
       {
@@ -135,6 +115,11 @@ pkgs.testers.runNixOSTest {
     start_all()
     client.wait_for_unit("var-lib-herdr.mount")
     client.wait_for_unit("var-lib-aginctus-ssh.mount")
+    client.wait_for_unit("herdr.service")
+    client.wait_for_file("/var/lib/herdr/config/herdr/herdr.sock")
+    # Verify production daemon startup, then keep catalog/SSH fixtures CLI-only:
+    # the daemon otherwise discovers fixture endpoints asynchronously.
+    client.succeed("systemctl stop herdr.service")
     client.succeed('test "$(stat -c %d:%i /var/lib/herdr)" = "$(stat -c %d:%i /var/lib/aginctus/state/system/herdr)"')
     client.succeed('test "$(stat -c %d:%i /var/lib/aginctus/ssh)" = "$(stat -c %d:%i /var/lib/aginctus/state/system/ssh)"')
 
