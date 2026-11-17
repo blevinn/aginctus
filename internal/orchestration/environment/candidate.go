@@ -97,7 +97,7 @@ func ParseCandidate(data []byte) (Candidate, error) {
 	}
 	var binding map[string]json.RawMessage
 	if err := json.Unmarshal(descriptor["binding"], &binding); err != nil || binding == nil {
-		return Candidate{}, errors.New("Incus binding must be an object")
+		return Candidate{}, errors.New("incus binding must be an object")
 	}
 	if err := candidateKeys(binding, "serverId", "project"); err != nil {
 		return Candidate{}, err
