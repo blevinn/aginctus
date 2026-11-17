@@ -65,7 +65,7 @@ func Reconcile(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Aginctus INPUT policy reconciled for verified bridge %q (DNS/DHCP only)\\n", iface)
+	fmt.Fprintf(stdout, "Aginctus INPUT policy reconciled for verified bridge %q (DNS/DHCP only)\n", iface)
 	return 0
 }
 
