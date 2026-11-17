@@ -28,6 +28,42 @@ The CLI remains responsible for orchestrating volume provisioning even if a gues
 
 ## Guest state bindings: declarative, not a Herdr-aware helper
 
+The product-owned guest specification and image assembly live in
+`plugins/herdr/images/client-guest.nix` and `client.nix`. `flake.nix` composes
+these with explicitly injected shared helpers; `.#herdr-client` still produces
+`aginctus-herdr-client-image` with `rootfs` (squashfs) and `metadata` symlinks.
+Both supported Linux architectures retain that output. The socket VM imports
+the same client guest module with a disposable tmpfs system-state volume;
+its separate OpenCode-side server configuration is still a test reproduction.
+
+### Image selection and host effects
+
+The existing NixOS module supports three modes under `services.aginctus`:
+
+| Mode | Declaration | Effect when host integration is enabled |
+| --- | --- | --- |
+| Default build | Leave `images.herdrClient` at defaults | Source is `self.packages.${system}.herdr-client`; boot image unit invokes `images update` for the runtime alias (default `aginctus-herdr-client`). |
+| Custom derivation | Set `images.herdrClient.source` to a package providing the same `rootfs`/`metadata` artifact contract | The same image unit imports/updates that source. Set `settings.infrastructure.herdr.image.alias` to choose the alias used by both import and runtime. |
+| Existing local alias | Set `images.herdrClient.enable = false` and `settings.infrastructure.herdr.image.alias` to the preloaded alias | No Herdr image import unit or image source dependency is generated. Provision and verify the image separately in the runtime's configured Incus scope. |
+
+`images.herdrClient.alias` defaults **from**
+`settings.infrastructure.herdr.image.alias`, not the reverse. Overriding only
+the import alias leaves the runtime pointer unchanged; if overriding both,
+keep them equal. There is currently no equality assertion or automatic alias
+existence/guest-contract validation. A custom image must implement the persistent
+state and helper contracts below; changing the source does not make an arbitrary
+guest usable as the managed Herdr client.
+
+These declarations are evaluated without contacting Incus. Enabling the host
+module does generate boot-time image update units by default; switching a host
+configuration can therefore build and import images. Image updates do not replace
+existing guests or migrate state. `reconcile.enable` defaults to false; enabling
+it separately applies configured resources and orders reconciliation after enabled
+image units, tracking their sources for restart. Disabling the Herdr import does
+not disable reconciliation or the separate OpenCode image import. It does not
+build/import a missing alias on demand. Standalone image builds and the safe Nix
+checks do not import images, reconcile resources or authorize host mutation.
+
 The NixOS guest image imports reusable `nix/workloads/guest-state-bindings.nix`. The module takes an allowlisted list of state class, subdirectory and destination; it generates a preparation service and systemd bind mount units. No `guest/state/bind-system.sh` is shipped.
 
 The Herdr image alone declares:
