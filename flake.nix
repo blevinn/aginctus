@@ -44,12 +44,30 @@
           herdrPackage = herdr.packages.${system}.herdr;
           herdrClientCommand = import ./nix/workloads/herdr-client-command.nix { inherit pkgs herdrPackage; };
           releaseVersion = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./internal/cli/VERSION);
-          goPackages = import ./nix/packages/go.nix {
-            inherit pkgs releaseVersion self;
-            sourceRoot = ./.;
+          aginctusCli = pkgs.buildGoModule {
+            pname = "aginctus";
+            version = "${releaseVersion}+${self.shortRev or "source"}";
+            src = ./.;
+            # Dirty trees and non-Git sources get content identity, not a false commit claim.
+            ldflags = [
+              "-X=github.com/blevinn/aginctus/internal/cli.Revision=${self.rev or "source-${self.narHash}"}"
+            ];
+            # Recalculate after Go module graph changes. A stale hash can reuse
+            # an incompatible vendor tree even when go.mod is newer.
+            vendorHash = "sha256-0k7OkHckPVEZEbFkQ1ojBbIEc7Lj0nvfWsYWOy18AdI=";
+            subPackages = [ "./cmd/aginctus" ];
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            postInstall = ''
+              wrapProgram "$out/bin/aginctus" --prefix PATH : "${pkgs.lib.makeBinPath [ pkgs.incus ]}"
+            '';
           };
-          aginctusCli = goPackages.aginctusCli;
-          oauthGatewayDaemon = goPackages.oauthGatewayDaemon;
+          oauthGatewayDaemon = pkgs.buildGoModule {
+            pname = "aginctus-oauth-gateway";
+            version = releaseVersion;
+            src = ./.;
+            vendorHash = "sha256-0k7OkHckPVEZEbFkQ1ojBbIEc7Lj0nvfWsYWOy18AdI=";
+            subPackages = [ "./cmd/aginctus-oauth-gateway" ];
+          };
           sshClientIdentityHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-client-identity";
             runtimeInputs = [
@@ -86,81 +104,18 @@
             text = builtins.readFile ./guest/ssh/authorize.sh;
           };
 
-          herdrClientSystem = nixpkgs.lib.nixosSystem {
-            inherit system;
-            modules = [
-              "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
-              (import ./nix/workloads/guest-state-bindings.nix {
-                bindings = [
-                  {
-                    class = "system";
-                    subdir = "herdr";
-                    target = "/var/lib/herdr";
-                  }
-                  {
-                    class = "system";
-                    subdir = "ssh";
-                    target = "/var/lib/aginctus/ssh";
-                  }
-                ];
-              })
-              (
-                { ... }:
-                {
-                  system.stateVersion = "26.05";
-
-                  environment.systemPackages = [
-                    herdrClientCommand
-                    pkgs.openssh
-                    sshClientIdentityHelper
-                    sshHostTrustHelper
-                    sshMachineConfigHelper
-                  ];
-
-                  # Only the managed Herdr client consumes this guest-owned
-                  # persistent SSH config. All identity and host-key settings
-                  # are recorded under the protected state-system volume.
-                  programs.ssh.extraConfig = ''
-                    Include /var/lib/aginctus/ssh/machines/*.conf
-                  '';
-
-                  environment.variables = {
-                    XDG_CONFIG_HOME = "/var/lib/herdr/config";
-                    XDG_RUNTIME_DIR = "/run/herdr";
-                    XDG_STATE_HOME = "/var/lib/herdr";
-                  };
-
-                  systemd.services.herdr = {
-                    description = "Herdr headless server";
-                    wantedBy = [ "multi-user.target" ];
-                    after = [
-                      "network-online.target"
-                      "var-lib-herdr.mount"
-                      "var-lib-aginctus-ssh.mount"
-                    ];
-                    wants = [ "network-online.target" ];
-                    requires = [
-                      "var-lib-herdr.mount"
-                      "var-lib-aginctus-ssh.mount"
-                    ];
-
-                    serviceConfig = {
-                      Environment = [
-                        "HOME=/root"
-                        "XDG_CONFIG_HOME=/var/lib/herdr/config"
-                        "XDG_RUNTIME_DIR=/run/herdr"
-                        "XDG_STATE_HOME=/var/lib/herdr"
-                      ];
-                      ExecStart = "${herdrPackage}/bin/herdr server";
-                      Restart = "on-failure";
-                      RestartSec = "2s";
-                      RuntimeDirectory = "herdr";
-                      StateDirectory = "herdr";
-                    };
-                  };
-                }
-              )
-            ];
+          herdrClientImage = import ./plugins/herdr/images/client.nix {
+            inherit
+              nixpkgs
+              system
+              pkgs
+              herdrPackage
+              herdrClientCommand
+              sshClientIdentityHelper
+              sshHostTrustHelper
+              sshMachineConfigHelper
+              ;
+            guestStateBindings = import ./nix/workloads/guest-state-bindings.nix;
           };
 
           # Bundle the OpenCode guest Python scripts into a single store
@@ -318,17 +273,37 @@
           oauthGatewayRootfs = oauthGatewaySystem.config.system.build.squashfs;
           oauthGatewayMetadata = oauthGatewaySystem.config.system.build.metadata;
 
-          herdrClientRootfs = herdrClientSystem.config.system.build.squashfs;
-          herdrClientMetadata = herdrClientSystem.config.system.build.metadata;
           opencodeWorkloadRootfs = opencodeWorkloadSystem.config.system.build.squashfs;
           opencodeWorkloadMetadata = opencodeWorkloadSystem.config.system.build.metadata;
         in
         {
           # Separate operator-only CLI; never registered by aginctus/MCP.
-          # Testenv and accepted-state tools remain explicit, opt-in package outputs.
-          testenv-cli = goPackages.testenv-cli;
-          state-service = goPackages.state-service;
-          state-local = goPackages.state-local;
+          testenv-cli = pkgs.buildGoModule {
+            pname = "aginctus-testenv";
+            version = releaseVersion;
+            src = ./.;
+            vendorHash = "sha256-0k7OkHckPVEZEbFkQ1ojBbIEc7Lj0nvfWsYWOy18AdI=";
+            subPackages = [ "./cmd/aginctus-testenv" ];
+            ldflags = [ "-X=main.revision=${self.rev or "source-${self.narHash}"}" ];
+          };
+          # Standalone opt-in accepted-state tools. Deliberately NOT installed
+          # by NixOS/Home Manager modules and never exposed as an MCP command.
+          # The service remains read-only; the local tool can promote only
+          # explicit pinned workload candidates in its own private same-UID store.
+          state-service = pkgs.buildGoModule {
+            pname = "aginctus-state";
+            version = releaseVersion;
+            src = ./.;
+            vendorHash = "sha256-0k7OkHckPVEZEbFkQ1ojBbIEc7Lj0nvfWsYWOy18AdI=";
+            subPackages = [ "./cmd/aginctus-state" ];
+          };
+          state-local = pkgs.buildGoModule {
+            pname = "aginctus-state-local";
+            version = releaseVersion;
+            src = ./.;
+            vendorHash = "sha256-0k7OkHckPVEZEbFkQ1ojBbIEc7Lj0nvfWsYWOy18AdI=";
+            subPackages = [ "./cmd/aginctus-state-local" ];
+          };
           aginctus = aginctusCli;
           default = aginctusCli;
           # Expose exactly the runtime used by the workload image for contract tests.
@@ -361,11 +336,7 @@
             ln -s ${oauthGatewayMetadata} "$out/metadata"
           '';
 
-          herdr-client = pkgs.runCommand "aginctus-herdr-client-image" { } ''
-            mkdir -p "$out"
-            ln -s ${herdrClientRootfs} "$out/rootfs"
-            ln -s ${herdrClientMetadata} "$out/metadata"
-          '';
+          herdr-client = herdrClientImage.image;
 
           opencode-workload = pkgs.runCommand "aginctus-opencode-workload-image" { } ''
             mkdir -p "$out"
@@ -436,6 +407,7 @@
             inherit self nixpkgs system;
           };
           herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
+            herdrClientModule = herdrClientImage.guestModule;
             inherit
               self
               nixpkgs
@@ -467,7 +439,12 @@
         system:
         {
           nixos-module = import ./tests/nix/module-check.nix { inherit self nixpkgs system; };
-          home-manager-module = import ./tests/nix/home-manager-module-check.nix { inherit self nixpkgs system; };
+          herdr-image-selection = import ./tests/nix/herdr-image-check.nix {
+            inherit self nixpkgs system;
+          };
+          home-manager-module = import ./tests/nix/home-manager-module-check.nix {
+            inherit self nixpkgs system;
+          };
           operator-settings-parity = import ./tests/nix/operator-settings-parity-check.nix {
             inherit self nixpkgs system;
           };
