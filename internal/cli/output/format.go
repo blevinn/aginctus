@@ -46,7 +46,7 @@ func WriteStructured(w io.Writer, format Format, document api.Document) error {
 	if format != JSON && format != YAML {
 		return fmt.Errorf("output format %q is not a structured format", format)
 	}
-	if w == nil || document == nil || (reflect.ValueOf(document).Kind() == reflect.Pointer && reflect.ValueOf(document).IsNil()) {
+	if isNilValue(w) || isNilValue(document) {
 		return fmt.Errorf("structured output requires a writer and document")
 	}
 	meta := document.TypeMetadata()
@@ -75,4 +75,17 @@ func WriteStructured(w io.Writer, format Format, document api.Document) error {
 		return fmt.Errorf("write structured output: %w", io.ErrShortWrite)
 	}
 	return nil
+}
+
+func isNilValue(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
 }

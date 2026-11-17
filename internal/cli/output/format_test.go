@@ -103,6 +103,13 @@ func TestWriteStructuredRejectsInvalidInputsWithoutWriting(t *testing.T) {
 	}
 }
 
+func TestWriteStructuredRejectsTypedNilWriter(t *testing.T) {
+	var writer *bytes.Buffer
+	if err := WriteStructured(writer, JSON, testDocument()); err == nil {
+		t.Fatal("expected typed-nil writer to be rejected")
+	}
+}
+
 type rejectWriter struct{ err error }
 
 func (w rejectWriter) Write([]byte) (int, error) { return 0, w.err }
