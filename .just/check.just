@@ -63,8 +63,8 @@ python:
 # Both adapters use temporary fixtures; do not run live acceptance.
 [no-cd]
 shell-tests:
-    bash scripts/acceptance/opencode-test.sh
-    bash scripts/acceptance/opencode-live-adapter-test.sh
+    bash tests/acceptance/opencode-test.sh
+    bash tests/acceptance/opencode-live-adapter-test.sh
 
 [no-cd]
 shell:
