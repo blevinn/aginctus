@@ -467,8 +467,8 @@ pkgs.testers.runNixOSTest {
     machine.succeed("ip link set guest-host master hm-mgmt; ip link set guest-host up")
     packets()
 
-    # Metadata diagnostics must not turn an unreadable host tree into evidence
-    # of absence, or repair/adopt a competing user credential tree.
+    # Metadata diagnostics inspect each explicitly chosen credential location
+    # independently, without treating host/user trees as competing controllers.
     system_gateway = "/var/lib/aginctus/state/aginctus/gateway/upgraded-operator"
     user_gateway = "/home/operator/.local/state/aginctus/gateway/upgraded-operator"
     machine.succeed("install -d -m 0700 " + system_gateway)
@@ -479,18 +479,16 @@ pkgs.testers.runNixOSTest {
         return machine.succeed("sha256sum " + path + "/secrets.json; stat -c '%u:%g:%a' " + path + " " + path + "/secrets.json")
     system_gateway_before = credential_metadata(system_gateway)
     user_gateway_before = credential_metadata(user_gateway)
-    state_audit = cli + " operator state-audit --owner user"
-    state_report = report(state_audit, 1)
-    assert "System gateway credential metadata: unverified" in state_report
+    state_audit = cli + " operator state-audit --location user"
+    state_report = report(state_audit, 0)
     assert "User gateway credential metadata: present" in state_report
-    assert "no migration" in state_report
+    assert "neither running service nor Incus project authority verified" in state_report
     machine.fail(operator + " test -r " + system_gateway + "/secrets.json")
     root_cli = "env XDG_STATE_HOME=/run/absent-operator-state ${
       self.packages.${system}.aginctus
     }/bin/aginctus --config gateway.id=upgraded-operator"
-    root_report = report(root_cli + " operator state-audit --owner system", 0)
+    root_report = report(root_cli + " operator state-audit --location system", 0)
     assert "System gateway credential metadata: present" in root_report
-    assert "User gateway credential metadata: absent" in root_report
     machine.fail("test -e /run/absent-operator-state")
 
     machine.succeed(operator + " chmod 0644 " + user_gateway + "/secrets.json")
@@ -509,7 +507,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("chown operator:users " + user_gateway + "/secrets.json")
     machine.succeed(operator_home_manager + " switch", timeout=600)
     machine.succeed(upgraded_home_manager + " switch", timeout=600)
-    assert "User gateway credential metadata: present" in report(state_audit, 1)
+    assert "User gateway credential metadata: present" in report(state_audit, 0)
     assert credential_metadata(system_gateway) == system_gateway_before
     assert credential_metadata(user_gateway) == user_gateway_before
 
