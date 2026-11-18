@@ -58,8 +58,8 @@ The script is used as a **phase implementation**. Install small audited executab
 ```sh
 nix develop -c python3 -m unittest discover -s scripts/acceptance -p 'test_herdr_lifecycle.py' -v
 nix develop -c python3 -m py_compile scripts/acceptance/herdr-lifecycle.py
-bash scripts/acceptance/opencode-live-adapter-test.sh
-bash scripts/acceptance/opencode-test.sh
+bash tests/acceptance/opencode-live-adapter-test.sh
+bash tests/acceptance/opencode-test.sh
 git diff --check origin/main...HEAD
 just check
 ```
