@@ -127,4 +127,3 @@ func ReconcileOwnedFirewalld(ctx context.Context, zoneName string, actions Firew
 	}
 	return FirewalldResult{Interface: owned.Interface}, nil
 }
-
