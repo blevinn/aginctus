@@ -68,7 +68,7 @@ func RunScopedImageImport(ctx context.Context, args []string, stdout, stderr io.
 		return 2
 	}
 	if err := incusimages.CreateScopedImage(ctx, scope, alias, dir, actions); err != nil {
-		fmt.Fprintf(stderr, "images import: %v\\n", err)
+		fmt.Fprintf(stderr, "images import: %v\n", err)
 		return 1
 	}
 	fmt.Fprintf(stdout, "image %q: created in project %q\n", alias, scope.Name)
