@@ -54,41 +54,18 @@ func Reconcile(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config
 	if selectedBackend == "nixos-nft" {
 		return ReconcileNixosNft(ctx, stdout, stderr, cfg, actions)
 	}
-	version, err := actions.Command(ctx, "", "iptables", "--version")
-	if err != nil || !strings.Contains(version, "(nf_tables)") {
-		fmt.Fprintln(stderr, "unsupported firewall backend: require NixOS iptables-nft")
-		return 1
-	}
-	input, err := actions.Command(ctx, "", "iptables", "-S", "nixos-fw")
-	if err != nil || !strings.Contains(input, "-j "+firewall.Chain) {
-		fmt.Fprintln(stderr, "Aginctus nixos-fw hook missing; activate the host NixOS module")
-		return 1
-	}
-	if _, err := actions.Command(ctx, "", "iptables", "-S", firewall.Chain); err != nil {
-		fmt.Fprintln(stderr, "Aginctus firewall chain missing")
-		return 1
-	}
-	policy, discoveryErr := actions.Discover(ctx, cfg)
-	var approved *firewall.Policy
-	if discoveryErr == nil {
-		approved = &policy
-	}
-	transaction, err := firewall.Render(approved)
+	iface, err := firewall.ReconcileOwnedIptablesNft(ctx, firewall.IptablesNftReconcileActions{
+		EffectiveUID: actions.EffectiveUID,
+		Command: actions.Command,
+		Discover: func(ctx context.Context) (firewall.Policy, error) {
+			return actions.Discover(ctx, cfg)
+		},
+	})
 	if err != nil {
-		fmt.Fprintln(stderr, "invalid firewall policy")
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	// --noflush preserves every foreign chain. The explicit -F clears only
-	// our chain; iptables-nft commits its replacement transaction atomically.
-	if _, err := actions.Command(ctx, transaction, "iptables-restore", "-w", "--noflush"); err != nil {
-		fmt.Fprintln(stderr, "Aginctus INPUT transaction failed; no unrelated rules were modified")
-		return 1
-	}
-	if discoveryErr != nil {
-		fmt.Fprintf(stderr, "Aginctus INPUT exceptions cleared (fail closed): %v\n", discoveryErr)
-		return 1
-	}
-	fmt.Fprintf(stdout, "Aginctus INPUT policy reconciled for verified bridge %q (DNS/DHCP only)\n", policy.Interface)
+	fmt.Fprintf(stdout, "Aginctus INPUT policy reconciled for verified bridge %q (DNS/DHCP only)\n", iface)
 	return 0
 }
 

@@ -134,7 +134,7 @@ The [closed Herdr connectivity issue #120](https://github.com/blevinn/aginctus/i
 
 ```sh
 nix develop -c go test ./internal/cli ./internal/herdrclient ./internal/incus/statevolume
-nix develop -c python3 -m unittest discover -s guest/ssh -p 'test_*.py' -v
+nix develop -c python3 -m unittest discover -s nix/guest/ssh -p 'test_*.py' -v
 nix develop -c just check-all
 ```
 
