@@ -115,7 +115,8 @@ the output to promote any `live/*` row in the aggregate report.
 Deterministic hostless validation (no image deployment needed):
 
 ```sh
-nix develop -c python3 -m unittest discover -s guest/opencode -p 'test_egress_probe.py' -v
+nix develop -c python3 -m unittest discover -s plugins/opencode/guest -p 'test_egress_probe.py' -v
 nix develop -c python3 -m unittest discover -s tests/acceptance -p 'test_guest_network_controls.py' -v
-nix develop -c ruff check guest/opencode/egress_probe.py guest/opencode/test_egress_probe.py tests/acceptance/guest-network-controls.py tests/acceptance/test_guest_network_controls.py
+nix develop -c ruff check plugins/opencode/guest/egress_probe.py plugins/opencode/guest/test_egress_probe.py scripts/acceptance/guest-network-controls.py scripts/acceptance/test_guest_network_controls.py
+nix develop -c ruff check plugins/opencode/guest/egress_probe.py plugins/opencode/guest/test_egress_probe.py tests/acceptance/guest-network-controls.py tests/acceptance/test_guest_network_controls.py
 ```

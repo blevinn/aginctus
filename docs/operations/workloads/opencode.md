@@ -85,7 +85,7 @@ If the endpoint, model or key is absent/invalid, OpenCode does **not** launch. A
 ## Isolated validation (does not require Incus or LiteLLM)
 
 ```sh
-python3 -m unittest discover -s guest/opencode -p 'test_*.py' -v
+python3 -m unittest discover -s plugins/opencode/guest -p 'test_*.py' -v
 nix develop -c go test ./...
 nix flake check
 nix build .#opencode-workload --no-link
@@ -95,7 +95,7 @@ The unit tests use a fake OpenCode executable and a synthetic tool-call response
 
 ```sh
 OPENCODE_PATH="$(nix build .#opencode-runtime --no-link --print-out-paths)/bin/opencode"
-nix shell nixpkgs#python3 --command python3 guest/opencode/test_real_runtime.py "$OPENCODE_PATH"
+nix shell nixpkgs#python3 --command python3 plugins/opencode/guest/test_real_runtime.py "$OPENCODE_PATH"
 ```
 
 The separate integration test runs the actual pinned CLI through the Go-alias session plugin and launcher in an isolated temporary HOME, with a disposable loopback mock. It asserts an authenticated `POST /v1/responses`, the configured Go pilot alias, an identifying `User-Agent`, a real OpenCode session header (`x-opencode-session` or `x-opencode-session-id`), continuity across requests in that run, and terminal streamed text consumption; no external model or gateway is needed. It never prints session identifiers or bearer keys. This is an **operator validation step**, not a claim that it passed. If the pinned OpenCode binary lacks those headers, the offline test fails rather than having Aginctus silently fabricate a session. A run with one request verifies header presence only; repeatability across a multi-request conversation and upstream forwarding remain separate acceptance gates.
@@ -185,7 +185,7 @@ cleanup warning before manually removing the named disposable test instance.
 ### Independent validation
 
 ```sh
-nix shell nixpkgs#python3 --command python3 -m unittest discover -s guest/opencode -p 'test_*.py' -v
+nix shell nixpkgs#python3 --command python3 -m unittest discover -s plugins/opencode/guest -p 'test_*.py' -v
 nix develop -c go test ./internal/cli ./...
 nix flake check
 nix build .#opencode-workload --no-link
