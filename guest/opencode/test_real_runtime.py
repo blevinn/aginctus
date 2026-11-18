@@ -174,7 +174,7 @@ def main(binary, inspect_tools=False, execute_tools=False):
             # Import only a repository-pinned fixture from this source tree.
             # The interpreter runs the actual pinned OpenCode launcher separately.
             sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-            from scripts.vm_harness.tool_sequence import ToolSequence, stream
+            from tests.vm_harness.tool_sequence import ToolSequence, stream
             Handler.sequence = ToolSequence(str(root), model=MODEL)
             Handler.sequence_stream = stream
             (root / "go.mod").write_text(
