@@ -317,7 +317,7 @@
                     environment.systemPackages = [
                       pkgs.go
                       (pkgs.writeShellScriptBin "aginctus-vm-guest-credentials" ''
-                        exec ${pkgs.python3}/bin/python3 ${./scripts/vm_harness/guest_credentials.py} "$@"
+                        exec ${pkgs.python3}/bin/python3 ${./tests/vm_harness/guest_credentials.py} "$@"
                       '')
                     ];
                   }
