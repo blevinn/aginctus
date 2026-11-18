@@ -12,6 +12,7 @@ let
     mkdir -p "$out/guest" "$out/tests"
     cp -R ${../../guest/opencode} "$out/guest/opencode"
     cp -R ${../../tests/vm_harness} "$out/tests/vm_harness"
+    touch "$out/tests/__init__.py"
   '';
 in
 pkgs.testers.runNixOSTest {
