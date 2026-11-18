@@ -259,7 +259,7 @@ synthetic native-hook behavior can be validated locally, separately
 from the pinned Python policy tests:
 
 ```sh
-nix shell nixpkgs#nodejs --command node --test guest/opencode/test_go_session_plugin.mjs
+nix shell nixpkgs#nodejs --command node --test plugins/opencode/guest/test_go_session_plugin.mjs
 nix develop -c python3 -m unittest discover -s scripts/gateway -p 'test_opencode_go_forwarding.py' -v
 ```
 

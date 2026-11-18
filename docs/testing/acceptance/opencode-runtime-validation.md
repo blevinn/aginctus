@@ -84,7 +84,7 @@ for mode in incremental buffered; do
     --entrypoint /app/.venv/bin/python "$IMAGE" \
     /probe/scripts/gateway/probe_pinned_litellm_responses.py \
     /probe/tests/gateway/fixtures/model-group-forwarding.yaml --direct-only \
-    --production-launcher /probe/guest/opencode/launch.py \
+    --production-launcher /probe/plugins/opencode/guest/launch.py \
     --opencode "$RUNTIME" --delivery-mode "$mode" || break
 
   "$PODMAN" run --rm --pull=never --network none \
@@ -95,7 +95,7 @@ for mode in incremental buffered; do
     --entrypoint /app/.venv/bin/python "$IMAGE" \
     /probe/scripts/gateway/probe_pinned_litellm_responses.py \
     /probe/tests/gateway/fixtures/model-group-forwarding.yaml --packaged-hook /bundle \
-    --production-launcher /probe/guest/opencode/launch.py \
+    --production-launcher /probe/plugins/opencode/guest/launch.py \
     --opencode "$RUNTIME" --postgres-bin "$POSTGRES_BIN" \
     --delivery-mode "$mode" || break
 done
