@@ -29,5 +29,8 @@ type Client struct {
 // New constructs a client without loading ambient configuration or touching
 // Incus. A nil plugin inventory represents an empty compiled selection.
 func New(options Options) *Client {
-	return &Client{\n\t\tPlugins: &PluginsService{inventory: options.PluginInventory},\n\t\tWorkloads: &WorkloadsService{reader: options.ScopedWorkloadReader},\n\t}
+	return &Client{
+		Plugins: &PluginsService{inventory: options.PluginInventory},
+		Workloads: &WorkloadsService{reader: options.ScopedWorkloadReader},
+	}
 }
