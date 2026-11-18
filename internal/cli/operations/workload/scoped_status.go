@@ -12,7 +12,11 @@ import (
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
-// InspectedInstance preserves the existing CLI adapter type while the domain\n// owns the inventory contract.\ntype InspectedInstance = workload.InspectedInstance\n\ntype ScopedStatusActions struct {
+// InspectedInstance preserves the existing CLI adapter type while the domain
+// owns the inventory contract.
+type InspectedInstance = workload.InspectedInstance
+
+type ScopedStatusActions struct {
 	Parse func([]string) (string, []string, error)
 	Read func(context.Context, *config.Config, string) (incusscope.ProjectScope, []InspectedInstance, error)
 	Find func([]InspectedInstance, string, string, string, string) (string, error)
