@@ -2,7 +2,7 @@
 
 This is **stage 4** of the [OpenCode acceptance decision path](README.md#4-operator-authorized-live-nine-phase-acceptance). Read-only preflight or a successful workspace-only Herdr smoke does not authorize this step. Obtain separate approval under the current [#122 inference gate](https://github.com/blevinn/aginctus/issues/122) before enabling live requests or paying for an upstream provider.
 
-`scripts/acceptance/opencode-live-adapter.sh` is a **fail-closed dispatcher**
+`tests/acceptance/opencode-live-adapter.sh` is a **fail-closed dispatcher**
 for the [disposable acceptance harness](README.md). It requires
 operator-supplied hooks and is not proof of a completed end-to-end run.
 
@@ -36,9 +36,9 @@ Scripts must supply their own timeouts and safe cleanup semantics. The dispatche
 
 ```sh
 # Safe deterministic dispatch checks, no Herdr or provider required:
-bash -n scripts/acceptance/opencode-live-adapter.sh scripts/acceptance/opencode-live-adapter-test.sh
-bash scripts/acceptance/opencode-live-adapter-test.sh
-bash scripts/acceptance/opencode-test.sh
+bash -n tests/acceptance/opencode-live-adapter.sh tests/acceptance/opencode-live-adapter-test.sh
+bash tests/acceptance/opencode-live-adapter-test.sh
+bash tests/acceptance/opencode-test.sh
 ```
 
 These checks use test doubles and do not contact Herdr or a provider.
@@ -56,9 +56,9 @@ and review all nine hooks, their timeouts and cleanup behavior.
 export AGINCTUS_ACCEPTANCE_LIVE_HOOKS=/absolute/path/to/reviewed-hooks
 export AGINCTUS_ACCEPTANCE_LIVE=I_UNDERSTAND
 # Install an executable copy in an operator-owned directory outside the checkout:
-install -m 0700 scripts/acceptance/opencode-live-adapter.sh /absolute/path/to/operator-bin/opencode-live-adapter
+install -m 0700 tests/acceptance/opencode-live-adapter.sh /absolute/path/to/operator-bin/opencode-live-adapter
 export AGINCTUS_ACCEPTANCE_ADAPTER=/absolute/path/to/operator-bin/opencode-live-adapter
-bash scripts/acceptance/opencode.sh live
+bash tests/acceptance/opencode.sh live
 ```
 
 The destination directory must already exist. The bundled dispatcher has
