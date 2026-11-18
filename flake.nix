@@ -77,7 +77,7 @@
               pkgs.gnused
               pkgs.gawk
             ];
-            text = builtins.readFile ./guest/ssh/client-identity.sh;
+            text = builtins.readFile ./nix/guest/ssh/client-identity.sh;
           };
           sshMachineConfigHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-machine-config";
@@ -85,7 +85,7 @@
               pkgs.coreutils
               pkgs.util-linux
             ];
-            text = builtins.readFile ./guest/ssh/machine-config.sh;
+            text = builtins.readFile ./nix/guest/ssh/machine-config.sh;
           };
           sshHostTrustHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-host-trust";
@@ -93,7 +93,7 @@
               pkgs.coreutils
               pkgs.openssh
             ];
-            text = builtins.readFile ./guest/ssh/host-trust.sh;
+            text = builtins.readFile ./nix/guest/ssh/host-trust.sh;
           };
           sshAuthorizeHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-authorize";
@@ -101,7 +101,7 @@
               pkgs.coreutils
               pkgs.openssh
             ];
-            text = builtins.readFile ./guest/ssh/authorize.sh;
+            text = builtins.readFile ./nix/guest/ssh/authorize.sh;
           };
 
           herdrClientImage = import ./plugins/herdr/images/client.nix {
