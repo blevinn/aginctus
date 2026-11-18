@@ -176,7 +176,7 @@ OpenCode image containing the provisioning helper:
 just build opencode-workload
 just update image opencode-workload
 nix shell nixpkgs#python3 --command python3 \
-  scripts/acceptance/opencode-guest-provision.py --pool default
+  tests/acceptance/opencode-guest-provision.py --pool default
 ```
 
 Replace `default` with your configured Incus storage pool. Inspect any
