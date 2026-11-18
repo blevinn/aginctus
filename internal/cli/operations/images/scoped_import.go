@@ -2,7 +2,6 @@ package imageops
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
+	incusimages "github.com/blevinn/aginctus/internal/incus/images"
 )
 
 // ScopedImportActions injects the exact authorization, local inventory,
@@ -50,38 +50,14 @@ func ParseScopedImageImportArgs(args []string) (project, alias, directory string
 	return project, alias, directory, nil
 }
 
-func ReadScopedImageAlias(ctx context.Context, scope incusscope.ProjectScope, alias string, inspect func(context.Context, incusscope.ProjectScope) ([]byte, error), maxBytes int) (fingerprint string, exists bool, err error) {
-	raw, err := inspect(ctx, scope)
-	if err != nil || len(raw) > maxBytes {
-		return "", false, fmt.Errorf("unable to verify scoped image inventory")
-	}
-	var images []LocalImage
-	if err := json.Unmarshal(raw, &images); err != nil || images == nil {
-		return "", false, fmt.Errorf("invalid scoped image inventory")
-	}
-	for _, image := range images {
-		if image.Fingerprint == "" {
-			return "", false, fmt.Errorf("invalid image fingerprint")
-		}
-		for _, item := range image.Aliases {
-			if item.Name != alias {
-				continue
-			}
-			if exists {
-				return "", false, fmt.Errorf("ambiguous scoped image alias")
-			}
-			fingerprint, exists = image.Fingerprint, true
-		}
-	}
-	return fingerprint, exists, nil
+// Compatibility adapters preserve the CLI call contract while Incus owns
+// inventory ambiguity and verified project-policy semantics.
+func ReadScopedImageAlias(ctx context.Context, scope incusscope.ProjectScope, alias string, inspect func(context.Context, incusscope.ProjectScope) ([]byte, error), maxBytes int) (string, bool, error) {
+	return incusimages.ScopedAliasFingerprint(ctx, scope, alias, inspect, maxBytes)
 }
 
 func VerifyScopedImageProject(ctx context.Context, scope incusscope.ProjectScope, read func(context.Context, incusscope.ProjectScope) (string, error)) error {
-	status, err := read(ctx, scope)
-	if err != nil || status != string(incusscope.ProjectCompatible) {
-		return fmt.Errorf("local image project ownership and feature policy not verified")
-	}
-	return nil
+	return incusimages.VerifyScopedImageProject(ctx, scope, read)
 }
 
 // A narrowly scoped creation command: never adopts or replaces a preexisting
