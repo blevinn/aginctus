@@ -1,6 +1,6 @@
 """Exercise the *real pinned* OpenCode CLI against a loopback Responses mock.
 
-Run with: nix develop -c python3 guest/opencode/test_real_runtime.py /nix/store/.../bin/opencode
+Run with: nix develop -c python3 plugins/opencode/guest/test_real_runtime.py /nix/store/.../bin/opencode
 The test fails unless the real CLI makes an authenticated /v1/responses call
 and consumes a complete SSE text response. Never needs a live LiteLLM gateway.
 """
@@ -173,7 +173,7 @@ def main(binary, inspect_tools=False, execute_tools=False):
         if execute_tools:
             # Import only a repository-pinned fixture from this source tree.
             # The interpreter runs the actual pinned OpenCode launcher separately.
-            sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+            sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
             from scripts.vm_harness.tool_sequence import ToolSequence, stream
             Handler.sequence = ToolSequence(str(root), model=MODEL)
             Handler.sequence_stream = stream
