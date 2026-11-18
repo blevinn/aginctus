@@ -133,7 +133,7 @@ a live gateway.
 
 ### Operator-only gateway spend-log correlation probe (preparatory #521)
 
-`scripts/gateway/inspect_responses_spend.py` can inspect **one previously
+`tools/gateway/inspect_responses_spend.py` can inspect **one previously
 generated** LiteLLM spend-log record through the private gateway's
 administrative read-only `GET /spend/logs?request_id=` endpoint. The command
 does not submit a prompt, launch an agent, create a key or cause a new model
@@ -150,7 +150,7 @@ explicitly; no gateway traffic occurs unless `--inspect` or
 ```sh
 # Set exact values after inspecting the reviewed pilot; no defaults inferred.
 # Dry run first: reads no secret files and makes no HTTP request.
-nix develop -c python3 scripts/gateway/inspect_responses_spend.py \
+nix develop -c python3 tools/gateway/inspect_responses_spend.py \
   --endpoint "$GATEWAY_PRIVATE_ENDPOINT" --gateway-id "$GATEWAY_ID" \
   --request-id "$GATEWAY_REQUEST_ID" \
   --run-id "$ACCEPTANCE_RUN_ID" \
