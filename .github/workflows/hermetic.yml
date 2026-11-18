@@ -217,7 +217,7 @@ jobs:
       - name: Python unit suites
         run: |
           set -euo pipefail
-          for path in scripts/vm_harness guest/opencode nix/guest/ssh scripts/acceptance scripts/gateway tests; do
+          for path in scripts/vm_harness guest/opencode nix/guest/ssh scripts/acceptance scripts/gateway tools/gateway tests; do
             python3 -m unittest discover -s "$path" -p 'test_*.py' -v
           done
       - name: shellcheck
