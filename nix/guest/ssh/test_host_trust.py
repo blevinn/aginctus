@@ -1,4 +1,4 @@
-"""Hermetic regression tests for guest/ssh/host-trust.sh.
+"""Hermetic regression tests for nix/guest/ssh/host-trust.sh.
 
 The script writes to the hardcoded ``/var/lib/aginctus/ssh`` path and is
 expected to run as root in a guest image. Each test runs the script inside
@@ -18,8 +18,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "guest" / "ssh" / "host-trust.sh"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SCRIPT = REPO_ROOT / "nix" / "guest" / "ssh" / "host-trust.sh"
 
 
 def namespace_can_chown_to_foreign():
