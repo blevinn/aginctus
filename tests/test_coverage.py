@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.acceptance import local_report
 from scripts.checks import coverage, preflight_report
 from scripts.vm_harness import runner
+from tests.acceptance import local_report
 from tools.ci import ci_summary
 
 
