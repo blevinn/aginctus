@@ -57,6 +57,11 @@ let
       };
     };
   };
+  # New environment candidates are explicit, independently identified inputs.
+  # The binding is DECLARED here; only authenticated Incus observation verifies it.
+  environmentCandidateName = types.strMatching "[a-z][a-z0-9-]{0,62}";
+  environmentCandidateUUID = types.strMatching "[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+  environmentCandidateServerID = types.strMatching "[A-Za-z0-9][A-Za-z0-9._:-]{0,255}";
   candidateWorkloads = if cfg.workloadCandidate == null then [ ] else cfg.workloadCandidate.workloads;
   candidateIDs = map (w: w.id) candidateWorkloads;
   candidateInstanceNames = map (w: w.instanceName) candidateWorkloads;
@@ -66,6 +71,31 @@ let
     && unique candidateIDs
     && unique candidateInstanceNames
     && lib.all (w: builtins.length w.profiles <= 32 && unique w.profiles) candidateWorkloads;
+  environmentWorkloads =
+    if cfg.environmentCandidate == null then [ ] else cfg.environmentCandidate.workloads;
+  environmentWorkloadIDs = map (w: w.id) environmentWorkloads;
+  environmentCandidateValid =
+    builtins.length environmentWorkloads <= 256
+    && unique environmentWorkloadIDs
+    && unique (map (w: w.instanceName) environmentWorkloads)
+    && lib.all (w: builtins.length w.profiles <= 32 && unique w.profiles) environmentWorkloads
+    && cfg.environmentCandidate.project != "default";
+  environmentCandidateSpec = {
+    apiVersion = "aginctus.dev/environment/v1alpha1";
+    kind = "EnvironmentCandidate";
+    environment = {
+      inherit (cfg.environmentCandidate) id name;
+      binding = {
+        serverId = cfg.environmentCandidate.serverId;
+        project = cfg.environmentCandidate.project;
+      };
+    };
+    selectedWorkloads = environmentWorkloadIDs;
+    workloads = map (w: {
+      inherit (w)
+        id instanceName instanceType imageFingerprint profiles ensureRunning;
+    }) environmentWorkloads;
+  };
   # Project identity is sourced from the SAME rendered Home Manager settings.
   # It is not a caller-selected ambient Incus default or cross-principal merge.
   workloadCandidateSpec = {
@@ -118,6 +148,42 @@ in
       '';
     };
 
+    environmentCandidate = mkOption {
+      type = types.nullOr (types.submodule {
+        options = {
+          id = mkOption {
+            type = environmentCandidateUUID;
+            description = "Immutable environment UUID; not a privilege grant.";
+          };
+          name = mkOption {
+            type = environmentCandidateName;
+            description = "Renameable environment display name.";
+          };
+          serverId = mkOption {
+            type = environmentCandidateServerID;
+            description = "Declared Incus server identity, verified independently at use.";
+          };
+          project = mkOption {
+            type = candidateName;
+            description = "Explicit Incus project; must not be default.";
+          };
+          workloads = mkOption {
+            type = types.listOf candidateWorkload;
+            description = "Selected nonsecret pinned workloads for this environment.";
+          };
+        };
+      });
+      default = null;
+      description = ''
+        Optional nonsecret, versioned environment candidate. Emitted separately
+        from ordinary merged CLI preferences; it never grants Incus access,
+        accepts a revision, starts a reconciler or changes host policy.
+        Supply one fully declared environment identity and binding. The binding
+        must be authenticated against the selected Incus server before use.
+        Do not also configure the experimental legacy workloadCandidate.
+      '';
+    };
+
     package = mkOption {
       type = types.package;
       default = self.packages.${pkgs.stdenv.hostPlatform.system}.aginctus;
@@ -151,7 +217,17 @@ in
     ++ lib.optional (cfg.workloadCandidate != null) {
       assertion = candidateValid;
       message = "programs.aginctus.workloadCandidate must select at most 256 unique workload IDs and instance names, with at most 32 unique profiles per workload";
-    };
+    }
+    ++ lib.optional (cfg.environmentCandidate != null) {
+      assertion = environmentCandidateValid;
+      message = "programs.aginctus.environmentCandidate needs a non-default project, <=256 unique workloads/instances and <=32 unique profiles per workload";
+    }
+    ++ [
+      {
+        assertion = cfg.environmentCandidate == null || cfg.workloadCandidate == null;
+        message = "programs.aginctus.environmentCandidate and workloadCandidate must not both be set";
+      }
+    ];
 
     home.packages = [ cfg.package ];
     xdg.configFile = {
@@ -162,6 +238,10 @@ in
     // lib.optionalAttrs (cfg.workloadCandidate != null) {
       "aginctus/workload-candidate.json".source =
         jsonFormat.generate "aginctus-hm-workload-candidate.json" workloadCandidateSpec;
+    }
+    // lib.optionalAttrs (cfg.environmentCandidate != null) {
+      "aginctus/environment-candidate.json".source =
+        jsonFormat.generate "aginctus-hm-environment-candidate.json" environmentCandidateSpec;
     };
   };
 }

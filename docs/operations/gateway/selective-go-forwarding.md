@@ -228,7 +228,7 @@ Require successful exports before running either probe:
   --entrypoint /app/.venv/bin/python "$IMAGE" \
   /probe/scripts/gateway/probe_pinned_litellm_responses.py \
   /probe/tests/gateway/fixtures/model-group-forwarding.yaml --packaged-hook /bundle \
-  --production-launcher /probe/guest/opencode/launch.py \
+  --production-launcher /probe/plugins/opencode/guest/launch.py \
   --opencode "$RUNTIME" --postgres-bin "$POSTGRES_BIN"
 
 nix --quiet develop --offline -c just check-all

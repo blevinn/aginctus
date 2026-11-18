@@ -123,11 +123,11 @@
           # provision.py and launch.py and is importable at runtime.
           opencodeGuestScripts = pkgs.runCommand "aginctus-opencode-guest-scripts" { } ''
             mkdir -p $out
-            cp ${./guest/opencode/provision.py} $out/provision.py
-            cp ${./guest/opencode/launch.py} $out/launch.py
-            cp ${./guest/opencode/gateway_endpoint.py} $out/gateway_endpoint.py
-            cp ${./guest/opencode/go_session_plugin.js} $out/go_session_plugin.js
-            cp ${./guest/opencode/siwc_plugin.js} $out/siwc_plugin.js
+            cp ${./plugins/opencode/guest/provision.py} $out/provision.py
+            cp ${./plugins/opencode/guest/launch.py} $out/launch.py
+            cp ${./plugins/opencode/guest/gateway_endpoint.py} $out/gateway_endpoint.py
+            cp ${./plugins/opencode/guest/go_session_plugin.js} $out/go_session_plugin.js
+            cp ${./plugins/opencode/guest/siwc_plugin.js} $out/siwc_plugin.js
           '';
 
           # Scoped source patch for the flake-pinned CLI event-consumer join.
@@ -145,7 +145,7 @@
           # Root-owned, pinned source and interpreter; operator-only host
           # invocation remains separate from the guest's network capability.
           opencodeEgressProbe = pkgs.writeShellScriptBin "aginctus-egress-probe" ''
-            exec ${pkgs.python3}/bin/python3 -I -B ${./guest/opencode/egress_probe.py} "$@"
+            exec ${pkgs.python3}/bin/python3 -I -B ${./plugins/opencode/guest/egress_probe.py} "$@"
           '';
 
           opencodeWorkloadSystem = nixpkgs.lib.nixosSystem {
