@@ -26,7 +26,7 @@ class ValidationDispatchTests(unittest.TestCase):
                 for directory in (
                     "scripts/vm_harness",
                     "guest/opencode", "nix/guest/ssh", "scripts/acceptance",
-                    "scripts/gateway", "tests",
+                    "scripts/gateway", "tools/gateway", "tests",
                 )
             ],
             "shell opencode-test.sh",
