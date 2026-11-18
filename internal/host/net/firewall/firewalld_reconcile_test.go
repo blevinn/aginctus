@@ -9,11 +9,11 @@ import (
 
 func TestReconcileOwnedFirewalldNoMutationOnDeniedHost(t *testing.T) {
 	for _, tc := range []struct { name string; uid int; zone, target, active, services string } {
-		{"not root", 1000, "aginctus", "DROP", "target: DROP", ""},
+		{"not root", 1000, "aginctus-smoke", "DROP", "target: DROP", ""},
 		{"invalid zone", 0, "", "DROP", "target: DROP", ""},
-		{"permanent target", 0, "aginctus", "ACCEPT", "target: DROP", ""},
-		{"runtime target", 0, "aginctus", "DROP", "target: ACCEPT", ""},
-		{"foreign service", 0, "aginctus", "DROP", "target: DROP", "ssh"},
+		{"permanent target", 0, "aginctus-smoke", "ACCEPT", "target: DROP", ""},
+		{"runtime target", 0, "aginctus-smoke", "DROP", "target: ACCEPT", ""},
+		{"foreign service", 0, "aginctus-smoke", "DROP", "target: DROP", "ssh"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			writes := 0
@@ -25,7 +25,7 @@ func TestReconcileOwnedFirewalldNoMutationOnDeniedHost(t *testing.T) {
 						if strings.HasPrefix(a,"--remove-") || strings.HasPrefix(a,"--add-") { writes++ }
 					}
 					switch args[len(args)-1] {
-					case "--get-zones": return "aginctus", nil
+					case "--get-zones": return "aginctus-smoke", nil
 					case "--get-target": return tc.target, nil
 					case "--list-all": return tc.active, nil
 					case "--list-services": return tc.services, nil
