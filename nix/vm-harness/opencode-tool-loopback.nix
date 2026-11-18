@@ -11,7 +11,7 @@ let
   toolsFixture = pkgs.runCommand "aginctus-opencode-tool-loopback" { } ''
     mkdir -p "$out/guest" "$out/scripts"
     cp -R ${../../guest/opencode} "$out/guest/opencode"
-    cp -R ${../../scripts/vm_harness} "$out/scripts/vm_harness"
+    cp -R ${../../tests/vm_harness} "$out/tests/vm_harness"
   '';
 in
 pkgs.testers.runNixOSTest {
