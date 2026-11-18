@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/blevinn/aginctus/internal/validation/catalog"
+	"github.com/blevinn/aginctus/internal/testing/validation/catalog"
 )
 
 func hermeticFixture() []byte {
