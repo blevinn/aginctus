@@ -76,6 +76,8 @@ let
   knownSettingsOptions = import ./settings-options.nix { inherit lib jsonFormat; };
   # Render the MCP subtree in the shape the Aginctus Go schema accepts.
   mcpSettings = import ./mcp-settings.nix { inherit lib; };
+  environmentSchema = import ./environment-candidate.nix { inherit lib; };
+  environmentCandidateSpec = environmentSchema.render cfg.environmentCandidate;
 in
 {
   imports = [ ./egress-firewall.nix ];
@@ -99,6 +101,18 @@ in
         settings are typed, while the freeform JSON layer preserves forward
         compatibility with newly introduced Aginctus configuration keys.
         Runtime gateway secrets are intentionally not modeled here.
+      '';
+    };
+
+    environmentCandidate = mkOption {
+      type = environmentSchema.type;
+      default = null;
+      description = ''
+        Optional nonsecret candidate for one explicitly identified environment.
+        This is not an accepted revision or an input to the legacy reconcile
+        service. A declared server/project binding must be independently
+        verified against an authenticated Incus session at selection time.
+        Host capabilities remain root-owned and outside candidate intent.
       '';
     };
 
@@ -168,7 +182,15 @@ in
   };
 
   config = mkIf cfg.enable {
+    environment.etc."aginctus/environment-candidate.json" =
+      lib.mkIf (cfg.environmentCandidate != null) {
+        source = jsonFormat.generate "aginctus-nixos-environment-candidate.json" environmentCandidateSpec;
+      };
     assertions = [
+      {
+        assertion = cfg.environmentCandidate == null || environmentSchema.valid cfg.environmentCandidate;
+        message = "services.aginctus.environmentCandidate must use a non-default project, unique workload/instance identities and bounded explicit profiles";
+      }
       {
         assertion =
           !cfg.firewall.egress.enable
