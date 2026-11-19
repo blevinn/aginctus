@@ -210,7 +210,7 @@ class LiteLLMTest(unittest.TestCase):
                                                    "OPENCODE_DISABLE_MODELS_FETCH": "1",
                                                    **{"XDG_" + key + "_HOME": str(Path(root) / key.lower())
                                                       for key in ("DATA", "CONFIG", "CACHE", "STATE")}}
-                                    launcher = Path(__file__).resolve().parents[2] / "guest/opencode/launch.py"
+                                    launcher = Path(__file__).resolve().parents[2] / "plugins/opencode/guest/launch.py"
                                     process = await asyncio.create_subprocess_exec(
                                         sys.executable, str(launcher), os.environ["AGINCTUS_TEST_OPENCODE_BINARY"],
                                         "run", "--format", "json", "Reply with the synthetic marker only. Do not execute tools.",

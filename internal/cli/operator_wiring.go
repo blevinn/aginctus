@@ -145,16 +145,12 @@ func inspectGatewayState(root, gatewayID string, expectedUID uint32) gatewayStat
 	return operatorops.InspectGatewayState(root, gatewayID, expectedUID)
 }
 
-func auditOperatorGatewayState(owner, systemRoot, userRoot, gatewayID string, systemUID, userUID uint32) (gatewayStateEvidence, gatewayStateEvidence, bool) {
-	return operatorops.AuditGatewayState(owner, systemRoot, userRoot, gatewayID, systemUID, userUID)
-}
-
 func runOperatorStateAudit(args []string, stdout, stderr io.Writer, effective *config.Config) int {
 	return operatorops.RunStateAudit(args, stdout, stderr, effective, os.Geteuid, filestate.StateRoot)
 }
 
-func renderOperatorStateAudit(owner, systemRoot, userRoot, gatewayID string, systemUID, userUID uint32, stdout, stderr io.Writer) int {
-	return operatorops.RenderStateAudit(owner, systemRoot, userRoot, gatewayID, systemUID, userUID, stdout, stderr)
+func renderOperatorStateAudit(location, root, gatewayID string, uid uint32, stdout, stderr io.Writer) int {
+	return operatorops.RenderStateAudit(location, root, gatewayID, uid, stdout, stderr)
 }
 
 // These are the known Aginctus units that can import images or reconcile
