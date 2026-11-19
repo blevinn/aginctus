@@ -1,15 +1,17 @@
 package images
 
 import (
- "context"
- "encoding/json"
- "fmt"
- incusscope "github.com/blevinn/aginctus/internal/incus"
+	"context"
+	"encoding/json"
+	"fmt"
+	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
 
 // Exact-project inventory and image claim evidence never grant authorization.
 func InspectOwnedScopedInventory(ctx context.Context, scope incusscope.ProjectScope, inspect func(context.Context, incusscope.ProjectScope) ([]byte, error), maxBytes int) ([]ObservedClaimedImage, error) {
-	if inspect == nil { return nil, fmt.Errorf("unable to inspect project-local images") }
+	if inspect == nil {
+		return nil, fmt.Errorf("unable to inspect project-local images")
+	}
 	raw, err := inspect(ctx, scope)
 	if err != nil || maxBytes <= 0 || len(raw) > maxBytes {
 		return nil, fmt.Errorf("unable to inspect project-local images")
@@ -43,4 +45,3 @@ func AvailableForOwnedImport(images []ObservedClaimedImage, alias, fingerprint s
 	}
 	return true
 }
-
