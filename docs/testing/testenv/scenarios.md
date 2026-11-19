@@ -18,7 +18,7 @@ billing/provenance or a coding-agent run. Never use its static key on a pilot.
 ## Next synthetic tool-protocol acceptance gate
 
 Issue #531 now has an **opt-in loopback OpenCode tool probe** in
-`guest/opencode/test_real_runtime.py`, with two modes that use the
+`plugins/opencode/guest/test_real_runtime.py`, with two modes that use the
 real pinned OpenCode executable and the production Aginctus launcher:
 
 - `--inspect-tools` observes only genuine bounded Responses tool
