@@ -9,9 +9,10 @@
 let
   pkgs = import nixpkgs { inherit system; };
   toolsFixture = pkgs.runCommand "aginctus-opencode-tool-loopback" { } ''
-    mkdir -p "$out/plugins/opencode" "$out/scripts"
+    mkdir -p "$out/plugins/opencode" "$out/tests"
     cp -R ${../../plugins/opencode/guest} "$out/plugins/opencode/guest"
-    cp -R ${../../scripts/vm_harness} "$out/scripts/vm_harness"
+    cp -R ${../../tests/vm_harness} "$out/tests/vm_harness"
+    touch "$out/tests/__init__.py"
   '';
 in
 pkgs.testers.runNixOSTest {
