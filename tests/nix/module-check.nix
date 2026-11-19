@@ -27,6 +27,36 @@ let
     }).config;
 
   base = evaluate { };
+  withEnvironmentCandidate = evaluate {
+    services.aginctus = {
+      images.herdrClient.enable = false;
+      images.opencodeWorkload.enable = false;
+      reconcile.enable = false;
+      environmentCandidate = {
+        id = "7c82e6d1-1212-4123-8123-0123456789ab";
+        name = "development";
+        serverId = "verified-incus-server";
+        project = "dev_team";
+        workloads = [ {
+          id = "dev";
+          instanceName = "dev-instance";
+          instanceType = "container";
+          imageFingerprint = lib.concatStrings (lib.replicate 64 "a");
+          profiles = [ "base" ];
+          ensureRunning = false;
+        } ];
+      };
+    };
+  };
+  invalidEnvironmentCandidate = evaluate {
+    services.aginctus.environmentCandidate = {
+      id = "7c82e6d1-1212-4123-8123-0123456789ab";
+      name = "development";
+      serverId = "verified-incus-server";
+      project = "default";
+      workloads = [ ];
+    };
+  };
   alternateProject = evaluate {
     services.aginctus.settings.incus.project = "aginctus-alt";
   };
@@ -360,6 +390,13 @@ assert !(builtins.hasAttr "aginctus-image-herdr-client" hostOnly.systemd.service
 assert !(builtins.hasAttr "aginctus-image-opencode-workload" hostOnly.systemd.services);
 assert !(builtins.hasAttr "aginctus-reconcile" hostOnly.systemd.services);
 assert builtins.hasAttr "aginctus/config.json" hostOnly.environment.etc;
+assert !(builtins.hasAttr "aginctus/environment-candidate.json" base.environment.etc);
+assert builtins.hasAttr "aginctus/environment-candidate.json" withEnvironmentCandidate.environment.etc;
+assert lib.hasInfix "aginctus-nixos-environment-candidate.json" (
+  toString withEnvironmentCandidate.environment.etc."aginctus/environment-candidate.json".source
+);
+assert !(builtins.hasAttr "aginctus-reconcile" withEnvironmentCandidate.systemd.services);
+assert lib.any (a: !a.assertion) (failedAginctusAssertions invalidEnvironmentCandidate);
 assert !(builtins.hasAttr "aginctus/operator-package.json" base.environment.etc);
 assert !(builtins.hasAttr "aginctus/operator-package.json" hostOnly.environment.etc);
 assert !base.services.aginctus.reconcile.enable;
