@@ -79,49 +79,27 @@ func InspectGatewayState(root, gatewayID string, expectedUID uint32) GatewayStat
 	return GatewayStatePresent
 }
 
-func AuditGatewayState(owner, systemRoot, userRoot, gatewayID string, systemUID, userUID uint32) (GatewayStateEvidence, GatewayStateEvidence, bool) {
-	// The state root selected for the user may not be the same location as
-	// system-owned state; otherwise a user environment variable could make
-	// one credential tree appear to have two owners.
-	if filepath.Clean(systemRoot) == filepath.Clean(userRoot) {
-		return GatewayStateUnsafe, GatewayStateUnsafe, false
-	}
-	system := InspectGatewayState(systemRoot, gatewayID, systemUID)
-	user := InspectGatewayState(userRoot, gatewayID, userUID)
-	if system == GatewayStateUnsafe || user == GatewayStateUnsafe ||
-		system == GatewayStateUnverified || user == GatewayStateUnverified ||
-		system == GatewayStateIncomplete || user == GatewayStateIncomplete {
-		return system, user, false
-	}
-	switch owner {
-	case "system":
-		return system, user, user == GatewayStateAbsent
-	case "user":
-		return system, user, system == GatewayStateAbsent
-	default:
-		return system, user, false
-	}
-}
-
-// RunStateAudit is a standalone read-only diagnostic. Selecting an
-// owner does not activate that owner's gateway, adopt an Incus object or grant
-// access to protected state. It is not yet a guard on the mutating commands.
+// RunStateAudit inspects exactly one explicitly selected credential-storage
+// location. This is metadata observation, not Incus project or lifecycle
+// authority. Host inspection requires root; user inspection requires the
+// unprivileged user whose state root is being examined.
 func RunStateAudit(args []string, stdout, stderr io.Writer, effective *config.Config, euid func() int, stateRoot func() (string, error)) int {
-	owner := ""
+	location := ""
 	switch {
-	case len(args) == 2 && args[0] == "state-audit" && args[1] == "--owner=system":
-		owner = "system"
-	case len(args) == 2 && args[0] == "state-audit" && args[1] == "--owner=user":
-		owner = "user"
-	case len(args) == 3 && args[0] == "state-audit" && args[1] == "--owner" &&
+	case len(args) == 2 && args[0] == "state-audit" && args[1] == "--location=system":
+		location = "system"
+	case len(args) == 2 && args[0] == "state-audit" && args[1] == "--location=user":
+		location = "user"
+	case len(args) == 3 && args[0] == "state-audit" && args[1] == "--location" &&
 		(args[2] == "system" || args[2] == "user"):
-		owner = args[2]
+		location = args[2]
 	default:
-		fmt.Fprintln(stderr, "Usage: aginctus operator state-audit --owner system|user")
+		fmt.Fprintln(stderr, "Usage: aginctus operator state-audit --location system|user")
 		return 2
 	}
-	if owner == "user" && euid() == 0 {
-		fmt.Fprintln(stderr, "operator state-audit: user ownership must be checked as the unprivileged operator (no sudo)")
+	uid := euid()
+	if (location == "system" && uid != 0) || (location == "user" && uid == 0) {
+		fmt.Fprintln(stderr, "operator state-audit: inspect host credentials as root or user credentials as the unprivileged owner; no privilege fallback")
 		return 2
 	}
 	gatewayID, err := effective.String("gateway.id")
@@ -129,23 +107,31 @@ func RunStateAudit(args []string, stdout, stderr io.Writer, effective *config.Co
 		fmt.Fprintln(stderr, "operator state-audit: gateway.id must be an explicit, valid gateway identifier")
 		return 2
 	}
-	userRoot, err := stateRoot()
-	if err != nil {
-		fmt.Fprintln(stderr, "operator state-audit: cannot resolve absolute user state root")
-		return 2
+	root := SystemStateRoot
+	if location == "user" {
+		root, err = stateRoot()
+		if err != nil || !filepath.IsAbs(root) {
+			fmt.Fprintln(stderr, "operator state-audit: cannot resolve absolute user state root")
+			return 2
+		}
 	}
-	return RenderStateAudit(owner, SystemStateRoot, userRoot, gatewayID, 0, uint32(euid()), stdout, stderr)
+	return RenderStateAudit(location, root, gatewayID, uint32(uid), stdout, stderr)
 }
 
-func RenderStateAudit(owner, systemRoot, userRoot, gatewayID string, systemUID, userUID uint32, stdout, stderr io.Writer) int {
-	system, user, ok := AuditGatewayState(owner, systemRoot, userRoot, gatewayID, systemUID, userUID)
-	fmt.Fprintf(stdout, "Gateway %q: selected state authority %s (read-only; no migration)\n", gatewayID, owner)
-	fmt.Fprintf(stdout, "System gateway credential metadata: %s\n", system)
-	fmt.Fprintf(stdout, "User gateway credential metadata: %s\n", user)
-	if !ok {
-		fmt.Fprintln(stderr, "gateway state ownership unverified or conflicting: stop before any user/system handoff; inspect through the authorized owner (no secret contents)")
+// RenderStateAudit inspects metadata only and never reads secret bytes.
+// A credential tree does not prove active service use or reconciler ownership.
+func RenderStateAudit(location, root, gatewayID string, uid uint32, stdout, stderr io.Writer) int {
+	if location != "system" && location != "user" {
+		fmt.Fprintln(stderr, "operator state-audit: invalid credential location")
+		return 2
+	}
+	result := InspectGatewayState(root, gatewayID, uid)
+	fmt.Fprintf(stdout, "Gateway %q: credential storage location %s (read-only)\n", gatewayID, location)
+	fmt.Fprintf(stdout, "%s gateway credential metadata: %s\n", map[string]string{"system":"System", "user":"User"}[location], result)
+	if result == GatewayStateUnsafe || result == GatewayStateUnverified || result == GatewayStateIncomplete {
+		fmt.Fprintln(stderr, "gateway credential metadata unsafe or unverified; no secret contents read")
 		return 1
 	}
-	fmt.Fprintln(stdout, "No competing credential state observed; running unit, Incus alias, and reconciler authority remain unverified")
+	fmt.Fprintln(stdout, "Credential metadata observed; neither running service nor Incus project authority verified")
 	return 0
 }

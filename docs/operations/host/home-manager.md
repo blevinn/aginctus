@@ -134,23 +134,24 @@ reconciliation and test-driver reattachment of its synthetic peer to the recreat
 bridge. This tests clean daemon interruption, not workload recovery or a crash during an Incus
 write transaction.
 
-Gateway state-audit acceptance uses separate runtime-generated synthetic files
-with owner-only directory/file permissions. The ordinary operator reports the
-protected system tree as unverified, not absent, and refuses a handoff even when
-its own credential metadata is present. A root-only diagnostic separately proves
-the system fixture is present without initializing the selected empty user root.
-User files with broad modes, symlinks to protected system state, or foreign
-ownership are reported unsafe without automatic repair. Reports are checked for
-synthetic secret disclosure; Home Manager switching preserves both state trees'
-contents and owner/mode metadata. These are read-only diagnostics, not proof of
-the running gateway's state identity or credential migration acceptance.
+Gateway credential metadata acceptance uses separate runtime-generated synthetic
+host and user files with owner-only permissions. A privileged host diagnostic
+inspects only the host location; the ordinary operator inspects only its
+user credential location. Neither comparison nor a selected controller owner
+is inferred. User files with broad modes, symlinks to protected system state,
+or foreign ownership are reported unsafe without automatic repair. Reports
+are checked for synthetic secret disclosure; Home Manager switching preserves
+both state trees' contents and owner/mode metadata. These are read-only
+observations, not proof of a running gateway's credential identity or an
+authorization/migration acceptance.
 
-Lifecycle unit-audit acceptance starts harmless sleep fixtures under a known
-Aginctus lifecycle unit name in the real system/current-user managers. Installed
-inactive and active competing units cause refusal; simultaneous system/user
-fixtures refuse either authority selection. Removing both fixtures restores the
-no-known-conflict result, while stopping the user manager yields unverified
-evidence and refusal. Root firewall-only units remain outside that allowlist.
+Lifecycle unit-inventory acceptance starts harmless sleep fixtures under a known
+Aginctus lifecycle unit name in the real system/current-user managers. Installed,
+inactive and active units are reported without being interpreted as competing
+project authorities; even simultaneous system/user fixtures are observational.
+Removing both fixtures restores an absent inventory, while stopping the user
+manager yields unverified evidence and a nonzero result. Root firewall-only units
+remain outside that allowlist.
 This verifies read-only diagnostics, not mutation-time guards, real reconciler
 behavior, other-user visibility, or exclusion of manual/renamed controllers.
 
