@@ -98,54 +98,37 @@ func TestOperatorGatewayStateMetadata(t *testing.T) {
 	})
 }
 
-func TestOperatorGatewayStateOwnerSelection(t *testing.T) {
+func TestOperatorGatewayCredentialLocationIsNotAnOwnerHandoff(t *testing.T) {
 	uid := uint32(os.Geteuid())
-	dir := t.TempDir()
-	system := filepath.Join(dir, "system")
-	user := filepath.Join(dir, "user")
-	for _, root := range []string{system, user} {
-		if err := os.MkdirAll(root, 0o700); err != nil {
-			t.Fatal(err)
-		}
+	root := filepath.Join(t.TempDir(), "state")
+	makeGatewayState(t, root, "local")
+	var out, errs bytes.Buffer
+	code := renderOperatorStateAudit("user", root, "local", uid, &out, &errs)
+	if code != 0 || !strings.Contains(out.String(), "User gateway credential metadata: present") ||
+		!strings.Contains(out.String(), "neither running service nor Incus project authority verified") {
+		t.Fatalf("incorrect location report code=%d stdout=%q stderr=%q", code, out.String(), errs.String())
 	}
-	check := func(owner string, success bool, sys, usr gatewayStateEvidence) {
-		t.Helper()
-		actualSystem, actualUser, ok := auditOperatorGatewayState(owner, system, user, "local", uid, uid)
-		if ok != success || actualSystem != sys || actualUser != usr {
-			t.Errorf("owner=%q got (%s,%s,%v); expected (%s,%s,%v)", owner, actualSystem, actualUser, ok, sys, usr, success)
-		}
+	if strings.Contains(out.String()+errs.String(), "sensitive-secret") || strings.Contains(out.String()+errs.String(), root) {
+		t.Fatal("credential diagnostic disclosed contents or private path")
 	}
-	check("system", true, gatewayStateAbsent, gatewayStateAbsent)
-	makeGatewayState(t, system, "local")
-	check("system", true, gatewayStatePresent, gatewayStateAbsent)
-	check("user", false, gatewayStatePresent, gatewayStateAbsent)
-	makeGatewayState(t, user, "local")
-	check("system", false, gatewayStatePresent, gatewayStatePresent)
-	check("user", false, gatewayStatePresent, gatewayStatePresent)
-	if _, _, ok := auditOperatorGatewayState("system", system, system, "local", uid, uid); ok {
-		t.Error("same state root must not pass for two owner roles")
+	out.Reset()
+	errs.Reset()
+	if code := renderOperatorStateAudit("unknown", root, "local", uid, &out, &errs); code != 2 {
+		t.Fatal("unknown credential location accepted")
 	}
 }
 
-func TestOperatorGatewayStateAuditRedactsAndRejectsConflict(t *testing.T) {
+func TestOperatorGatewayCredentialAuditRejectsUnsafeLocation(t *testing.T) {
 	uid := uint32(os.Geteuid())
-	dir := t.TempDir()
-	system := filepath.Join(dir, "system")
-	user := filepath.Join(dir, "user")
-	makeGatewayState(t, system, "local")
-	makeGatewayState(t, user, "local")
-	var out, errOut bytes.Buffer
-	code := renderOperatorStateAudit("system", system, user, "local", uid, uid, &out, &errOut)
-	if code != 1 || !strings.Contains(errOut.String(), "unverified or conflicting") {
-		t.Fatalf("code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	root := filepath.Join(t.TempDir(), "state")
+	secret := makeGatewayState(t, root, "local")
+	if err := os.Chmod(secret, 0o644); err != nil { t.Fatal(err) }
+	var out, errs bytes.Buffer
+	code := renderOperatorStateAudit("user", root, "local", uid, &out, &errs)
+	if code != 1 || !strings.Contains(errs.String(), "unsafe or unverified") {
+		t.Fatalf("unsafe credential location accepted code=%d out=%q err=%q", code, out.String(), errs.String())
 	}
-	allOutput := out.String() + errOut.String()
-	if strings.Contains(allOutput, "sensitive-secret") || strings.Contains(allOutput, "secrets.json") || strings.Contains(allOutput, dir) {
-		t.Fatalf("state audit leaked secret data or inspected filesystem paths: %q", allOutput)
-	}
-	for _, want := range []string{"System gateway credential metadata: present", "User gateway credential metadata: present"} {
-		if !strings.Contains(out.String(), want) {
-			t.Fatalf("missing %q in audit result %q", want, out.String())
-		}
+	if strings.Contains(out.String()+errs.String(), "sensitive-secret") || strings.Contains(out.String()+errs.String(), root) {
+		t.Fatal("credential diagnostic leaked data or paths")
 	}
 }
