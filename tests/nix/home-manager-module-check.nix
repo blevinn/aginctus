@@ -159,6 +159,62 @@ let
       };
     };
   };
+  withEnvironmentCandidate = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      environmentCandidate = {
+        id = "7c82e6d1-1212-4123-8123-0123456789ab";
+        name = "development";
+        serverId = "verified-incus-server";
+        project = "dev_team";
+        workloads = [ candidateWorkload ];
+      };
+    };
+  };
+  environmentDefaultProject = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      environmentCandidate = {
+        id = "7c82e6d1-1212-4123-8123-0123456789ab";
+        name = "development";
+        serverId = "verified-incus-server";
+        project = "default";
+        workloads = [ candidateWorkload ];
+      };
+    };
+  };
+  bothCandidateSources = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      environmentCandidate = {
+        id = "7c82e6d1-1212-4123-8123-0123456789ab";
+        name = "development";
+        serverId = "verified-incus-server";
+        project = "dev_team";
+        workloads = [ candidateWorkload ];
+      };
+      workloadCandidate = {
+        deploymentID = "legacy";
+        workloads = [ candidateWorkload ];
+      };
+    };
+  };
+  duplicateEnvironmentInstances = evaluate {
+    programs.aginctus = {
+      enable = true;
+      package = stub;
+      environmentCandidate = {
+        id = "7c82e6d1-1212-4123-8123-0123456789ab";
+        name = "development";
+        serverId = "verified-incus-server";
+        project = "dev_team";
+        workloads = [ candidateWorkload (candidateWorkload // { id = "other"; }) ];
+      };
+    };
+  };
   duplicateCandidate = evaluate {
     programs.aginctus = {
       enable = true;
@@ -278,6 +334,14 @@ in
 assert disabled.home.packages == [ ];
 assert !(builtins.hasAttr "aginctus/workload-candidate.json" disabled.xdg.configFile);
 assert !(builtins.hasAttr "aginctus/workload-candidate.json" enabled.xdg.configFile);
+assert !(builtins.hasAttr "aginctus/environment-candidate.json" enabled.xdg.configFile);
+assert !(builtins.hasAttr "aginctus/environment-candidate.json" withCandidate.xdg.configFile);
+assert builtins.hasAttr "aginctus/environment-candidate.json" withEnvironmentCandidate.xdg.configFile;
+assert !(builtins.hasAttr "aginctus/workload-candidate.json" withEnvironmentCandidate.xdg.configFile);
+assert lib.all (a: a.assertion) withEnvironmentCandidate.assertions;
+assert lib.any (a: !a.assertion) environmentDefaultProject.assertions;
+assert lib.any (a: !a.assertion) bothCandidateSources.assertions;
+assert lib.any (a: !a.assertion) duplicateEnvironmentInstances.assertions;
 assert withCandidate.programs.aginctus.workloadCandidate.deploymentID == "hm-deployment";
 assert withCandidate.programs.aginctus.settings.incus.project == "hm-operator";
 assert withCandidate.home.packages == [ stub ];
@@ -377,6 +441,24 @@ pkgs.runCommand "aginctus-home-manager-operator-contract"
       and .workloads[0].profiles == ["base"]
       and .workloads[0].ensureRunning == false
     ' "$candidate" > /dev/null
+
+    environment_candidate="${withEnvironmentCandidate.xdg.configFile."aginctus/environment-candidate.json".source}"
+    test -f "$environment_candidate"
+    jq --arg sha "${candidateFingerprint}" -e '
+      .apiVersion == "aginctus.dev/environment/v1alpha1"
+      and .kind == "EnvironmentCandidate"
+      and .environment.id == "7c82e6d1-1212-4123-8123-0123456789ab"
+      and .environment.name == "development"
+      and .environment.binding.serverId == "verified-incus-server"
+      and .environment.binding.project == "dev_team"
+      and .selectedWorkloads == ["dev"]
+      and (.workloads | length) == 1
+      and .workloads[0].imageFingerprint == $sha
+      and (.workloads[0].profiles == ["base"])
+      and (.workloads[0].ensureRunning == false)
+      and (has("gateway") | not)
+      and (has("firewall") | not)
+    ' "$environment_candidate" > /dev/null
 
     # The candidate is in the read-only Nix store. Nothing is accepted,
     # reconciled, or written to Incus by this evaluation/check.

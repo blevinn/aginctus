@@ -80,7 +80,7 @@ whether the client omitted the header or LiteLLM dropped it.
 
 **OpenCode Go caveat:** This host-side nonce-echo smoke intentionally does not
 fabricate an OpenCode conversation ID or pretend to be a coding agent. The
-pinned real-OpenCode loopback test in `guest/opencode/test_real_runtime.py`
+pinned real-OpenCode loopback test in `plugins/opencode/guest/test_real_runtime.py`
 checks for an identifying `User-Agent`, the presence of a native OpenCode
 session header, and stability across the requests in one run. That test
 establishes the **client-to-mock** contract, not LiteLLM-to-Go forwarding.
