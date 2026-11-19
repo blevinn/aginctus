@@ -1,6 +1,6 @@
 # Configuration reference: sources and host integration
 
-Aginctus configuration is assembled from multiple sources with deterministic precedence. This page owns values, precedence, NixOS/Home Manager integration and their authority boundaries; [CLI operations](cli.md) owns command side effects, while installed `aginctus help` owns syntax.
+Ordinary Aginctus CLI configuration is assembled from multiple sources with deterministic precedence. **This precedence does not select or merge environment candidates or authorize their acceptance.** This page owns ordinary values, precedence, NixOS/Home Manager integration and their authority boundaries; [CLI operations](cli.md) owns command side effects, while installed `aginctus help` owns syntax.
 
 From highest priority to lowest:
 
@@ -12,6 +12,27 @@ From highest priority to lowest:
 6. built-in defaults.
 
 Higher-priority sources override lower-priority sources.
+
+## Explicit environment candidates (separate from CLI configuration)
+
+Environment candidates use a complete versioned `EnvironmentCandidate` document with
+an immutable UUID and explicit declared Incus server/project binding. They are
+**not** composed from `/etc/aginctus/config.json`, XDG `config.json`,
+`AGINCTUS_*` variables or `--config` overrides. The Go selection API
+requires an explicitly named absolute candidate file and verifies its target
+against a separately enrolled and observed environment identity. The observed
+Incus binding must originate from an authenticated connection, not from a
+self-reported JSON field.
+
+NixOS may emit `/etc/aginctus/environment-candidate.json` with
+`services.aginctus.environmentCandidate`. Home Manager may emit its own
+`aginctus/environment-candidate.json` with
+`programs.aginctus.environmentCandidate`. Neither module promotes the
+candidate, changes project accepted state or activates a new writer. The
+legacy `workloadCandidate` stays an experimental separate document.
+
+See [explicit candidate sources](../design/environment-candidate-sources.md)
+for schema, authority boundaries and migration requirements.
 
 ## Compiled selection is separate from runtime configuration
 
