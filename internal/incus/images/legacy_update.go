@@ -12,17 +12,16 @@ import (
 // listing. Legacy operations intentionally do not select an exact project.
 type LocalImage struct {
 	Fingerprint string `json:"fingerprint"`
-	Aliases []struct {
+	Aliases     []struct {
 		Name string `json:"name"`
 	} `json:"aliases"`
 }
 
-
 // LegacyUpdateActions preserve the v0.1 ambient Incus runner contract;
 // they never acquire scoped resource authority from alias claims.
 type LegacyUpdateActions struct {
-	Run func(context.Context, ...string) ([]byte, error)
-	Artifact func(string, string, string) (string, error)
+	Run         func(context.Context, ...string) ([]byte, error)
+	Artifact    func(string, string, string) (string, error)
 	Fingerprint func(string, string) (string, error)
 	LocalImages func(context.Context) ([]LocalImage, error)
 }
@@ -99,4 +98,3 @@ func UpdateAmbientImage(ctx context.Context, name, dir string, actions LegacyUpd
 	}
 	return nil
 }
-
