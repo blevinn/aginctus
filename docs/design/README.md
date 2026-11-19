@@ -11,6 +11,8 @@ implemented contracts, operator procedures and evidence requirements.
 - [Native Incus reconciliation](native-incus-reconciliation.md) — backend migration and parity gates.
 - [Native OCI feasibility](native-oci-feasibility.md) — experimental image/runtime investigation.
 - [Three-layer state](three-layer-state.md) — configured, accepted and current state, promotion and recovery.
+- [Project-scoped state storage](environment-state-storage.md) — accepted-state authority with independent environment revisions.
+- [Explicit environment candidate sources](environment-candidate-sources.md) — typed NixOS/Home Manager/standalone declarations without system/user merging.
 
 ## CLI design
 
