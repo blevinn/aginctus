@@ -6,7 +6,7 @@ Status: **provisional engineering contract; no delegation sign-off**. Tracks [#4
 
 Standalone Home Manager owns the operator CLI and nonsecret *configured candidate*, not live Incus resources. NixOS owns the daemon, root firewall, host bridge, and preexisting protected gateway state. A Home Manager switch, user login, package change, or environment change must not promote accepted state or reconcile resources.
 
-The read-only `operator preflight`, `units-audit`, `package-audit`, and `state-audit` commands answer different questions. A successful result from **any combination** of them is **not** authorization for a Home Manager writer:
+The read-only `operator preflight`, `units-audit`, and `state-audit` commands answer different questions; the declaration-only `package-audit` has been retired. A successful result from **any combination** of them is **not** authorization for a Home Manager writer:
 
 - A restricted TLS certificate may permit project reads without project writes; an unrestricted credential may be further constrained by the server authorizer.
 - A project name, `--project` selection, Incus ownership label, EUID, `incus` group, or daemon-local Unix socket is not proof of a confined principal.
