@@ -4,8 +4,8 @@ import json
 import unittest
 from unittest.mock import patch
 
-from scripts.vm_harness import synthetic_gateway_probe as probe
-from scripts.vm_harness import synthetic_responses as upstream
+from tests.vm_harness import synthetic_gateway_probe as probe
+from tests.vm_harness import synthetic_responses as upstream
 
 
 class SyntheticGatewayProbeTests(unittest.TestCase):

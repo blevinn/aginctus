@@ -68,7 +68,7 @@ func TestHermeticSuiteParity(t *testing.T) {
 }
 
 func TestVMScenarioParity(t *testing.T) {
-	runner := readSource(t, "scripts/vm_harness/runner.py")
+	runner := readSource(t, "tests/vm_harness/runner.py")
 	flake := readSource(t, "flake.nix")
 	just := readSource(t, "justfile")
 	evidence := readSource(t, "scripts/checks/vm_evidence.py")

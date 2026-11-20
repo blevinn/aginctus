@@ -4,7 +4,7 @@ This is the scenario-specific companion to the [VM harness setup and evidence gu
 
 ## Synthetic Responses fixture (protocol layer)
 
-`scripts/vm_harness/synthetic_responses.py` implements a small, local-only
+`tests/vm_harness/synthetic_responses.py` implements a small, local-only
 OpenAI Responses-style upstream with a hardcoded **synthetic-only** key and
 model, validated nonce, bounded request bodies, SSE terminal completion and
 per-nonce request counts. It makes no external requests and suppresses
@@ -121,7 +121,7 @@ authorization, host-key pinning and machine registration happen inside the
 fresh disposable VM through the shipped helpers and CLI. No host credentials,
 host workspaces or ambient SSH agent are transported.
 
-`scripts/vm_harness/full_stack.py` owns a run-scoped fixture and in-process
+`tests/vm_harness/full_stack.py` owns a run-scoped fixture and in-process
 adapter with the existing nine phase names and workspace/run-ID arguments:
 
 ```text
@@ -211,7 +211,7 @@ Required gates, each failing closed:
 Hostless validation, safe in the current multipurpose checkout:
 
 ```sh
-nix --quiet develop --no-update-lock-file -c python3 -m unittest scripts.vm_harness.test_full_stack scripts.vm_harness.test_guest_credentials scripts.vm_harness.test_tool_sequence scripts.vm_harness.test_synthetic_responses scripts.vm_harness.test_runner -v
+nix --quiet develop --no-update-lock-file -c python3 -m unittest tests.vm_harness.test_full_stack tests.vm_harness.test_guest_credentials tests.vm_harness.test_tool_sequence tests.vm_harness.test_synthetic_responses tests.vm_harness.test_runner -v
 nix --quiet develop --no-update-lock-file -c go test ./internal/testenv ./tests/oci-stage
 nix --quiet eval --no-update-lock-file .#vm-harness-full-stack.drvPath
 nix --quiet develop --no-update-lock-file -c just check report-json

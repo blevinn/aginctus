@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.vm_harness import evidence, runner
+from tests.vm_harness import evidence, runner
 
 
 class RunnerTests(unittest.TestCase):
