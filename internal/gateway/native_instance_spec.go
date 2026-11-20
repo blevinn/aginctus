@@ -34,15 +34,15 @@ type NativeGatewayInstancePair struct {
 // nor guest instances are created here. No secret values enter the plan.
 func PlanNativeGatewayInstances(topology NativeGatewayTopology, devices NativeGatewayDevices, postgresAlias, liteLLMAlias string) (NativeGatewayInstancePair, error) {
 	if err := topology.ValidateExecutionShape(); err != nil {
-		postgresName,litellmName:="postgres-1","litellm-1"
+		return NativeGatewayInstancePair{},err
+	}
+	postgresName,litellmName:="postgres-1","litellm-1"
 	if topology.EnvironmentID!="" {
-		if !gatewayTopologyVolumeMatches(topology) {
+		if !gatewayTopologyVolumeMatches(topology){
 			return NativeGatewayInstancePair{},fmt.Errorf("gateway environment resources do not match canonical identity")
 		}
 		base:="ag-"+strings.ReplaceAll(topology.EnvironmentID,"-","")
 		postgresName,litellmName=base+"-pg",base+"-llm"
-	}
-	return NativeGatewayInstancePair{}, err
 	}
 	if devices.Project != topology.Project || !nativeDeviceName.MatchString(postgresAlias) ||
 		!nativeDeviceName.MatchString(liteLLMAlias) || postgresAlias == liteLLMAlias {
