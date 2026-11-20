@@ -57,7 +57,7 @@ jobs:
           test ! -e "$fixture/target/namespace-marker"
 
       - name: install Nix
-        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+        uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -89,7 +89,7 @@ jobs:
 
       - name: release packaging preview (no tag or publish)
         id: release_preview
-        run: nix --quiet develop --no-update-lock-file -c bash scripts/release/package.sh "$RUNNER_TEMP/release-preview"
+        run: nix --quiet develop --no-update-lock-file -c bash tools/release/package.sh "$RUNNER_TEMP/release-preview"
 
       - name: diff check
         id: whitespace
@@ -116,7 +116,7 @@ jobs:
           RELEASE_PREVIEW_RESULT: ${{ steps.release_preview.outcome }}
           WHITESPACE_RESULT: ${{ steps.whitespace.outcome }}
         run: |
-          python3 scripts/checks/ci_summary.py
+          python3 tools/ci/ci_summary.py
 
   # Advisory while the legacy required gate runs; #708 will convert the
   # existing required context into a fail-closed aggregator.
@@ -217,7 +217,7 @@ jobs:
       - name: Python unit suites
         run: |
           set -euo pipefail
-          for path in scripts/vm_harness guest/opencode guest/ssh scripts/acceptance scripts/gateway tests; do
+          for path in tests/vm_harness plugins/opencode/guest nix/guest/ssh tools/gateway tests; do
             python3 -m unittest discover -s "$path" -p 'test_*.py' -v
           done
       - name: shellcheck
@@ -232,8 +232,8 @@ jobs:
       - name: shell adapter tests (synthetic only)
         run: |
           set -euo pipefail
-          bash scripts/acceptance/opencode-test.sh
-          bash scripts/acceptance/opencode-live-adapter-test.sh
+          bash tests/acceptance/opencode-test.sh
+          bash tests/acceptance/opencode-live-adapter-test.sh
       - name: local Markdown links
         run: python3 tools/docs/check_markdown_links.py
 
@@ -256,7 +256,7 @@ jobs:
         id: classify
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: python3 scripts/checks/ci_select.py --base "$BASE_SHA"
+        run: python3 tools/ci/ci_select.py --base "$BASE_SHA"
 
   nix-contracts:
     name: targeted Nix security contracts (ubuntu)
@@ -283,7 +283,7 @@ jobs:
           # Do not weaken this contract or alter runner security settings.
           unshare --user --map-root-user --mount --fork -- true
       - name: install Nix
-        uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31
+        uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes

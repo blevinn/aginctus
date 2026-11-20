@@ -91,24 +91,12 @@ func DiscoverEgressGrant(ctx context.Context, cfg *config.Config, actions Egress
 	}
 	// Never use a guessed physical interface. Routing decides the uplink;
 	// its zone must match the explicit configuration before opening HTTPS.
-	rules, err := actions.Command(ctx, "", "ip", "-j", "-4", "rule", "show")
+	_, blocked, err := firewall.VerifiedEgressRoute(ctx, firewall.EgressRouteActions{
+		Command: actions.Command,
+		EffectiveZone: actions.EffectiveZone,
+	}, uplink, spec.EgressNetwork, spec.Network, allowTailscaleRouting)
 	if err != nil {
 		return empty, err
-	}
-	raw, err := actions.Command(ctx, "", "ip", "-j", "-4", "route", "show", "table", "all")
-	if err != nil {
-		return empty, err
-	}
-	iface, blocked, err := firewall.EgressRouting(rules, raw, allowTailscaleRouting)
-	if err != nil {
-		return empty, err
-	}
-	if iface == spec.EgressNetwork || iface == spec.Network {
-		return empty, fmt.Errorf("unsafe default route")
-	}
-	zone, err := actions.EffectiveZone(ctx, iface)
-	if err != nil || zone != uplink {
-		return empty, fmt.Errorf("default-route interface does not belong to configured uplink zone")
 	}
 	return firewall.EgressRules(spec.EgressIPv4Address, spec.EgressBridgeIPv4CIDR, uplink, blocked)
 }

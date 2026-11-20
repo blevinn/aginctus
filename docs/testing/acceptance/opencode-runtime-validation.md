@@ -8,7 +8,7 @@ fresh-host deployment, provider billing or human release approval.
 
 Executed against clean Aginctus source
 `57c2da642f5bcb400bdc4430b8102c2a181e877b`, with its unchanged lockfile.
-`nix/patched-opencode.nix` appends the event-drain source patch and asserts
+`nix/workloads/patched-opencode.nix` appends the event-drain source patch and asserts
 OpenCode `1.15.10`. The exported runtime and workload use the same binding.
 
 ```sh
@@ -84,7 +84,7 @@ for mode in incremental buffered; do
     --entrypoint /app/.venv/bin/python "$IMAGE" \
     /probe/scripts/gateway/probe_pinned_litellm_responses.py \
     /probe/tests/gateway/fixtures/model-group-forwarding.yaml --direct-only \
-    --production-launcher /probe/guest/opencode/launch.py \
+    --production-launcher /probe/plugins/opencode/guest/launch.py \
     --opencode "$RUNTIME" --delivery-mode "$mode" || break
 
   "$PODMAN" run --rm --pull=never --network none \
@@ -95,7 +95,7 @@ for mode in incremental buffered; do
     --entrypoint /app/.venv/bin/python "$IMAGE" \
     /probe/scripts/gateway/probe_pinned_litellm_responses.py \
     /probe/tests/gateway/fixtures/model-group-forwarding.yaml --packaged-hook /bundle \
-    --production-launcher /probe/guest/opencode/launch.py \
+    --production-launcher /probe/plugins/opencode/guest/launch.py \
     --opencode "$RUNTIME" --postgres-bin "$POSTGRES_BIN" \
     --delivery-mode "$mode" || break
 done

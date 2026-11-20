@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts.checks import vm_evidence
-from scripts.vm_harness import evidence, runner
+from tests.vm_harness import evidence, runner
 
 
 class VMEvidenceTests(unittest.TestCase):

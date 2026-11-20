@@ -27,8 +27,8 @@
     {
       nixosModules = {
         aginctus = import ./nix/modules/nixos-module.nix { inherit self; };
-        aginctusTestenvRecovery = import ./nix/testenv/recovery-worker.nix { inherit self; };
-        aginctusTestenvWorker = import ./nix/testenv/installed-worker.nix { inherit self; };
+        aginctusTestenvRecovery = import ./internal/testenv/nix/recovery-worker.nix { inherit self; };
+        aginctusTestenvWorker = import ./internal/testenv/nix/installed-worker.nix { inherit self; };
         default = self.nixosModules.aginctus;
       };
 
@@ -42,7 +42,7 @@
         let
           pkgs = import nixpkgs { inherit system; };
           herdrPackage = herdr.packages.${system}.herdr;
-          herdrClientCommand = import ./nix/herdr-client-command.nix { inherit pkgs herdrPackage; };
+          herdrClientCommand = import ./nix/workloads/herdr-client-command.nix { inherit pkgs herdrPackage; };
           releaseVersion = pkgs.lib.strings.removeSuffix "\n" (builtins.readFile ./internal/cli/VERSION);
           aginctusCli = pkgs.buildGoModule {
             pname = "aginctus";
@@ -77,7 +77,7 @@
               pkgs.gnused
               pkgs.gawk
             ];
-            text = builtins.readFile ./guest/ssh/client-identity.sh;
+            text = builtins.readFile ./nix/guest/ssh/client-identity.sh;
           };
           sshMachineConfigHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-machine-config";
@@ -85,7 +85,7 @@
               pkgs.coreutils
               pkgs.util-linux
             ];
-            text = builtins.readFile ./guest/ssh/machine-config.sh;
+            text = builtins.readFile ./nix/guest/ssh/machine-config.sh;
           };
           sshHostTrustHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-host-trust";
@@ -93,7 +93,7 @@
               pkgs.coreutils
               pkgs.openssh
             ];
-            text = builtins.readFile ./guest/ssh/host-trust.sh;
+            text = builtins.readFile ./nix/guest/ssh/host-trust.sh;
           };
           sshAuthorizeHelper = pkgs.writeShellApplication {
             name = "aginctus-ssh-authorize";
@@ -101,84 +101,21 @@
               pkgs.coreutils
               pkgs.openssh
             ];
-            text = builtins.readFile ./guest/ssh/authorize.sh;
+            text = builtins.readFile ./nix/guest/ssh/authorize.sh;
           };
 
-          herdrClientSystem = nixpkgs.lib.nixosSystem {
-            inherit system;
-            modules = [
-              "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
-              (import ./nix/guest-state-bindings.nix {
-                bindings = [
-                  {
-                    class = "system";
-                    subdir = "herdr";
-                    target = "/var/lib/herdr";
-                  }
-                  {
-                    class = "system";
-                    subdir = "ssh";
-                    target = "/var/lib/aginctus/ssh";
-                  }
-                ];
-              })
-              (
-                { ... }:
-                {
-                  system.stateVersion = "26.05";
-
-                  environment.systemPackages = [
-                    herdrClientCommand
-                    pkgs.openssh
-                    sshClientIdentityHelper
-                    sshHostTrustHelper
-                    sshMachineConfigHelper
-                  ];
-
-                  # Only the managed Herdr client consumes this guest-owned
-                  # persistent SSH config. All identity and host-key settings
-                  # are recorded under the protected state-system volume.
-                  programs.ssh.extraConfig = ''
-                    Include /var/lib/aginctus/ssh/machines/*.conf
-                  '';
-
-                  environment.variables = {
-                    XDG_CONFIG_HOME = "/var/lib/herdr/config";
-                    XDG_RUNTIME_DIR = "/run/herdr";
-                    XDG_STATE_HOME = "/var/lib/herdr";
-                  };
-
-                  systemd.services.herdr = {
-                    description = "Herdr headless server";
-                    wantedBy = [ "multi-user.target" ];
-                    after = [
-                      "network-online.target"
-                      "var-lib-herdr.mount"
-                      "var-lib-aginctus-ssh.mount"
-                    ];
-                    wants = [ "network-online.target" ];
-                    requires = [
-                      "var-lib-herdr.mount"
-                      "var-lib-aginctus-ssh.mount"
-                    ];
-
-                    serviceConfig = {
-                      Environment = [
-                        "HOME=/root"
-                        "XDG_CONFIG_HOME=/var/lib/herdr/config"
-                        "XDG_RUNTIME_DIR=/run/herdr"
-                        "XDG_STATE_HOME=/var/lib/herdr"
-                      ];
-                      ExecStart = "${herdrPackage}/bin/herdr server";
-                      Restart = "on-failure";
-                      RestartSec = "2s";
-                      RuntimeDirectory = "herdr";
-                      StateDirectory = "herdr";
-                    };
-                  };
-                }
-              )
-            ];
+          herdrClientImage = import ./plugins/herdr/images/client.nix {
+            inherit
+              nixpkgs
+              system
+              pkgs
+              herdrPackage
+              herdrClientCommand
+              sshClientIdentityHelper
+              sshHostTrustHelper
+              sshMachineConfigHelper
+              ;
+            guestStateBindings = import ./nix/workloads/guest-state-bindings.nix;
           };
 
           # Bundle the OpenCode guest Python scripts into a single store
@@ -186,15 +123,15 @@
           # provision.py and launch.py and is importable at runtime.
           opencodeGuestScripts = pkgs.runCommand "aginctus-opencode-guest-scripts" { } ''
             mkdir -p $out
-            cp ${./guest/opencode/provision.py} $out/provision.py
-            cp ${./guest/opencode/launch.py} $out/launch.py
-            cp ${./guest/opencode/gateway_endpoint.py} $out/gateway_endpoint.py
-            cp ${./guest/opencode/go_session_plugin.js} $out/go_session_plugin.js
-            cp ${./guest/opencode/siwc_plugin.js} $out/siwc_plugin.js
+            cp ${./plugins/opencode/guest/provision.py} $out/provision.py
+            cp ${./plugins/opencode/guest/launch.py} $out/launch.py
+            cp ${./plugins/opencode/guest/gateway_endpoint.py} $out/gateway_endpoint.py
+            cp ${./plugins/opencode/guest/go_session_plugin.js} $out/go_session_plugin.js
+            cp ${./plugins/opencode/guest/siwc_plugin.js} $out/siwc_plugin.js
           '';
 
           # Scoped source patch for the flake-pinned CLI event-consumer join.
-          aginctusPinnedOpenCode = import ./nix/patched-opencode.nix { inherit pkgs; };
+          aginctusPinnedOpenCode = import ./nix/workloads/patched-opencode.nix { inherit pkgs; };
 
           # Runtime-only gateway configuration: no endpoint, model or key is
           # materialized into the Nix store. Herdr's PATH resolves this wrapper.
@@ -208,7 +145,7 @@
           # Root-owned, pinned source and interpreter; operator-only host
           # invocation remains separate from the guest's network capability.
           opencodeEgressProbe = pkgs.writeShellScriptBin "aginctus-egress-probe" ''
-            exec ${pkgs.python3}/bin/python3 -I -B ${./guest/opencode/egress_probe.py} "$@"
+            exec ${pkgs.python3}/bin/python3 -I -B ${./plugins/opencode/guest/egress_probe.py} "$@"
           '';
 
           opencodeWorkloadSystem = nixpkgs.lib.nixosSystem {
@@ -336,8 +273,6 @@
           oauthGatewayRootfs = oauthGatewaySystem.config.system.build.squashfs;
           oauthGatewayMetadata = oauthGatewaySystem.config.system.build.metadata;
 
-          herdrClientRootfs = herdrClientSystem.config.system.build.squashfs;
-          herdrClientMetadata = herdrClientSystem.config.system.build.metadata;
           opencodeWorkloadRootfs = opencodeWorkloadSystem.config.system.build.squashfs;
           opencodeWorkloadMetadata = opencodeWorkloadSystem.config.system.build.metadata;
         in
@@ -382,7 +317,7 @@
                     environment.systemPackages = [
                       pkgs.go
                       (pkgs.writeShellScriptBin "aginctus-vm-guest-credentials" ''
-                        exec ${pkgs.python3}/bin/python3 ${./scripts/vm_harness/guest_credentials.py} "$@"
+                        exec ${pkgs.python3}/bin/python3 ${./tests/vm_harness/guest_credentials.py} "$@"
                       '')
                     ];
                   }
@@ -401,11 +336,7 @@
             ln -s ${oauthGatewayMetadata} "$out/metadata"
           '';
 
-          herdr-client = pkgs.runCommand "aginctus-herdr-client-image" { } ''
-            mkdir -p "$out"
-            ln -s ${herdrClientRootfs} "$out/rootfs"
-            ln -s ${herdrClientMetadata} "$out/metadata"
-          '';
+          herdr-client = herdrClientImage.image;
 
           opencode-workload = pkgs.runCommand "aginctus-opencode-workload-image" { } ''
             mkdir -p "$out"
@@ -417,23 +348,23 @@
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           testenv-incus-vm-image =
-            (import ./nix/testenv/incus-vm-image.nix {
+            (import ./internal/testenv/nix/incus-vm-image.nix {
               inherit self nixpkgs system;
             }).image;
         }
         # Keep VM integration tests explicitly buildable, outside the default
         # flake checks, so routine validation does not execute heavyweight VMs.
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          firewall-iptables-integration = import ./nix/firewall-iptables-test.nix {
+          firewall-iptables-integration = import ./tests/nix/firewall/firewall-iptables-test.nix {
             inherit self nixpkgs system;
           };
-          firewall-firewalld-integration = import ./nix/firewall-firewalld-test.nix {
+          firewall-firewalld-integration = import ./tests/nix/firewall/firewall-firewalld-test.nix {
             inherit self nixpkgs system;
           };
-          firewall-egress-bootstrap = import ./nix/firewall-egress-bootstrap-test.nix {
+          firewall-egress-bootstrap = import ./tests/nix/firewall/firewall-egress-bootstrap-test.nix {
             inherit self nixpkgs system;
           };
-          firewall-nixos-nft-integration = import ./nix/firewall-nixos-nft-test.nix {
+          firewall-nixos-nft-integration = import ./tests/nix/firewall/firewall-nixos-nft-test.nix {
             inherit self nixpkgs system;
           };
           # Heavyweight: explicitly selected, never part of default flake checks.
@@ -476,6 +407,7 @@
             inherit self nixpkgs system;
           };
           herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
+            herdrClientModule = herdrClientImage.guestModule;
             inherit
               self
               nixpkgs
@@ -506,26 +438,31 @@
       checks = forAllSystems (
         system:
         {
-          nixos-module = import ./nix/module-check.nix { inherit self nixpkgs system; };
-          home-manager-module = import ./nix/home-manager-module-check.nix { inherit self nixpkgs system; };
-          operator-settings-parity = import ./nix/operator-settings-parity-check.nix {
+          nixos-module = import ./tests/nix/module-check.nix { inherit self nixpkgs system; };
+          herdr-image-selection = import ./tests/nix/herdr-image-check.nix {
             inherit self nixpkgs system;
           };
-          gateway-config-parity = import ./nix/gateway-config-parity-check.nix {
+          home-manager-module = import ./tests/nix/home-manager-module-check.nix {
             inherit self nixpkgs system;
           };
-          opencode-workload-socket-alignment = import ./nix/opencode-workload-check.nix {
+          operator-settings-parity = import ./tests/nix/operator-settings-parity-check.nix {
+            inherit self nixpkgs system;
+          };
+          gateway-config-parity = import ./tests/nix/gateway-config-parity-check.nix {
+            inherit self nixpkgs system;
+          };
+          opencode-workload-socket-alignment = import ./tests/nix/opencode-workload-check.nix {
             inherit self nixpkgs system;
           };
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          testenv-incus-vm-image-config = import ./nix/testenv/incus-vm-image-check.nix {
+          testenv-incus-vm-image-config = import ./internal/testenv/nix/incus-vm-image-check.nix {
             inherit self nixpkgs system;
           };
-          testenv-recovery-worker-policy = import ./nix/testenv/recovery-worker-check.nix {
+          testenv-recovery-worker-policy = import ./internal/testenv/nix/recovery-worker-check.nix {
             inherit self nixpkgs system;
           };
-          testenv-installed-worker-policy = import ./nix/testenv/installed-worker-check.nix {
+          testenv-installed-worker-policy = import ./internal/testenv/nix/installed-worker-check.nix {
             inherit self nixpkgs system;
           };
         }

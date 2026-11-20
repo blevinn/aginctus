@@ -18,13 +18,7 @@ let
   knownSettingsOptions = import ./settings-options.nix { inherit lib jsonFormat; };
   # Render the MCP subtree in the shape the Aginctus Go schema accepts.
   mcpSettings = import ./mcp-settings.nix { inherit lib; };
-  # Export the declared user CLI package, never credentials or environment.
-  operatorPackageManifest = jsonFormat.generate "aginctus-user-package.json" {
-    schema = 1;
-    authority = "user";
-    package = toString cfg.package;
-  };
-
+  environmentSchema = import ./environment-candidate.nix { inherit lib; };
   # Both dotted keys and nested objects are possible in the freeform JSON
   # layer. Reject runtime credential paths before writing the Nix store.
   configuredSecretPaths = import ./runtime-secret-paths.nix { inherit lib; } cfg.settings;
@@ -64,6 +58,11 @@ let
       };
     };
   };
+  # New environment candidates are explicit, independently identified inputs.
+  # The binding is DECLARED here; only authenticated Incus observation verifies it.
+  environmentCandidateName = types.strMatching "[a-z][a-z0-9-]{0,62}";
+  environmentCandidateUUID = types.strMatching "[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+  environmentCandidateServerID = types.strMatching "[A-Za-z0-9][A-Za-z0-9._:-]{0,255}";
   candidateWorkloads = if cfg.workloadCandidate == null then [ ] else cfg.workloadCandidate.workloads;
   candidateIDs = map (w: w.id) candidateWorkloads;
   candidateInstanceNames = map (w: w.instanceName) candidateWorkloads;
@@ -73,6 +72,8 @@ let
     && unique candidateIDs
     && unique candidateInstanceNames
     && lib.all (w: builtins.length w.profiles <= 32 && unique w.profiles) candidateWorkloads;
+  environmentCandidateValid = environmentSchema.valid cfg.environmentCandidate;
+  environmentCandidateSpec = environmentSchema.render cfg.environmentCandidate;
   # Project identity is sourced from the SAME rendered Home Manager settings.
   # It is not a caller-selected ambient Incus default or cross-principal merge.
   workloadCandidateSpec = {
@@ -125,6 +126,19 @@ in
       '';
     };
 
+    environmentCandidate = mkOption {
+      type = environmentSchema.type;
+      default = null;
+      description = ''
+        Optional nonsecret, versioned environment candidate. Emitted separately
+        from ordinary merged CLI preferences; it never grants Incus access,
+        accepts a revision, starts a reconciler or changes host policy.
+        Supply one fully declared environment identity and binding. The binding
+        must be authenticated against the selected Incus server before use.
+        Do not also configure the experimental legacy workloadCandidate.
+      '';
+    };
+
     package = mkOption {
       type = types.package;
       default = self.packages.${pkgs.stdenv.hostPlatform.system}.aginctus;
@@ -158,11 +172,20 @@ in
     ++ lib.optional (cfg.workloadCandidate != null) {
       assertion = candidateValid;
       message = "programs.aginctus.workloadCandidate must select at most 256 unique workload IDs and instance names, with at most 32 unique profiles per workload";
-    };
+    }
+    ++ lib.optional (cfg.environmentCandidate != null) {
+      assertion = environmentCandidateValid;
+      message = "programs.aginctus.environmentCandidate needs a non-default project, <=256 unique workloads/instances and <=32 unique profiles per workload";
+    }
+    ++ [
+      {
+        assertion = cfg.environmentCandidate == null || cfg.workloadCandidate == null;
+        message = "programs.aginctus.environmentCandidate and workloadCandidate must not both be set";
+      }
+    ];
 
     home.packages = [ cfg.package ];
     xdg.configFile = {
-      "aginctus/operator-package.json".source = operatorPackageManifest;
       "aginctus/config.json".source = jsonFormat.generate "aginctus-user-config.json" (
         mcpSettings.renderSettings cfg.settings
       );
@@ -170,6 +193,10 @@ in
     // lib.optionalAttrs (cfg.workloadCandidate != null) {
       "aginctus/workload-candidate.json".source =
         jsonFormat.generate "aginctus-hm-workload-candidate.json" workloadCandidateSpec;
+    }
+    // lib.optionalAttrs (cfg.environmentCandidate != null) {
+      "aginctus/environment-candidate.json".source =
+        jsonFormat.generate "aginctus-hm-environment-candidate.json" environmentCandidateSpec;
     };
   };
 }

@@ -4,7 +4,7 @@ This is the **operator-only evidence companion** to the [staged acceptance decis
 
 ## Optional private, runner-owned acceptance report
 
-The existing `scripts/acceptance/opencode.sh` can now write a small **local**
+The existing `tests/acceptance/opencode.sh` can now write a small **local**
 report if the operator explicitly supplies `AGINCTUS_ACCEPTANCE_REPORT_ROOT`.
 Create that directory beforehand, **outside the repository and any
 agent-writable workspace**, with the owner of the trusted runner and mode 0700:
@@ -14,7 +14,7 @@ install -d -m 0700 "$HOME/.local/state/aginctus/acceptance-results"
 export AGINCTUS_ACCEPTANCE_REPORT_ROOT="$HOME/.local/state/aginctus/acceptance-results"
 # Then invoke the EXISTING operator-reviewed mock or live acceptance workflow.
 # Example: with the already reviewed adapter and live opt-in selected:
-# bash scripts/acceptance/opencode.sh live
+# bash tests/acceptance/opencode.sh live
 ```
 
 This opt-in **does not** launch acceptance on its own. Live execution still
@@ -133,7 +133,7 @@ a live gateway.
 
 ### Operator-only gateway spend-log correlation probe (preparatory #521)
 
-`scripts/gateway/inspect_responses_spend.py` can inspect **one previously
+`tools/gateway/inspect_responses_spend.py` can inspect **one previously
 generated** LiteLLM spend-log record through the private gateway's
 administrative read-only `GET /spend/logs?request_id=` endpoint. The command
 does not submit a prompt, launch an agent, create a key or cause a new model
@@ -150,7 +150,7 @@ explicitly; no gateway traffic occurs unless `--inspect` or
 ```sh
 # Set exact values after inspecting the reviewed pilot; no defaults inferred.
 # Dry run first: reads no secret files and makes no HTTP request.
-nix develop -c python3 scripts/gateway/inspect_responses_spend.py \
+nix develop -c python3 tools/gateway/inspect_responses_spend.py \
   --endpoint "$GATEWAY_PRIVATE_ENDPOINT" --gateway-id "$GATEWAY_ID" \
   --request-id "$GATEWAY_REQUEST_ID" \
   --run-id "$ACCEPTANCE_RUN_ID" \
@@ -259,7 +259,7 @@ synthetic native-hook behavior can be validated locally, separately
 from the pinned Python policy tests:
 
 ```sh
-nix shell nixpkgs#nodejs --command node --test guest/opencode/test_go_session_plugin.mjs
+nix shell nixpkgs#nodejs --command node --test plugins/opencode/guest/test_go_session_plugin.mjs
 nix develop -c python3 -m unittest discover -s scripts/gateway -p 'test_opencode_go_forwarding.py' -v
 ```
 

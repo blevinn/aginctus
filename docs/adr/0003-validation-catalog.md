@@ -13,7 +13,7 @@ discovery and the existing v1 VM evidence reader.
 
 ## Decision
 
-The dependency-light Go package internal/validation/catalog owns typed suite
+The dependency-light Go package internal/testing/validation/catalog owns typed suite
 and VM scenario metadata. It performs no I/O or execution. The existing
 operator-only testenv CLI projects its public list from that catalog without
 changing JSON shape, descriptions, names or execution behavior.

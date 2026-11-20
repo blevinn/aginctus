@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/blevinn/aginctus/internal/acceptedstate"
+	"github.com/blevinn/aginctus/internal/orchestration/state"
 )
 
 func TestRunRequiresPreinitializedLocalState(t *testing.T) {

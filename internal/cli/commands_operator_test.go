@@ -12,10 +12,12 @@ func TestCobraOperatorInvalidInputDoesNotReadConfigOrInspectIncus(t *testing.T) 
 		{"operator", "preflight"},
 		{"operator", "project-ensure", "--project=aginctus"},
 		{"operator", "project-plan"},
-		{"operator", "units-audit"},
+		{"operator", "units-audit", "--owner=system"},
 		{"operator", "units-audit", "--owner=bad"},
-		{"operator", "package-audit", "--owner=user", "--unexpected"},
-		{"operator", "state-audit", "--owner=bad"},
+		{"operator", "package-audit", "--owner=user"},
+		{"operator", "state-audit", "--owner=user"},
+		{"operator", "state-audit", "--location=bad"},
+		{"operator", "state-audit"},
 		{"--config=incus.project=other", "operator", "project-plan", "--project=aginctus"},
 	} {
 		t.Run(strings.Join(args, "_"), func(t *testing.T) {

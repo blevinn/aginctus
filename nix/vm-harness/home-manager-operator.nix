@@ -82,13 +82,7 @@ let
   unmanagedConfig = pkgs.writeText "unmanaged-operator-config.json" (
     builtins.toJSON { gateway.id = "unmanaged-operator"; }
   );
-  mismatchedManifest = pkgs.writeText "mismatched-operator-package.json" (
-    builtins.toJSON {
-      schema = 1;
-      authority = "user";
-      package = "/nix/store/00000000000000000000000000000000-wrong-cli";
-    }
-  );
+
   checkReport = pkgs.writeText "check-operator-report.py" ''
     from pathlib import Path
     import sys
@@ -214,7 +208,7 @@ pkgs.testers.runNixOSTest {
 
     host_units()
     firewall_before = host_policy()
-    host_config = machine.succeed("sha256sum /etc/aginctus/config.json /etc/aginctus/operator-package.json")
+    host_config = machine.succeed("sha256sum /etc/aginctus/config.json")
 
     # Compare complete nonsecret resource inventory, not just instance counts.
     inventories = ["project list", "storage list"] + [
@@ -260,7 +254,6 @@ pkgs.testers.runNixOSTest {
     machine.succeed("runuser -u operator -- /home/operator/.nix-profile/bin/aginctus config get gateway.id | grep -q disposable-operator")
     cli = operator + " /home/operator/.nix-profile/bin/aginctus"
     assert not {"wheel", "incus", "incus-admin"}.intersection(machine.succeed(operator + " id -nG").split())
-    machine.succeed(cli + " operator package-audit --owner user | grep -q 'observed running CLI path'")
     status, _ = machine.execute(cli + " operator preflight --project aginctus", timeout=30)
     assert status == 1, "operator preflight must fail for denied Incus access, not usage"
     assert host_policy() == firewall_before, "unauthorized activation changed firewall policy"
@@ -268,15 +261,6 @@ pkgs.testers.runNixOSTest {
 
     # Repeated activation remains an operator-only package/config change.
     machine.succeed(activation, timeout=600)
-    machine.succeed(cli + " operator package-audit --owner user")
-
-    # A changed declaration must not make incompatible system/user CLIs acceptable.
-    manifest = "/home/operator/.config/aginctus/operator-package.json"
-    machine.succeed(operator + " rm -f " + manifest)
-    machine.succeed(operator + " cp ${mismatchedManifest} " + manifest)
-    status, mismatch = machine.execute(cli + " operator package-audit --owner user 2>&1")
-    assert status == 1 and "operator package declarations differ" in mismatch, "system/user declaration mismatch must fail safely"
-    machine.succeed(operator + " rm -f " + manifest)
 
     # The CLI selects its profile before activation; a file conflict must leave
     # the active-generation GC root and unmanaged contents intact.
@@ -315,12 +299,10 @@ pkgs.testers.runNixOSTest {
     machine.succeed(cli + " config get gateway.id | grep -q disposable-operator")
     machine.succeed(operator + " jq -e --arg fp " + ("a" * 64) +
                     " '.workloads[0].imageFingerprint == $fp' " + candidate)
-    machine.succeed(cli + " operator package-audit --owner user")
     machine.succeed(upgraded_home_manager + " switch", timeout=600)
     machine.succeed(cli + " config get gateway.id | grep -q upgraded-operator")
     machine.succeed(operator + " jq -e --arg fp " + ("b" * 64) +
                     " '.workloads[0].imageFingerprint == $fp' " + candidate)
-    machine.succeed(cli + " operator package-audit --owner user")
 
     # Starting a lingering user manager does not start Aginctus units or timers.
     machine.succeed("loginctl enable-linger operator")
@@ -439,7 +421,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed(upgrade, timeout=600)
     assert host_policy() == firewall_authorized, "authorized activation changed firewall policy"
     assert machine.succeed("sha256sum /home/operator/.config/incus/config.yml /home/administrator/.config/incus/config.yml") == client_config
-    assert machine.succeed("sha256sum /etc/aginctus/config.json /etc/aginctus/operator-package.json") == host_config
+    assert machine.succeed("sha256sum /etc/aginctus/config.json") == host_config
     host_units()
 
     # Real DNS positive/host-port negative survive host firewall reload without
@@ -469,7 +451,6 @@ pkgs.testers.runNixOSTest {
     machine.succeed(cli + " config get gateway.id | grep -q disposable-operator")
     machine.succeed(upgraded_home_manager + " switch", timeout=600)
     machine.succeed(cli + " config get gateway.id | grep -q upgraded-operator")
-    machine.succeed(cli + " operator package-audit --owner user")
     machine.fail("systemctl is-active --quiet incus.service")
     machine.fail(operator + " test -r /var/lib/aginctus/state/acceptance-sentinel")
     machine.succeed("systemctl unmask --runtime incus.socket incus.service")
@@ -486,8 +467,8 @@ pkgs.testers.runNixOSTest {
     machine.succeed("ip link set guest-host master hm-mgmt; ip link set guest-host up")
     packets()
 
-    # Metadata diagnostics must not turn an unreadable host tree into evidence
-    # of absence, or repair/adopt a competing user credential tree.
+    # Metadata diagnostics inspect each explicitly chosen credential location
+    # independently, without treating host/user trees as competing controllers.
     system_gateway = "/var/lib/aginctus/state/aginctus/gateway/upgraded-operator"
     user_gateway = "/home/operator/.local/state/aginctus/gateway/upgraded-operator"
     machine.succeed("install -d -m 0700 " + system_gateway)
@@ -498,18 +479,16 @@ pkgs.testers.runNixOSTest {
         return machine.succeed("sha256sum " + path + "/secrets.json; stat -c '%u:%g:%a' " + path + " " + path + "/secrets.json")
     system_gateway_before = credential_metadata(system_gateway)
     user_gateway_before = credential_metadata(user_gateway)
-    state_audit = cli + " operator state-audit --owner user"
-    state_report = report(state_audit, 1)
-    assert "System gateway credential metadata: unverified" in state_report
+    state_audit = cli + " operator state-audit --location user"
+    state_report = report(state_audit, 0)
     assert "User gateway credential metadata: present" in state_report
-    assert "no migration" in state_report
+    assert "neither running service nor Incus project authority verified" in state_report
     machine.fail(operator + " test -r " + system_gateway + "/secrets.json")
     root_cli = "env XDG_STATE_HOME=/run/absent-operator-state ${
       self.packages.${system}.aginctus
     }/bin/aginctus --config gateway.id=upgraded-operator"
-    root_report = report(root_cli + " operator state-audit --owner system", 0)
+    root_report = report(root_cli + " operator state-audit --location system", 0)
     assert "System gateway credential metadata: present" in root_report
-    assert "User gateway credential metadata: absent" in root_report
     machine.fail("test -e /run/absent-operator-state")
 
     machine.succeed(operator + " chmod 0644 " + user_gateway + "/secrets.json")
@@ -528,7 +507,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("chown operator:users " + user_gateway + "/secrets.json")
     machine.succeed(operator_home_manager + " switch", timeout=600)
     machine.succeed(upgraded_home_manager + " switch", timeout=600)
-    assert "User gateway credential metadata: present" in report(state_audit, 1)
+    assert "User gateway credential metadata: present" in report(state_audit, 0)
     assert credential_metadata(system_gateway) == system_gateway_before
     assert credential_metadata(user_gateway) == user_gateway_before
 
@@ -537,30 +516,28 @@ pkgs.testers.runNixOSTest {
     machine.succeed("loginctl enable-linger operator")
     machine.wait_for_unit("user@1000.service")
     user_systemctl = operator + " env XDG_RUNTIME_DIR=/run/user/1000 systemctl --user"
-    unit_audit = operator + " env XDG_RUNTIME_DIR=/run/user/1000 /home/operator/.nix-profile/bin/aginctus operator units-audit --owner "
-    assert "No competing known lifecycle units" in report(unit_audit + "user", 0)
+    unit_audit = operator + " env XDG_RUNTIME_DIR=/run/user/1000 /home/operator/.nix-profile/bin/aginctus operator units-audit"
+    assert "Unit observations complete for system and current user only" in report(unit_audit, 0)
     machine.succeed("cp ${lifecycleUnitFixture} /run/systemd/system/aginctus-reconcile.service; systemctl daemon-reload")
-    assert "aginctus-reconcile.service: system=installed user=absent" in report(unit_audit + "user", 1)
+    assert "aginctus-reconcile.service: system=installed user=absent" in report(unit_audit, 0)
     machine.succeed("systemctl start aginctus-reconcile.service")
-    assert "aginctus-reconcile.service: system=active user=absent" in report(unit_audit + "user", 1)
-    assert "No competing known lifecycle units" in report(unit_audit + "system", 0)
+    assert "aginctus-reconcile.service: system=active user=absent" in report(unit_audit, 0)
     machine.succeed(operator + " install -d -m 0700 /home/operator/.config/systemd/user")
     machine.succeed(operator + " cp ${lifecycleUnitFixture} /home/operator/.config/systemd/user/aginctus-reconcile.service")
     machine.succeed(user_systemctl + " daemon-reload")
-    assert "aginctus-reconcile.service: system=active user=installed" in report(unit_audit + "system", 1)
+    assert "aginctus-reconcile.service: system=active user=installed" in report(unit_audit, 0)
     machine.succeed(user_systemctl + " start aginctus-reconcile.service")
-    for owner in ["system", "user"]:
-        assert "aginctus-reconcile.service: system=active user=active" in report(unit_audit + owner, 1)
+    assert "aginctus-reconcile.service: system=active user=active" in report(unit_audit, 0)
     machine.succeed(user_systemctl + " stop aginctus-reconcile.service")
     machine.succeed("systemctl stop aginctus-reconcile.service")
-    assert "aginctus-reconcile.service: system=installed user=installed" in report(unit_audit + "user", 1)
+    assert "aginctus-reconcile.service: system=installed user=installed" in report(unit_audit, 0)
     machine.succeed(operator + " rm -f /home/operator/.config/systemd/user/aginctus-reconcile.service")
     machine.succeed(user_systemctl + " daemon-reload")
     machine.succeed("rm -f /run/systemd/system/aginctus-reconcile.service; systemctl daemon-reload")
-    assert "No competing known lifecycle units" in report(unit_audit + "user", 0)
+    assert "Unit observations complete for system and current user only" in report(unit_audit, 0)
     machine.succeed("loginctl disable-linger operator")
     machine.succeed("systemctl stop user@1000.service")
-    assert "user=unverified" in report(unit_audit + "user", 1)
+    assert "user=unverified" in report(unit_audit, 1)
 
     for command in inventories:
         assert machine.succeed(f"incus {command} --format json | jq -S .") == before[command], f"HM activation or user-manager lifecycle changed Incus {command}"

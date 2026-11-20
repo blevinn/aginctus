@@ -24,9 +24,8 @@ class ValidationDispatchTests(unittest.TestCase):
             *[
                 f"python3 -m unittest discover -s {directory} -p test_*.py -v"
                 for directory in (
-                    "scripts/vm_harness",
-                    "guest/opencode", "guest/ssh", "scripts/acceptance",
-                    "scripts/gateway", "tests",
+                    "tests/vm_harness",
+                    "plugins/opencode/guest", "nix/guest/ssh", "tools/gateway", "tests",
                 )
             ],
             "shell opencode-test.sh",
@@ -40,8 +39,8 @@ class ValidationDispatchTests(unittest.TestCase):
         # Each suite stops at its own first failed command, but the reporter
         # proceeds to later suites and summarizes every observed suite.
         groups = (
-            expected[:3], expected[3:7], expected[7:13], expected[13:15],
-            expected[15:16], expected[16:17], expected[17:19], expected[19:],
+            expected[:3], expected[3:7], expected[7:12], expected[12:14],
+            expected[14:15], expected[15:16], expected[16:18], expected[18:],
         )
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -94,7 +93,7 @@ if name == "git":
                 tool = tools / name
                 tool.write_text(stub)
                 tool.chmod(0o700)
-            acceptance = root / "scripts/acceptance"
+            acceptance = root / "tests/acceptance"
             acceptance.mkdir(parents=True)
             for name in ("opencode-test.sh", "opencode-live-adapter-test.sh"):
                 (acceptance / name).write_text(

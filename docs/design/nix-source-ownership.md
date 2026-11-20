@@ -8,11 +8,13 @@ Own Nix expressions by the feature or operational boundary they implement, not b
 
 ## Production expressions
 
-Keep the product's Nix implementations under `nix/`, with cohesive groups:
+Keep shared production Nix implementations under `nix/`, with cohesive groups;
+product-specific image specifications belong to their plugin owner:
 
 - `nix/modules/`: the public NixOS and Home Manager modules, together with shared settings schema, MCP settings rendering, runtime-secret guards, and firewall module logic.
-- `nix/packages/`: independently useful package derivations (CLI, gateway, state tools and Herdr command wrapper). Share build settings only where doing so clearly prevents drift.
-- `nix/workloads/`: image/guest construction (Herdr, OpenCode) and truly shared guest state bindings. Keep the scoped OpenCode patch with its consumer.
+- `nix/packages/`: independently useful package derivations (CLI, gateway and state tools). Share build settings only where doing so clearly prevents drift.
+- `plugins/herdr/images/`: the managed Herdr client guest specification and Incus image assembly. The flake injects shared command wrappers, SSH helpers and state bindings explicitly; the socket VM reuses the production client module.
+- `nix/workloads/`: shared workload support (including reusable guest state bindings and command wrappers). The helper relocation in #889 is additive to product image ownership: update injected imports, rather than moving those helpers into the plugin. OpenCode image extraction remains a separate slice; keep its scoped patch with its consumer.
 
 Do not fragment each module into many small expressions merely to achieve a target line count. Keep the production NixOS and Home Manager interfaces separate but preserve their common typed settings and secret-exclusion contract.
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/blevinn/aginctus/internal/managementnetwork"
+	"github.com/blevinn/aginctus/internal/orchestration/managementnetwork"
 )
 
 type applyConfig struct {

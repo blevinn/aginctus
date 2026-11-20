@@ -11,6 +11,14 @@ implemented contracts, operator procedures and evidence requirements.
 - [Native Incus reconciliation](native-incus-reconciliation.md) — backend migration and parity gates.
 - [Native OCI feasibility](native-oci-feasibility.md) — experimental image/runtime investigation.
 - [Three-layer state](three-layer-state.md) — configured, accepted and current state, promotion and recovery.
+- [Project-scoped state storage](environment-state-storage.md) — accepted-state authority with independent environment revisions.
+- [Explicit environment candidate sources](environment-candidate-sources.md) — typed NixOS/Home Manager/standalone declarations without system/user merging.
+
+## CLI design
+
+- [Environment-centric CLI north star](cli-north-star.md) — agreed top-level vocabulary, active environment selection, state introspection, images and explicit plumbing opt-in.
+- [Domain-owned CLI migration](cli-domain-ownership.md) — decomposition of existing Cobra operation adapters into domain-owned implementations.
+- [Go client and structured CLI output](cli-go-client-output.md) — in-process public API, versioned projection schemas, error semantics, and standard output formats.
 
 ## Authority and operator integration
 

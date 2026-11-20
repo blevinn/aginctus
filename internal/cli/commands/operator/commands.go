@@ -12,12 +12,11 @@ import (
 // Operator diagnostics deliberately never use ambient or implicit project
 // selection. Offline and host-only operations reject configuration overrides.
 type Handlers struct {
-	UnitsAudit func(context.Context, []string, io.Writer, io.Writer) int
-	PackageAudit func([]string, io.Writer, io.Writer) int
-	StateAudit func([]string, io.Writer, io.Writer, *config.Config) int
-	Preflight func(context.Context, []string, io.Writer, io.Writer) int
+	UnitsAudit    func(context.Context, []string, io.Writer, io.Writer) int
+	StateAudit    func([]string, io.Writer, io.Writer, *config.Config) int
+	Preflight     func(context.Context, []string, io.Writer, io.Writer) int
 	ProjectEnsure func(context.Context, []string, io.Writer, io.Writer) int
-	ProjectPlan func(context.Context, []string, io.Writer, io.Writer) int
+	ProjectPlan   func(context.Context, []string, io.Writer, io.Writer) int
 }
 
 // Register keeps owner/project checks in the Cobra leaves, before any
@@ -36,7 +35,7 @@ func Register(root *cobra.Command, stdout, stderr io.Writer,
 				return fmt.Errorf("%s: configuration overrides are not supported", cmd.CommandPath())
 			}
 			if owner != nil && *owner != "system" && *owner != "user" {
-				return fmt.Errorf("--owner must be system or user")
+				return fmt.Errorf("--location must be system or user")
 			}
 			if project != nil && !cmd.Flags().Changed("project") {
 				return fmt.Errorf("explicit --project NAME is required")
@@ -61,30 +60,21 @@ func Register(root *cobra.Command, stdout, stderr io.Writer,
 		operator.AddCommand(cmd)
 		return cmd
 	}
-	for _, verb := range []string{"units-audit", "package-audit", "state-audit"} {
+	add("units-audit", false, nil, nil, nil, func(cmd *cobra.Command, _ *config.Config) int {
+		return handlers.UnitsAudit(cmd.Context(), nil, stdout, stderr)
+	})
+	for _, verb := range []string{"state-audit"} {
 		action := verb
 		owner := ""
-		cfg := action == "state-audit"
-		cmd := add(action, cfg, &owner, nil, nil, func(cmd *cobra.Command, config *config.Config) int {
-			if !cmd.Flags().Changed("owner") {
-				return 2
-			}
-			args := []string{"--owner", owner}
-			switch action {
-			case "units-audit":
-				return handlers.UnitsAudit(cmd.Context(), args, stdout, stderr)
-			case "package-audit":
-				return handlers.PackageAudit(args, stdout, stderr)
-			default:
-				return handlers.StateAudit(append([]string{"state-audit"}, args...), stdout, stderr, config)
-			}
+		cmd := add(action, true, &owner, nil, nil, func(cmd *cobra.Command, config *config.Config) int {
+			args := []string{"--location", owner}
+			return handlers.StateAudit(append([]string{"state-audit"}, args...), stdout, stderr, config)
 		})
-		cmd.Flags().StringVar(&owner, "owner", "", "Declared authority: system or user")
-		// Avoid bypassing the existing no-argument owner requirement.
+		cmd.Flags().StringVar(&owner, "location", "", "Credential storage location: system or user")
 		prior := cmd.PreRunE
 		cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-			if !cmd.Flags().Changed("owner") {
-				return fmt.Errorf("--owner system|user is required")
+			if !cmd.Flags().Changed("location") {
+				return fmt.Errorf("--location system|user is required")
 			}
 			return prior(cmd, args)
 		}
