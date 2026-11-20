@@ -7,7 +7,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from scripts.checks import preflight_report
+from tools.validation import preflight_report
 
 
 class PreflightReportTests(unittest.TestCase):
