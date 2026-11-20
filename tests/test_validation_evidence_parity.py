@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.checks import coverage, local_acceptance
+from tests.validation import coverage, local_acceptance
 from tests.acceptance import local_report
 from tools.ci import ci_summary
 
