@@ -95,7 +95,7 @@ func StartNativeEnvironmentGatewayWithClient(
 		if instance.Status=="Stopped"{
 			attempted=true
 			transition,err:=native.EnsureInstanceStateWithClient(ctx,native.InstanceLifecycleIntent{
-				Scope:scope,Name:spec.Name,Resource:"gateway-instance",Role:spec.Role,State:native.InstanceRunning,
+				Scope:scope,Name:spec.Name,Resource:"gateway-instance",Role:spec.Role,EnvironmentID:spec.EnvironmentID,State:native.InstanceRunning,
 			},client)
 			if err!=nil || !transition.Verified{return fail("transition",spec.Name,true)}
 			if transition.Changed {result.Started=append(result.Started,spec.Name)}
