@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/blevinn/aginctus/internal/validation/catalog"
+	"github.com/blevinn/aginctus/internal/testing/validation/catalog"
 )
 
 // Scenario is one of the pinned, explicitly opt-in NixOS VM test derivations.

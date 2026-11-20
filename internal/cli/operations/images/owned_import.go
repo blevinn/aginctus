@@ -2,7 +2,6 @@ package imageops
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
+	incusimages "github.com/blevinn/aginctus/internal/incus/images"
 )
 
 // OwnedImportActions explicitly passes the project lease, authoritative
@@ -51,39 +51,12 @@ func ParseScopedOwnedImageImportArgs(args []string) (project, owner, alias, dir 
 	return args[2], args[4], args[5], args[6], nil
 }
 
+// Domain-owned compatibility adapters for CLI callers.
 func InspectOwnedScopedImageInventory(ctx context.Context, scope incusscope.ProjectScope, inspect func(context.Context, incusscope.ProjectScope) ([]byte, error), maxBytes int) ([]ObservedClaimedImage, error) {
-	raw, err := inspect(ctx, scope)
-	if err != nil || len(raw) > maxBytes {
-		return nil, fmt.Errorf("unable to inspect project-local images")
-	}
-	var images []ObservedClaimedImage
-	if err := json.Unmarshal(raw, &images); err != nil || images == nil {
-		return nil, fmt.Errorf("invalid project-local image inventory")
-	}
-	// An incomplete record invalidates the entire snapshot; it must not
-	// silently mean an absent target fingerprint or alias.
-	for _, image := range images {
-		if !OwnedFingerprintPattern.MatchString(image.Fingerprint) {
-			return nil, fmt.Errorf("project-local image identity unverified")
-		}
-	}
-	return images, nil
+ return incusimages.InspectOwnedScopedInventory(ctx, scope, inspect, maxBytes)
 }
-
 func AvailableForOwnedImport(images []ObservedClaimedImage, alias, fingerprint string) bool {
-	for _, image := range images {
-		// A matching image in the target project must never be adopted or
-		// have its properties modified as part of a new import.
-		if image.Fingerprint == fingerprint {
-			return false
-		}
-		for _, item := range image.Aliases {
-			if item.Name == alias {
-				return false
-			}
-		}
-	}
-	return true
+ return incusimages.AvailableForOwnedImport(images, alias, fingerprint)
 }
 
 // This command creates a fresh image record with a *self-declared* owner
