@@ -2,11 +2,16 @@ package images
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
+
+// OwnedCreateFailure is a stable, typed domain refusal. The CLI owns human
+// diagnostic formatting; individual capability errors are never exposed.
+type OwnedCreateFailure string
+
+func (e OwnedCreateFailure) Error() string { return string(e) }
 
 // OwnedCreateActions contains exact-project creation capabilities. Self-declared
 // owner claims and a cooperative writer lease never constitute authorization.
@@ -25,59 +30,59 @@ type OwnedCreateActions struct {
 func CreateClaimedImage(ctx context.Context, scope incusscope.ProjectScope, owner, alias, dir string, actions OwnedCreateActions) error {
 	if actions.Lease == nil || actions.Verify == nil || actions.Inventory == nil ||
 		actions.Artifact == nil || actions.Fingerprint == nil || actions.Import == nil {
-		return fmt.Errorf("images import-owned: required capabilities unavailable; no import attempted")
+		return OwnedCreateFailure("capabilities")
 	}
 	// Serialize all participating image writers in this local project,
 	// including distinct aliases which could have matching fingerprints.
 	release, err := actions.Lease(scope)
 	if err != nil || release == nil {
-		return fmt.Errorf("images import-owned: project writer lease unavailable; no import attempted")
+		return OwnedCreateFailure("lease")
 	}
 	defer release()
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	if err := actions.Verify(ctx, scope); err != nil {
-		return fmt.Errorf("images import-owned: local project not verified; no import attempted")
+		return OwnedCreateFailure("project-initial")
 	}
 	initial, err := actions.Inventory(ctx, scope)
 	if err != nil {
-		return fmt.Errorf("images import-owned: cannot verify project-local image inventory")
+		return OwnedCreateFailure("inventory-initial")
 	}
 	metadata, err := actions.Artifact(dir, "metadata", ".tar.xz")
 	if err != nil {
-		return fmt.Errorf("images import-owned: cannot resolve metadata artifact")
+		return OwnedCreateFailure("metadata")
 	}
 	rootfs, err := actions.Artifact(dir, "rootfs", ".squashfs")
 	if err != nil {
-		return fmt.Errorf("images import-owned: cannot resolve rootfs artifact")
+		return OwnedCreateFailure("rootfs")
 	}
 	fingerprint, err := actions.Fingerprint(metadata, rootfs)
 	if err != nil {
-		return fmt.Errorf("images import-owned: cannot fingerprint image artifacts")
+		return OwnedCreateFailure("fingerprint")
 	}
 	if !AvailableForOwnedImport(initial, alias, fingerprint) {
-		return fmt.Errorf("images import-owned: alias or fingerprint already exists; refusing adoption")
+		return OwnedCreateFailure("adoption")
 	}
 
 	if err := actions.Verify(ctx, scope); err != nil {
-		return fmt.Errorf("images import-owned: project changed before import; no mutation attempted")
+		return OwnedCreateFailure("project-prewrite")
 	}
 	beforeWrite, err := actions.Inventory(ctx, scope)
 	if err != nil || !AvailableForOwnedImport(beforeWrite, alias, fingerprint) {
-		return fmt.Errorf("images import-owned: image inventory changed or unavailable; refusing mutation")
+		return OwnedCreateFailure("inventory-prewrite")
 	}
 	// Incus's server-side duplicate fingerprint/alias checks are the
 	// remaining collision defense against another writer.
 	if err := actions.Import(ctx, scope, metadata, rootfs, alias, owner); err != nil {
-		return fmt.Errorf("images import-owned: creation refused or failed; inspect state manually before retrying")
+		return OwnedCreateFailure("import")
 	}
 
 	if err := actions.Verify(ctx, scope); err != nil {
-		return fmt.Errorf("images import-owned: project unverified after creation; no automatic rollback")
+		return OwnedCreateFailure("project-postwrite")
 	}
 	after, err := actions.Inventory(ctx, scope)
 	if err != nil || ClassifyOwnerClaim(after, scope, alias, owner) != "claimed" {
-		return fmt.Errorf("images import-owned: ownership claim not verified after creation; no automatic rollback")
+		return OwnedCreateFailure("claim-postwrite")
 	}
 	found := false
 	for _, image := range after {
@@ -90,7 +95,7 @@ func CreateClaimedImage(ctx context.Context, scope incusscope.ProjectScope, owne
 		}
 	}
 	if !found {
-		return fmt.Errorf("images import-owned: fingerprint mismatch after creation; no automatic rollback")
+		return OwnedCreateFailure("fingerprint-postwrite")
 	}
 	return nil
 }
