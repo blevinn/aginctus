@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests.validation import coverage
-from scripts.checks import preflight_report
+from tools.validation import preflight_report
 from tests.acceptance import local_report
 from tests.vm_harness import runner
 from tools.ci import ci_summary
