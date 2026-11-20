@@ -94,7 +94,7 @@ if name == "git":
                 tool = tools / name
                 tool.write_text(stub)
                 tool.chmod(0o700)
-            acceptance = root / "scripts/acceptance"
+            acceptance = root / "tests/acceptance"
             acceptance.mkdir(parents=True)
             for name in ("opencode-test.sh", "opencode-live-adapter-test.sh"):
                 (acceptance / name).write_text(
