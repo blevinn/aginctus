@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"regexp"
 	"time"
 
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 
-	incusscope "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/orchestration/environment"
 )
 
 // GatewayGuestExecOperation is the bounded Incus operation observation needed
@@ -41,15 +40,12 @@ type GatewayPostgresProbeClient interface {
 // No passwords, host paths, tokens or arbitrary commands are accepted here.
 // pg_isready alone is insufficient; psql -w SELECT 1 fails closed if password
 // auth fails. This probe does not establish the credential-file's provenance.
-var gatewayOwnerID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
-
-func VerifyNativeGatewayPostgresReadyWithClient(ctx context.Context, project, environmentID, instanceName string, client GatewayPostgresProbeClient) error {
-	if _, err := incusscope.NewProjectScope(project); err != nil {
-		return fmt.Errorf("gateway PostgreSQL readiness requires selected project")
-	}
-	if !gatewayOwnerID.MatchString(environmentID) || !gatewayOwnerID.MatchString(instanceName) || instanceName == "postgres-1" {
-		return fmt.Errorf("gateway PostgreSQL readiness requires scoped environment and guest identity")
-	}
+func VerifyNativeGatewayPostgresReadyWithClient(ctx context.Context, descriptor environment.Descriptor, observed environment.Binding, client GatewayPostgresProbeClient) error {
+	identity,err:=NativeGatewayIdentity(descriptor,observed)
+	if err!=nil{return fmt.Errorf("gateway PostgreSQL readiness requires verified environment binding")}
+	project:=identity.Project
+	environmentID:=identity.EnvironmentID
+	instanceName:=identity.PostgresInstance
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	if err := ctx.Err(); err != nil {
