@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/blevinn/aginctus/internal/plugins/build"
+	pluginbuild "github.com/blevinn/aginctus/internal/plugins/build"
 )
 
 func TestCheckedInComposition(t *testing.T) {
@@ -25,7 +25,7 @@ func TestCheckedInComposition(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, want) {
-		t.Fatal("run go generate ./internal/appplugins")
+		t.Fatal("run go generate ./internal/plugins/composition")
 	}
 	r, err := New(context.Background())
 	if err != nil {
