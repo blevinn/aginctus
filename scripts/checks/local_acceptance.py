@@ -14,7 +14,7 @@ from contextlib import ExitStack
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from scripts.acceptance import local_report
+from tests.acceptance import local_report
 
 ROWS = (
     ("fixture_change", "host_fixture_check"),
