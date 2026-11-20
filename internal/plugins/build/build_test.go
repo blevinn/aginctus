@@ -39,7 +39,7 @@ func TestSelectionBuilds(t *testing.T) {
 		return raw
 	}
 	originalMod, originalSum := read(filepath.Join(root, "go.mod")), read(filepath.Join(root, "go.sum"))
-	originalGenerated := read(filepath.Join(root, "internal/appplugins/generated.go"))
+	originalGenerated := read(filepath.Join(root, "internal/plugins/composition/generated.go"))
 	asset := bytes.TrimSpace(read(filepath.Join(root, "internal/plugins/build/testdata/builtin/capability.txt")))
 	for _, tc := range []struct {
 		name      string
@@ -84,7 +84,7 @@ func TestSelectionBuilds(t *testing.T) {
 					t.Fatal(err)
 				}
 				generated := write("generated.go", source)
-				overlay, _ := json.Marshal(map[string]any{"Replace": map[string]string{filepath.Join(root, "internal/appplugins/generated.go"): generated}})
+				overlay, _ := json.Marshal(map[string]any{"Replace": map[string]string{filepath.Join(root, "internal/plugins/composition/generated.go"): generated}})
 				flags = append(flags, "-overlay="+write("overlay.json", overlay))
 			}
 			runGo := func(verb string, args ...string) ([]byte, error) {
@@ -165,7 +165,7 @@ func TestSelectionBuilds(t *testing.T) {
 			}
 		})
 	}
-	if !bytes.Equal(read(filepath.Join(root, "go.mod")), originalMod) || !bytes.Equal(read(filepath.Join(root, "go.sum")), originalSum) || !bytes.Equal(read(filepath.Join(root, "internal/appplugins/generated.go")), originalGenerated) {
+	if !bytes.Equal(read(filepath.Join(root, "go.mod")), originalMod) || !bytes.Equal(read(filepath.Join(root, "go.sum")), originalSum) || !bytes.Equal(read(filepath.Join(root, "internal/plugins/composition/generated.go")), originalGenerated) {
 		t.Fatal("build fixture changed checkout inputs")
 	}
 }
