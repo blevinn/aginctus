@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/blevinn/aginctus/internal/pluginbuild"
+	pluginbuild "github.com/blevinn/aginctus/internal/plugins/build"
 )
 
 func TestCheckedInComposition(t *testing.T) {
