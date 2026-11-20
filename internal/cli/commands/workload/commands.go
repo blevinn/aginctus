@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/blevinn/aginctus/internal/config"
+	clioutput "github.com/blevinn/aginctus/internal/cli/output"
 	"github.com/spf13/cobra"
 )
 
@@ -17,6 +18,7 @@ type Handlers struct {
 	ScopedStop         Run
 	Configured         func(context.Context, string, []string, bool, bool, io.Writer, io.Writer, *config.Config) int
 	ScopedStatus       func(context.Context, []string, io.Writer, io.Writer, *config.Config, bool) int
+	ScopedTyped        func(context.Context, string, string, bool, clioutput.Format, io.Writer, *config.Config) error
 	List               Run
 	Status             Run
 	GatewayProvision   Run
@@ -118,6 +120,26 @@ func Register(
 		cmd := add(workloads, verb+" [NAME]", map[string][]string{"ls": {"list"}}[verb], argsRule, nil,
 			func(cmd *cobra.Command, args []string, cfg *config.Config) int {
 				if cmd.Flags().Changed("project") {
+					if cmd.Root().PersistentFlags().Changed("output") {
+						format, err := clioutput.ParseFormat(cmd.Root().PersistentFlags().Lookup("output").Value.String())
+						if err != nil {
+							fmt.Fprintln(stderr, err)
+							return 1
+						}
+						target := ""
+						if len(args) == 1 {
+							target = args[0]
+						}
+						if handlers.ScopedTyped == nil {
+							fmt.Fprintln(stderr, "typed scoped workload output unavailable")
+							return 1
+						}
+						if err := handlers.ScopedTyped(cmd.Context(), project, target, verb == "ls", format, stdout, cfg); err != nil {
+							fmt.Fprintf(stderr, "workload status: %v\n", err)
+							return 1
+						}
+						return 0
+					}
 					return handlers.ScopedStatus(cmd.Context(), append([]string{"--project", project}, args...), stdout, stderr, cfg, verb == "ls")
 				}
 				if verb == "ls" {

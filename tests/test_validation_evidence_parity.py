@@ -9,8 +9,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.validation import coverage, local_acceptance
 from tests.acceptance import local_report
+from tests.validation import coverage, local_acceptance
 from tools.ci import ci_summary
 
 ROOT = Path(__file__).resolve().parents[1]

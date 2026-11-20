@@ -132,7 +132,10 @@ func runBasicCobra(
 			if _, err := clioutput.ParseFormat(outputFormat); err != nil {
 				return err
 			}
-			if cmd.Parent() != pluginCmd || cmd.Name() != "inventory" {
+			pluginInventory := cmd.Parent() == pluginCmd && cmd.Name() == "inventory"
+			verifiedScopedWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workload" &&
+				(cmd.Name() == "ls" || cmd.Name() == "status") && cmd.Flags().Changed("project")
+			if !pluginInventory && !verifiedScopedWorkload {
 				return fmt.Errorf("--output is not yet supported by %s", cmd.CommandPath())
 			}
 		}
