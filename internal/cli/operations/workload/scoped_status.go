@@ -2,11 +2,9 @@ package workloadops
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/herdrclient"
@@ -14,16 +12,9 @@ import (
 	"github.com/blevinn/aginctus/internal/workload"
 )
 
-// InspectedInstance is the stable observed Incus identity. The scoped read
-// refuses ambiguous names, unexpected projects and foreign ownership markers.
-type InspectedInstance struct {
-	Name    string            `json:"name"`
-	Status  string            `json:"status"`
-	Config  map[string]string `json:"config"`
-	Project string            `json:"project"`
-}
-
-
+// InspectedInstance preserves the existing CLI adapter type while the domain
+// owns the inventory contract.
+type InspectedInstance = workload.InspectedInstance
 
 type ScopedStatusActions struct {
 	Parse func([]string) (string, []string, error)
@@ -54,50 +45,12 @@ func ParseScopedInstanceStatusArgs(args []string) (string, []string, error) {
 }
 
 func ReadScopedManagedInstances(ctx context.Context, cfg *config.Config, name string, verify func(context.Context, incusscope.ProjectScope) error, inspect func(context.Context, incusscope.ProjectScope) ([]byte, error), maxBytes int) (incusscope.ProjectScope, []InspectedInstance, error) {
-	scope, err := cfg.IncusProjectScope()
-	if err != nil || scope.Name != name {
-		return incusscope.ProjectScope{}, nil, fmt.Errorf("project must match the declared incus.project setting")
-	}
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	if err := verify(ctx, scope); err != nil {
-		return incusscope.ProjectScope{}, nil, fmt.Errorf("local project ownership and feature policy unverified")
-	}
-	raw, err := inspect(ctx, scope)
-	if err != nil || len(raw) > maxBytes {
-		return incusscope.ProjectScope{}, nil, fmt.Errorf("project-scoped instance inventory unavailable")
-	}
-	var instances []InspectedInstance
-	if err := json.Unmarshal(raw, &instances); err != nil || instances == nil {
-		return incusscope.ProjectScope{}, nil, fmt.Errorf("invalid project-scoped instance inventory")
-	}
-	seen := make(map[string]bool, len(instances))
-	for _, instance := range instances {
-		if instance.Name == "" || (instance.Project != "" && instance.Project != scope.Name) || seen[instance.Name] {
-			return incusscope.ProjectScope{}, nil, fmt.Errorf("ambiguous or invalid project-scoped instance inventory")
-		}
-		seen[instance.Name] = true
-	}
-	return scope, instances, nil
+	return workload.ReadScopedManagedInstances(ctx, cfg, name, verify, inspect, maxBytes)
 }
 
-// Unlike legacy findManagedInstance, this lookup deliberately does not
-// presume the default project. Ownership is still checked for every named
-// instance, and a conflicting name never appears as "absent".
+// FindScopedManagedInstance retains its old call path for CLI compatibility.
 func FindScopedManagedInstance(instances []InspectedInstance, name, resource, role, id string) (string, error) {
-	for _, instance := range instances {
-		if instance.Name != name {
-			continue
-		}
-		if instance.Config["user.aginctus.managed"] != "true" ||
-			instance.Config["user.aginctus.resource"] != resource ||
-			(role != "" && instance.Config["user.aginctus.role"] != role) ||
-			(id != "" && instance.Config["user.aginctus.workload"] != id) {
-			return "", fmt.Errorf("instance %q exists but ownership markers do not match", name)
-		}
-		return instance.Status, nil
-	}
-	return "", nil
+	return workload.FindScopedManagedInstance(instances, name, resource, role, id)
 }
 
 func RunScopedHerdrStatus(ctx context.Context, args []string, out, stderr io.Writer, cfg *config.Config, actions ScopedStatusActions) int {
