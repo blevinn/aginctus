@@ -24,7 +24,7 @@ let
     ${lib.optionalString fullStack ''
       cp ${../../tests/vm_harness/full_stack.py} "$out/full_stack.py"
       cp ${../../tests/vm_harness/evidence.py} "$out/evidence.py"
-      cp ${../../scripts/acceptance/herdr-lifecycle.py} "$out/herdr-lifecycle.py"
+      cp ${../../tests/acceptance/herdr-lifecycle.py} "$out/herdr-lifecycle.py"
     ''}
   '';
   syntheticProbe = pkgs.writeShellScriptBin "aginctus-vm-synthetic-probe" ''
@@ -202,7 +202,7 @@ pkgs.testers.runNixOSTest {
     # Reuse the strict pilot route parser against the real DHCP guest.
     # A route assertion is not packet-filter or provider-inference evidence.
     import runpy
-    verify_routes = runpy.run_path("${../../scripts/acceptance/opencode-pilot-preflight.py}")["verify_ipv4_routes"]
+    verify_routes = runpy.run_path("${../../tests/acceptance/opencode-pilot-preflight.py}")["verify_ipv4_routes"]
     verify_routes(machine.succeed("timeout 15 incus exec --disable-stdin --project aginctus-gateway postgres-1 -- cat /proc/net/route"))
     for instance in ("aginctus-dev", "aginctus-herdr"):
         machine.wait_until_succeeds(f"timeout 15 incus exec --disable-stdin {instance} -- ip -4 addr show dev eth0 | grep -q 'inet '", timeout=120)
