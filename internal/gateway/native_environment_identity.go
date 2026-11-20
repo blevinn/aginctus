@@ -2,9 +2,22 @@ package gateway
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
+)
+
+var gatewayEnvironmentIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}package gateway
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+
+	"github.com/blevinn/aginctus/internal/orchestration/environment"
+)
+
 )
 
 // NativeGatewayResourceIdentity identifies one environment's gateway resources
