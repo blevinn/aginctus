@@ -5,7 +5,7 @@ import unittest
 from urllib.error import HTTPError
 from urllib.request import ProxyHandler, Request, build_opener
 
-from scripts.vm_harness.synthetic_responses import (
+from tests.vm_harness.synthetic_responses import (
     TOKEN,
     SyntheticServer,
     parse_request,

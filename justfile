@@ -55,50 +55,50 @@ test-nix-firewall:
 # Boot a pinned real Incus guest using the shared VM fixture (#427).
 # Always explicit: excluded from check-all and normal CI.
 test-vm-smoke:
-    python3 scripts/vm_harness/runner.py test smoke
+    python3 tests/vm_harness/runner.py test smoke
 
 # Guest-only Btrfs Incus pool and real Aginctus management bridge checks.
 test-vm-storage-network:
-    python3 scripts/vm_harness/runner.py test storage-network
+    python3 tests/vm_harness/runner.py test storage-network
 
 # Real packaged Herdr/OpenCode images and Incus lifecycle, no OCI inference.
 test-vm-runtime-lifecycle:
-    python3 scripts/vm_harness/runner.py test runtime-lifecycle
+    python3 tests/vm_harness/runner.py test runtime-lifecycle
 
 # Native scoped instance lifecycle and dry-run against disposable Incus.
 test-vm-native-instance:
-    python3 scripts/vm_harness/runner.py test native-instance
+    python3 tests/vm_harness/runner.py test native-instance
 
 # Real LiteLLM/PostgreSQL OCI and Herdr/OpenCode topology (no model calls).
 # May need OCI registry access; use a disposable NixOS KVM worker only.
 test-vm-gateway-topology:
-    python3 scripts/vm_harness/runner.py test gateway-topology
+    python3 tests/vm_harness/runner.py test gateway-topology
 test-vm-synthetic-gateway:
-    python3 scripts/vm_harness/runner.py test synthetic-gateway
+    python3 tests/vm_harness/runner.py test synthetic-gateway
 # Real LiteLLM function-call continuation transport with FAKE tool outputs.
 # Operator-only KVM, no Herdr/OpenCode tool execution or live inference.
 test-vm-synthetic-tool-gateway:
-    python3 scripts/vm_harness/runner.py test synthetic-tool-gateway
+    python3 tests/vm_harness/runner.py test synthetic-tool-gateway
 # Real Herdr/OpenCode tools through the synthetic gateway, dedicated worker only.
 test-vm-full-stack:
-    python3 scripts/vm_harness/runner.py test full-stack
+    python3 tests/vm_harness/runner.py test full-stack
 # Genuine pinned OpenCode tool execution INSIDE a disposable no-egress VM.
 # Still a loopback synthetic model: not Herdr/LiteLLM acceptance.
 test-vm-opencode-tool-loopback:
-    python3 scripts/vm_harness/runner.py test opencode-tool-loopback
+    python3 tests/vm_harness/runner.py test opencode-tool-loopback
 
 # Real Incus foreign-resource and daemon-outage recovery assertions.
 test-vm-ownership-recovery:
-    python3 scripts/vm_harness/runner.py test ownership-recovery
+    python3 tests/vm_harness/runner.py test ownership-recovery
 
 # Inspect the same VM fixture with the interactive NixOS test driver.
 # Run under a dedicated unprivileged worker identity, never on pilot host.
 vm-debug:
-    python3 scripts/vm_harness/runner.py debug smoke
+    python3 tests/vm_harness/runner.py debug smoke
 
 # Hostless safety tests for runner command/environment selection.
 test-vm-runner:
-    python3 -m unittest discover -s scripts/vm_harness -p 'test_*.py' -v
+    python3 -m unittest discover -s tests/vm_harness -p 'test_*.py' -v
 
 # Builds and runs a disposable QEMU VM with real Incus and the packaged CLI.
 # Unlike 'just test', this is a heavyweight integration check.

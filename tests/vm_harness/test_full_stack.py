@@ -10,9 +10,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from scripts.vm_harness import full_stack as stack
-from scripts.vm_harness import runner
-from scripts.vm_harness.tool_sequence import SequenceError, ToolSequence
+from tests.vm_harness import full_stack as stack
+from tests.vm_harness import runner
+from tests.vm_harness.tool_sequence import SequenceError, ToolSequence
 
 
 class FakeAdapter:

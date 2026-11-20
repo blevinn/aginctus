@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.vm_harness import guest_credentials as helper
+from tests.vm_harness import guest_credentials as helper
 
 
 class GuestCredentialTests(unittest.TestCase):

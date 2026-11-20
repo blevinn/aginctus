@@ -18,7 +18,7 @@ from pathlib import Path
 
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from scripts.vm_harness import evidence
+from tests.vm_harness import evidence
 
 ROOT = Path(__file__).resolve().parents[2] / ".vm-harness-results"
 SCENARIOS = (
