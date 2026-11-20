@@ -20,14 +20,14 @@ the address still belongs to LiteLLM, is reachable, or cannot be spoofed.
 From a host-independent checkout (no Incus execution):
 
 ```sh
-nix develop -c python3 -m unittest discover -s scripts/acceptance -p 'test_opencode_inference_preflight.py' -v
-nix develop -c python3 -m py_compile scripts/acceptance/opencode-inference-preflight.py
+nix develop -c python3 -m unittest discover -s tests/acceptance -p 'test_opencode_inference_preflight.py' -v
+nix develop -c python3 -m py_compile tests/acceptance/opencode-inference-preflight.py
 ```
 
 For a separately authorized, **read-only** pilot inspection only:
 
 ```sh
-nix develop -c python3 scripts/acceptance/opencode-inference-preflight.py
+nix develop -c python3 tests/acceptance/opencode-inference-preflight.py
 ```
 
 The script runs `incus --project default exec` against the managed
