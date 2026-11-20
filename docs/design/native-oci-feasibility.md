@@ -99,7 +99,7 @@ configuration, packaging, scripts and documentation on the v0.1 release baseline
 | `flake.nix` | Both Go binaries vendor the shared module graph and hash; the Incus executable wrapper also serves existing non-orchestration commands. No separate Apply/Compose Nix package is installed. Do not remove Incus CLI packaging merely to remove orchestration libraries. |
 | `nix/vm-harness/gateway-topology.nix` | Legacy Apply-before-Compose regression, daemon HTTPS prerequisite, current project and instance names, OCI readiness and route checks. Native topology needs its own acceptance before cutover. |
 | `justfile`, `tests/vm_harness/`, `tests/` | Explicit Compose integration entry point, gateway scenarios, fixtures and runner safety tests. Keep regression evidence distinct from native acceptance. |
-| `scripts/gateway/` | Selective-Go auditing uses Compose service labels; model-registration helpers contain legacy gateway naming assumptions. Migrate identity contracts along with the gateway, not independently. |
+| `tools/gateway/` and `plugins/litellm/runtime/` | Selective-Go auditing uses Compose service labels; model-registration helpers have historical gateway naming assumptions. Reconcile identity contracts with the gateway architecture separately from this source-layout migration. |
 | `docs/` | Orchestration, gateway, egress, management DHCP, credential volume, scoped CLI, workspace and selective-Go documents reference legacy behavior. Preserve historical release evidence; update current operator instructions at subsystem cutover. |
 
 Useful audit commands (tracked files only, excluding concurrent worktrees):
