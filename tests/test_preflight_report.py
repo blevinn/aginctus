@@ -31,7 +31,7 @@ class PreflightReportTests(unittest.TestCase):
         args, kwargs = run.call_args
         self.assertEqual(len(args[0]), 2)
         self.assertTrue(
-            args[0][1].endswith("/scripts/acceptance/opencode-inference-preflight.py")
+            args[0][1].endswith("/tests/acceptance/opencode-inference-preflight.py")
         )
         self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
         self.assertEqual(kwargs["stdout"], subprocess.DEVNULL)
