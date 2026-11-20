@@ -9,11 +9,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tests.validation import coverage
-from tools.validation import preflight_report
 from tests.acceptance import local_report
+from tests.validation import coverage
 from tests.vm_harness import runner
 from tools.ci import ci_summary
+from tools.validation import preflight_report
 
 
 def hermetic(*, failure=""):
