@@ -48,5 +48,4 @@ pkgs.runCommand "aginctus-oauth-gateway-image" { } ''
   mkdir -p "$out"
   ln -s ${oauthGatewayRootfs} "$out/rootfs"
   ln -s ${oauthGatewayMetadata} "$out/metadata"
-'';
-
+''
