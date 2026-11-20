@@ -40,8 +40,8 @@ class ValidationDispatchTests(unittest.TestCase):
         # Each suite stops at its own first failed command, but the reporter
         # proceeds to later suites and summarizes every observed suite.
         groups = (
-            expected[:3], expected[3:7], expected[7:14], expected[14:16],
-            expected[16:17], expected[17:18], expected[18:20], expected[20:],
+            expected[:3], expected[3:7], expected[7:15], expected[15:17],
+            expected[17:18], expected[18:19], expected[19:21], expected[21:],
         )
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
