@@ -13,7 +13,7 @@ discovery and the existing v1 VM evidence reader.
 
 ## Decision
 
-The dependency-light Go package internal/testing/validation/catalog owns typed suite
+The dependency-light Go package internal/validation/catalog owns typed suite
 and VM scenario metadata. It performs no I/O or execution. The existing
 operator-only testenv CLI projects its public list from that catalog without
 changing JSON shape, descriptions, names or execution behavior.
@@ -44,7 +44,7 @@ These are compatibility policy descriptors, not permission tokens.
   scrubbed from each child environment.
 - Batch NixOS VM: explicit operator on disposable worker, not agent-safe
   persistent VM admission or arbitrary host shell.
-- Persistent testenv: existing internal/testenv backend plus dedicated-worker
+- Persistent testenv: existing internal/testing/testenv backend plus dedicated-worker
   identity, admission, ownership and independent recovery.
 - Pilot/live provider: separately authorized, never implicit in catalog
   discovery, hermetic checks or synthetic evidence.
