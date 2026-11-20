@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/blevinn/aginctus/internal/validation/catalog"
+	"github.com/blevinn/aginctus/internal/testing/validation/catalog"
 )
 
 const (

@@ -3,7 +3,7 @@ set -Eeuo pipefail
 cd "$(dirname "$0")/../.."
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
-adapter="$PWD/scripts/acceptance/opencode-live-adapter.sh"
+adapter="$PWD/tests/acceptance/opencode-live-adapter.sh"
 id=aginctus-acceptance.ABCD1234
 ws="$tmp/$id/workspace"
 mkdir -p "$ws" "$tmp/hooks"

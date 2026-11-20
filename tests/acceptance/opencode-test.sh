@@ -36,7 +36,7 @@ export ACCEPTANCE_TEST_EVENTS="$tmp/events"
 export AGINCTUS_ACCEPTANCE_ADAPTER="$tmp/adapter"
 mkdir -m 700 "$tmp/reports"
 export AGINCTUS_ACCEPTANCE_REPORT_ROOT="$tmp/reports"
-TMPDIR="$tmp" bash scripts/acceptance/opencode.sh mock
+TMPDIR="$tmp" bash tests/acceptance/opencode.sh mock
 python3 - "$tmp/reports" <<'PY'
 import json
 import sys
@@ -63,18 +63,18 @@ test -f "$tmp/events/close"
 rm "$tmp/events/"*
 # Failure must still stop and close; live opt-in must reject without opening.
 export ACCEPTANCE_TEST_FAIL=1
-if TMPDIR="$tmp" bash scripts/acceptance/opencode.sh mock; then echo "unexpected mock pass" >&2; exit 1; fi
+if TMPDIR="$tmp" bash tests/acceptance/opencode.sh mock; then echo "unexpected mock pass" >&2; exit 1; fi
 test -f "$tmp/events/stop"
 test -f "$tmp/events/close"
 rm "$tmp/events/"*
-if bash scripts/acceptance/opencode.sh live; then echo "unexpected live pass" >&2; exit 1; fi
+if bash tests/acceptance/opencode.sh live; then echo "unexpected live pass" >&2; exit 1; fi
 test ! -e "$tmp/events/stop"
 test ! -e "$tmp/events/close"
 
 # A cleanup command failure must fail the harness, even when fixture tests pass.
 unset ACCEPTANCE_TEST_FAIL
 export ACCEPTANCE_TEST_CLEANUP_FAIL=1
-if TMPDIR="$tmp" bash scripts/acceptance/opencode.sh mock; then echo "unexpected cleanup pass" >&2; exit 1; fi
+if TMPDIR="$tmp" bash tests/acceptance/opencode.sh mock; then echo "unexpected cleanup pass" >&2; exit 1; fi
 python3 - "$tmp/reports" <<'PY'
 import json
 import sys
@@ -102,7 +102,7 @@ cat >"$tmp/bin/rm" <<'EOF'
 exit 19
 EOF
 chmod +x "$tmp/bin/rm"
-if TMPDIR="$tmp" PATH="$tmp/bin:$PATH" bash scripts/acceptance/opencode.sh mock; then
+if TMPDIR="$tmp" PATH="$tmp/bin:$PATH" bash tests/acceptance/opencode.sh mock; then
   echo "unexpected local-removal pass" >&2; exit 1
 fi
 python3 - "$tmp/reports" <<'PY'
@@ -123,7 +123,7 @@ rm "$tmp/events/"*
 mkdir -m 755 "$tmp/unsafe-results"
 chmod 755 "$tmp/unsafe-results"
 export AGINCTUS_ACCEPTANCE_REPORT_ROOT="$tmp/unsafe-results"
-if TMPDIR="$tmp" bash scripts/acceptance/opencode.sh mock; then
+if TMPDIR="$tmp" bash tests/acceptance/opencode.sh mock; then
   echo "unsafe evidence root unexpectedly accepted" >&2; exit 1
 fi
 test ! -e "$tmp/events/stop"

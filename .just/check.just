@@ -58,13 +58,14 @@ python:
     python3 -m unittest discover -s nix/guest/ssh -p 'test_*.py' -v
     python3 -m unittest discover -s scripts/acceptance -p 'test_*.py' -v
     python3 -m unittest discover -s scripts/gateway -p 'test_*.py' -v
+    python3 -m unittest discover -s tools/gateway -p 'test_*.py' -v
     python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 # Both adapters use temporary fixtures; do not run live acceptance.
 [no-cd]
 shell-tests:
-    bash scripts/acceptance/opencode-test.sh
-    bash scripts/acceptance/opencode-live-adapter-test.sh
+    bash tests/acceptance/opencode-test.sh
+    bash tests/acceptance/opencode-live-adapter-test.sh
 
 [no-cd]
 shell:
