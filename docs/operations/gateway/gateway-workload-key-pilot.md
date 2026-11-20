@@ -119,10 +119,10 @@ LiteLLM HTTP responses or the gateway's expanded Incus configuration.
 
 ```sh
 nix develop -c python3 -m unittest discover \
-  -s scripts/gateway -p 'test_manage_workload_key.py' -v
+  -s tools/gateway -p 'test_manage_workload_key.py' -v
 nix develop -c python3 -m py_compile \
   tools/gateway/manage-workload-key.py \
-  scripts/gateway/test_manage_workload_key.py
+  tools/gateway/test_manage_workload_key.py
 
 just check
 nix flake check
