@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -33,12 +34,51 @@ const instanceNoTimeout = -1
 // InstanceLifecycleIntent describes the required running state of one
 // Aginctus-owned instance. It never creates, replaces or removes an
 // instance, and it never adopts a foreign instance.
+var nativeEnvironmentUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}package native
+
+import (
+	"context"
+	"fmt"
+	"maps"
+	"net/http"
+	"regexp"
+	"strings"
+	"time"
+
+	incus "github.com/lxc/incus/v7/client"
+	"github.com/lxc/incus/v7/shared/api"
+
+	incusscope "github.com/blevinn/aginctus/internal/incus"
+)
+
+// InstanceState is the running state a managed instance must reach.
+type InstanceState string
+
+const (
+	// InstanceRunning is the running state.
+	InstanceRunning InstanceState = "running"
+	// InstanceStopped is the stopped state.
+	InstanceStopped InstanceState = "stopped"
+)
+
+// instanceNoTimeout requests no client-side timeout. It matches the Incus
+// CLI stop default, so the SDK transition keeps the user-visible behaviour
+// of the subprocess it replaces: the daemon applies its own high shutdown
+// timeout instead of forcing the instance after a short grace period.
+const instanceNoTimeout = -1
+
+// InstanceLifecycleIntent describes the required running state of one
+// Aginctus-owned instance. It never creates, replaces or removes an
+// instance, and it never adopts a foreign instance.
+)
+
 type InstanceLifecycleIntent struct {
 	Scope      incusscope.ProjectScope
 	Name       string
 	Resource   string
 	Role       string
 	WorkloadID string
+	EnvironmentID string
 	State      InstanceState
 }
 
@@ -50,6 +90,9 @@ func (intent InstanceLifecycleIntent) Validate() error {
 	}
 	if !localName(intent.Name) {
 		return fmt.Errorf("instance name must be an explicit local name")
+	}
+	if intent.EnvironmentID!="" && !nativeEnvironmentUUID.MatchString(intent.EnvironmentID) {
+		return fmt.Errorf("native instance lifecycle requires a canonical environment UUID")
 	}
 	if intent.Resource == "" {
 		return fmt.Errorf("instance lifecycle requires an ownership resource")
@@ -74,6 +117,9 @@ func (intent InstanceLifecycleIntent) markers() map[string]string {
 	}
 	if intent.WorkloadID != "" {
 		markers["user.aginctus.workload"] = intent.WorkloadID
+	}
+	if intent.EnvironmentID != "" {
+		markers["user.aginctus.environment-id"] = intent.EnvironmentID
 	}
 	return markers
 }
