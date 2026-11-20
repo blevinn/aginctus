@@ -2,7 +2,7 @@
 { self, system }:
 { lib, ... }:
 let
-  pins = builtins.fromJSON (builtins.readFile ../../tests/oci-stage/pins.json);
+  pins = builtins.fromJSON (builtins.readFile ../../oci-stage/pins.json);
   arch =
     {
       x86_64-linux = "amd64";

@@ -292,7 +292,7 @@ separate operator observations.
 
 ## Test-only immutable OCI staging interface (#532)
 
-`nix/vm-harness/oci-staging.nix` is an explicit, additive guest module for
+`tests/nix/vm-harness/oci-staging.nix` is an explicit, additive guest module for
 dedicated-worker acceptance. Import it alongside `aginctus-host.nix` using
 `(import ./oci-staging.nix { inherit self system; })`. The opt-in `full-stack`
 scenario imports it and performs the provisioning/check calls below. The
