@@ -1,3 +1,0 @@
-litellm_settings:
-  callbacks:
-    - litellm_opencode_go_hook.proxy_handler_instance
