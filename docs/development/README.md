@@ -143,7 +143,7 @@ coverage and failure behavior, without printing raw test output. Run
 | --- | --- |
 | `check` | `go mod verify`, `go test ./...`, `go vet ./...` |
 | `check-lint` | `golangci-lint run` (`staticcheck` only), `ruff check .`, and `shellcheck` for every Git-tracked `*.sh` file |
-| `test-python` | Verbose `unittest` discovery of `test_*.py`, separately in `plugins/opencode/guest`, `nix/guest/ssh`, `scripts/acceptance`, `scripts/gateway`, and `tests` |
+| `test-python` | Verbose `unittest` discovery of `test_*.py`, separately in `plugins/opencode/guest`, `nix/guest/ssh`, `tests/acceptance`, `plugins/litellm/runtime`, `tests/gateway`, `tools/gateway`, and `tests` |
 | `test-shell` | `opencode-test.sh` and `opencode-live-adapter-test.sh`, using temporary fake adapters/hooks only |
 | `check-shell` | `bash -n` for every Git-tracked `*.sh` file, including the opt-in operator harnesses without executing them |
 | `check-markdown-links` | Offline local paths, images, references, and heading fragments in every Git-tracked `*.md` and `*.markdown` document |
