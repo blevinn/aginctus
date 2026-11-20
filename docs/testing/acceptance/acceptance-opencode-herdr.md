@@ -2,7 +2,7 @@
 
 This is **stage 3** of the [OpenCode acceptance decision path](README.md#3-opt-in-real-herdr-lifecycle-not-yet-the-full-agent-task). A workspace-only pass demonstrates owned Herdr operations, not model inference or agent-executed tests. The #124 issue's closure does not replace the independent #122/#257 live provider and egress gates.
 
-The Python implementation `scripts/acceptance/herdr-lifecycle.py` now calls documented Herdr commands for `open`, `start`, `prompt`, `wait`, `stop` and `close`. It uses the Herdr `--machine` selector, which points to a **previously saved and authenticated Herdr machine on the same machine where the CLI runs**, not an arbitrary SSH host. The pilot's intended Herdr client runs inside the `aginctus-herdr` Incus container; the host's `herdr machine list --json` is not its machine registry. The API is documented at [Herdr agent automation](https://herdr.dev/docs/agent-automation/) and [Herdr CLI reference](https://herdr.dev/docs/cli-reference/); pilot validation must confirm the pinned Herdr version supports them.
+The Python implementation `tests/acceptance/herdr-lifecycle.py` now calls documented Herdr commands for `open`, `start`, `prompt`, `wait`, `stop` and `close`. It uses the Herdr `--machine` selector, which points to a **previously saved and authenticated Herdr machine on the same machine where the CLI runs**, not an arbitrary SSH host. The pilot's intended Herdr client runs inside the `aginctus-herdr` Incus container; the host's `herdr machine list --json` is not its machine registry. The API is documented at [Herdr agent automation](https://herdr.dev/docs/agent-automation/) and [Herdr CLI reference](https://herdr.dev/docs/cli-reference/); pilot validation must confirm the pinned Herdr version supports them.
 
 This is a partial integration, **not** complete acceptance. The live dispatcher requires all nine hooks. There is still no built-in `preflight` covering authenticated Herdr reachability and guest workspace transport, no real `credential-check` or `gateway-evidence` hook. The OpenCode gateway launcher from #123 must be provisioned and validated separately. The Herdr agent's settled state does not prove it ran tests; inspect agent tool traces, gateway logs and guest test execution independently.
 
@@ -51,13 +51,13 @@ become independently verified remote cleanup in the private result or
 aggregate coverage. Keep `cleanup: not_verified` until the trusted runner
 itself integrates an independently checked full owned-resource inventory.
 
-The script is used as a **phase implementation**. Install small audited executable wrapper scripts named `open`, `start`, `prompt`, `wait`, `stop`, `close` in the hook directory. Each wrapper invokes `python3 /absolute/repo/scripts/acceptance/herdr-lifecycle.py <phase> "$@"` as a normal command (not `eval`). `preflight`, `credential-check`, and `gateway-evidence` must be implemented separately, and must fail closed rather than emit synthetic markers. The existing dispatcher refuses incomplete directories.
+The script is used as a **phase implementation**. Install small audited executable wrapper scripts named `open`, `start`, `prompt`, `wait`, `stop`, `close` in the hook directory. Each wrapper invokes `python3 /absolute/repo/tests/acceptance/herdr-lifecycle.py <phase> "$@"` as a normal command (not `eval`). `preflight`, `credential-check`, and `gateway-evidence` must be implemented separately, and must fail closed rather than emit synthetic markers. The existing dispatcher refuses incomplete directories.
 
 ## Deterministic checks
 
 ```sh
-nix develop -c python3 -m unittest discover -s scripts/acceptance -p 'test_herdr_lifecycle.py' -v
-nix develop -c python3 -m py_compile scripts/acceptance/herdr-lifecycle.py
+nix develop -c python3 -m unittest discover -s tests/acceptance -p 'test_herdr_lifecycle.py' -v
+nix develop -c python3 -m py_compile tests/acceptance/herdr-lifecycle.py
 bash tests/acceptance/opencode-live-adapter-test.sh
 bash tests/acceptance/opencode-test.sh
 git diff --check origin/main...HEAD
@@ -68,7 +68,7 @@ Live Herdr execution remains opt-in and **is not established by these test doubl
 
 ## Opt-in real pilot workspace smoke (not release sign-off)
 
-The new `scripts/acceptance/herdr-smoke.py` runs **two actual remote workspace create/get/close cycles** through the saved Herdr machine profile. It requires explicit opt-in and reviewed guest directory staging and cleanup commands.
+The new `tests/acceptance/herdr-smoke.py` runs **two actual remote workspace create/get/close cycles** through the saved Herdr machine profile. It requires explicit opt-in and reviewed guest directory staging and cleanup commands.
 
 There are two opt-in levels (see the module docstring):
 
@@ -110,7 +110,7 @@ export AGINCTUS_ACCEPTANCE_HERDR_MACHINE='<reviewed-profile>'
 export AGINCTUS_ACCEPTANCE_HERDR_SMOKE_ROOT=/home/agent/aginctus-acceptance
 export AGINCTUS_ACCEPTANCE_HERDR_STAGE=/absolute/path/to/reviewed-stage
 export AGINCTUS_ACCEPTANCE_HERDR_CLEANUP=/absolute/path/to/reviewed-cleanup
-nix develop -c python3 scripts/acceptance/herdr-smoke.py
+nix develop -c python3 tests/acceptance/herdr-smoke.py
 ```
 
 Review the Herdr workspace list afterwards and confirm that neither run left a workspace or a guest directory. This only establishes remote workspace operations, not the full `agent start/prompt/wait/stop` contract. A separate real agent-lifecycle run is still required before regarding #233 as a validated real lifecycle integration. Do **not** treat mocked lifecycle assertions as real remote-lifecycle or release-acceptance evidence.
@@ -129,7 +129,7 @@ Use the configured Herdr client instance name in place of `aginctus-herdr` if ov
 
 ## Managed guest helper for workspace-only smoke
 
-`scripts/acceptance/guest-owned.py` now supplies the stage and cleanup actions via authenticated `incus exec aginctus-dev -- runuser -u agent -- /bin/sh -c ...`. It creates a **new empty** workspace directory under `/home/agent/aginctus-acceptance` with a private run-ID marker. Cleanup refuses directories with unexpected files and will never delete the existing Herdr workspace `w1`. The guest runs as `agent`, and the host never receives any SSH private key.
+`tests/acceptance/guest-owned.py` now supplies the stage and cleanup actions via authenticated `incus exec aginctus-dev -- runuser -u agent -- /bin/sh -c ...`. It creates a **new empty** workspace directory under `/home/agent/aginctus-acceptance` with a private run-ID marker. Cleanup refuses directories with unexpected files and will never delete the existing Herdr workspace `w1`. The guest runs as `agent`, and the host never receives any SSH private key.
 
 The smoke defaults to this helper for staging and cleanup. The helper requires `/bin/sh`, `stat`, `find`, `mkdir`, `chmod`, `rm`, and `rmdir` in the workload; check these and the `agent` home before opt-in. `AGINCTUS_ACCEPTANCE_WORKLOAD` can select an explicitly reviewed instance if the workload name differs. The helper is intended **only for the empty workspace smoke** and does not yet stage a coding fixture. Cleanup failures require manual investigation; do not forcibly remove unexpected content.
 
@@ -172,7 +172,7 @@ After checking these prerequisites and reviewing the helper and ownership model,
 AGINCTUS_ACCEPTANCE_HERDR_SMOKE=I_UNDERSTAND \
 AGINCTUS_ACCEPTANCE_HERDR_MACHINE=aginctus-dev \
 AGINCTUS_ACCEPTANCE_HERDR_SMOKE_ROOT=/home/agent/aginctus-acceptance \
-nix develop -c python3 scripts/acceptance/herdr-smoke.py
+nix develop -c python3 tests/acceptance/herdr-smoke.py
 ```
 
 Do not run this if there are previously unreviewed failed runs with the same IDs. Inspect newly created resources after each failure. This still does not verify actual agent lifecycle.
@@ -188,7 +188,7 @@ AGINCTUS_ACCEPTANCE_HERDR_SMOKE=I_UNDERSTAND \
 AGINCTUS_ACCEPTANCE_HERDR_AGENT_SMOKE=I_UNDERSTAND \
 AGINCTUS_ACCEPTANCE_HERDR_MACHINE=aginctus-dev \
 AGINCTUS_ACCEPTANCE_HERDR_SMOKE_ROOT=/home/agent/aginctus-acceptance \
-nix develop -c python3 scripts/acceptance/herdr-smoke.py
+nix develop -c python3 tests/acceptance/herdr-smoke.py
 ```
 
 Adding `AGINCTUS_ACCEPTANCE_HERDR_AGENT_PROMPT=I_UNDERSTAND` additionally sends a minimal no-file-change prompt and runs a bounded wait. **Do not opt into prompting until the gateway workload key, model selection, and private inference endpoint are verified**; agent readiness alone is not proof of inference. This agent test is still unvalidated against the pilot. The non-root guest cleanup refuses unexpected files, so if OpenCode writes persistent files under the disposable cwd, a failed cleanup should be inspected manually. Neither the test nor the operator should remove unrelated resources, including `w1`.
