@@ -8,6 +8,7 @@ import "fmt"
 // before any mutation. No secret values are included in this representation.
 type NativeGatewayTopology struct {
 	Deployment        string
+	EnvironmentID     string
 	Project           string
 	ManagementNetwork string
 	EgressNetwork     string
