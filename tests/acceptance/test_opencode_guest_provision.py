@@ -1,4 +1,4 @@
-"""Hermetic regression tests for scripts/acceptance/opencode-guest-provision.py."""
+"""Hermetic regression tests for tests/acceptance/opencode-guest-provision.py."""
 import importlib.util
 import subprocess
 import unittest
@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "acceptance" / "opencode-guest-provision.py"
+SCRIPT = REPO_ROOT / "tests" / "acceptance" / "opencode-guest-provision.py"
 
 
 def load_module():
