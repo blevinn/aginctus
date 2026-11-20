@@ -18,11 +18,11 @@ The disposable, synthetic-provider [VM harness workstream](https://github.com/bl
 From the repository root, with Bash, Go 1.22+ and the fixture's Unix tools available:
 
 ```sh
-bash scripts/acceptance/opencode-test.sh
-bash scripts/acceptance/opencode-live-adapter-test.sh
+bash tests/acceptance/opencode-test.sh
+bash tests/acceptance/opencode-live-adapter-test.sh
 ```
 
-The [harness](../../../scripts/acceptance/opencode.sh) creates a uniquely named temporary Go module with a deliberately wrong `Add` implementation and a failing test. Its mock adapter *simulates* an edit and gateway evidence. The harness checks the resulting source and independently runs `go test ./...`; it also verifies injected failures, unauthorized live rejection and owned cleanup. Expect `PASS: deterministic acceptance orchestration and cleanup` for the first test; an intentionally printed failure inside a negative test is not itself a failed test suite. Nonzero exit means the invoked check failed.
+The [harness](../../../tests/acceptance/opencode.sh) creates a uniquely named temporary Go module with a deliberately wrong `Add` implementation and a failing test. Its mock adapter *simulates* an edit and gateway evidence. The harness checks the resulting source and independently runs `go test ./...`; it also verifies injected failures, unauthorized live rejection and owned cleanup. Expect `PASS: deterministic acceptance orchestration and cleanup` for the first test; an intentionally printed failure inside a negative test is not itself a failed test suite. Nonzero exit means the invoked check failed.
 
 These tests need neither deployed Aginctus/Herdr/Incus nor an upstream model. They are safe for hermetic CI; they prove **no live inference**. The broader offline repository suite is `nix develop -c just check ci`, which keeps live and disposable acceptance opt-ins disabled.
 

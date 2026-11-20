@@ -11,7 +11,7 @@ let
     inherit system;
     modules = [
       "${nixpkgs}/nixos/modules/virtualisation/incus-virtual-machine.nix"
-      (import ../vm-harness/aginctus-host.nix { inherit self system; })
+      (import ../../../nix/vm-harness/aginctus-host.nix { inherit self system; })
       (
         { lib, pkgs, ... }:
         {

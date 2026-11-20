@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/blevinn/aginctus/internal/validation/catalog"
+	"github.com/blevinn/aginctus/internal/testing/validation/catalog"
 )
 
 var coverageCaseID = regexp.MustCompile("^[A-Za-z0-9_./:-]{1,192}$")

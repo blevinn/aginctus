@@ -11,7 +11,7 @@ import (
 
 func readSource(t *testing.T, name string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", name))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", name))
 	if err != nil {
 		t.Fatal(err)
 	}

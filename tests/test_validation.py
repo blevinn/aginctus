@@ -25,8 +25,8 @@ class ValidationDispatchTests(unittest.TestCase):
                 f"python3 -m unittest discover -s {directory} -p test_*.py -v"
                 for directory in (
                     "tests/vm_harness",
-                    "plugins/opencode/guest", "nix/guest/ssh", "scripts/acceptance",
-                    "scripts/gateway", "tests",
+                    "plugins/opencode/guest", "nix/guest/ssh", "tests/acceptance",
+                    "tools/gateway", "tests",
                 )
             ],
             "shell opencode-test.sh",
@@ -94,7 +94,7 @@ if name == "git":
                 tool = tools / name
                 tool.write_text(stub)
                 tool.chmod(0o700)
-            acceptance = root / "scripts/acceptance"
+            acceptance = root / "tests/acceptance"
             acceptance.mkdir(parents=True)
             for name in ("opencode-test.sh", "opencode-live-adapter-test.sh"):
                 (acceptance / name).write_text(

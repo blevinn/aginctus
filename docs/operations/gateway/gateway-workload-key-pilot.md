@@ -18,7 +18,7 @@ It does not restart any guest, rewrite Compose, change DNS, or open a network.
 
 ## Safe defaults and limits
 
-`scripts/gateway/manage-workload-key.py` has three modes:
+`tools/gateway/manage-workload-key.py` has three modes:
 
 - **Default**: non-network dry-run. Checks only syntax and an absolute output
   path; reads no files and creates no directories.
@@ -64,7 +64,7 @@ private IP `10.144.44.70`; re-observe this address before live use.
 Offline preview (no network and no key-file preconditions):
 
 ```sh
-nix develop -c python3 scripts/gateway/manage-workload-key.py \
+nix develop -c python3 tools/gateway/manage-workload-key.py \
   --endpoint http://10.144.44.70:4000 \
   --alias aginctus-approved-model \
   --output /absolute/private/workload.key
@@ -84,7 +84,7 @@ outside Git and the Nix store (no commands here print keys):
 install -d -m 0700 "$HOME/.local/state/aginctus/pilot-keys"
 
 # Replace with an ACTUALLY REGISTERED, APPROVED LiteLLM model alias.
-nix develop -c python3 scripts/gateway/manage-workload-key.py \
+nix develop -c python3 tools/gateway/manage-workload-key.py \
   --endpoint http://10.144.44.70:4000 \
   --alias aginctus-approved-model \
   --output "$HOME/.local/state/aginctus/pilot-keys/workload.key" \
@@ -103,7 +103,7 @@ trusted provider-side evidence.
 Revoke the key as soon as the pilot acceptance is complete:
 
 ```sh
-nix develop -c python3 scripts/gateway/manage-workload-key.py \
+nix develop -c python3 tools/gateway/manage-workload-key.py \
   --endpoint http://10.144.44.70:4000 \
   --alias aginctus-approved-model \
   --output "$HOME/.local/state/aginctus/pilot-keys/workload.key" \
@@ -121,7 +121,7 @@ LiteLLM HTTP responses or the gateway's expanded Incus configuration.
 nix develop -c python3 -m unittest discover \
   -s scripts/gateway -p 'test_manage_workload_key.py' -v
 nix develop -c python3 -m py_compile \
-  scripts/gateway/manage-workload-key.py \
+  tools/gateway/manage-workload-key.py \
   scripts/gateway/test_manage_workload_key.py
 
 just check
@@ -130,7 +130,7 @@ git diff --check origin/main...HEAD
 git status --short
 
 # Fully inert preview; no files or network need to exist.
-nix develop -c python3 scripts/gateway/manage-workload-key.py \
+nix develop -c python3 tools/gateway/manage-workload-key.py \
   --endpoint http://10.144.44.70:4000 \
   --alias aginctus-approved-model \
   --output /does/not/exist/workload.key

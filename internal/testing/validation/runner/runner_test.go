@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/blevinn/aginctus/internal/validation/catalog"
+	"github.com/blevinn/aginctus/internal/testing/validation/catalog"
 )
 
 func TestSanitizeEnv(t *testing.T) {
