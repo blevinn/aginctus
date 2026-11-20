@@ -7,7 +7,7 @@ This increment implements **actual read-only Incus interrogation**, not the comp
 Run on a provisioned NixOS pilot with `aginctus` and `incus` in PATH, from the repository development shell (`nix develop`, which includes Python 3):
 
 ```sh
-python3 scripts/acceptance/opencode-pilot-preflight.py
+python3 tests/acceptance/opencode-pilot-preflight.py
 ```
 
 The script retrieves effective resource names using `aginctus config get` and reads the default Incus project's network/instance resources using `incus query`. It asserts that the configured management bridge is a bridge with explicit `ipv4.nat=false`, `ipv4.routing=false` and `ipv6.address=none`; the configured Herdr client and `dev` OpenCode workload must be running containers.
@@ -25,7 +25,7 @@ nix develop -c bash -c 'command -v aginctus || echo "Aginctus CLI not on PATH"; 
 # From a checkout, build the CLI without installing it on the host:
 tmp="$(mktemp -d)"
 nix develop -c go build -o "$tmp/aginctus" ./cmd/aginctus
-nix develop -c bash -c 'PATH="$1:$PATH" python3 scripts/acceptance/opencode-pilot-preflight.py' bash "$tmp"
+nix develop -c bash -c 'PATH="$1:$PATH" python3 tests/acceptance/opencode-pilot-preflight.py' bash "$tmp"
 rm -rf -- "$tmp"
 ```
 
@@ -36,8 +36,8 @@ This inspection now checks the selected OpenCode guest's Incus **effective netwo
 Deterministic validation (no Incus required; run from `nix develop`):
 
 ```sh
-python3 -m unittest discover -s scripts/acceptance -p 'test_opencode_pilot_preflight.py' -v
-python3 -m py_compile scripts/acceptance/opencode-pilot-preflight.py
+python3 -m unittest discover -s tests/acceptance -p 'test_opencode_pilot_preflight.py' -v
+python3 -m py_compile tests/acceptance/opencode-pilot-preflight.py
 # Hostless tests now also exercise effective NIC and malformed/default route cases.
 bash tests/acceptance/opencode-live-adapter-test.sh
 bash tests/acceptance/opencode-test.sh
@@ -49,7 +49,7 @@ This read-only topology inspection can run independently of any live-agent invoc
 
 ## Separately opted-in guest TCP controls (#521)
 
-`scripts/acceptance/guest-network-controls.py` adds a **separate**, optional
+`tests/acceptance/guest-network-controls.py` adds a **separate**, optional
 host-observed networking smoke. Unlike the structural preflight above, it
 actually attempts a TCP connection **from the guest**. This is never invoked
 by `just check ci`, by the default preflight, or by the OpenCode adapter.
@@ -78,13 +78,13 @@ The operator must select two destinations:
 
 ```sh
 # No Incus or network access without BOTH --run and the opt-in environment.
-nix develop -c python3 scripts/acceptance/guest-network-controls.py \
+nix develop -c python3 tests/acceptance/guest-network-controls.py \
   --gateway-ip "$GATEWAY_PRIVATE_IPV4" \
   --public-ip "$PUBLIC_LISTENING_IPV4"
 
 # Only after the #257 operator-approved network acceptance window:
 export AGINCTUS_ACCEPTANCE_EGRESS=I_UNDERSTAND
-nix develop -c python3 scripts/acceptance/guest-network-controls.py \
+nix develop -c python3 tests/acceptance/guest-network-controls.py \
   --gateway-ip "$GATEWAY_PRIVATE_IPV4" \
   --public-ip "$PUBLIC_LISTENING_IPV4" \
   --run
@@ -116,6 +116,7 @@ Deterministic hostless validation (no image deployment needed):
 
 ```sh
 nix develop -c python3 -m unittest discover -s plugins/opencode/guest -p 'test_egress_probe.py' -v
-nix develop -c python3 -m unittest discover -s scripts/acceptance -p 'test_guest_network_controls.py' -v
+nix develop -c python3 -m unittest discover -s tests/acceptance -p 'test_guest_network_controls.py' -v
 nix develop -c ruff check plugins/opencode/guest/egress_probe.py plugins/opencode/guest/test_egress_probe.py scripts/acceptance/guest-network-controls.py scripts/acceptance/test_guest_network_controls.py
+nix develop -c ruff check plugins/opencode/guest/egress_probe.py plugins/opencode/guest/test_egress_probe.py tests/acceptance/guest-network-controls.py tests/acceptance/test_guest_network_controls.py
 ```
