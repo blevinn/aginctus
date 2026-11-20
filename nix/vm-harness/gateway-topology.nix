@@ -17,13 +17,13 @@ let
   # Keep script files side-by-side; they are not chosen from a checkout.
   syntheticSources = pkgs.runCommand "aginctus-vm-synthetic-sources" { } ''
     mkdir -p "$out"
-    cp ${../../scripts/vm_harness/synthetic_responses.py} "$out/synthetic_responses.py"
-    cp ${../../scripts/vm_harness/synthetic_gateway_probe.py} "$out/synthetic_gateway_probe.py"
-    cp ${../../scripts/vm_harness/tool_sequence.py} "$out/tool_sequence.py"
-    cp ${../../scripts/vm_harness/gateway_tool_transport.py} "$out/gateway_tool_transport.py"
+    cp ${../../tests/vm_harness/synthetic_responses.py} "$out/synthetic_responses.py"
+    cp ${../../tests/vm_harness/synthetic_gateway_probe.py} "$out/synthetic_gateway_probe.py"
+    cp ${../../tests/vm_harness/tool_sequence.py} "$out/tool_sequence.py"
+    cp ${../../tests/vm_harness/gateway_tool_transport.py} "$out/gateway_tool_transport.py"
     ${lib.optionalString fullStack ''
-      cp ${../../scripts/vm_harness/full_stack.py} "$out/full_stack.py"
-      cp ${../../scripts/vm_harness/evidence.py} "$out/evidence.py"
+      cp ${../../tests/vm_harness/full_stack.py} "$out/full_stack.py"
+      cp ${../../tests/vm_harness/evidence.py} "$out/evidence.py"
       cp ${../../tests/acceptance/herdr-lifecycle.py} "$out/herdr-lifecycle.py"
     ''}
   '';

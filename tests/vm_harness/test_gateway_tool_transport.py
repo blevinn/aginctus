@@ -3,18 +3,18 @@ import copy
 import json
 import unittest
 
-from scripts.vm_harness.gateway_tool_transport import (
+from tests.vm_harness.gateway_tool_transport import (
     TransportFailure,
     completed_item,
     probe_gateway_tool_transport,
 )
-from scripts.vm_harness.tool_sequence import ToolSequence, stream
+from tests.vm_harness.tool_sequence import ToolSequence, stream
 
 NONCE = "transport_nonce_1234"
 
 
 def fixture_stream(nonce=NONCE, step=0):
-    from scripts.vm_harness.tool_sequence import fixture_response
+    from tests.vm_harness.tool_sequence import fixture_response
     return stream(fixture_response(nonce, step, "/workspace", "synthetic-test"))
 
 

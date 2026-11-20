@@ -53,7 +53,7 @@ missing-instance refusal. No actor evidence is injected into this CLI scenario.
 It does not activate a controller or verify production migration/actor authority.
 
 ```sh
-nix --quiet develop -c python3 scripts/vm_harness/runner.py test native-instance
+nix --quiet develop -c python3 tests/vm_harness/runner.py test native-instance
 ```
 
 Requires an x86_64-linux KVM worker and sufficient disk space. The Go acceptance
