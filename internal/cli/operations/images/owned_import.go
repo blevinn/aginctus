@@ -51,6 +51,42 @@ func AvailableForOwnedImport(images []ObservedClaimedImage, alias, fingerprint s
  return incusimages.AvailableForOwnedImport(images, alias, fingerprint)
 }
 
+// ownedCreateDiagnostic is CLI presentation, never a domain authority check.
+func ownedCreateDiagnostic(err error) string {
+	switch err {
+	case incusimages.OwnedCreateFailure("capabilities"):
+		return "images import-owned: required capabilities unavailable; no import attempted"
+	case incusimages.OwnedCreateFailure("lease"):
+		return "images import-owned: project writer lease unavailable; no import attempted"
+	case incusimages.OwnedCreateFailure("project-initial"):
+		return "images import-owned: local project not verified; no import attempted"
+	case incusimages.OwnedCreateFailure("inventory-initial"):
+		return "images import-owned: cannot verify project-local image inventory"
+	case incusimages.OwnedCreateFailure("metadata"):
+		return "images import-owned: cannot resolve metadata artifact"
+	case incusimages.OwnedCreateFailure("rootfs"):
+		return "images import-owned: cannot resolve rootfs artifact"
+	case incusimages.OwnedCreateFailure("fingerprint"):
+		return "images import-owned: cannot fingerprint image artifacts"
+	case incusimages.OwnedCreateFailure("adoption"):
+		return "images import-owned: alias or fingerprint already exists; refusing adoption"
+	case incusimages.OwnedCreateFailure("project-prewrite"):
+		return "images import-owned: project changed before import; no mutation attempted"
+	case incusimages.OwnedCreateFailure("inventory-prewrite"):
+		return "images import-owned: image inventory changed or unavailable; refusing mutation"
+	case incusimages.OwnedCreateFailure("import"):
+		return "images import-owned: creation refused or failed; inspect state manually before retrying"
+	case incusimages.OwnedCreateFailure("project-postwrite"):
+		return "images import-owned: project unverified after creation; no automatic rollback"
+	case incusimages.OwnedCreateFailure("claim-postwrite"):
+		return "images import-owned: ownership claim not verified after creation; no automatic rollback"
+	case incusimages.OwnedCreateFailure("fingerprint-postwrite"):
+		return "images import-owned: fingerprint mismatch after creation; no automatic rollback"
+	default:
+		return "images import-owned: creation failed; inspect project state before retrying"
+	}
+}
+
 // This command creates a fresh image record with a *self-declared* owner
 // claim. Neither the owner flag nor the properties authenticate the caller
 // or prove an active systemd/Home Manager controller. As with the older
@@ -67,7 +103,7 @@ func RunScopedOwnedImageImport(ctx context.Context, args []string, stdout, stder
 		return 2
 	}
 	if err := incusimages.CreateClaimedImage(ctx, scope, owner, alias, dir, actions); err != nil {
-		fmt.Fprintln(stderr, err)
+		fmt.Fprintln(stderr, ownedCreateDiagnostic(err))
 		return 1
 	}
 	fmt.Fprintf(stdout, "image %q: created with %q claim in project %q\n", alias, owner, scope.Name)
