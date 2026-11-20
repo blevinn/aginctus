@@ -27,9 +27,7 @@ type NativeGatewaySecretExposure struct {
 // secure replacement was delivered.
 func AuditNativeGatewaySecretExposure(ctx context.Context, pair NativeGatewayInstancePair, instances []*api.Instance) (NativeGatewaySecretExposure, error) {
 	if err := ctx.Err(); err != nil { return NativeGatewaySecretExposure{},err }
-	if len(instances)!=2 || pair.Postgres.Name!="postgres-1" || pair.LiteLLM.Name!="litellm-1" ||
-		pair.Postgres.Project=="" || pair.Postgres.Project!=pair.LiteLLM.Project ||
-		pair.Postgres.Role!="postgres" || pair.LiteLLM.Role!="litellm" {
+	if len(instances)!=2 || validateNativeGatewayPairOwner(pair)!=nil {
 		return NativeGatewaySecretExposure{},fmt.Errorf("gateway credential exposure requires exact service pair")
 	}
 	for index,spec := range []NativeGatewayInstanceSpec{pair.Postgres,pair.LiteLLM} {
@@ -38,7 +36,8 @@ func AuditNativeGatewaySecretExposure(ctx context.Context, pair NativeGatewayIns
 			inst.Config["user.aginctus.managed"]!="true" ||
 			inst.Config["user.aginctus.resource"]!="gateway-instance" ||
 			inst.Config["user.aginctus.role"]!=spec.Role ||
-			inst.Config["user.aginctus.deployment"]!=spec.Project {
+			inst.Config["user.aginctus.deployment"]!=spec.Project ||
+			!gatewayOwnerMatches(inst.Config,spec.EnvironmentID) {
 			return NativeGatewaySecretExposure{},fmt.Errorf("gateway credential exposure requires owned service instances")
 		}
 	}
