@@ -30,7 +30,7 @@ The pilot alias is `aginctus-go-pilot`, with initial upstream candidate
 Preview:
 
 ```sh
-nix --quiet develop -c python3 scripts/gateway/register-openai-model.py \
+nix --quiet develop -c python3 tools/gateway/register-openai-model.py \
   --endpoint "$GATEWAY_ENDPOINT" --provider opencode-go \
   --alias aginctus-go-pilot --source openai/gpt-6-luna
 ```
@@ -259,7 +259,7 @@ without unrelated upstream development changes.
 ```sh
 nix --quiet develop --offline -c env AGINCTUS_EXPORT_GO_BUNDLE="$BUNDLE_DIR" \
   go test ./scripts/gateway -count=1
-nix --quiet develop --offline -c python3 scripts/gateway/audit_selective_go.py \
+nix --quiet develop --offline -c python3 tools/gateway/audit_selective_go.py \
   --project "$PROJECT" --instance "$INSTANCE" --bundle-dir "$BUNDLE_DIR" \
   --expected-incus-fingerprint "$VERIFIED_INCUS_FINGERPRINT" \
   --expected-image "$DIGEST_QUALIFIED_LITELLM_IMAGE"
