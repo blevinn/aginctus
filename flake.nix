@@ -27,8 +27,8 @@
     {
       nixosModules = {
         aginctus = import ./nix/modules/nixos-module.nix { inherit self; };
-        aginctusTestenvRecovery = import ./nix/testenv/recovery-worker.nix { inherit self; };
-        aginctusTestenvWorker = import ./nix/testenv/installed-worker.nix { inherit self; };
+        aginctusTestenvRecovery = import ./internal/testenv/nix/recovery-worker.nix { inherit self; };
+        aginctusTestenvWorker = import ./internal/testenv/nix/installed-worker.nix { inherit self; };
         default = self.nixosModules.aginctus;
       };
 
@@ -348,23 +348,23 @@
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           testenv-incus-vm-image =
-            (import ./nix/testenv/incus-vm-image.nix {
+            (import ./internal/testenv/nix/incus-vm-image.nix {
               inherit self nixpkgs system;
             }).image;
         }
         # Keep VM integration tests explicitly buildable, outside the default
         # flake checks, so routine validation does not execute heavyweight VMs.
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          firewall-iptables-integration = import ./nix/firewall-iptables-test.nix {
+          firewall-iptables-integration = import ./tests/nix/firewall/firewall-iptables-test.nix {
             inherit self nixpkgs system;
           };
-          firewall-firewalld-integration = import ./nix/firewall-firewalld-test.nix {
+          firewall-firewalld-integration = import ./tests/nix/firewall/firewall-firewalld-test.nix {
             inherit self nixpkgs system;
           };
-          firewall-egress-bootstrap = import ./nix/firewall-egress-bootstrap-test.nix {
+          firewall-egress-bootstrap = import ./tests/nix/firewall/firewall-egress-bootstrap-test.nix {
             inherit self nixpkgs system;
           };
-          firewall-nixos-nft-integration = import ./nix/firewall-nixos-nft-test.nix {
+          firewall-nixos-nft-integration = import ./tests/nix/firewall/firewall-nixos-nft-test.nix {
             inherit self nixpkgs system;
           };
           # Heavyweight: explicitly selected, never part of default flake checks.
@@ -456,13 +456,13 @@
           };
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          testenv-incus-vm-image-config = import ./nix/testenv/incus-vm-image-check.nix {
+          testenv-incus-vm-image-config = import ./internal/testenv/nix/incus-vm-image-check.nix {
             inherit self nixpkgs system;
           };
-          testenv-recovery-worker-policy = import ./nix/testenv/recovery-worker-check.nix {
+          testenv-recovery-worker-policy = import ./internal/testenv/nix/recovery-worker-check.nix {
             inherit self nixpkgs system;
           };
-          testenv-installed-worker-policy = import ./nix/testenv/installed-worker-check.nix {
+          testenv-installed-worker-policy = import ./internal/testenv/nix/installed-worker-check.nix {
             inherit self nixpkgs system;
           };
         }

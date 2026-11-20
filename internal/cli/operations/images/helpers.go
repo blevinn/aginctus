@@ -9,12 +9,7 @@ import (
 
 // LocalImage and PrintLocalImages preserve the v0.1 human-readable CLI
 // inventory contract; no project is inferred by the renderer.
-type LocalImage struct {
-	Fingerprint string `json:"fingerprint"`
-	Aliases []struct {
-		Name string `json:"name"`
-	} `json:"aliases"`
-}
+type LocalImage = incusimages.LocalImage
 
 func PrintLocalImages(stdout io.Writer, images []LocalImage) {
 	for _, img := range images {
