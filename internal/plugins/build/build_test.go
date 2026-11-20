@@ -17,14 +17,14 @@ import (
 	"github.com/blevinn/aginctus/pkg/plugin"
 )
 
-const builtinPath = "github.com/blevinn/aginctus/internal/pluginbuild/testdata/builtin"
+const builtinPath = "github.com/blevinn/aginctus/internal/plugins/build/testdata/builtin"
 const externalPath = "example.com/aginctus-external-plugin"
 
 // Build real application binaries through temporary overlays/modfiles. Never
 // edit the checkout, download modules, enable workspace/toolchain discovery or
 // call host services. The external module is pinned to a local synthetic fixture.
 func TestSelectionBuilds(t *testing.T) {
-	root, err := filepath.Abs("../..")
+	root, err := filepath.Abs("../../..")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestSelectionBuilds(t *testing.T) {
 	}
 	originalMod, originalSum := read(filepath.Join(root, "go.mod")), read(filepath.Join(root, "go.sum"))
 	originalGenerated := read(filepath.Join(root, "internal/appplugins/generated.go"))
-	asset := bytes.TrimSpace(read(filepath.Join(root, "internal/pluginbuild/testdata/builtin/capability.txt")))
+	asset := bytes.TrimSpace(read(filepath.Join(root, "internal/plugins/build/testdata/builtin/capability.txt")))
 	for _, tc := range []struct {
 		name      string
 		selection []Selection
@@ -141,7 +141,7 @@ func TestSelectionBuilds(t *testing.T) {
 			if slices.Contains(closure, builtinPath) != hasBuiltin || slices.Contains(closure, externalPath) != hasExternal {
 				t.Fatalf("selection/closure mismatch: builtin=%v external=%v", hasBuiltin, hasExternal)
 			}
-			if slices.Contains(closure, "github.com/blevinn/aginctus/internal/pluginbuild") {
+			if slices.Contains(closure, "github.com/blevinn/aginctus/internal/plugins/build") {
 				t.Fatal("generator leaked into application")
 			}
 			binaryBytes := read(binary)

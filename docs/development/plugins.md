@@ -209,7 +209,7 @@ Generate and verify from the repository root:
 ```sh
 nix develop -c go generate ./internal/appplugins
 nix develop -c go run ./cmd/aginctus-plugin-gen -manifest internal/appplugins/plugins.json -out internal/appplugins/generated.go -check
-nix develop -c go test ./internal/pluginbuild/... ./internal/appplugins/... ./cmd/aginctus-plugin-gen/... ./internal/plugins/...
+nix develop -c go test ./internal/plugins/build/... ./internal/appplugins/... ./cmd/aginctus-plugin-gen/... ./internal/plugins/...
 ```
 
 Generation validates source-safe selections and rejects unknown fields, repeated
@@ -254,7 +254,7 @@ access. These are trusted in-process implementations, not sandboxed extensions.
 
 ### Offline build-selection evidence
 
-Normal root tests include `internal/pluginbuild.TestSelectionBuilds`. This builds
+Normal root tests include `internal/plugins/build.TestSelectionBuilds`. This builds
 and runs actual `cmd/aginctus` executables for checked-in default, explicit empty,
 synthetic builtin and custom builtin-plus-external selections. Temporary Go
 overlays and modfiles leave the checkout unchanged. The external author fixture
@@ -282,7 +282,7 @@ the normal Go module cache (as for ordinary development tests). They verify:
   contribution callbacks.
 
 ```sh
-nix develop -c go test -count=1 -run TestSelectionBuilds -v ./internal/pluginbuild
+nix develop -c go test -count=1 -run TestSelectionBuilds -v ./internal/plugins/build
 nix develop -c go test ./internal/plugins/... ./pkg/plugin/...
 nix develop -c just check all
 ```
