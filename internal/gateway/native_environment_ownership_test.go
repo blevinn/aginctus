@@ -3,6 +3,8 @@ package gateway
 import (
 	"context"
 	"testing"
+
+	"github.com/lxc/incus/v7/shared/api"
 )
 
 func environmentGatewayCreateFixture(t *testing.T)(NativeGatewayTopology,NativeGatewayDevices,NativeGatewayInstancePair,*fakeGatewayStoppedClient){
@@ -72,4 +74,27 @@ func TestEnvironmentGatewayRejectsLegacyInstanceAndVolumeNames(t *testing.T){
 	}
 	_ = devices
 	_ = client
+}
+
+func TestEnvironmentGatewayReadOnlyStatusAndRuntimePreflight(t *testing.T){
+	top,devices,pair,client:=environmentGatewayCreateFixture(t)
+	if _,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil});err!=nil{
+		t.Fatal(err)
+	}
+	status,err:=InspectNativeGatewayStatusWithReader(context.Background(),top,devices,pair,client)
+	if err!=nil || !status.AllStopped {t.Fatalf("owned stopped status: %+v %v",status,err)}
+	inspection,err:=InspectNativeGatewayStartupWithReader(context.Background(),top,devices,pair,client)
+	if err!=nil || len(inspection.Missing)!=7 || inspection.RuntimeKeysPresent {
+		t.Fatalf("unconfigured environment startup preflight: %+v %v",inspection,err)
+	}
+	instances:=[]*api.Instance{client.instances[pair.Postgres.Name],client.instances[pair.LiteLLM.Name]}
+	audit,err:=AuditNativeGatewaySecretExposure(context.Background(),pair,instances)
+	if err!=nil || audit.SafeForNativeStart {t.Fatalf("credential exposure audit: %+v %v",audit,err)}
+	instances[1].Config["user.aginctus.environment-id"]="123e4567-e89b-42d3-a456-426614174001"
+	if _,err:=AssessNativeGatewayRuntimeConfig(context.Background(),pair,instances);err==nil {
+		t.Fatal("foreign environment accepted by runtime preflight")
+	}
+	if _,err:=AuditNativeGatewaySecretExposure(context.Background(),pair,instances);err==nil{
+		t.Fatal("foreign environment accepted by credential exposure audit")
+	}
 }
