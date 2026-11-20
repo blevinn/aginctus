@@ -15,7 +15,7 @@ fi
 
 # An operator may explicitly opt into a private persistent report. Validate the
 # destination BEFORE any adapter / provider work; never create it implicitly.
-reporter="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)/scripts/acceptance/local_report.py"
+reporter="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/local_report.py"
 if [[ -n "${AGINCTUS_ACCEPTANCE_REPORT_ROOT:-}" ]]; then
   python3 "$reporter" --check-root "$AGINCTUS_ACCEPTANCE_REPORT_ROOT" || exit 1
 fi

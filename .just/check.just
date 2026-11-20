@@ -56,6 +56,7 @@ python:
     python3 -m unittest discover -s tests/vm_harness -p 'test_*.py' -v
     python3 -m unittest discover -s plugins/opencode/guest -p 'test_*.py' -v
     python3 -m unittest discover -s nix/guest/ssh -p 'test_*.py' -v
+    python3 -m unittest discover -s tests/acceptance -p 'test_*.py' -v
     python3 -m unittest discover -s plugins/litellm/runtime -p 'test_*.py' -v
     python3 -m unittest discover -s tests/gateway -p 'test_*.py' -v
     python3 -m unittest discover -s scripts/gateway -p 'test_*.py' -v
