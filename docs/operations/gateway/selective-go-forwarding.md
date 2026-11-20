@@ -84,7 +84,7 @@ client and comparing its own session events with the provider-bound request;
 the callback does not invent or cryptographically certify session IDs.
 
 The built Go CLI directly embeds the two canonical Python modules and a
-callback-only YAML, through `scripts/gateway/assets.go`. Both gateway renderers
+callback-only YAML, through `plugins/litellm/runtime/assets.go`. Both gateway renderers
 deliver exactly these public inline Compose configs:
 
 | Target | Purpose |
