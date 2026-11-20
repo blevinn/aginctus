@@ -106,10 +106,10 @@ GitHub comments or chat. Revoke the temporary virtual key when complete.
 
 ~~~sh
 nix develop -c python3 -m unittest discover \
-  -s scripts/gateway -p 'test_authenticated_inference_smoke.py' -v
+  -s tests/gateway -p 'test_authenticated_inference_smoke.py' -v
 nix develop -c python3 -m py_compile \
   tests/gateway/authenticated-inference-smoke.py \
-  scripts/gateway/test_authenticated_inference_smoke.py
+  tests/gateway/test_authenticated_inference_smoke.py
 just check-all
 git diff --check origin/main...HEAD
 git status --short
