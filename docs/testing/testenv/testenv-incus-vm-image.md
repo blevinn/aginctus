@@ -12,7 +12,7 @@ the v0.1 pilot's Incus daemon, nor give the worker's daemon socket, signing
 key or admin privileges to a coding agent.
 
 The image now imports the **same shared Aginctus NixOS host module**
-used by `nix/vm-harness/guest.nix`, including the real system integration,
+used by `tests/nix/vm-harness/guest.nix`, including the real system integration,
 Herdr image definition and Incus configuration. It includes Incus guest-agent
 loading, guest-local Incus, the store-pinned Aginctus CLI, Btrfs tooling
 and no configured networking or SSH service. It does **not** reconcile
