@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.checks import local_acceptance
+from tests.validation import local_acceptance
 from tests.acceptance import local_report
 
 RUN_ID = "aginctus-acceptance.ABCD1234"
