@@ -50,9 +50,7 @@ type NativeGatewayRuntimeAssessment struct {
 // This function cannot authorize activation, even on a Complete result.
 func AssessNativeGatewayRuntimeConfig(ctx context.Context,pair NativeGatewayInstancePair,instances []*api.Instance)(NativeGatewayRuntimeAssessment,error){
 	if err:=ctx.Err();err!=nil{return NativeGatewayRuntimeAssessment{},err}
-	if len(instances)!=2 || pair.Postgres.Name!="postgres-1" || pair.LiteLLM.Name!="litellm-1" ||
-		pair.Postgres.Role!="postgres" || pair.LiteLLM.Role!="litellm" ||
-		pair.Postgres.Project=="" || pair.Postgres.Project!=pair.LiteLLM.Project {
+	if len(instances)!=2 || validateNativeGatewayPairOwner(pair)!=nil {
 		return NativeGatewayRuntimeAssessment{},fmt.Errorf("native gateway runtime assessment requires exact service pair")
 	}
 	out:=NativeGatewayRuntimeAssessment{Project:pair.Postgres.Project}
@@ -64,7 +62,8 @@ func AssessNativeGatewayRuntimeConfig(ctx context.Context,pair NativeGatewayInst
 			inst.Status!="Stopped" || inst.Config["user.aginctus.managed"]!="true" ||
 			inst.Config["user.aginctus.resource"]!="gateway-instance" ||
 			inst.Config["user.aginctus.role"]!=role ||
-			inst.Config["user.aginctus.deployment"]!=spec.Project {
+			inst.Config["user.aginctus.deployment"]!=spec.Project ||
+			!gatewayOwnerMatches(inst.Config,spec.EnvironmentID) {
 			return NativeGatewayRuntimeAssessment{},fmt.Errorf("native gateway runtime instance ownership or stopped state unverified")
 		}
 	}
