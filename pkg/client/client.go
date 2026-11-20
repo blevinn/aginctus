@@ -16,16 +16,21 @@ type PluginInventory interface {
 // establish their authority and initialization contracts.
 type Options struct {
 	PluginInventory PluginInventory
+	ScopedWorkloadReader ScopedWorkloadStatusReader
 }
 
 // Client is safe for concurrent read operations when its injected inventory
 // follows the immutable snapshot contract.
 type Client struct {
 	Plugins *PluginsService
+	Workloads *WorkloadsService
 }
 
 // New constructs a client without loading ambient configuration or touching
 // Incus. A nil plugin inventory represents an empty compiled selection.
 func New(options Options) *Client {
-	return &Client{Plugins: &PluginsService{inventory: options.PluginInventory}}
+	return &Client{
+		Plugins: &PluginsService{inventory: options.PluginInventory},
+		Workloads: &WorkloadsService{reader: options.ScopedWorkloadReader},
+	}
 }
