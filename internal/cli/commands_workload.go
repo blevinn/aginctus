@@ -43,6 +43,7 @@ func addWorkloadCommands(root *cobra.Command, stdout, stderr io.Writer,
 			return executeConfiguredWorkloads(ctx, action, args, mutationOptions{DryRun: dryRun, Force: force}, out, errOut, cfg)
 		},
 		ScopedStatus:     runScopedWorkloadStatus,
+		ScopedTyped:      runTypedScopedWorkloadStatus,
 		List:             runActiveWorkloadList,
 		Status:           runWorkloadStatus,
 		GatewayProvision: runWorkloadGatewayProvision,

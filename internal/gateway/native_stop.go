@@ -79,7 +79,7 @@ func StopNativeGatewayWithClient(ctx context.Context,top NativeGatewayTopology,d
 			return fail("mutation-boundary",fmt.Errorf("service state changed before stop"))
 		}
 		stopped,err:=native.EnsureInstanceStateWithClient(ctx,native.InstanceLifecycleIntent{
-			Scope:scope,Name:spec.Name,Resource:"gateway-instance",Role:spec.Role,State:native.InstanceStopped,
+			Scope:scope,Name:spec.Name,Resource:"gateway-instance",Role:spec.Role,EnvironmentID:spec.EnvironmentID,State:native.InstanceStopped,
 		},client)
 		if err!=nil {return fail(spec.Name,err)}
 		if !stopped.Verified {return fail(spec.Name,fmt.Errorf("stop completion unverified"))}
