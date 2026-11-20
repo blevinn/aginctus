@@ -83,7 +83,7 @@ bootstrap. Establishing trust for a replacement workload also requires verifying
 its incarnation and SSH host key, rather than assuming an absent pin is approval.
 Then follow the supported authorize, pin-host and register sequence below.
 
-The read-only `scripts/acceptance/herdr-socket-pilot-validation.py` reports helper
+The read-only `tests/acceptance/herdr-socket-pilot-validation.py` reports helper
 codes and gates remote probes on existing identity, trust and matching workload
 authorization. It runs the saved machine catalog and remote workspace command
 in **aginctus-herdr**, not in the workload. An empty local machine catalog is not
