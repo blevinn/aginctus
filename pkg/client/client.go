@@ -20,6 +20,7 @@ type Options struct {
 	LogicalWorkloadReader LogicalWorkloadReader
 	EnvironmentReader     EnvironmentReader
 	ConfigSelectionReader ConfigSelectionReader
+	ConfiguredStateReader ConfiguredStateReader
 	AcceptedStateReader   AcceptedStateReader
 	DefaultProject        string
 	DefaultEnvironmentID  string
@@ -28,10 +29,11 @@ type Options struct {
 // Client is safe for concurrent read operations when its injected inventory
 // follows the immutable snapshot contract.
 type Client struct {
-	Plugins      *PluginsService
-	Workloads    *WorkloadsService
+	Plugins        *PluginsService
+	Workloads      *WorkloadsService
 	Environments   *EnvironmentsService
 	Config         *ConfigService
+	State          *StateService
 	AcceptedStates *AcceptedStatesService
 }
 
@@ -39,10 +41,11 @@ type Client struct {
 // Incus. A nil plugin inventory represents an empty compiled selection.
 func New(options Options) *Client {
 	return &Client{
-		Plugins:      &PluginsService{inventory: options.PluginInventory},
-		Workloads:    &WorkloadsService{reader: options.ScopedWorkloadReader, logical: options.LogicalWorkloadReader},
+		Plugins:        &PluginsService{inventory: options.PluginInventory},
+		Workloads:      &WorkloadsService{reader: options.ScopedWorkloadReader, logical: options.LogicalWorkloadReader},
 		Environments:   &EnvironmentsService{reader: options.EnvironmentReader, defaultProject: options.DefaultProject, defaultID: options.DefaultEnvironmentID},
 		Config:         &ConfigService{reader: options.ConfigSelectionReader},
+		State:          &StateService{configured: options.ConfiguredStateReader},
 		AcceptedStates: &AcceptedStatesService{reader: options.AcceptedStateReader},
 	}
 }
