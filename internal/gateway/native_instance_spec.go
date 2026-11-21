@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 )
 
 // NativeGatewayInstanceSpec is a pure description of one proposed Incus
@@ -11,6 +12,7 @@ import (
 // secret material, or an API request ready to execute.
 type NativeGatewayInstanceSpec struct {
 	Project           string
+	EnvironmentID     string
 	Name              string
 	Role              string
 	ImageAlias        string
@@ -32,7 +34,15 @@ type NativeGatewayInstancePair struct {
 // nor guest instances are created here. No secret values enter the plan.
 func PlanNativeGatewayInstances(topology NativeGatewayTopology, devices NativeGatewayDevices, postgresAlias, liteLLMAlias string) (NativeGatewayInstancePair, error) {
 	if err := topology.ValidateExecutionShape(); err != nil {
-		return NativeGatewayInstancePair{}, err
+		return NativeGatewayInstancePair{},err
+	}
+	postgresName,litellmName:="postgres-1","litellm-1"
+	if topology.EnvironmentID!="" {
+		if !gatewayTopologyVolumeMatches(topology){
+			return NativeGatewayInstancePair{},fmt.Errorf("gateway environment resources do not match canonical identity")
+		}
+		base:="ag-"+strings.ReplaceAll(topology.EnvironmentID,"-","")
+		postgresName,litellmName=base+"-pg",base+"-llm"
 	}
 	if devices.Project != topology.Project || !nativeDeviceName.MatchString(postgresAlias) ||
 		!nativeDeviceName.MatchString(liteLLMAlias) || postgresAlias == liteLLMAlias {
@@ -62,12 +72,12 @@ func PlanNativeGatewayInstances(topology NativeGatewayTopology, devices NativeGa
 	}
 	return NativeGatewayInstancePair{
 		Postgres: NativeGatewayInstanceSpec{
-			Project: topology.Project, Name: "postgres-1", Role: "postgres", ImageAlias: postgresAlias,
+			Project: topology.Project, EnvironmentID:topology.EnvironmentID, Name:postgresName, Role: "postgres", ImageAlias: postgresAlias,
 			Devices:           clone(expected.Postgres),
 			SecretEnvironment: slices.Clone(topology.Services[0].SecretEnvironment),
 		},
 		LiteLLM: NativeGatewayInstanceSpec{
-			Project: topology.Project, Name: "litellm-1", Role: "litellm", ImageAlias: liteLLMAlias,
+			Project: topology.Project, EnvironmentID:topology.EnvironmentID, Name:litellmName, Role: "litellm", ImageAlias: liteLLMAlias,
 			Devices:           clone(expected.LiteLLM),
 			DependsOn:         slices.Clone(topology.Services[1].DependsOn),
 			SecretEnvironment: slices.Clone(topology.Services[1].SecretEnvironment),

@@ -28,6 +28,12 @@ type OwnedCreateActions struct {
 // the cooperative lease through an independently verified post-create claim
 // and fingerprint; on uncertain state it deliberately does not roll back.
 func CreateClaimedImage(ctx context.Context, scope incusscope.ProjectScope, owner, alias, dir string, actions OwnedCreateActions) error {
+	// Domain callers must not rely on a particular CLI parser to constrain
+	// the selected project, self-declared owner or imported alias.
+	if _, err := incusscope.NewProjectScope(scope.Name); err != nil ||
+		(owner != "system" && owner != "user") || !ValidImageName(alias) || dir == "" {
+		return OwnedCreateFailure("selection")
+	}
 	if actions.Lease == nil || actions.Verify == nil || actions.Inventory == nil ||
 		actions.Artifact == nil || actions.Fingerprint == nil || actions.Import == nil {
 		return OwnedCreateFailure("capabilities")
