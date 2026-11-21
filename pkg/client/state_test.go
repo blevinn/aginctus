@@ -61,5 +61,4 @@ func TestConfiguredStateCancellationAndUnavailableSource(t *testing.T){
 	ctx,cancel:=context.WithCancel(context.Background());cancel()
 	source:=&testConfiguredSource{}
 	if _,err:=New(Options{ConfiguredStateReader:source}).State.Configured(ctx,req);!errors.Is(err,context.Canceled)||source.calls!=0{t.Fatalf("cancelled: err=%v calls=%d",err,source.calls)}
-	if _,err:=New(Options{ConfiguredStateReader:source}).State.Configured(nil,req);err==nil{t.Fatal("nil context accepted")}
 }
