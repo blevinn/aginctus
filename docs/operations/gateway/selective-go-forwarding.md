@@ -30,7 +30,7 @@ The pilot alias is `aginctus-go-pilot`, with initial upstream candidate
 Preview:
 
 ```sh
-nix --quiet develop -c python3 scripts/gateway/register-openai-model.py \
+nix --quiet develop -c python3 tools/gateway/register-openai-model.py \
   --endpoint "$GATEWAY_ENDPOINT" --provider opencode-go \
   --alias aginctus-go-pilot --source openai/gpt-6-luna
 ```
@@ -203,7 +203,7 @@ IMAGE=ghcr.io/berriai/litellm:v1.103.0@sha256:bd089afdcd35b894b14a93f9743cdc8b59
 WORK="$(mktemp -d /tmp/aginctus-go-offline.XXXXXX)"
 RUNTIME="$(nix --quiet build --offline --no-link --print-out-paths .#opencode-runtime)/bin/opencode"
 nix --quiet develop --offline -c env AGINCTUS_EXPORT_GO_BUNDLE="$WORK/bundle" \
-  go test ./scripts/gateway -count=1
+  go test ./plugins/litellm/runtime -count=1
 nix --quiet develop --offline -c go run ./cmd/aginctus \
   --config=gateway.litellm.selectiveGoForwarding=true \
   --config="gateway.images.litellm=$IMAGE" gateway render > "$WORK/compose.yaml"
@@ -258,8 +258,8 @@ without unrelated upstream development changes.
 
 ```sh
 nix --quiet develop --offline -c env AGINCTUS_EXPORT_GO_BUNDLE="$BUNDLE_DIR" \
-  go test ./scripts/gateway -count=1
-nix --quiet develop --offline -c python3 scripts/gateway/audit_selective_go.py \
+  go test ./plugins/litellm/runtime -count=1
+nix --quiet develop --offline -c python3 tools/gateway/audit_selective_go.py \
   --project "$PROJECT" --instance "$INSTANCE" --bundle-dir "$BUNDLE_DIR" \
   --expected-incus-fingerprint "$VERIFIED_INCUS_FINGERPRINT" \
   --expected-image "$DIGEST_QUALIFIED_LITELLM_IMAGE"
