@@ -36,6 +36,7 @@ without dropping their integration evidence.
 | `commands_scoped_workload_output_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
 | `commands_syntax_matrix_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
 | `commands_testenv_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_environment_reads_test.go` | Cross-family authenticated environment read entrypoint | Retain root Run/output and fail-closed authority evidence |
 | `commands_logical_workloads_test.go` | Cross-family logical workload read entrypoint | Retain root Run/output and explicit scope evidence |
 | `commands_workload_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
 | `commands_workload_aliases_test.go` | Cross-family class-filtered workload entrypoint | Retain root Run/output and class-mismatch evidence |
