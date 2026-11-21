@@ -44,7 +44,7 @@ A dry-run requires no secret, network, or gateway readiness:
 
 ~~~sh
 # Replace the illustrative IP with the OBSERVED private LiteLLM address.
-nix develop -c python3 scripts/gateway/authenticated-inference-smoke.py \
+nix develop -c python3 tests/gateway/authenticated-inference-smoke.py \
   --endpoint http://10.42.40.15:4000 \
   --alias aginctus-verified-openai \
   --workload-key-file /absolute/operator/private/workload.key
@@ -108,7 +108,7 @@ GitHub comments or chat. Revoke the temporary virtual key when complete.
 nix develop -c python3 -m unittest discover \
   -s scripts/gateway -p 'test_authenticated_inference_smoke.py' -v
 nix develop -c python3 -m py_compile \
-  scripts/gateway/authenticated-inference-smoke.py \
+  tests/gateway/authenticated-inference-smoke.py \
   scripts/gateway/test_authenticated_inference_smoke.py
 just check-all
 git diff --check origin/main...HEAD
