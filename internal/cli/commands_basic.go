@@ -138,13 +138,14 @@ func runBasicCobra(
 			}
 			pluginInventory := cmd.Parent() == pluginCmd && (cmd.Name() == "inventory" || cmd.Name() == "show")
 			configSelection := cmd.Parent() != nil && cmd.Parent().Name() == "config" && cmd.Name() == "scope"
+			systemStatus := cmd.Parent() != nil && cmd.Parent().Name() == "system" && cmd.Name() == "status"
 			logicalWorkload := cmd.Parent() != nil && (cmd.Parent().Name() == "workloads" || cmd.Parent().Name() == "agents" || cmd.Parent().Name() == "frontends" || cmd.Parent().Name() == "gateways") &&
 				(cmd.Name() == "list" || cmd.Name() == "show" || cmd.Name() == "status")
 			environmentRead := cmd.Parent() != nil && cmd.Parent().Name() == "environment" &&
 				(cmd.Name() == "list" || cmd.Name() == "show")
 			verifiedScopedWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workload" &&
 				(cmd.Name() == "ls" || cmd.Name() == "status") && cmd.Flags().Changed("project")
-			if !pluginInventory && !verifiedScopedWorkload && !logicalWorkload && !environmentRead && !configSelection {
+			if !pluginInventory && !verifiedScopedWorkload && !logicalWorkload && !environmentRead && !configSelection && !systemStatus {
 				return fmt.Errorf("--output is not yet supported by %s", cmd.CommandPath())
 			}
 		}
@@ -223,6 +224,7 @@ func runBasicCobra(
 	}
 	doctor.Flags().BoolVar(&fix, "fix", false, "Configure missing loopback HTTPS listener")
 	root.AddCommand(doctor)
+	registerSystemStatus(root, stdout, incusClient, &outputFormat)
 
 	addAggregateCommands(root, stdout, stderr, load, &status)
 	addNetworkCommands(root, stdout, stderr, load, &status)
