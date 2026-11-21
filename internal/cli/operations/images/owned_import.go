@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"time"
 
 	"github.com/blevinn/aginctus/internal/config"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
@@ -15,14 +14,7 @@ import (
 // OwnedImportActions explicitly passes the project lease, authoritative
 // local observations and create-only Incus operation to the application
 // layer. The owner marker is diagnostic, not a write authorization.
-type OwnedImportActions struct {
-	Lease func(incusscope.ProjectScope) (func(), error)
-	Verify func(context.Context, incusscope.ProjectScope) error
-	Inventory func(context.Context, incusscope.ProjectScope) ([]ObservedClaimedImage, error)
-	Artifact func(string, string, string) (string, error)
-	Fingerprint func(string, string) (string, error)
-	Import func(context.Context, incusscope.ProjectScope, string, string, string, string) error
-}
+type OwnedImportActions = incusimages.OwnedCreateActions
 
 func ScopedOwnedImageImportArgs(scope incusscope.ProjectScope, metadata, rootfs, alias, owner string) []string {
 	props := ExpectedOwnerClaim(scope, alias, owner)
@@ -59,6 +51,42 @@ func AvailableForOwnedImport(images []ObservedClaimedImage, alias, fingerprint s
  return incusimages.AvailableForOwnedImport(images, alias, fingerprint)
 }
 
+// ownedCreateDiagnostic is CLI presentation, never a domain authority check.
+func ownedCreateDiagnostic(err error) string {
+	switch err {
+	case incusimages.OwnedCreateFailure("capabilities"):
+		return "images import-owned: required capabilities unavailable; no import attempted"
+	case incusimages.OwnedCreateFailure("lease"):
+		return "images import-owned: project writer lease unavailable; no import attempted"
+	case incusimages.OwnedCreateFailure("project-initial"):
+		return "images import-owned: local project not verified; no import attempted"
+	case incusimages.OwnedCreateFailure("inventory-initial"):
+		return "images import-owned: cannot verify project-local image inventory"
+	case incusimages.OwnedCreateFailure("metadata"):
+		return "images import-owned: cannot resolve metadata artifact"
+	case incusimages.OwnedCreateFailure("rootfs"):
+		return "images import-owned: cannot resolve rootfs artifact"
+	case incusimages.OwnedCreateFailure("fingerprint"):
+		return "images import-owned: cannot fingerprint image artifacts"
+	case incusimages.OwnedCreateFailure("adoption"):
+		return "images import-owned: alias or fingerprint already exists; refusing adoption"
+	case incusimages.OwnedCreateFailure("project-prewrite"):
+		return "images import-owned: project changed before import; no mutation attempted"
+	case incusimages.OwnedCreateFailure("inventory-prewrite"):
+		return "images import-owned: image inventory changed or unavailable; refusing mutation"
+	case incusimages.OwnedCreateFailure("import"):
+		return "images import-owned: creation refused or failed; inspect state manually before retrying"
+	case incusimages.OwnedCreateFailure("project-postwrite"):
+		return "images import-owned: project unverified after creation; no automatic rollback"
+	case incusimages.OwnedCreateFailure("claim-postwrite"):
+		return "images import-owned: ownership claim not verified after creation; no automatic rollback"
+	case incusimages.OwnedCreateFailure("fingerprint-postwrite"):
+		return "images import-owned: fingerprint mismatch after creation; no automatic rollback"
+	default:
+		return "images import-owned: creation failed; inspect project state before retrying"
+	}
+}
+
 // This command creates a fresh image record with a *self-declared* owner
 // claim. Neither the owner flag nor the properties authenticate the caller
 // or prove an active systemd/Home Manager controller. As with the older
@@ -74,82 +102,8 @@ func RunScopedOwnedImageImport(ctx context.Context, args []string, stdout, stder
 		fmt.Fprintln(stderr, "images import-owned: project must match the declared incus.project setting")
 		return 2
 	}
-	// Serialize all participating image writers in this local project,
-	// including distinct aliases which could have matching fingerprints.
-	release, err := actions.Lease(scope)
-	if err != nil {
-		fmt.Fprintln(stderr, "images import-owned: project writer lease unavailable; no import attempted")
-		return 1
-	}
-	defer release()
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
-	if err := actions.Verify(ctx, scope); err != nil {
-		fmt.Fprintln(stderr, "images import-owned: local project not verified; no import attempted")
-		return 1
-	}
-	initial, err := actions.Inventory(ctx, scope)
-	if err != nil {
-		fmt.Fprintln(stderr, "images import-owned: cannot verify project-local image inventory")
-		return 1
-	}
-	metadata, err := actions.Artifact(dir, "metadata", ".tar.xz")
-	if err != nil {
-		fmt.Fprintln(stderr, "images import-owned: cannot resolve metadata artifact")
-		return 1
-	}
-	rootfs, err := actions.Artifact(dir, "rootfs", ".squashfs")
-	if err != nil {
-		fmt.Fprintln(stderr, "images import-owned: cannot resolve rootfs artifact")
-		return 1
-	}
-	fingerprint, err := actions.Fingerprint(metadata, rootfs)
-	if err != nil {
-		fmt.Fprintln(stderr, "images import-owned: cannot fingerprint image artifacts")
-		return 1
-	}
-	if !AvailableForOwnedImport(initial, alias, fingerprint) {
-		fmt.Fprintln(stderr, "images import-owned: alias or fingerprint already exists; refusing adoption")
-		return 1
-	}
-
-	if err := actions.Verify(ctx, scope); err != nil {
-		fmt.Fprintln(stderr, "images import-owned: project changed before import; no mutation attempted")
-		return 1
-	}
-	beforeWrite, err := actions.Inventory(ctx, scope)
-	if err != nil || !AvailableForOwnedImport(beforeWrite, alias, fingerprint) {
-		fmt.Fprintln(stderr, "images import-owned: image inventory changed or unavailable; refusing mutation")
-		return 1
-	}
-	// Incus's server-side duplicate fingerprint/alias checks are the
-	// remaining collision defense against another writer.
-	if err := actions.Import(ctx, scope, metadata, rootfs, alias, owner); err != nil {
-		fmt.Fprintln(stderr, "images import-owned: creation refused or failed; inspect state manually before retrying")
-		return 1
-	}
-
-	if err := actions.Verify(ctx, scope); err != nil {
-		fmt.Fprintln(stderr, "images import-owned: project unverified after creation; no automatic rollback")
-		return 1
-	}
-	after, err := actions.Inventory(ctx, scope)
-	if err != nil || ClassifyOwnerClaim(after, scope, alias, owner) != "claimed" {
-		fmt.Fprintln(stderr, "images import-owned: ownership claim not verified after creation; no automatic rollback")
-		return 1
-	}
-	found := false
-	for _, image := range after {
-		if image.Fingerprint == fingerprint {
-			for _, item := range image.Aliases {
-				if item.Name == alias {
-					found = true
-				}
-			}
-		}
-	}
-	if !found {
-		fmt.Fprintln(stderr, "images import-owned: fingerprint mismatch after creation; no automatic rollback")
+	if err := incusimages.CreateClaimedImage(ctx, scope, owner, alias, dir, actions); err != nil {
+		fmt.Fprintln(stderr, ownedCreateDiagnostic(err))
 		return 1
 	}
 	fmt.Fprintf(stdout, "image %q: created with %q claim in project %q\n", alias, owner, scope.Name)
