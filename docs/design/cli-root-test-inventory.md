@@ -23,6 +23,7 @@ without dropping their integration evidence.
 | `architecture_guards_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
 | `architecture_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
 | `commands_basic_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_config_scope_test.go` | Cross-family configured project preference presentation | Retain root Run/format/authorization disclaimer evidence |
 | `commands_gateway_assets_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
 | `commands_gateway_core_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
 | `commands_gateway_egress_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
@@ -121,5 +122,5 @@ without dropping their integration evidence.
 - The full Go/Nix/hermetic/privileged manual acceptance gate remains
   separate from this accounting check.
 
-The ledger deliberately records **70 files** and does not
+The ledger deliberately records **71 files** and does not
 set a numerical target for deleting cross-family root integration tests.
