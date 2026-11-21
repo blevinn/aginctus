@@ -57,3 +57,54 @@ This is a **structural inventory and migration decision log**, not an instructio
 ## Open audits
 
 The inventory is complete at the subtree/count level, **not** at the per-package import-graph level. Before each move, enumerate all production and test importers, transitive dependencies, security-sensitive interfaces, and potential cycles. Update this decision log when the move is implemented or rejected. No package should be moved solely to make the table shorter.
+
+
+## Follow-up boundary disposition (2026-11-21)
+
+Snapshot: `main` `025d3de411a6f0504fdb7297909c5d51bc8b3c44` before the accompanying #799 host
+firewalld query-executor extraction. This section supersedes the original
+2026-11-15 layout table as a **current structural status**, not a new
+runtime or Incus security acceptance statement.
+
+| Reusable responsibility | Current owner on this snapshot | Evidence / continued owner |
+| --- | --- | --- |
+| Host firewall policy, backend evidence and privileged mutations | `internal/host/net/firewall` | #873; #905 and #964 complete the separately privileged CLI egress boundary |
+| Incus state-volume and claimed-image lifecycle | `internal/incus/statevolume`, `internal/incus/images` | #874, #943, #955; remaining #904 review is independent |
+| Accepted-state revisions, same-UID offline store and journal | `internal/orchestration/state` | #886; project service authentication, CAS, recovery and writer fencing remain #695/#696/#704 |
+| Management-network orchestration and plans | `internal/orchestration/managementnetwork` | #875/#884, not host firewall ownership |
+| Disposable VM worker and validation evidence | `internal/testing/testenv`, `internal/testing/validation` | #948/#949 and #973's recovery of changes missing from `main` |
+| Plugin generator and application composition | `internal/plugins/build`, `internal/plugins/composition` | #974/#983; #975's merge alone did not put its composition relocation on `main` |
+
+The only shared **host command transport** used by the gateway's legacy
+read-only firewalld query helper now belongs in
+`host/net/firewall.RunFirewalld`; `gateway.SystemFirewalld` is a
+compatibility delegate preserving its injected call signature and
+`--get-zone-of-interface` exit-code-2 normalization. The executor
+does not choose a zone, grant privileges or approve any activation.
+The owning domain's tests exercise the same error/refusal cases.
+`TestHostFirewallImportDirection` guards against new imports of CLI,
+gateway/gatewaycontrol or concrete product plugin packages into the
+host firewall domain.
+
+**Explicitly retained product-owned / follow-up work:**
+- `internal/gateway` retains *gateway-specific* Incus egress bridge
+  plans, DHCP transition, deployment credentials and related firewalld
+  **read-only audit policy**. These concern a concrete gateway; do not
+  copy them into generic host firewall merely because they mention a
+  firewall. The broader gateway container/plugin split belongs to
+  #805/#806.
+- `internal/cli/operations/network` retains Cobra-independent
+  formatting, request-to-domain wiring and gateway-specific egress
+  discovery. #905/#964 moved the privileged transaction to host/net;
+  remaining adapter cleanup and command-test ownership are #725/#902/#903,
+  not an unresolved host policy authority grant.
+- CLI gateway asset-store action ownership remains #906.
+  Product lifecycle and accepted-state service activation retain #704
+  and resource-owner/permission gates; a package path is not an
+  authorization principal.
+
+**Final validation still required before marking #799 completed:** fresh
+`go test ./...`, the host firewall/domain import checks, applicable
+`just check all`/Nix regressions and required PR CI on the integrated
+head. This document is a source and dependency-boundary review; it does
+not assert new manual NixOS, Incus or live-provider acceptance.

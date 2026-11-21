@@ -25,7 +25,7 @@ func ReconcileAuthorizedEgress(ctx context.Context, revoke bool, actions Authori
 		return fmt.Errorf("egress firewall: required host capabilities unavailable")
 	}
 	unlock, err := actions.Lock("/run/aginctus-firewall")
-	if err != nil { return err }
+	if err != nil { return fmt.Errorf("egress firewall: exclusive host lock unavailable") }
 	if unlock == nil { return fmt.Errorf("egress firewall: lock release unavailable") }
 	defer unlock()
 	bridge, err := actions.Bridge()
