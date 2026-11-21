@@ -28,7 +28,7 @@ func runBasicCobra(
 	var outputFormat string
 	var selectedEnvironmentID, selectedIncusProject string
 	root := &cobra.Command{
-		Use: "aginctus", SilenceUsage: true, SilenceErrors: true,
+		Use: "aginctus", Short: "Manage Aginctus environments and workloads", SilenceUsage: true, SilenceErrors: true,
 		Long: "Aginctus uses explicit commands and scopes. Inspection, plans, rendering and supported dry-runs do not authorize writes. Apply/remove/start/stop, provisioning and repair can mutate resources; --confirm-* guards apply only to the commands that declare them.",
 	}
 	root.SetOut(stdout)
@@ -39,7 +39,7 @@ func runBasicCobra(
 	root.Version = Version
 	root.SetVersionTemplate(fmt.Sprintf("aginctus %s (revision %s)\n", Version, buildRevision()))
 	root.SetHelpCommand(&cobra.Command{
-		Use: "help [--full] [command]", Short: "Help about any command", Args: cobra.ArbitraryArgs,
+		Use: "help [--full] [command]", Short: "Help about any command", Args: cobra.ArbitraryArgs, DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {
 			full := len(args) > 0 && args[0] == "--full"
 			if full {
