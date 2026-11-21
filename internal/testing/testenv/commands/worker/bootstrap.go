@@ -6,7 +6,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/blevinn/aginctus/internal/testenv"
+	"github.com/blevinn/aginctus/internal/testing/testenv"
 	"github.com/spf13/cobra"
 )
 

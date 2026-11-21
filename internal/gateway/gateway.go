@@ -26,7 +26,7 @@ import (
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	composedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/compose"
 	nativedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/native"
-	gatewayassets "github.com/blevinn/aginctus/scripts/gateway"
+	gatewayassets "github.com/blevinn/aginctus/plugins/litellm/runtime"
 )
 
 type Spec struct {

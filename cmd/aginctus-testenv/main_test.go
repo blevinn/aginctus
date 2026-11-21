@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/blevinn/aginctus/internal/testenv"
+	"github.com/blevinn/aginctus/internal/testing/testenv"
 )
 
 func TestBootstrapFingerprintsIsInspectionOnly(t *testing.T) {

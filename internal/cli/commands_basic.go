@@ -116,6 +116,7 @@ func runBasicCobra(
 			}
 		},
 	})
+	addPluginShowCommand(pluginCmd, root, stdout, registry, &outputFormat)
 	root.AddCommand(pluginCmd)
 	root.PersistentFlags().Var(overrides, "config", "Override one path=value (repeatable)")
 	root.PersistentFlags().Var(overrides, "configure", "Alias for --config")
@@ -132,7 +133,7 @@ func runBasicCobra(
 			if _, err := clioutput.ParseFormat(outputFormat); err != nil {
 				return err
 			}
-			pluginInventory := cmd.Parent() == pluginCmd && cmd.Name() == "inventory"
+			pluginInventory := cmd.Parent() == pluginCmd && (cmd.Name() == "inventory" || cmd.Name() == "show")
 			verifiedScopedWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workload" &&
 				(cmd.Name() == "ls" || cmd.Name() == "status") && cmd.Flags().Changed("project")
 			if !pluginInventory && !verifiedScopedWorkload {

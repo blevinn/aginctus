@@ -13,7 +13,7 @@ import re
 import stat
 from pathlib import Path
 
-from scripts.checks import local_acceptance, vm_evidence
+from tests.validation import local_acceptance, vm_evidence
 from tools.ci import ci_summary
 
 MAX_INPUT_BYTES = 65536
