@@ -1,6 +1,6 @@
 # CLI root mutable injection seam audit
 
-Tracks #903, #755 and #902. Audited on current `main` (2026-11-21).
+Tracks #903, #755, #902 and #1021. Initial audit on `main` (2026-11-21); updated disposition after #1013/#1014/#1019 merged.
 These are top-level **mutable function/transport** variables in production
 CLI composition. They exist primarily to substitute test behaviors from the
 same package; they are not inherently Cobra global registrations, which the
@@ -14,15 +14,14 @@ path is explicit so #903/#755 can use a defensible closure decision.
 | Root file | Mutable injection seams | Owning capability | Planned disposition |
 | --- | --- | --- | --- |
 | `commands_aggregate.go` | `removeAggregateGateway, executeAggregatePlan` | orchestration | Replace with per-Run aggregate handlers after native plan contracts settle |
-| `commands_gateway.go` | `gatewayResponsesInput, gatewayEgressQuery` | gateway/control-plane | Inject verifier reader and read-only query through gateway handler construction |
-| `commands_network.go` | `getFirewallNetwork, firewallEffectiveUID, discoverFirewallPolicy, firewallCommand` | host/net/firewall | Inject a host firewall capability bundle at root assembly; retain privilege proof |
+| `commands_gateway.go` | `gatewayEgressQuery` | gateway/control-plane | Inject verifier reader and read-only query through gateway handler construction |
+| `commands_network.go` | `getFirewallNetwork, firewallEffectiveUID, firewallCommand` | host/net/firewall | Inject a host firewall capability bundle at root assembly; retain privilege proof |
 | `gateway_siwc.go` | `exchangeGatewaySIWC, prepareGatewaySIWC` | plugin provider session | Inject session capabilities; no implicit credential authority |
 | `gateway_status.go` | `inspectGatewayProjects, inspectGatewayInstances` | gateway/Incus observer | Pass observer via gateway status handler |
 | `herdr_wiring.go` | `herdrAuthorizationGuestExec, launchHerdrConsole, transitionHerdrClient, herdrHostTrustGuestExec, herdrMachineGuestExec` | plugins/herdr | Provide concrete pinned-host and guest capabilities via request-scoped wiring |
 | `images_mutation_wiring.go` | `importScopedImage, acquireScopedImageMutationLease, importOwnedScopedImage` | incus/images | Per-invocation CreateActions / OwnedCreateActions already exist; remove mutable root forwarding seams after root tests migrate |
 | `instance_status_wiring.go` | `inspectIncusInstances, inspectScopedInstances` | incus observer | Explicit project-scoped reader per invocation |
 | `images_wiring.go` | `runIncusImage, inspectScopedImages` | incus/images | Inject command and inventory reader per request; preserve ambient v0.1 compatibility separately |
-| `network_firewall_egress.go` | `lockEgress, inspectEgressLink, effectiveEgressZone` | host/net/firewall | Pass verified route/lock/effective-zone capabilities into typed egress handler |
 | `network_status.go` | `inspectIncusNetworks` | incus observer | Inject read-only inventory into network status handler |
 | `operator_wiring.go` | `inspectOperatorIncus, inspectLocalProjects, createLocalProject, inspectOperatorUnit` | host/operator and incus | Replace global observers with explicit independently authorized capabilities |
 | `run.go` | `executeManagementNetwork, executeHerdrClient, executeWorkload, setIncusHTTPSAddress, ensureCredentialStorage, attachGatewayCredentials, auditGatewayCredentials` | root composition | Provide a per-Run dependency bundle; keep public command tree distinct from testenv worker |
@@ -30,6 +29,29 @@ path is explicit so #903/#755 can use a defensible closure decision.
 | `workload_lifecycle.go` | `runWorkloadIncus, transitionWorkload` | orchestration/native | Pass local-project and lifecycle capabilities per operation |
 | `testenv.go` | `executeTestenvVM, serveTestenvMCP` | testenv | Inject independent public testenv handlers; retain worker isolation |
 | `workload_scoped_wiring.go` | `planScopedExistingWorkloadDiff, ensureScopedExistingWorkload, transitionScopedWorkloadState` | orchestration/native | Use typed request-scoped orchestration capabilities |
+
+## Reconciled migrations and active follow-up
+
+The following callbacks are **already eliminated** from production root
+wiring by merged PRs: `gatewayResponsesInput` (#1013),
+`discoverFirewallPolicy` (#1014) and network-specific
+`lockEgress` / `inspectEgressLink` / `effectiveEgressZone` (#1019).
+Do not retain those stale entries simply to inflate the migration backlog.
+The `gatewayEgressQuery` override remained deliberately after #1019,
+because a full-root preview/help integration test still injected it.
+
+The new independent follow-up branches proposed for #1021 are #1030
+(gateway read-only query injection) and #1031 (operator project-plan and
+project-ensure test capability isolation). Until those PRs merge, the
+corresponding documented callbacks are **still present** on main and must
+not be represented as removed. #1032 is the acceptance checklist, not
+host validation.
+
+The table records remaining mutable callbacks, but it does not endorse
+their permanence or establish that they were individually approved as
+safe exceptions. Native/plugin ownership is tracked separately under
+#803/#804/#805/#806. The operator must review each security-sensitive
+exception before closing #755/#725.
 
 ## Priority and closure policy
 
