@@ -173,7 +173,7 @@ jobs:
           GOSUMDB: "off"
         run: |
           set -euo pipefail
-          go run ./cmd/aginctus help | python3 tools/docs/check_docs_examples.py
+          go run ./cmd/aginctus help --full | python3 tools/docs/check_docs_examples.py
 
   static-fast:
     if: ${{ github.event_name == 'pull_request' }}

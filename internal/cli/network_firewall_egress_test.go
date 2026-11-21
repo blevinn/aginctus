@@ -12,22 +12,23 @@ import (
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
+	networkops "github.com/blevinn/aginctus/internal/cli/operations/network"
 	"github.com/blevinn/aginctus/internal/host/net/firewall"
 	"github.com/lxc/incus/v7/shared/api"
 )
 
 func TestEgressLockAndState(t *testing.T) {
 	dir := t.TempDir()
-	release, err := lockEgress(dir)
+	release, err := firewall.LockEgress(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second, e := lockEgress(dir); e == nil {
+	if second, e := firewall.LockEgress(dir); e == nil {
 		second()
 		t.Fatal("concurrent reconcile acquired lock")
 	}
 	release()
-	release, err = lockEgress(dir)
+	release, err = firewall.LockEgress(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,11 +45,8 @@ func TestEgressLockAndState(t *testing.T) {
 }
 
 func TestEgressNoUnprivilegedMutationOrRetiredStaging(t *testing.T) {
-	old := firewallEffectiveUID
-	firewallEffectiveUID = func() int { return 1000 }
-	t.Cleanup(func() { firewallEffectiveUID = old })
 	var out, errs bytes.Buffer
-	if rc := runNetworkFirewallEgress(context.Background(), &out, &errs, nil, false); rc != 1 || !strings.Contains(errs.String(), "requires root") {
+	if rc := runNetworkFirewallEgressWithActions(context.Background(), &out, &errs, nil, false, networkops.EgressActions{EffectiveUID: func() int { return 1000 }}); rc != 1 || !strings.Contains(errs.String(), "requires root") {
 		t.Fatalf("rc=%d %s", rc, errs.String())
 	}
 	for _, command := range []string{"stage", "unstage", "verify-staged"} {
@@ -60,12 +58,6 @@ func TestEgressNoUnprivilegedMutationOrRetiredStaging(t *testing.T) {
 }
 
 func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
-	oldQuery, oldNetwork, oldCommand, oldInspect := gatewayEgressQuery, getFirewallNetwork, firewallCommand, inspectEgressLink
-	oldZone := effectiveEgressZone
-	t.Cleanup(func() {
-		gatewayEgressQuery, getFirewallNetwork, firewallCommand, inspectEgressLink = oldQuery, oldNetwork, oldCommand, oldInspect
-		effectiveEgressZone = oldZone
-	})
 	loader := config.NewLoader()
 	loader.SystemPath = ""
 	loader.UserPath = ""
@@ -108,7 +100,8 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 				instance["devices"].(map[string]map[string]string)["eth2"] = map[string]string{"type": "nic", "network": "other"}
 			}
 			instance["expanded_devices"] = instance["devices"]
-			gatewayEgressQuery = func(_ context.Context, args ...string) ([]byte, error) {
+			actions := networkops.EgressActions{}
+			actions.ReadIncus = func(_ context.Context, args ...string) ([]byte, error) {
 				path := args[len(args)-1]
 				var value any
 				switch {
@@ -133,25 +126,25 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 				}
 				return json.Marshal(value)
 			}
-			getFirewallNetwork = func(context.Context, string) (*api.Network, error) {
+			actions.Network = func(context.Context, string) (*api.Network, error) {
 				raw, _ := json.Marshal(bridge)
 				var n api.Network
 				err := json.Unmarshal(raw, &n)
 				return &n, err
 			}
-			inspectEgressLink = func(string, net.IP) error {
+			actions.InspectLink = func(string, net.IP) error {
 				if drift == "link" {
 					return errors.New("link mismatch")
 				}
 				return nil
 			}
-			effectiveEgressZone = func(context.Context, string) (string, error) {
+			actions.EffectiveZone = func(context.Context, string) (string, error) {
 				if drift == "uplink" {
 					return "trusted", nil
 				}
 				return "public", nil
 			}
-			firewallCommand = func(_ context.Context, _ string, name string, args ...string) (string, error) {
+			actions.Command = func(_ context.Context, _ string, name string, args ...string) (string, error) {
 				if strings.Join(args, " ") == "-j -4 rule show" {
 					if strings.HasPrefix(drift, "tailscale") {
 						raw, err := os.ReadFile("../host/net/firewall/testdata/tailscale-ipv4-rules.json")
@@ -173,7 +166,7 @@ func TestDiscoverEgressIdentityAndRoutes(t *testing.T) {
 				}
 				return `[{"dst":"default","dev":"wan0"},{"dst":"11.12.13.0/24","dev":"lan0"},{"dst":"11.13.14.15","dev":"lo","type":"local"}]`, nil
 			}
-			grant, err := discoverEgressGrant(context.Background(), effective)
+			grant, err := discoverEgressGrantWithActions(context.Background(), effective, actions)
 			if drift != "" && drift != "tailscale" && drift != "kernel disabled" {
 				if err == nil {
 					t.Fatal("accepted unsafe discovery")

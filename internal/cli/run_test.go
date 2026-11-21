@@ -720,7 +720,7 @@ func TestWorkloadRemoveNamed(t *testing.T) {
 
 func TestGeneratedGatewayHelpIsDispatchable(t *testing.T) {
 	var out, errs bytes.Buffer
-	if code := Run(context.Background(), []string{"gateway", "--help"}, &out, &errs, nil, nil); code != 0 || errs.Len() != 0 {
+	if code := Run(context.Background(), []string{"help", "--full", "gateway"}, &out, &errs, nil, nil); code != 0 || errs.Len() != 0 {
 		t.Fatalf("code=%d stderr=%q", code, errs.String())
 	}
 	for _, route := range []string{
@@ -743,11 +743,11 @@ func TestGeneratedGatewayHelpIsDispatchable(t *testing.T) {
 
 func TestGeneratedGatewayHelpMatchesHelpCommand(t *testing.T) {
 	var family, explicit, errs bytes.Buffer
-	if code := Run(context.Background(), []string{"gateway", "--help"}, &family, &errs, nil, nil); code != 0 {
+	if code := Run(context.Background(), []string{"help", "--full", "gateway"}, &family, &errs, nil, nil); code != 0 {
 		t.Fatalf("direct help failed: %d %s", code, errs.String())
 	}
 	errs.Reset()
-	if code := Run(context.Background(), []string{"help", "gateway"}, &explicit, &errs, nil, nil); code != 0 || errs.Len() != 0 || helpSyntax(family.String()) != helpSyntax(explicit.String()) {
+	if code := Run(context.Background(), []string{"help", "--full", "gateway"}, &explicit, &errs, nil, nil); code != 0 || errs.Len() != 0 || helpSyntax(family.String()) != helpSyntax(explicit.String()) {
 		t.Fatalf("help mismatch: code=%d stderr=%q", code, errs.String())
 	}
 }

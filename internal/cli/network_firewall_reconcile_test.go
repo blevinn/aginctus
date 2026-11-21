@@ -8,29 +8,26 @@ import (
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
+	networkops "github.com/blevinn/aginctus/internal/cli/operations/network"
 	"github.com/blevinn/aginctus/internal/host/net/firewall"
 )
 
-func firewallReconcileFixture(t *testing.T) *config.Config {
+func firewallReconcileFixture(t *testing.T) (*config.Config, *networkops.FirewallActions) {
 	t.Helper()
-	oldUID, oldCommand, oldDiscover := firewallEffectiveUID, firewallCommand, discoverFirewallPolicy
-	t.Cleanup(func() {
-		firewallEffectiveUID, firewallCommand, discoverFirewallPolicy = oldUID, oldCommand, oldDiscover
-	})
-	firewallEffectiveUID = func() int { return 0 }
 	loader := config.NewLoader()
 	loader.SystemPath, loader.UserPath, loader.Environment = "", "", nil
 	cfg, err := loader.Load(config.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cfg
+	actions := &networkops.FirewallActions{EffectiveUID: func() int { return 0 }}
+	return cfg, actions
 }
 
 func TestFirewalldReconcileUsesOwnedZoneAndMinimalRules(t *testing.T) {
-	cfg := firewallReconcileFixture(t)
+	cfg, actions := firewallReconcileFixture(t)
 	var grants []string
-	firewallCommand = func(_ context.Context, input, name string, args ...string) (string, error) {
+	actions.Command = func(_ context.Context, input, name string, args ...string) (string, error) {
 		call := name + " " + strings.Join(args, " ")
 		switch call {
 		case "nft -a list ruleset":
@@ -62,11 +59,11 @@ func TestFirewalldReconcileUsesOwnedZoneAndMinimalRules(t *testing.T) {
 			return "", nil
 		}
 	}
-	discoverFirewallPolicy = func(context.Context, *config.Config) (firewall.Policy, error) {
+	actions.Discover = func(context.Context, *config.Config) (firewall.Policy, error) {
 		return firewall.Policy{Interface: "custom-bridge", Address: "10.42.9.1", Subnet: "10.42.9.0/24"}, nil
 	}
 	var out, stderr bytes.Buffer
-	if rc := runNetworkFirewallReconcile(context.Background(), &out, &stderr, cfg); rc != 0 {
+	if rc := runNetworkFirewallReconcileWithActions(context.Background(), &out, &stderr, cfg, *actions); rc != 0 {
 		t.Fatalf("rc=%d stderr=%q", rc, stderr.String())
 	}
 	if len(grants) != 4 {
@@ -98,10 +95,10 @@ func TestFirewalldReconcileUsesOwnedZoneAndMinimalRules(t *testing.T) {
 }
 
 func TestFirewalldDisownedNetworkRemovesRuntimeExceptions(t *testing.T) {
-	cfg := firewallReconcileFixture(t)
+	cfg, actions := firewallReconcileFixture(t)
 	existing := `rule family="ipv4" source address="10.42.9.0/24" destination address="10.42.9.1" port port="53" protocol="udp" accept`
 	var removals []string
-	firewallCommand = func(_ context.Context, _ string, name string, args ...string) (string, error) {
+	actions.Command = func(_ context.Context, _ string, name string, args ...string) (string, error) {
 		call := name + " " + strings.Join(args, " ")
 		switch call {
 		case "nft -a list ruleset":
@@ -131,11 +128,11 @@ func TestFirewalldDisownedNetworkRemovesRuntimeExceptions(t *testing.T) {
 			return "", nil
 		}
 	}
-	discoverFirewallPolicy = func(context.Context, *config.Config) (firewall.Policy, error) {
+	actions.Discover = func(context.Context, *config.Config) (firewall.Policy, error) {
 		return firewall.Policy{}, errors.New("network ownership mismatch")
 	}
 	var out, stderr bytes.Buffer
-	if rc := runNetworkFirewallReconcile(context.Background(), &out, &stderr, cfg); rc != 1 {
+	if rc := runNetworkFirewallReconcileWithActions(context.Background(), &out, &stderr, cfg, *actions); rc != 1 {
 		t.Fatalf("rc=%d stderr=%q", rc, stderr.String())
 	}
 	if len(removals) != 1 || !strings.Contains(removals[0], existing) {
@@ -144,34 +141,34 @@ func TestFirewalldDisownedNetworkRemovesRuntimeExceptions(t *testing.T) {
 }
 
 func TestFirewallReconcileRejectsMixedHostBackendsBeforeMutation(t *testing.T) {
-	cfg := firewallReconcileFixture(t)
+	cfg, actions := firewallReconcileFixture(t)
 	calls := 0
-	firewallCommand = func(_ context.Context, _ string, name string, args ...string) (string, error) {
+	actions.Command = func(_ context.Context, _ string, name string, args ...string) (string, error) {
 		calls++
 		if name != "nft" || strings.Join(args, " ") != "-a list ruleset" {
 			t.Fatal("mixed firewall backends must fail before mutation")
 		}
 		return "table inet firewalld {}\ntable inet nixos-fw {}", nil
 	}
-	discoverFirewallPolicy = func(context.Context, *config.Config) (firewall.Policy, error) {
+	actions.Discover = func(context.Context, *config.Config) (firewall.Policy, error) {
 		t.Fatal("backend failure must not discover network policy")
 		return firewall.Policy{}, nil
 	}
 	var out, stderr bytes.Buffer
-	if rc := runNetworkFirewallReconcile(context.Background(), &out, &stderr, cfg); rc != 1 || calls != 1 {
+	if rc := runNetworkFirewallReconcileWithActions(context.Background(), &out, &stderr, cfg, *actions); rc != 1 || calls != 1 {
 		t.Fatalf("rc=%d calls=%d", rc, calls)
 	}
 }
 
 func TestUnprivilegedFirewallReconcileDoesNotExecuteCommands(t *testing.T) {
-	cfg := firewallReconcileFixture(t)
-	firewallEffectiveUID = func() int { return 1000 }
-	firewallCommand = func(context.Context, string, string, ...string) (string, error) {
+	cfg, actions := firewallReconcileFixture(t)
+	actions.EffectiveUID = func() int { return 1000 }
+	actions.Command = func(context.Context, string, string, ...string) (string, error) {
 		t.Fatal("unprivileged reconcile must not execute host command")
 		return "", nil
 	}
 	var out, stderr bytes.Buffer
-	if rc := runNetworkFirewallReconcile(context.Background(), &out, &stderr, cfg); rc != 1 {
+	if rc := runNetworkFirewallReconcileWithActions(context.Background(), &out, &stderr, cfg, *actions); rc != 1 {
 		t.Fatalf("rc=%d", rc)
 	}
 }
