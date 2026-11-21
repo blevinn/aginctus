@@ -23,7 +23,7 @@ import (
 // parser; all command families are registered here and reuse shared services.
 func runBasicCobra(
 	ctx context.Context, args []string, stdout, stderr io.Writer,
-	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry, logicalReader client.LogicalWorkloadReader,
+	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry, logicalReader client.LogicalWorkloadReader, environmentReader client.EnvironmentReader,
 ) int {
 	return runBasicCobraWithGatewayInput(ctx, args, stdout, stderr, incusClient, loader, registry, logicalReader, os.Stdin)
 }
@@ -150,15 +150,21 @@ func runBasicCobraWithGatewayInput(
 			pluginInventory := cmd.Parent() == pluginCmd && (cmd.Name() == "inventory" || cmd.Name() == "show")
 			logicalWorkload := cmd.Parent() != nil && (cmd.Parent().Name() == "workloads" || cmd.Parent().Name() == "agents" || cmd.Parent().Name() == "frontends" || cmd.Parent().Name() == "gateways") &&
 				(cmd.Name() == "list" || cmd.Name() == "show" || cmd.Name() == "status")
+			environmentRead := cmd.Parent() != nil && cmd.Parent().Name() == "environment" &&
+				(cmd.Name() == "list" || cmd.Name() == "show")
 			verifiedScopedWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workload" &&
 				(cmd.Name() == "ls" || cmd.Name() == "status") && cmd.Flags().Changed("project")
-			if !pluginInventory && !verifiedScopedWorkload && !logicalWorkload {
+			if !pluginInventory && !verifiedScopedWorkload && !logicalWorkload && !environmentRead {
 				return fmt.Errorf("--output is not yet supported by %s", cmd.CommandPath())
 			}
 		}
 		logicalWorkload := cmd.Parent() != nil && (cmd.Parent().Name() == "workloads" || cmd.Parent().Name() == "agents" || cmd.Parent().Name() == "frontends" || cmd.Parent().Name() == "gateways")
-		if (root.PersistentFlags().Changed("environment") || root.PersistentFlags().Changed("incus-project")) && !logicalWorkload {
-			return fmt.Errorf("environment and Incus project selectors require a verified workloads read")
+		if root.PersistentFlags().Changed("environment") && !logicalWorkload {
+			return fmt.Errorf("environment selector requires verified workloads read")
+		}
+		environmentRead := cmd.Parent() != nil && cmd.Parent().Name() == "environment"
+		if root.PersistentFlags().Changed("incus-project") && !logicalWorkload && !environmentRead {
+			return fmt.Errorf("incus project selector requires a verified environment or workloads read")
 		}
 		return nil
 	}
@@ -232,6 +238,7 @@ func runBasicCobraWithGatewayInput(
 	addHerdrCommands(root, stdout, stderr, load, &status)
 	addWorkloadCommands(root, stdout, stderr, load, &status)
 	registerLogicalWorkloadReads(root, stdout, logicalReader, &selectedIncusProject, &selectedEnvironmentID, &outputFormat)
+	registerEnvironmentReads(root, stdout, environmentReader, &selectedIncusProject, &outputFormat)
 	gatewayCmd := addGatewayCoreCommands(root, stdout, stderr, load, &status)
 	addGatewayRegistryCommands(gatewayCmd, stdout, stderr, load, &status, options)
 	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status, responsesInput)
