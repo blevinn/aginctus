@@ -137,7 +137,7 @@ func runBasicCobra(
 				return err
 			}
 			pluginInventory := cmd.Parent() == pluginCmd && (cmd.Name() == "inventory" || cmd.Name() == "show")
-			logicalWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workloads" &&
+			logicalWorkload := cmd.Parent() != nil && (cmd.Parent().Name() == "workloads" || cmd.Parent().Name() == "agents" || cmd.Parent().Name() == "frontends" || cmd.Parent().Name() == "gateways") &&
 				(cmd.Name() == "list" || cmd.Name() == "show" || cmd.Name() == "status")
 			verifiedScopedWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workload" &&
 				(cmd.Name() == "ls" || cmd.Name() == "status") && cmd.Flags().Changed("project")
@@ -145,7 +145,7 @@ func runBasicCobra(
 				return fmt.Errorf("--output is not yet supported by %s", cmd.CommandPath())
 			}
 		}
-		logicalWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workloads"
+		logicalWorkload := cmd.Parent() != nil && (cmd.Parent().Name() == "workloads" || cmd.Parent().Name() == "agents" || cmd.Parent().Name() == "frontends" || cmd.Parent().Name() == "gateways")
 		if (root.PersistentFlags().Changed("environment") || root.PersistentFlags().Changed("incus-project")) && !logicalWorkload {
 			return fmt.Errorf("environment and Incus project selectors require a verified workloads read")
 		}
