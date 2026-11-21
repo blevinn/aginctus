@@ -29,6 +29,18 @@ func runBasicCobra(
 	return runBasicCobraWithGatewayInput(ctx, args, stdout, stderr, incusClient, loader, registry, logicalReader, environmentReader, os.Stdin)
 }
 
+// runBasicCobraWithStateReaders is an explicit injection seam for trusted
+// embedding hosts. No environment ownership is inferred from selectors.
+func runBasicCobraWithStateReaders(
+	ctx context.Context, args []string, stdout, stderr io.Writer,
+	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
+	configured client.ConfiguredStateReader, accepted client.AcceptedStateReader,
+	diff client.ConfiguredAcceptedDiffReader,
+) int {
+	return runBasicCobraWithStateCapabilities(ctx, args, stdout, stderr, incusClient, loader, registry,
+		nil, nil, os.Stdin, gatewayops.QueryIncusEgress, configured, accepted, diff)
+}
+
 // runBasicCobraWithGatewayInput binds the verifier's stdin to one fresh Cobra
 // tree. Callers never need to replace a package-level reader.
 func runBasicCobraWithGatewayInput(
@@ -46,6 +58,19 @@ func runBasicCobraWithGatewayCapabilities(
 	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
 	logicalReader client.LogicalWorkloadReader, environmentReader client.EnvironmentReader,
 	responsesInput io.Reader, egressQuery func(context.Context, ...string) ([]byte, error),
+) int {
+	return runBasicCobraWithStateCapabilities(ctx, args, stdout, stderr, incusClient, loader, registry,
+		logicalReader, environmentReader, responsesInput, egressQuery, nil, nil, nil)
+}
+
+// runBasicCobraWithStateCapabilities only receives authenticated state readers
+// from a trusted embedding host. Ordinary CLI execution supplies nil readers.
+func runBasicCobraWithStateCapabilities(
+	ctx context.Context, args []string, stdout, stderr io.Writer,
+	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
+	logicalReader client.LogicalWorkloadReader, environmentReader client.EnvironmentReader,
+	responsesInput io.Reader, egressQuery func(context.Context, ...string) ([]byte, error),
+	configuredReader client.ConfiguredStateReader, acceptedReader client.AcceptedStateReader, diffReader client.ConfiguredAcceptedDiffReader,
 ) int {
 	var options config.Options
 	var outputFormat string
@@ -184,20 +209,23 @@ func runBasicCobraWithGatewayCapabilities(
 			systemStatus := cmd.Parent() != nil && cmd.Parent().Name() == "system" && cmd.Name() == "status"
 			logicalWorkload := cmd.Parent() != nil && (cmd.Parent().Name() == "workloads" || cmd.Parent().Name() == "agents" || cmd.Parent().Name() == "frontends" || cmd.Parent().Name() == "gateways") &&
 				(cmd.Name() == "list" || cmd.Name() == "show" || cmd.Name() == "status")
+			stateRead := cmd.Parent() != nil && cmd.Parent().Name() == "state" &&
+				(cmd.Name() == "show" || cmd.Name() == "diff")
 			environmentRead := cmd.Parent() != nil && cmd.Parent().Name() == "environment" &&
 				(cmd.Name() == "list" || cmd.Name() == "show")
 			verifiedScopedWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workload" &&
 				(cmd.Name() == "ls" || cmd.Name() == "status") && cmd.Flags().Changed("project")
-			if !pluginInventory && !verifiedScopedWorkload && !logicalWorkload && !environmentRead && !configSelection && !systemStatus {
+			if !pluginInventory && !verifiedScopedWorkload && !logicalWorkload && !environmentRead && !configSelection && !systemStatus && !stateRead {
 				return fmt.Errorf("--output is not yet supported by %s", cmd.CommandPath())
 			}
 		}
 		logicalWorkload := cmd.Parent() != nil && (cmd.Parent().Name() == "workloads" || cmd.Parent().Name() == "agents" || cmd.Parent().Name() == "frontends" || cmd.Parent().Name() == "gateways")
-		if root.PersistentFlags().Changed("environment") && !logicalWorkload {
+		stateRead := cmd.Parent() != nil && cmd.Parent().Name() == "state"
+		if root.PersistentFlags().Changed("environment") && !logicalWorkload && !stateRead {
 			return fmt.Errorf("environment selector requires verified workloads read")
 		}
 		environmentRead := cmd.Parent() != nil && cmd.Parent().Name() == "environment"
-		if root.PersistentFlags().Changed("incus-project") && !logicalWorkload && !environmentRead {
+		if root.PersistentFlags().Changed("incus-project") && !logicalWorkload && !environmentRead && !stateRead {
 			return fmt.Errorf("incus project selector requires a verified environment or workloads read")
 		}
 		return nil
@@ -275,6 +303,7 @@ func runBasicCobraWithGatewayCapabilities(
 	addWorkloadCommands(root, stdout, stderr, load, &status)
 	registerLogicalWorkloadReads(root, stdout, logicalReader, &selectedIncusProject, &selectedEnvironmentID, &outputFormat)
 	registerEnvironmentReads(root, stdout, environmentReader, &selectedIncusProject, &outputFormat)
+	registerStateReads(root, stdout, configuredReader, acceptedReader, diffReader, &selectedIncusProject, &selectedEnvironmentID, &outputFormat)
 	gatewayCmd := addGatewayCoreCommands(root, stdout, stderr, load, &status)
 	addGatewayRegistryCommands(gatewayCmd, stdout, stderr, load, &status, options)
 	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status, responsesInput, egressQuery)

@@ -87,6 +87,17 @@ func RunWithAuthorizedReaders(ctx context.Context,args []string,stdout,stderr io
 	return runBasicCobra(ctx,args,stdout,stderr,incusClient,configLoader,registry,workloads,environments)
 }
 
+// RunWithStateReaders lets a trusted embedding host supply independently
+// authenticated state readers. The installed CLI has no implicit state
+// authority and therefore fails closed until backend integration is approved.
+func RunWithStateReaders(ctx context.Context, args []string, stdout, stderr io.Writer,
+	incusClient IncusClient, configLoader ConfigLoader, registry *plugins.Registry,
+	configured client.ConfiguredStateReader, accepted client.AcceptedStateReader,
+	diff client.ConfiguredAcceptedDiffReader) int {
+	return runBasicCobraWithStateReaders(ctx, args, stdout, stderr,
+		incusClient, configLoader, registry, configured, accepted, diff)
+}
+
 var setIncusHTTPSAddress = func(ctx context.Context, address string) error {
 	cmd := exec.CommandContext(ctx, "incus", "config", "set", "core.https_address="+address)
 	output, err := cmd.CombinedOutput()
