@@ -63,6 +63,15 @@ A promotion transaction does not touch live Incus workloads. Reconciliation pins
 
 ## Storage topologies to validate
 
+See [the provisional project-volume service topology](project-state-service-topology.md)
+for the selected disposable implementation: one custom volume and one service
+instance within an Incus project, independently versioned environment UUID
+namespaces, and a bootstrap path outside accepted-state reconciliation.
+This is a physical feasibility direction, **not** a production authenticated
+state service or permission to enable writer processes.
+
+
+
 The preferred logical design is a **project-scoped state authority** with separately versioned environment records. Candidate physical implementations include a project-owned volume/service, environment-specific data partitions within project-confined durable storage, or a carefully limited shared service. None is selected yet; independent environment revision histories do **not** require one state-service container per environment. A state service MUST NOT hold unrestricted root Incus credentials and then accept a project selector from untrusted clients. Project storage-volume permission boundaries, API authentication, namespace traversal, cross-project reads, crash-safety, backups, recovery and bootstrapping must be tested against actual pinned Incus.
 
 A project member with project-wide write access may modify other environments' resources through Incus; environment isolation is a reconciliation correctness property, **not** a second ACL. Project authorization controls access; environment-scoped ownership, CAS and writer fencing control lifecycle correctness. Stronger tenant isolation requires separately authorized Incus projects.
