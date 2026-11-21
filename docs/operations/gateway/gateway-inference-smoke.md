@@ -110,7 +110,7 @@ nix develop -c python3 -m unittest discover \
 nix develop -c python3 -m py_compile \
   tests/gateway/authenticated-inference-smoke.py \
   tests/gateway/test_authenticated_inference_smoke.py
-just check-all
+just check all
 git diff --check origin/main...HEAD
 git status --short
 ~~~
