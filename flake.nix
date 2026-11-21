@@ -27,8 +27,8 @@
     {
       nixosModules = {
         aginctus = import ./nix/modules/nixos-module.nix { inherit self; };
-        aginctusTestenvRecovery = import ./internal/testenv/nix/recovery-worker.nix { inherit self; };
-        aginctusTestenvWorker = import ./internal/testenv/nix/installed-worker.nix { inherit self; };
+        aginctusTestenvRecovery = import ./internal/testing/testenv/nix/recovery-worker.nix { inherit self; };
+        aginctusTestenvWorker = import ./internal/testing/testenv/nix/installed-worker.nix { inherit self; };
         default = self.nixosModules.aginctus;
       };
 
@@ -156,7 +156,7 @@
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           testenv-incus-vm-image =
-            (import ./internal/testenv/nix/incus-vm-image.nix {
+            (import ./internal/testing/testenv/nix/incus-vm-image.nix {
               inherit self nixpkgs system;
             }).image;
         }
@@ -176,42 +176,42 @@
             inherit self nixpkgs system;
           };
           # Heavyweight: explicitly selected, never part of default flake checks.
-          vm-harness-smoke = import ./nix/vm-harness/smoke.nix {
+          vm-harness-smoke = import ./tests/nix/vm-harness/smoke.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-storage-network = import ./nix/vm-harness/storage-network.nix {
+          vm-harness-storage-network = import ./tests/nix/vm-harness/storage-network.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-runtime-lifecycle = import ./nix/vm-harness/runtime-lifecycle.nix {
+          vm-harness-runtime-lifecycle = import ./tests/nix/vm-harness/runtime-lifecycle.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-gateway-topology = import ./nix/vm-harness/gateway-topology.nix {
+          vm-harness-gateway-topology = import ./tests/nix/vm-harness/gateway-topology.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-native-oci = import ./nix/vm-harness/native-oci.nix {
+          vm-harness-native-oci = import ./tests/nix/vm-harness/native-oci.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-native-instance = import ./nix/vm-harness/native-instance.nix {
+          vm-harness-native-instance = import ./tests/nix/vm-harness/native-instance.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-synthetic-gateway = import ./nix/vm-harness/gateway-topology.nix {
+          vm-harness-synthetic-gateway = import ./tests/nix/vm-harness/gateway-topology.nix {
             inherit self nixpkgs system;
             synthetic = true;
           };
-          vm-harness-synthetic-tool-gateway = import ./nix/vm-harness/gateway-topology.nix {
+          vm-harness-synthetic-tool-gateway = import ./tests/nix/vm-harness/gateway-topology.nix {
             inherit self nixpkgs system;
             synthetic = true;
             toolTransport = true;
           };
-          vm-harness-opencode-tool-loopback = import ./nix/vm-harness/opencode-tool-loopback.nix {
+          vm-harness-opencode-tool-loopback = import ./tests/nix/vm-harness/opencode-tool-loopback.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-full-stack = import ./nix/vm-harness/gateway-topology.nix {
+          vm-harness-full-stack = import ./tests/nix/vm-harness/gateway-topology.nix {
             inherit self nixpkgs system;
             synthetic = true;
             fullStack = true;
           };
-          vm-harness-ownership-recovery = import ./nix/vm-harness/ownership-recovery.nix {
+          vm-harness-ownership-recovery = import ./tests/nix/vm-harness/ownership-recovery.nix {
             inherit self nixpkgs system;
           };
           herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
@@ -232,13 +232,13 @@
       # even when its derivation is not built.
       # Run explicitly: nix build -L --no-link .#vmTests.x86_64-linux.home-manager-operator
       vmTests = forAllSystems (system: {
-        home-manager-operator = import ./nix/vm-harness/home-manager-operator.nix {
+        home-manager-operator = import ./tests/nix/vm-harness/home-manager-operator.nix {
           inherit self nixpkgs system;
         };
-        incus-project-authority = import ./nix/vm-harness/incus-project-authority.nix {
+        incus-project-authority = import ./tests/nix/vm-harness/incus-project-authority.nix {
           inherit self nixpkgs system;
         };
-        accepted-state-incus = import ./nix/vm-harness/accepted-state-incus.nix {
+        accepted-state-incus = import ./tests/nix/vm-harness/accepted-state-incus.nix {
           inherit self nixpkgs system;
         };
       });
@@ -264,13 +264,13 @@
           };
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          testenv-incus-vm-image-config = import ./internal/testenv/nix/incus-vm-image-check.nix {
+          testenv-incus-vm-image-config = import ./internal/testing/testenv/nix/incus-vm-image-check.nix {
             inherit self nixpkgs system;
           };
-          testenv-recovery-worker-policy = import ./internal/testenv/nix/recovery-worker-check.nix {
+          testenv-recovery-worker-policy = import ./internal/testing/testenv/nix/recovery-worker-check.nix {
             inherit self nixpkgs system;
           };
-          testenv-installed-worker-policy = import ./internal/testenv/nix/installed-worker-check.nix {
+          testenv-installed-worker-policy = import ./internal/testing/testenv/nix/installed-worker-check.nix {
             inherit self nixpkgs system;
           };
         }

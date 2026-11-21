@@ -157,7 +157,7 @@ JSON on stdin and emit deterministic plans or inspection-only fingerprints.
 The ordinary agent CLI and MCP have no bootstrap interface.
 
 `IncusBootstrapContract` and `IncusBootstrapInventory` in
-`internal/testenv/incus_bootstrap.go` define the input schema. The project
+`internal/testing/testenv/incus_bootstrap.go` define the input schema. The project
 configuration in every plan comes directly from `IncusProjectPolicy("testenv")`:
 the fixed restricted project, aggregate quotas, nesting exception, blocked
 outer NIC/host devices/snapshots and private profiles have one policy authority.
