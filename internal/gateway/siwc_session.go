@@ -7,7 +7,7 @@ import (
 	"io"
 	"time"
 
-	gatewayassets "github.com/blevinn/aginctus/scripts/gateway"
+	gatewayassets "github.com/blevinn/aginctus/plugins/litellm/runtime"
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 )

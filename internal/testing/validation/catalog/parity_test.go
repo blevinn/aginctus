@@ -71,7 +71,7 @@ func TestVMScenarioParity(t *testing.T) {
 	runner := readSource(t, "tests/vm_harness/runner.py")
 	flake := readSource(t, "flake.nix")
 	just := readSource(t, "justfile")
-	evidence := readSource(t, "scripts/checks/vm_evidence.py")
+	evidence := readSource(t, "tests/validation/vm_evidence.py")
 
 	pythonScenarios := manifestBody(t, runner, "SCENARIOS = {", "\n}")
 	pattern := regexp.MustCompile(`"([a-z0-9-]+)": "(vm-harness-[a-z0-9-]+)"`)

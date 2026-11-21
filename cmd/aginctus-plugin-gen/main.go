@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/blevinn/aginctus/internal/pluginbuild"
+	"github.com/blevinn/aginctus/internal/plugins/build"
 )
 
 func run(args []string, stderr io.Writer) error {

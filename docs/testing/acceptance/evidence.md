@@ -86,7 +86,7 @@ keep the directory restricted to a separate trusted operator principal.
 
 ### Operator-only, non-inference gateway authorization checks (#521)
 
-The existing `scripts/gateway/authenticated-inference-smoke.py` now has a
+The existing `tests/gateway/authenticated-inference-smoke.py` now has a
 **separate `--auth-only` mode**, requiring explicit operator selection.
 It reuses the existing private gateway endpoint and owner-only secret-file
 checks and performs only:
@@ -103,7 +103,7 @@ probe. These values come from a separately reviewed pilot configuration,
 not from defaults guessed by this document:
 
 ```sh
-nix develop -c python3 scripts/gateway/authenticated-inference-smoke.py \
+nix develop -c python3 tests/gateway/authenticated-inference-smoke.py \
   --endpoint "$GATEWAY_PRIVATE_ENDPOINT" \
   --gateway-id "$GATEWAY_ID" \
   --alias "$GATEWAY_MODEL_ALIAS" \
