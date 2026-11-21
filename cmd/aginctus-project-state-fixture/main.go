@@ -42,10 +42,10 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return err
 	}
 	if len(args) == 0 {
-		return errors.New("explicit init, status or accept required")
+		return errors.New("explicit init, status, audit, accept or serve required")
 	}
 	action := args[0]
-	if action != "init" && action != "status" && action != "accept" && action != "serve" {
+	if action != "init" && action != "status" && action != "audit" && action != "accept" && action != "serve" {
 		return errors.New("unsupported project-state fixture action")
 	}
 	fs := flag.NewFlagSet(action, flag.ContinueOnError)
@@ -105,6 +105,16 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	desc := environment.Descriptor{ID: o.environmentID, Name: "fixture-read", Binding: binding}
 	if err := desc.Validate(); err != nil {
 		return errors.New("invalid environment selection")
+	}
+	if action == "audit" {
+		if o.candidate != "" || o.expected != "" || o.confirm {
+			return errors.New("audit is read-only and accepts no promotion flags")
+		}
+		result, err := store.AuditLocalPublishedHistory(ctx, desc)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(stdout).Encode(result)
 	}
 	if action == "status" {
 		if o.candidate != "" || o.expected != "" || o.confirm {
