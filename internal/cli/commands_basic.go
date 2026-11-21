@@ -153,7 +153,7 @@ func runBasicCobra(
 		}
 		environmentRead := cmd.Parent() != nil && cmd.Parent().Name() == "environment"
 		if root.PersistentFlags().Changed("incus-project") && !logicalWorkload && !environmentRead {
-			return fmt.Errorf("Incus project selector requires a verified environment or workloads read")
+			return fmt.Errorf("incus project selector requires a verified environment or workloads read")
 		}
 		return nil
 	}
