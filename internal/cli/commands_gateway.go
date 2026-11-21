@@ -67,10 +67,11 @@ func addGatewayAssetCommands(gateway, providers, models *cobra.Command,
 	assetscmd.Register(gateway, providers, models, status, options, load, configuredGatewayStore, gatewayPlugins(), gatewayops.ReadAssetConfig)
 }
 
-func executeGatewayEgress(ctx context.Context, action, zone, ranges string,
+// Compatibility seam: the root help/preview integration test still injects a
+// read-only gateway query. Scoped network egress no longer depends on it.\nvar gatewayEgressQuery = gatewayops.QueryIncusEgress\n\nfunc executeGatewayEgress(ctx context.Context, action, zone, ranges string,
 	stdout, stderr io.Writer, effective *config.Config,
 ) int {
-	return gatewayops.ExecuteEgress(ctx, action, zone, ranges, stdout, stderr, effective, gatewayops.QueryIncusEgress)
+	return gatewayops.ExecuteEgress(ctx, action, zone, ranges, stdout, stderr, effective, gatewayEgressQuery)
 }
 
 func addGatewayEgressCommands(
