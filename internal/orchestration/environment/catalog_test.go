@@ -3,6 +3,7 @@ package environment
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -51,6 +52,7 @@ func TestCatalogFailsClosedBeforeDisclosure(t *testing.T) {
 			s:=&testEnrollmentSource{descriptors:tc.records,err:tc.err}
 			got,err:=(Catalog{Verifier:v,Source:s}).List(context.Background(),tc.project)
 			if err==nil || len(got)!=0 {t.Fatalf("records leaked: %#v err=%v",got,err)}
+			if strings.Contains(err.Error(),"sensitive") { t.Fatal("untrusted source error leaked") }
 			if tc.project=="" || tc.name=="wrong scope" {
 				if s.calls!=0 {t.Fatal("source queried without authenticated scope")}
 			}
