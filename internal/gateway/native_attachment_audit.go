@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"strings"
 
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
@@ -125,12 +126,15 @@ func ObserveNativeGatewayAttachmentsWithReader(ctx context.Context, top NativeGa
 		v.Config["user.aginctus.managed"] != "true" ||
 		v.Config["user.aginctus.resource"] != "gateway-postgres-volume" ||
 		v.Config["user.aginctus.deployment"] != scope.Name ||
+		!gatewayOwnerMatches(v.Config,top.EnvironmentID) ||
 		v.Config["security.shifted"] != "true" {
 		return fmt.Errorf("native gateway PostgreSQL storage ownership unverified")
 	}
+	postgresName:="postgres-1"
+	if top.EnvironmentID!="" {postgresName="ag-"+strings.ReplaceAll(top.EnvironmentID,"-","")+"-pg"}
 	for _, ref := range v.UsedBy {
 		u, err := url.Parse(ref)
-		if err != nil || u.Path != "/1.0/instances/postgres-1" ||
+		if err != nil || u.Path != "/1.0/instances/"+postgresName ||
 			u.Query().Get("project") != scope.Name || len(u.Query()) != 1 {
 			return fmt.Errorf("native gateway PostgreSQL volume has foreign attachment")
 		}

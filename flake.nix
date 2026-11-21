@@ -229,7 +229,7 @@
           vm-harness-ownership-recovery = import ./tests/nix/vm-harness/ownership-recovery.nix {
             inherit self nixpkgs system;
           };
-          herdr-socket-integration = import ./nix/herdr-socket-vm-test.nix {
+          herdr-socket-integration = import ./tests/nix/herdr-socket-vm-test.nix {
             herdrClientModule = herdrClientImage.guestModule;
             inherit
               self
