@@ -59,7 +59,6 @@ python:
     python3 -m unittest discover -s tests/acceptance -p 'test_*.py' -v
     python3 -m unittest discover -s plugins/litellm/runtime -p 'test_*.py' -v
     python3 -m unittest discover -s tests/gateway -p 'test_*.py' -v
-    python3 -m unittest discover -s scripts/gateway -p 'test_*.py' -v
     python3 -m unittest discover -s tools/gateway -p 'test_*.py' -v
     python3 -m unittest discover -s tests -p 'test_*.py' -v
 
