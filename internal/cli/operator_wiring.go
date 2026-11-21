@@ -108,7 +108,20 @@ func readLocalProjectAssessment(ctx context.Context, scope incusscope.ProjectSco
 }
 
 func runOperatorProjectEnsure(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	return operatorops.RunProjectEnsure(ctx, args, stdout, stderr, readLocalProjectAssessment, createLocalProject)
+	return runOperatorProjectEnsureWithActions(ctx, args, stdout, stderr, inspectLocalProjects, createLocalProject)
+}
+
+// Project creation's reader and writer are explicit per invocation. The
+// existing operation remains responsible for syntax/confirmation and a
+// second independent post-write project assessment.
+func runOperatorProjectEnsureWithActions(ctx context.Context, args []string, stdout, stderr io.Writer,
+	read func(context.Context) ([]byte, error),
+	create func(context.Context, incusscope.ProjectScope) error,
+) int {
+	assess := func(ctx context.Context, scope incusscope.ProjectScope) (string, error) {
+		return operatorops.ReadLocalProjectAssessment(ctx, scope, read, maxProjectListBytes)
+	}
+	return operatorops.RunProjectEnsure(ctx, args, stdout, stderr, assess, create)
 }
 
 const maxProjectListBytes = 4 << 20
@@ -125,7 +138,16 @@ func assessObservedProjectList(scope incusscope.ProjectScope, raw []byte) (strin
 }
 
 func runOperatorProjectPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	return operatorops.RunProjectPlan(ctx, args, stdout, stderr, inspectOperatorIncus, maxProjectListBytes)
+	return runOperatorProjectPlanWithQuery(ctx, args, stdout, stderr, inspectOperatorIncus)
+}
+
+// Keep the public operator call unchanged while allowing independent,
+// per-invocation project-list readers in negative-security tests. The
+// operation owner continues to validate explicit scope and output bounds.
+func runOperatorProjectPlanWithQuery(ctx context.Context, args []string, stdout, stderr io.Writer,
+	query func(context.Context, ...string) ([]byte, error),
+) int {
+	return operatorops.RunProjectPlan(ctx, args, stdout, stderr, query, maxProjectListBytes)
 }
 
 const operatorSystemStateRoot = operatorops.SystemStateRoot

@@ -57,10 +57,8 @@ func TestOperatorProjectEnsureFailClosed(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			oldRead, oldCreate := inspectLocalProjects, createLocalProject
-			t.Cleanup(func() { inspectLocalProjects, createLocalProject = oldRead, oldCreate })
 			reads, creates := 0, 0
-			inspectLocalProjects = func(context.Context) ([]byte, error) {
+			read := func(context.Context) ([]byte, error) {
 				reads++
 				if reads == 1 {
 					return tc.first, tc.readError
@@ -71,7 +69,7 @@ func TestOperatorProjectEnsureFailClosed(t *testing.T) {
 				t.Fatal("unexpected third project enumeration")
 				return nil, nil
 			}
-			createLocalProject = func(_ context.Context, selected incusscope.ProjectScope) error {
+			create := func(_ context.Context, selected incusscope.ProjectScope) error {
 				creates++
 				if selected.Name != "aginctus" {
 					t.Fatalf("wrong provision target: %s", selected.Name)
@@ -79,7 +77,7 @@ func TestOperatorProjectEnsureFailClosed(t *testing.T) {
 				return tc.createError
 			}
 			var out, errOut bytes.Buffer
-			code := runOperatorProjectEnsure(context.Background(), []string{"--project=aginctus", "--confirm-create"}, &out, &errOut)
+			code := runOperatorProjectEnsureWithActions(context.Background(), []string{"--project=aginctus", "--confirm-create"}, &out, &errOut, read, create)
 			if code != tc.wantCode || reads != tc.wantReads || creates != tc.wantCreates {
 				t.Fatalf("code=%d reads=%d creates=%d, expected code=%d reads=%d creates=%d; stderr=%q", code, reads, creates, tc.wantCode, tc.wantReads, tc.wantCreates, errOut.String())
 			}
@@ -102,19 +100,17 @@ func TestOperatorProjectEnsureFailClosed(t *testing.T) {
 }
 
 func TestOperatorProjectEnsureNeverCreatesOnUnsafeArgs(t *testing.T) {
-	oldRead, oldCreate := inspectLocalProjects, createLocalProject
-	t.Cleanup(func() { inspectLocalProjects, createLocalProject = oldRead, oldCreate })
-	inspectLocalProjects = func(context.Context) ([]byte, error) {
+	read := func(context.Context) ([]byte, error) {
 		t.Fatal("read reached with unsafe arguments")
 		return nil, nil
 	}
-	createLocalProject = func(context.Context, incusscope.ProjectScope) error {
+	create := func(context.Context, incusscope.ProjectScope) error {
 		t.Fatal("create reached with unsafe arguments")
 		return nil
 	}
 	for _, args := range [][]string{nil, {"--project", "aginctus"}, {"--project", "default", "--confirm-create"}} {
 		var out, errOut bytes.Buffer
-		if code := runOperatorProjectEnsure(context.Background(), args, &out, &errOut); code != 2 || out.Len() != 0 {
+		if code := runOperatorProjectEnsureWithActions(context.Background(), args, &out, &errOut, read, create); code != 2 || out.Len() != 0 {
 			t.Fatalf("args=%q code=%d stdout=%q", args, code, out.String())
 		}
 	}

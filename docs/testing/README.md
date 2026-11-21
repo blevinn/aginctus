@@ -18,6 +18,14 @@ This page is the **canonical testing entry point** for Aginctus. Different test 
 3. **Do you need to know whether a deployed pilot is ready?** Begin at stage 2 read-only preflight; it does not authorize stage 3 or 4.
 4. **Do you need actual model/agent evidence?** Use the operator-held staged acceptance, explicitly authorize credentials and any billable request, record independent attribution and revocation evidence, and independently verify cleanup.
 
+## v0.2 CLI architecture acceptance
+
+The [CLI architecture operator checklist](acceptance/cli-architecture-v02.md)
+records the separate actual NixOS development-host and disposable VM
+verification required for #725/#755. It is **NOT RUN** until the operator
+records observed command results, cleanup evidence and signoff. Neither
+hermetic checks nor an acceptance template constitute real host evidence.
+
 ## Further testenv and acceptance detail
 
 - [Testenv procedure index](testenv/README.md) and [VM scenario catalog](testenv/scenarios.md) — disposable nested VM, isolated worker, OCI staging and authorization boundaries.

@@ -24,6 +24,7 @@ func registerEnvironmentReads(root *cobra.Command,out io.Writer,reader client.En
 	service:=func()*client.EnvironmentsService{return client.New(client.Options{EnvironmentReader:reader}).Environments}
 	parent.AddCommand(&cobra.Command{
 		Use:"list",Args:cobra.NoArgs,Short:"List environments enrolled in the verified project",
+		Example:"  aginctus environment list\n  aginctus environment list --incus-project lab --output=json",
 		RunE:func(cmd *cobra.Command,_ []string)error{
 			f,err:=format();if err!=nil{return err}
 			result,err:=service().List(cmd.Context(),client.ListEnvironmentsRequest{Project:*project})
@@ -33,6 +34,7 @@ func registerEnvironmentReads(root *cobra.Command,out io.Writer,reader client.En
 	})
 	parent.AddCommand(&cobra.Command{
 		Use:"show ID",Args:cobra.ExactArgs(1),Short:"Inspect an enrolled immutable environment identity",
+		Example:"  aginctus environment show <environment-uuid>",
 		RunE:func(cmd *cobra.Command,args []string)error{
 			f,err:=format();if err!=nil{return err}
 			result,err:=service().Get(cmd.Context(),client.GetEnvironmentRequest{Project:*project,ID:args[0]})

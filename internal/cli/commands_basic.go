@@ -11,6 +11,7 @@ import (
 
 	clihelp "github.com/blevinn/aginctus/internal/cli/help"
 	configops "github.com/blevinn/aginctus/internal/cli/operations/config"
+	gatewayops "github.com/blevinn/aginctus/internal/cli/operations/gateway"
 	clioutput "github.com/blevinn/aginctus/internal/cli/output"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/plugins"
@@ -35,6 +36,17 @@ func runBasicCobraWithGatewayInput(
 	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
 	logicalReader client.LogicalWorkloadReader, environmentReader client.EnvironmentReader, responsesInput io.Reader,
 ) int {
+	return runBasicCobraWithGatewayCapabilities(ctx, args, stdout, stderr, incusClient, loader, registry, logicalReader, environmentReader, responsesInput, gatewayops.QueryIncusEgress)
+}
+
+// runBasicCobraWithGatewayCapabilities binds independent gateway read
+// capabilities to one invocation; no process-global query overrides.
+func runBasicCobraWithGatewayCapabilities(
+	ctx context.Context, args []string, stdout, stderr io.Writer,
+	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
+	logicalReader client.LogicalWorkloadReader, environmentReader client.EnvironmentReader,
+	responsesInput io.Reader, egressQuery func(context.Context, ...string) ([]byte, error),
+) int {
 	var options config.Options
 	var outputFormat string
 	var selectedEnvironmentID, selectedIncusProject string
@@ -50,28 +62,36 @@ func runBasicCobraWithGatewayInput(
 	root.Version = Version
 	root.SetVersionTemplate(fmt.Sprintf("aginctus %s (revision %s)\n", Version, buildRevision()))
 	root.SetHelpCommand(&cobra.Command{
-		Use: "help [--full] [command]", Short: "Help about any command", Args: cobra.ArbitraryArgs, DisableFlagParsing: true,
+		Use: "help [--full|--examples] [command]", Short: "Help about any command",
+		Args: cobra.ArbitraryArgs, DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			full := len(args) > 0 && args[0] == "--full"
-			if full {
-				args = args[1:]
+			mode := ""
+			if len(args) > 0 && (args[0] == "--full" || args[0] == "--examples") {
+				mode, args = args[0], args[1:]
 			}
-			if len(args) == 0 {
-				if full {
-					clihelp.WriteCobraReference(root, stdout)
-					return nil
+			for _, arg := range args {
+				if strings.HasPrefix(arg, "-") {
+					return fmt.Errorf("unknown help option %q (use --full or --examples before the command path)", arg)
 				}
-				return root.Help()
 			}
-			target, remaining, err := root.Find(args)
-			if err != nil || target == nil || len(remaining) != 0 {
-				return fmt.Errorf("unknown help topic %q", strings.Join(args, " "))
+			target := root
+			if len(args) > 0 {
+				var remaining []string
+				var err error
+				target, remaining, err = root.Find(args)
+				if err != nil || target == nil || len(remaining) != 0 {
+					return fmt.Errorf("unknown help topic %q", strings.Join(args, " "))
+				}
 			}
-			if full {
+			switch mode {
+			case "--full":
 				clihelp.WriteCobraReference(target, stdout)
 				return nil
+			case "--examples":
+				return clihelp.WriteCobraExamples(target, stdout)
+			default:
+				return target.Help()
 			}
-			return target.Help()
 		},
 	})
 	root.AddCommand(&cobra.Command{
@@ -160,13 +180,14 @@ func runBasicCobraWithGatewayInput(
 				return err
 			}
 			pluginInventory := cmd.Parent() == pluginCmd && (cmd.Name() == "inventory" || cmd.Name() == "show")
+			configSelection := cmd.Parent() != nil && cmd.Parent().Name() == "config" && cmd.Name() == "scope"
 			logicalWorkload := cmd.Parent() != nil && (cmd.Parent().Name() == "workloads" || cmd.Parent().Name() == "agents" || cmd.Parent().Name() == "frontends" || cmd.Parent().Name() == "gateways") &&
 				(cmd.Name() == "list" || cmd.Name() == "show" || cmd.Name() == "status")
 			environmentRead := cmd.Parent() != nil && cmd.Parent().Name() == "environment" &&
 				(cmd.Name() == "list" || cmd.Name() == "show")
 			verifiedScopedWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workload" &&
 				(cmd.Name() == "ls" || cmd.Name() == "status") && cmd.Flags().Changed("project")
-			if !pluginInventory && !verifiedScopedWorkload && !logicalWorkload && !environmentRead {
+			if !pluginInventory && !verifiedScopedWorkload && !logicalWorkload && !environmentRead && !configSelection {
 				return fmt.Errorf("--output is not yet supported by %s", cmd.CommandPath())
 			}
 		}
@@ -225,6 +246,7 @@ func runBasicCobraWithGatewayInput(
 			return nil
 		},
 	})
+	addConfigScope(configCmd, root, stdout, load, &outputFormat)
 	root.AddCommand(configCmd)
 
 	var fix bool
@@ -253,7 +275,7 @@ func runBasicCobraWithGatewayInput(
 	registerEnvironmentReads(root, stdout, environmentReader, &selectedIncusProject, &outputFormat)
 	gatewayCmd := addGatewayCoreCommands(root, stdout, stderr, load, &status)
 	addGatewayRegistryCommands(gatewayCmd, stdout, stderr, load, &status, options)
-	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status, responsesInput)
+	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status, responsesInput, egressQuery)
 	addOperatorCommands(root, stdout, stderr, load, &status, &options)
 	addTestenvCommands(root, stdout, stderr, &status, &options)
 	addImageCommands(root, stdout, stderr, load, &status)
