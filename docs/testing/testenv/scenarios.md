@@ -212,7 +212,7 @@ Hostless validation, safe in the current multipurpose checkout:
 
 ```sh
 nix --quiet develop --no-update-lock-file -c python3 -m unittest tests.vm_harness.test_full_stack tests.vm_harness.test_guest_credentials tests.vm_harness.test_tool_sequence tests.vm_harness.test_synthetic_responses tests.vm_harness.test_runner -v
-nix --quiet develop --no-update-lock-file -c go test ./internal/testenv ./tests/oci-stage
+nix --quiet develop --no-update-lock-file -c go test ./internal/testing/testenv ./tests/oci-stage
 nix --quiet eval --no-update-lock-file .#vm-harness-full-stack.drvPath
 nix --quiet develop --no-update-lock-file -c just check report-json
 ```

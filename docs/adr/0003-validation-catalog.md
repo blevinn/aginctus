@@ -44,7 +44,7 @@ These are compatibility policy descriptors, not permission tokens.
   scrubbed from each child environment.
 - Batch NixOS VM: explicit operator on disposable worker, not agent-safe
   persistent VM admission or arbitrary host shell.
-- Persistent testenv: existing internal/testenv backend plus dedicated-worker
+- Persistent testenv: existing internal/testing/testenv backend plus dedicated-worker
   identity, admission, ownership and independent recovery.
 - Pilot/live provider: separately authorized, never implicit in catalog
   discovery, hermetic checks or synthetic evidence.

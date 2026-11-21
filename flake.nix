@@ -27,8 +27,8 @@
     {
       nixosModules = {
         aginctus = import ./nix/modules/nixos-module.nix { inherit self; };
-        aginctusTestenvRecovery = import ./internal/testenv/nix/recovery-worker.nix { inherit self; };
-        aginctusTestenvWorker = import ./internal/testenv/nix/installed-worker.nix { inherit self; };
+        aginctusTestenvRecovery = import ./internal/testing/testenv/nix/recovery-worker.nix { inherit self; };
+        aginctusTestenvWorker = import ./internal/testing/testenv/nix/installed-worker.nix { inherit self; };
         default = self.nixosModules.aginctus;
       };
 
@@ -307,7 +307,7 @@
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
           testenv-incus-vm-image =
-            (import ./internal/testenv/nix/incus-vm-image.nix {
+            (import ./internal/testing/testenv/nix/incus-vm-image.nix {
               inherit self nixpkgs system;
             }).image;
         }
@@ -415,13 +415,13 @@
           };
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          testenv-incus-vm-image-config = import ./internal/testenv/nix/incus-vm-image-check.nix {
+          testenv-incus-vm-image-config = import ./internal/testing/testenv/nix/incus-vm-image-check.nix {
             inherit self nixpkgs system;
           };
-          testenv-recovery-worker-policy = import ./internal/testenv/nix/recovery-worker-check.nix {
+          testenv-recovery-worker-policy = import ./internal/testing/testenv/nix/recovery-worker-check.nix {
             inherit self nixpkgs system;
           };
-          testenv-installed-worker-policy = import ./internal/testenv/nix/installed-worker-check.nix {
+          testenv-installed-worker-policy = import ./internal/testing/testenv/nix/installed-worker-check.nix {
             inherit self nixpkgs system;
           };
         }
