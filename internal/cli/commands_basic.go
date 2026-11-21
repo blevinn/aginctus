@@ -50,28 +50,36 @@ func runBasicCobraWithGatewayInput(
 	root.Version = Version
 	root.SetVersionTemplate(fmt.Sprintf("aginctus %s (revision %s)\n", Version, buildRevision()))
 	root.SetHelpCommand(&cobra.Command{
-		Use: "help [--full] [command]", Short: "Help about any command", Args: cobra.ArbitraryArgs, DisableFlagParsing: true,
+		Use: "help [--full|--examples] [command]", Short: "Help about any command",
+		Args: cobra.ArbitraryArgs, DisableFlagParsing: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			full := len(args) > 0 && args[0] == "--full"
-			if full {
-				args = args[1:]
+			mode := ""
+			if len(args) > 0 && (args[0] == "--full" || args[0] == "--examples") {
+				mode, args = args[0], args[1:]
 			}
-			if len(args) == 0 {
-				if full {
-					clihelp.WriteCobraReference(root, stdout)
-					return nil
+			for _, arg := range args {
+				if strings.HasPrefix(arg, "-") {
+					return fmt.Errorf("unknown help option %q (use --full or --examples before the command path)", arg)
 				}
-				return root.Help()
 			}
-			target, remaining, err := root.Find(args)
-			if err != nil || target == nil || len(remaining) != 0 {
-				return fmt.Errorf("unknown help topic %q", strings.Join(args, " "))
+			target := root
+			if len(args) > 0 {
+				var remaining []string
+				var err error
+				target, remaining, err = root.Find(args)
+				if err != nil || target == nil || len(remaining) != 0 {
+					return fmt.Errorf("unknown help topic %q", strings.Join(args, " "))
+				}
 			}
-			if full {
+			switch mode {
+			case "--full":
 				clihelp.WriteCobraReference(target, stdout)
 				return nil
+			case "--examples":
+				return clihelp.WriteCobraExamples(target, stdout)
+			default:
+				return target.Help()
 			}
-			return target.Help()
 		},
 	})
 	root.AddCommand(&cobra.Command{
