@@ -64,12 +64,22 @@ type WorkloadStatus struct {
 // ListWorkloadsRequest selects a verified immutable environment identity.
 // Class is an optional filter applied *after* ownership verification.
 type ListWorkloadsRequest struct {
+	Project string
 	EnvironmentID string
 	Class WorkloadClass
 }
 
 // GetWorkloadRequest addresses one logical resource in an environment.
 type GetWorkloadRequest struct {
+	Project string
+	EnvironmentID string
+	Name string
+}
+
+// WorkloadStatusRequest selects observed evidence for a single resource in a
+// verified project/environment. It never authorizes reconciliation.
+type WorkloadStatusRequest struct {
+	Project string
 	EnvironmentID string
 	Name string
 }
