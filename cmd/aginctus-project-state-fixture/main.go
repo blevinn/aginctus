@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
 )
@@ -24,6 +26,7 @@ type options struct {
 	candidate     string
 	expected      string
 	confirm       bool
+	socket        string
 }
 
 type acceptedStatus struct {
@@ -42,7 +45,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return errors.New("explicit init, status or accept required")
 	}
 	action := args[0]
-	if action != "init" && action != "status" && action != "accept" {
+	if action != "init" && action != "status" && action != "accept" && action != "serve" {
 		return errors.New("unsupported project-state fixture action")
 	}
 	fs := flag.NewFlagSet(action, flag.ContinueOnError)
@@ -55,6 +58,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	fs.StringVar(&o.candidate, "candidate", "", "absolute typed environment candidate JSON")
 	fs.StringVar(&o.expected, "expected-revision", "", "exact published accepted revision ID or none")
 	fs.BoolVar(&o.confirm, "confirm", false, "explicit same-UID fixture acceptance; does not deploy")
+	fs.StringVar(&o.socket, "socket", "", "absolute Unix socket path under a private precreated directory")
 	if err := fs.Parse(args[1:]); err != nil {
 		return errors.New("invalid fixture command flags")
 	}
@@ -63,7 +67,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	}
 	binding := environment.Binding{ServerID: o.serverID, Project: o.project}
 	if action == "init" {
-		if o.environmentID != "" || o.candidate != "" || o.expected != "" || o.confirm {
+		if o.environmentID != "" || o.candidate != "" || o.expected != "" || o.confirm || o.socket != "" {
 			return errors.New("init accepts only project fixture identity")
 		}
 		_, err := environment.InitializeLocalProjectStateStore(o.stateDir, binding)
@@ -74,12 +78,27 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 			Initialized bool `json:"initialized"`
 		}{true})
 	}
-	if o.environmentID == "" {
+	if action != "serve" && o.environmentID == "" {
 		return errors.New("explicit immutable environment UUID required")
 	}
 	store, err := environment.OpenLocalProjectStateStore(o.stateDir, binding)
 	if err != nil {
 		return err
+	}
+	if action == "serve" {
+		if o.environmentID != "" || o.candidate != "" || o.expected != "" || o.confirm || o.socket == "" {
+			return errors.New("serve requires only --socket and a preinitialized state volume")
+		}
+		server, err := environment.StartLocalProjectReadOnly(ctx, store, o.socket)
+		if err != nil {
+			return err
+		}
+		defer server.Close()
+		<-ctx.Done()
+		return nil
+	}
+	if o.socket != "" {
+		return errors.New("socket selector is only allowed with serve")
 	}
 	// Only the UUID participates in fixture lookup. A synthetic local name
 	// cannot authorize or rename the enrolled environment's accepted record.
@@ -133,7 +152,9 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 }
 
 func main() {
-	if err := run(context.Background(), os.Args[1:], os.Stdout); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx, os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "aginctus-project-state-fixture:", err)
 		os.Exit(1)
 	}
