@@ -31,10 +31,7 @@ type NativeGatewayCreatePlan struct {
 // Partial observations, duplicate identities and unknown states fail closed.
 // The plan is not permission to write, adopt, stop, or delete anything.
 func PlanNativeGatewayCreate(pair NativeGatewayInstancePair, observed []NativeGatewayInstanceObservation) (NativeGatewayCreatePlan, error) {
-	if pair.Postgres.Project == "" || pair.Postgres.Project != pair.LiteLLM.Project ||
-		pair.Postgres.Name != "postgres-1" || pair.Postgres.Role != "postgres" ||
-		pair.LiteLLM.Name != "litellm-1" || pair.LiteLLM.Role != "litellm" ||
-		pair.Postgres.ImageAlias == pair.LiteLLM.ImageAlias ||
+	if validateNativeGatewayPairOwner(pair) != nil ||
 		len(observed) != 2 {
 		return NativeGatewayCreatePlan{}, fmt.Errorf("native gateway creation requires two selected service observations")
 	}
