@@ -15,18 +15,19 @@ type PluginInventory interface {
 // incremental constructor: new domain services will be added as migrations
 // establish their authority and initialization contracts.
 type Options struct {
-	PluginInventory PluginInventory
-	ScopedWorkloadReader ScopedWorkloadStatusReader
-	EnvironmentReader EnvironmentReader
-	DefaultProject string
-	DefaultEnvironmentID string
+	PluginInventory       PluginInventory
+	ScopedWorkloadReader  ScopedWorkloadStatusReader
+	LogicalWorkloadReader LogicalWorkloadReader
+	EnvironmentReader     EnvironmentReader
+	DefaultProject        string
+	DefaultEnvironmentID  string
 }
 
 // Client is safe for concurrent read operations when its injected inventory
 // follows the immutable snapshot contract.
 type Client struct {
-	Plugins *PluginsService
-	Workloads *WorkloadsService
+	Plugins      *PluginsService
+	Workloads    *WorkloadsService
 	Environments *EnvironmentsService
 }
 
@@ -34,8 +35,8 @@ type Client struct {
 // Incus. A nil plugin inventory represents an empty compiled selection.
 func New(options Options) *Client {
 	return &Client{
-		Plugins: &PluginsService{inventory: options.PluginInventory},
-		Workloads: &WorkloadsService{reader: options.ScopedWorkloadReader},
-		Environments: &EnvironmentsService{reader: options.EnvironmentReader,defaultProject: options.DefaultProject,defaultID: options.DefaultEnvironmentID},
+		Plugins:      &PluginsService{inventory: options.PluginInventory},
+		Workloads:    &WorkloadsService{reader: options.ScopedWorkloadReader, logical: options.LogicalWorkloadReader},
+		Environments: &EnvironmentsService{reader: options.EnvironmentReader, defaultProject: options.DefaultProject, defaultID: options.DefaultEnvironmentID},
 	}
 }
