@@ -67,13 +67,10 @@ func addGatewayAssetCommands(gateway, providers, models *cobra.Command,
 	assetscmd.Register(gateway, providers, models, status, options, load, configuredGatewayStore, gatewayPlugins(), gatewayops.ReadAssetConfig)
 }
 
-// Keep an injectable read-only Incus query for network/firewall and gateway tests.
-var gatewayEgressQuery = gatewayops.QueryIncusEgress
-
 func executeGatewayEgress(ctx context.Context, action, zone, ranges string,
 	stdout, stderr io.Writer, effective *config.Config,
 ) int {
-	return gatewayops.ExecuteEgress(ctx, action, zone, ranges, stdout, stderr, effective, gatewayEgressQuery)
+	return gatewayops.ExecuteEgress(ctx, action, zone, ranges, stdout, stderr, effective, gatewayops.QueryIncusEgress)
 }
 
 func addGatewayEgressCommands(
