@@ -28,10 +28,10 @@ func TestLocalEnvironmentPinExcludesSameEnvironmentCommitNotPeers(t *testing.T){
 	if err:=pin.Check(ctx);err!=nil{t.Fatal(err)}
 	copyCandidate,err:=pin.SnapshotCandidate(ctx)
 	if err!=nil{t.Fatal(err)}
-	copyCandidate.Workloads[0].Profiles[0]="mutated"
+	copyCandidate.Workloads[1].Profiles[0]="mutated"
 	copyCandidate.SelectedWorkloads[0]="mutated"
 	again,err:=pin.SnapshotCandidate(ctx)
-	if err!=nil||again.Workloads[0].Profiles[0]=="mutated"||again.SelectedWorkloads[0]=="mutated"{
+	if err!=nil||again.Workloads[1].Profiles[0]=="mutated"||again.SelectedWorkloads[0]=="mutated"{
 		t.Fatalf("snapshot leaked mutable aliases: %+v %v",again,err)
 	}
 	modified:=a
