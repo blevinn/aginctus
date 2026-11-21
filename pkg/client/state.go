@@ -19,6 +19,8 @@ type ConfiguredStateReader interface {
 // after the project-scoped service and reconciliation contracts are validated.
 type StateService struct {
 	configured ConfiguredStateReader
+	accepted AcceptedStateReader
+	diff ConfiguredAcceptedDiffReader
 }
 
 // GetConfiguredStateRequest selects an environment by immutable identity and

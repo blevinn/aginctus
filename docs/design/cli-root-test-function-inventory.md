@@ -13,6 +13,8 @@ without an updated owner decision.
 | --- | --- | --- | --- |
 | `commands_output_test.go` | `TestStructuredErrorUsesStderrAndDoesNotClaimSuccess` | CLI composition / machine error serialization | Retain root integration and non-disclosure evidence |
 | `commands_output_test.go` | `TestUnexpectedStructuredErrorDoesNotLeakBackendDetails` | CLI composition / machine error serialization | Retain root integration and non-disclosure evidence |
+| `commands_state_reads_test.go` | `TestStateCLIReadOnlyTypedOutput` | State read-only CLI composition | Retain fail-closed root entrypoint and typed output evidence |
+| `commands_state_reads_test.go` | `TestStateCLIDeniesAbsentAuthorityAndProject` | State read-only CLI composition | Retain fail-closed root entrypoint and typed output evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveDependencyOrder` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveStopsBeforeNetworkOnGatewayFailure` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveRejectsFlags` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |

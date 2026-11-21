@@ -65,3 +65,28 @@ func TestRenderBasicRejectsOverWideUnbreakableCommand(t *testing.T) {
 	if err := RenderBasic(leaf, &out); err == nil { t.Fatal("expected width error") }
 	if out.Len() != 0 { t.Fatal("renderer wrote invalid partial output") }
 }
+
+func TestDisplayColumnsWideAndCombining(t *testing.T) {
+	for _, tc := range []struct{ input string; width int }{
+		{"plain", 5},
+		{"界", 2},
+		{"e\u0301", 1},
+		{"🔥", 2},
+	} {
+		if got := displayColumns(tc.input); got != tc.width {
+			t.Errorf("displayColumns(%q) = %d; want %d", tc.input, got, tc.width)
+		}
+	}
+}
+
+func TestBasicHelpRejectsExcessCuratedFlagsInsteadOfTruncating(t *testing.T) {
+	leaf := &cobra.Command{Use: "apply", Short: "Apply a change"}
+	for i := 0; i < 35; i++ {
+		leaf.Flags().Bool(fmt.Sprintf("confirm-%02d", i), false, "Explicit confirmation")
+	}
+	var out bytes.Buffer
+	if err := RenderBasic(leaf, &out); err == nil {
+		t.Fatal("expected budget failure for too many essential options")
+	}
+	if out.Len() != 0 { t.Fatal("overflow must not produce partial help") }
+}
