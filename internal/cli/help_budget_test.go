@@ -41,6 +41,9 @@ func TestBasicHelpBudgetRealTree(t *testing.T) {
 			if path == "" { args = []string{"--help"} }
 			var out, errOut bytes.Buffer
 			if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
+				if strings.Contains(errOut.String(), "permanent staging commands are retired") {
+					return // Retired command stubs intentionally refuse even help dispatch.
+				}
 				t.Fatalf("help failed: code=%d stderr=%s", code, errOut.String())
 			}
 			if strings.Contains(out.String(), "Help layout error:") {

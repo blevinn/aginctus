@@ -41,7 +41,8 @@ func TestCobraNestedHelpReflectsLeafFlagScope(t *testing.T) {
 	} {
 		t.Run(strings.Join(tc.args, "_"), func(t *testing.T) {
 			var out, errors bytes.Buffer
-			code := Run(context.Background(), tc.args, &out, &errors, nil, nil)
+			args := append([]string{"help", "--full"}, tc.args[:len(tc.args)-1]...)
+			code := Run(context.Background(), args, &out, &errors, nil, nil)
 			if code != 0 || errors.Len() != 0 {
 				t.Fatalf("code=%d stdout=%q stderr=%q", code, out.String(), errors.String())
 			}

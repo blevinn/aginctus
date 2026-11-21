@@ -67,7 +67,9 @@ func RenderBasic(cmd *cobra.Command, out io.Writer) error {
 			isRequired := len(flag.Annotations[cobra.BashCompOneRequiredFlag]) > 0
 			if isRequired {
 				required = append(required, line+" (required)")
-			} else if flag.Name == "dry-run" || flag.Name == "project" || strings.HasPrefix(flag.Name, "confirm-") {
+			} else if flag.Name == "dry-run" || flag.Name == "project" || flag.Name == "owner" ||
+				flag.Name == "provider" || flag.Name == "source" || flag.Name == "ranges" ||
+				strings.HasPrefix(flag.Name, "confirm-") || strings.HasPrefix(flag.Name, "consent-") {
 				optional = append(optional, line)
 			}
 		})
@@ -85,9 +87,9 @@ func RenderBasic(cmd *cobra.Command, out io.Writer) error {
 	}
 	add("")
 	if len(children) > 0 {
-		add(fmt.Sprintf("Run '%s <command> --help' for details.", cmd.CommandPath()))
+		add("Run 'aginctus help <command>' for details.")
 	}
-	add(fmt.Sprintf("Run 'aginctus help --full%s' for the complete reference.", strings.TrimPrefix(cmd.CommandPath(), "aginctus")))
+	add("Run 'aginctus help --full <command>' for the complete reference.")
 	if len(lines) > BasicHelpMaxLines {
 		return fmt.Errorf("%s: basic help is %d lines (maximum %d); group commands or revise hierarchy", cmd.CommandPath(), len(lines), BasicHelpMaxLines)
 	}

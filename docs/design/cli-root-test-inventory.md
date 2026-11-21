@@ -23,6 +23,7 @@ without dropping their integration evidence.
 | `architecture_guards_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
 | `architecture_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
 | `commands_basic_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
+| `help_budget_test.go` | CLI composition / bounded help presentation | Retain; verify output limits across registered commands |
 | `commands_gateway_assets_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
 | `commands_gateway_core_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
 | `commands_gateway_egress_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |

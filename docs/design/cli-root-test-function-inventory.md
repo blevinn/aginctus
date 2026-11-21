@@ -92,6 +92,7 @@ without an updated owner decision.
 | `help_test.go` | `TestHelpAdvertisedAliasesDispatch` | CLI composition / global output | Retain; guard root-wide semantics |
 | `help_test.go` | `TestHelpEgressPreviewAndConfirmationSyntax` | CLI composition / global output | Retain; guard root-wide semantics |
 | `help_test.go` | `TestHelpApplyFromStreamSyntax` | CLI composition / global output | Retain; guard root-wide semantics |
+| `help_budget_test.go` | `TestBasicHelpBudgetRealTree` | CLI composition / bounded help presentation | Retain; verify output limits across registered commands |
 | `herdr_authorize_test.go` | `TestParseHerdrPublicIdentity` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `herdr_authorize_test.go` | `TestHerdrAuthorizeAbsentKeyReconcilesAndVerifies` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `herdr_authorize_test.go` | `TestHerdrAuthorizeAlreadyInstalledDoesNotRewrite` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
