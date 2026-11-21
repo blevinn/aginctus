@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"text/tabwriter"
 
 	clihelp "github.com/blevinn/aginctus/internal/cli/help"
-	clioutput "github.com/blevinn/aginctus/internal/cli/output"
-	"github.com/blevinn/aginctus/pkg/client"
 	configops "github.com/blevinn/aginctus/internal/cli/operations/config"
+	clioutput "github.com/blevinn/aginctus/internal/cli/output"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/plugins"
+	"github.com/blevinn/aginctus/pkg/client"
 	"github.com/spf13/cobra"
 )
 
@@ -23,6 +24,16 @@ import (
 func runBasicCobra(
 	ctx context.Context, args []string, stdout, stderr io.Writer,
 	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry, logicalReader client.LogicalWorkloadReader, environmentReader client.EnvironmentReader,
+) int {
+	return runBasicCobraWithGatewayInput(ctx, args, stdout, stderr, incusClient, loader, registry, logicalReader, environmentReader, os.Stdin)
+}
+
+// runBasicCobraWithGatewayInput binds the verifier's stdin to one fresh Cobra
+// tree. Callers never need to replace a package-level reader.
+func runBasicCobraWithGatewayInput(
+	ctx context.Context, args []string, stdout, stderr io.Writer,
+	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
+	logicalReader client.LogicalWorkloadReader, environmentReader client.EnvironmentReader, responsesInput io.Reader,
 ) int {
 	var options config.Options
 	var outputFormat string
@@ -230,7 +241,7 @@ func runBasicCobra(
 	registerEnvironmentReads(root, stdout, environmentReader, &selectedIncusProject, &outputFormat)
 	gatewayCmd := addGatewayCoreCommands(root, stdout, stderr, load, &status)
 	addGatewayRegistryCommands(gatewayCmd, stdout, stderr, load, &status, options)
-	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status)
+	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status, responsesInput)
 	addOperatorCommands(root, stdout, stderr, load, &status, &options)
 	addTestenvCommands(root, stdout, stderr, &status, &options)
 	addImageCommands(root, stdout, stderr, load, &status)
