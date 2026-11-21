@@ -78,7 +78,12 @@ nix:
     # Avoid a duplicate full-tree evaluation pass in every CI run.
     nix --quiet flake check --no-update-lock-file
 
-# Root-level ownership check; no repository mutation or network activity.\n[no-cd]\nlayout:\n    python3 tools/layout/check.py\n\n# Offline local targets and heading fragments in tracked Markdown.
+# Root-level ownership check; no repository mutation or network activity.
+[no-cd]
+layout:
+    python3 tools/layout/check.py
+
+# Offline local targets and heading fragments in tracked Markdown.
 [no-cd]
 markdown:
     python3 tools/docs/check_markdown_links.py
