@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.checks import vm_evidence
+from tests.validation import vm_evidence
 from tests.vm_harness import evidence, runner
 
 

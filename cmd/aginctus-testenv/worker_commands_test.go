@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/blevinn/aginctus/internal/testenv"
+	"github.com/blevinn/aginctus/internal/testing/testenv"
 )
 
 func TestWorkerLeavesAreInaccessibleFromHelpAndInvalidArguments(t *testing.T) {
