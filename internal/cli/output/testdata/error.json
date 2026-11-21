@@ -1,0 +1,6 @@
+{
+  "apiVersion": "aginctus.dev/v1alpha1",
+  "kind": "Error",
+  "code": "not_found",
+  "message": "workload not found"
+}
