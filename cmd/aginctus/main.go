@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/blevinn/aginctus/internal/appplugins"
+	"github.com/blevinn/aginctus/internal/plugins/composition"
 	"github.com/blevinn/aginctus/internal/cli"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/incus"
