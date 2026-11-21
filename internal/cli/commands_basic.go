@@ -1,20 +1,20 @@
 package cli
 
 import (
-	"os"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"text/tabwriter"
 
 	clihelp "github.com/blevinn/aginctus/internal/cli/help"
-	clioutput "github.com/blevinn/aginctus/internal/cli/output"
-	"github.com/blevinn/aginctus/pkg/client"
 	configops "github.com/blevinn/aginctus/internal/cli/operations/config"
+	clioutput "github.com/blevinn/aginctus/internal/cli/output"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/plugins"
+	"github.com/blevinn/aginctus/pkg/client"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +25,7 @@ func runBasicCobra(
 	ctx context.Context, args []string, stdout, stderr io.Writer,
 	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry, logicalReader client.LogicalWorkloadReader, environmentReader client.EnvironmentReader,
 ) int {
-	return runBasicCobraWithGatewayInput(ctx, args, stdout, stderr, incusClient, loader, registry, logicalReader, os.Stdin)
+	return runBasicCobraWithGatewayInput(ctx, args, stdout, stderr, incusClient, loader, registry, logicalReader, environmentReader, os.Stdin)
 }
 
 // runBasicCobraWithGatewayInput binds the verifier's stdin to one fresh Cobra
@@ -33,7 +33,7 @@ func runBasicCobra(
 func runBasicCobraWithGatewayInput(
 	ctx context.Context, args []string, stdout, stderr io.Writer,
 	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
-	logicalReader client.LogicalWorkloadReader, responsesInput io.Reader,
+	logicalReader client.LogicalWorkloadReader, environmentReader client.EnvironmentReader, responsesInput io.Reader,
 ) int {
 	var options config.Options
 	var outputFormat string

@@ -19,7 +19,7 @@ func TestGatewayResponsesVerifyFromStdin(t *testing.T) {
 	run := func(input string, args ...string) (int, string, string) {
 		t.Helper()
 		var stdout, stderr bytes.Buffer
-		code := runBasicCobraWithGatewayInput(context.Background(), append([]string{"gateway"}, args...), &stdout, &stderr, nil, &fakeConfigLoader{cfg: cfg}, nil, nil, strings.NewReader(input))
+		code := runBasicCobraWithGatewayInput(context.Background(), append([]string{"gateway"}, args...), &stdout, &stderr, nil, &fakeConfigLoader{cfg: cfg}, nil, nil, nil, strings.NewReader(input))
 		return code, stdout.String(), stderr.String()
 	}
 	if code, out, message := run(good, "responses", "verify", "--require-function-call"); code != 0 ||
