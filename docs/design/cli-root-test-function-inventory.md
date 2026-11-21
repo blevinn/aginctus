@@ -29,6 +29,8 @@ without an updated owner decision.
 | `architecture_guards_test.go` | `TestCLICommandPackagesConstructCobraLocally` | CLI composition / global output | Retain; guard root-wide semantics |
 | `architecture_guards_test.go` | `TestCLICommandGlobalStateGuardRejectsUnsafeDeclarations` | CLI composition / global output | Retain; guard root-wide semantics |
 | `architecture_guards_test.go` | `TestRootTestOwnerLedgerPreventsDrift` | CLI composition / global output | Retain; guard root-wide semantics |
+| `architecture_guards_test.go` | `TestCLIRootFunctionInjectionSeamsAreAccountedFor` | CLI composition / global output | Retain; guard root-wide semantics |
+| `architecture_guards_test.go` | `TestCLIRootTestFunctionsHaveOwnerRecords` | CLI composition / global output | Retain; guard root-wide semantics |
 | `architecture_test.go` | `TestCLICommandAndOperationImportBoundaries` | CLI composition / global output | Retain; guard root-wide semantics |
 | `commands_basic_test.go` | `TestCobraBasicRejectsSyntaxBeforeConfiguration` | CLI composition / global output | Retain; guard root-wide semantics |
 | `commands_basic_test.go` | `TestCobraBasicDoesNotRetainFlagStateAcrossRuns` | CLI composition / global output | Retain; guard root-wide semantics |
