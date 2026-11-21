@@ -59,22 +59,21 @@ func addGatewayAssetCommands(gateway, providers, models *cobra.Command,
 	assetscmd.Register(gateway, providers, models, status, options, load, configuredGatewayStore, gatewayPlugins(), gatewayops.ReadAssetConfig)
 }
 
-// Compatibility seam: the root help/preview integration test still injects a
-// read-only gateway query. Scoped network egress no longer depends on it.
-var gatewayEgressQuery = gatewayops.QueryIncusEgress
-
 func executeGatewayEgress(ctx context.Context, action, zone, ranges string,
-	stdout, stderr io.Writer, effective *config.Config,
+	stdout, stderr io.Writer, effective *config.Config, query func(context.Context, ...string) ([]byte, error),
 ) int {
-	return gatewayops.ExecuteEgress(ctx, action, zone, ranges, stdout, stderr, effective, gatewayEgressQuery)
+	return gatewayops.ExecuteEgress(ctx, action, zone, ranges, stdout, stderr, effective, query)
 }
 
 func addGatewayEgressCommands(
 	gatewayCmd *cobra.Command, stdout, stderr io.Writer,
 	load func() (*config.Config, error), status *int, responsesInput io.Reader,
+	egressQuery func(context.Context, ...string) ([]byte, error),
 ) {
 	egresscmd.Register(gatewayCmd, stdout, stderr, load, status, egresscmd.Handlers{
-		Egress: executeGatewayEgress,
+		Egress: func(ctx context.Context, action, zone, ranges string, stdout, stderr io.Writer, effective *config.Config) int {
+			return executeGatewayEgress(ctx, action, zone, ranges, stdout, stderr, effective, egressQuery)
+		},
 		Verify: func(args []string, stdout, stderr io.Writer) int {
 			return gatewayops.VerifyResponsesStream(args, stdout, stderr, responsesInput)
 		},
