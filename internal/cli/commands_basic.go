@@ -39,14 +39,26 @@ func runBasicCobra(
 	root.Version = Version
 	root.SetVersionTemplate(fmt.Sprintf("aginctus %s (revision %s)\n", Version, buildRevision()))
 	root.SetHelpCommand(&cobra.Command{
-		Use: "help [command]", Short: "Help about any command", Args: cobra.ArbitraryArgs,
+		Use: "help [--full] [command]", Short: "Help about any command", Args: cobra.ArbitraryArgs,
 		RunE: func(_ *cobra.Command, args []string) error {
+			full := len(args) > 0 && args[0] == "--full"
+			if full {
+				args = args[1:]
+			}
 			if len(args) == 0 {
+				if full {
+					clihelp.WriteCobraReference(root, stdout)
+					return nil
+				}
 				return root.Help()
 			}
 			target, remaining, err := root.Find(args)
 			if err != nil || target == nil || len(remaining) != 0 {
 				return fmt.Errorf("unknown help topic %q", strings.Join(args, " "))
+			}
+			if full {
+				clihelp.WriteCobraReference(target, stdout)
+				return nil
 			}
 			return target.Help()
 		},
