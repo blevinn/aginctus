@@ -38,6 +38,37 @@ unchanged; it may be unversioned. `name` is a shell projection, not a
 machine-document schema. Interactive terminal streams are outside the
 JSON/YAML result contract.
 
+## Environment and logical workload API status
+
+The environment reader and logical workload client APIs are designed for an
+**injected authenticated Incus-project enrollment and workload authority**.
+The production project-scoped accepted-state service is **not yet connected**.
+Do not treat local candidate files, arbitrary instance labels, or the legacy
+same-UID socket as an authoritative enrollment service.
+
+An embedding host with a verified logical reader can use
+`client.New(client.Options{LogicalWorkloadReader: reader}).Workloads.List/Get/Status`.
+For CLI integration the host may call `cli.RunWithLogicalWorkloads` with the
+same reader. A normal installed CLI without such injection fails closed for
+the new read family rather than returning an empty successful inventory.
+
+For now, these typed read commands require **both** an explicit immutable
+environment UUID and an Incus project:
+
+```sh
+aginctus --environment 11111111-1111-4111-8111-111111111111 \
+  --incus-project aginctus workloads list -o json
+```
+
+The `agents`, `frontends` and `gateways` aliases use the same typed
+workload read service with fixed class expectations. They are not independent
+resource stores. Legacy `aginctus workload ...` commands remain separate.
+
+Environment name resolution, default selection from effective configuration,
+`environment list/show` command integration, and genuine project-state
+discovery require the still-gated authoritative enrollment backend. No new
+CLI command enables privilege escalation or reconciles resources.
+
 ## Wire compatibility discipline
 
 `internal/cli/output/testdata/` contains v1alpha1 golden JSON documents
