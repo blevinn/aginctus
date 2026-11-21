@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"unicode/utf8"
+	"unicode"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -47,7 +47,7 @@ func RenderBasic(cmd *cobra.Command, out io.Writer) error {
 			// supplementary; avoid wrapping them into a giant command list.
 			line := "  " + child.Name()
 			if child.Short != "" {
-				padding := 18 - utf8.RuneCountInString(line)
+				padding := 18 - displayColumns(line)
 				if padding < 2 { padding = 2 }
 				label := line + strings.Repeat(" ", padding)
 				if utf8.RuneCountInString(label+child.Short) <= BasicHelpWidth {
@@ -77,11 +77,8 @@ func RenderBasic(cmd *cobra.Command, out io.Writer) error {
 			add("")
 			add("Options:")
 			for _, line := range required { add(line) }
-			// Optional flags are informative, never allowed to displace
-			// required flags or the route to the complete reference.
-			available := BasicHelpMaxLines - len(lines) - 4
-			if available < 0 { available = 0 }
-			if len(optional) > available { optional = optional[:available] }
+			// Explicitly curated operational flags must either fit or cause
+			// a layout failure. Never silently truncate a curated list.
 			for _, line := range optional { add(line) }
 		}
 	}
@@ -120,4 +117,31 @@ func wrapWords(line string, width int) []string {
 		}
 	}
 	return append(lines, current)
+}
+
+// displayColumns counts terminal cells, not bytes or Unicode code points.
+// Combining marks occupy no columns; East Asian wide/fullwidth runes occupy two.
+// Basic help intentionally emits no ANSI escape sequences.
+func displayColumns(s string) int {
+	columns := 0
+	for _, r := range s {
+		if unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Me, r) || r == '\u200d' {
+			continue
+		}
+		if r >= 0x1100 && (r <= 0x115f || r == 0x2329 || r == 0x232a ||
+			r >= 0x2e80 && r <= 0xa4cf ||
+			r >= 0xac00 && r <= 0xd7a3 ||
+			r >= 0xf900 && r <= 0xfaff ||
+			r >= 0xfe10 && r <= 0xfe19 ||
+			r >= 0xfe30 && r <= 0xfe6f ||
+			r >= 0xff01 && r <= 0xff60 ||
+			r >= 0xffe0 && r <= 0xffe6 ||
+			r >= 0x1f300 && r <= 0x1faff ||
+			r >= 0x20000 && r <= 0x3fffd) {
+			columns += 2
+		} else {
+			columns++
+		}
+	}
+	return columns
 }
