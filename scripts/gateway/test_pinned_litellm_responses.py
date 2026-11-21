@@ -66,7 +66,7 @@ class PinnedResponsesProbeTests(unittest.TestCase):
         self.assertNotIn("x-opencode-session", headers)
 
     def test_packaged_bundle_rejects_missing_or_modified_files_before_import(self):
-        root = Path(__file__).parent
+        root = Path(__file__).resolve().parents[2] / "plugins/litellm/runtime"
         assets = {"config.yaml": (root / "selective-go.yaml").read_bytes()}
         for name in ("litellm_opencode_go_hook.py", "opencode_go_forwarding.py"):
             assets[name] = (root / name).read_bytes()

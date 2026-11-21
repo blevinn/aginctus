@@ -6,7 +6,7 @@ For test tier selection and proof limits, start with the [testing overview](../R
 ## Shared host declaration
 
 The NixOS test-driver guest and the separately built persistent Incus VM
-image import `nix/vm-harness/aginctus-host.nix`, the single declaration of
+image import `tests/nix/vm-harness/aginctus-host.nix`, the single declaration of
 host-level Aginctus/Incus services and pinned image defaults. The test-driver
 wrapper owns only QEMU sizing; the persistent image owns the guest agent,
 EFI disk and image packaging. Both leave workload/gateway reconciliation
