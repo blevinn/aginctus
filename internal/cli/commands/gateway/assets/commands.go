@@ -91,23 +91,10 @@ func (b gatewayAssetBuilder) addProviders(providers *cobra.Command) {
 	var pluginApply, providerApply, providerConfig, providerFile string
 	applyProvider := add(providers, "apply [PLUGIN]", selectorArgs(&pluginApply), func(_ *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
 		plugin, _ := selected(pluginApply, args)
-		definition, ok := plugins[plugin]
-		if !ok {
-			return nil, fmt.Errorf("unknown compiled plugin")
-		}
-		name := providerApply
-		if name == "" {
-			name = definition.DefaultProvider
-		}
+		if _, ok := plugins[plugin]; !ok { return nil, fmt.Errorf("unknown compiled plugin") }
 		var configuration gatewaycontrol.Configuration
-		if err := b.readConfig(providerConfig, providerFile, &configuration); err != nil {
-			return nil, err
-		}
-		provider := gatewaycontrol.Provider{Name: name, Plugin: plugin, Config: configuration}
-		if err := s.ApplyProvider(provider); err != nil {
-			return nil, err
-		}
-		return provider, nil
+		if err := b.readConfig(providerConfig, providerFile, &configuration); err != nil { return nil, err }
+		return s.ApplyProviderInstance(plugin, providerApply, configuration)
 	})
 	applyProvider.Flags().StringVar(&pluginApply, "plugin", "", "Compiled plugin to instantiate")
 	applyProvider.Flags().StringVar(&providerApply, "provider", "", "Instance name (defaults to plugin default)")
@@ -120,27 +107,12 @@ func (b gatewayAssetBuilder) addProviders(providers *cobra.Command) {
 		if err != nil {
 			return nil, err
 		}
-		if name == "" {
-			all, err := s.Providers()
-			if err != nil {
-				return nil, err
-			}
-			if len(all) != 1 {
-				return nil, fmt.Errorf("select --provider explicitly unless exactly one instance exists")
-			}
-			for key := range all {
-				name = key
-			}
-		}
-		p, err := s.FindProvider(name)
-		if err != nil {
-			return nil, err
-		}
-		plugin := s.Plugins[p.Plugin]
-		if plugin.Login == nil {
-			return nil, fmt.Errorf("this plugin does not implement interactive login")
-		}
-		return nil, plugin.Login(cmd.Context(), p, gatewaycontrol.LoginOptions{Output: cmd.OutOrStdout(), EnablePlan: enablePlan, ConsentConnectedApp: consentApp, ConsentBackground: consentBackground})
+		return nil, s.LoginProvider(cmd.Context(), name, gatewaycontrol.LoginOptions{
+			Output: cmd.OutOrStdout(),
+			EnablePlan: enablePlan,
+			ConsentConnectedApp: consentApp,
+			ConsentBackground: consentBackground,
+		})
 	})
 	login.Flags().StringVar(&providerLogin, "provider", "", "Provider instance to authenticate")
 	login.Flags().BoolVar(&enablePlan, "enable-plan", false, "Explicitly request plan-usage consent when supported")
@@ -157,18 +129,7 @@ func (b gatewayAssetBuilder) addProviders(providers *cobra.Command) {
 		var providerName string
 		command := add(providers, action+" [PROVIDER]", selectorArgs(&providerName), func(cmd *cobra.Command, args []string, store *gatewaycontrol.Store) (any, error) {
 			name, _ := selected(providerName, args)
-			provider, err := store.FindProvider(name)
-			if err != nil {
-				return nil, err
-			}
-			plugin := store.Plugins[provider.Plugin]
-			if action == "status" && plugin.Status != nil {
-				return plugin.Status(cmd.Context(), provider)
-			}
-			if action == "logout" && plugin.Logout != nil {
-				return nil, plugin.Logout(cmd.Context(), provider)
-			}
-			return nil, fmt.Errorf("this plugin does not implement provider %s", action)
+			return store.ProviderSession(cmd.Context(), name, action)
 		})
 		command.Flags().StringVar(&providerName, "provider", "", "Provider instance")
 	}
@@ -224,10 +185,7 @@ func (b gatewayAssetBuilder) addMCPs(gateway *cobra.Command) {
 		if err := b.readConfig(mcpConfig, mcpFile, &raw); err != nil {
 			return nil, err
 		}
-		if err := s.ApplyMCP(name, raw); err != nil {
-			return nil, err
-		}
-		return raw, nil
+		return s.ApplyMCPDeclaration(name, raw)
 	})
 	mcpApply.Flags().StringVar(&applyMCP, "mcp", "", "Local MCP name")
 	mcpApply.Flags().BoolVar(&applyLocal, "local", false, "Declare locally (the default)")
@@ -259,10 +217,7 @@ func (b gatewayAssetBuilder) addCatalogs(gateway *cobra.Command) {
 		if err := b.readConfig(catalogConfig, catalogFile, &catalog); err != nil {
 			return nil, err
 		}
-		if err := s.ApplyCatalog(name, catalog); err != nil {
-			return nil, err
-		}
-		return catalog, nil
+		return s.ApplyCatalogDeclaration(name, catalog)
 	})
 	catalogApply.Flags().StringVar(&applyCatalog, "catalog", "", "Catalog name")
 	configFlags(catalogApply, &catalogConfig, &catalogFile, true)
