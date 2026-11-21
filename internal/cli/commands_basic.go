@@ -29,6 +29,18 @@ func runBasicCobra(
 	return runBasicCobraWithGatewayInput(ctx, args, stdout, stderr, incusClient, loader, registry, logicalReader, environmentReader, os.Stdin)
 }
 
+// runBasicCobraWithStateReaders is an explicit injection seam for trusted
+// embedding hosts. No environment ownership is inferred from selectors.
+func runBasicCobraWithStateReaders(
+	ctx context.Context, args []string, stdout, stderr io.Writer,
+	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
+	configured client.ConfiguredStateReader, accepted client.AcceptedStateReader,
+	diff client.ConfiguredAcceptedDiffReader,
+) int {
+	return runBasicCobraWithStateCapabilities(ctx, args, stdout, stderr, incusClient, loader, registry,
+		nil, nil, os.Stdin, gatewayops.QueryIncusEgress, configured, accepted, diff)
+}
+
 // runBasicCobraWithGatewayInput binds the verifier's stdin to one fresh Cobra
 // tree. Callers never need to replace a package-level reader.
 func runBasicCobraWithGatewayInput(
