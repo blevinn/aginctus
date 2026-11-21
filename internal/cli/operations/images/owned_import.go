@@ -54,6 +54,8 @@ func AvailableForOwnedImport(images []ObservedClaimedImage, alias, fingerprint s
 // ownedCreateDiagnostic is CLI presentation, never a domain authority check.
 func ownedCreateDiagnostic(err error) string {
 	switch err {
+	case incusimages.OwnedCreateFailure("selection"):
+		return "images import-owned: invalid project, owner or alias; no import attempted"
 	case incusimages.OwnedCreateFailure("capabilities"):
 		return "images import-owned: required capabilities unavailable; no import attempted"
 	case incusimages.OwnedCreateFailure("lease"):
