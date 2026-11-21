@@ -168,8 +168,9 @@ func (s *LocalProjectStateStore) namespace(desc Descriptor) (string,error) {
 	if s==nil {return "",errors.New("missing local project state store")}
 	if err:=desc.Validate();err!=nil{return "",err}
 	if desc.Binding!=s.binding {return "",errors.New("environment binding differs from project state scope")}
-	if err:=checkPrivateLocalDir(s.root);err!=nil{return "",err}
-	if err:=checkPrivateLocalDir(filepath.Join(s.root,"environments"));err!=nil{return "",err}
+	// Revalidate the immutable server/project anchor on every operation;
+	// an old handle is not entitled to trust a replaced or corrupted root.
+	if _,err:=OpenLocalProjectStateStore(s.root,s.binding);err!=nil{return "",err}
 	return filepath.Join(s.root,"environments",desc.ID),nil
 }
 
@@ -249,9 +250,13 @@ func (s *LocalProjectStateStore) CommitLocalCandidate(
 	if err!=nil{return AcceptedRevision{},err}
 	if err:=os.Mkdir(path,0o700);err!=nil && !errors.Is(err,os.ErrExist) {return AcceptedRevision{},err}
 	if err:=checkPrivateLocalDir(path);err!=nil{return AcceptedRevision{},err}
+	// The environment directory entry must survive a power loss before
+	// its own revisions and active pointer can be considered durable.
+	if err:=syncLocalProjectDir(filepath.Join(s.root,"environments"));err!=nil{return AcceptedRevision{},err}
 	revisions:=filepath.Join(path,"revisions")
 	if err:=os.Mkdir(revisions,0o700);err!=nil && !errors.Is(err,os.ErrExist){return AcceptedRevision{},err}
 	if err:=checkPrivateLocalDir(revisions);err!=nil{return AcceptedRevision{},err}
+	if err:=syncLocalProjectDir(path);err!=nil{return AcceptedRevision{},err}
 	lock,err:=filestate.LockRegistry(filepath.Join(path,"active.json"))
 	if err!=nil{return AcceptedRevision{},fmt.Errorf("local environment CAS lock unavailable: %w",err)}
 	defer lock.Close()
