@@ -18,6 +18,9 @@ type Options struct {
 	PluginInventory PluginInventory
 	ScopedWorkloadReader ScopedWorkloadStatusReader
 	LogicalWorkloadReader LogicalWorkloadReader
+	EnvironmentReader EnvironmentReader
+	DefaultProject string
+	DefaultEnvironmentID string
 }
 
 // Client is safe for concurrent read operations when its injected inventory
@@ -25,6 +28,7 @@ type Options struct {
 type Client struct {
 	Plugins *PluginsService
 	Workloads *WorkloadsService
+	Environments *EnvironmentsService
 }
 
 // New constructs a client without loading ambient configuration or touching
@@ -33,5 +37,6 @@ func New(options Options) *Client {
 	return &Client{
 		Plugins: &PluginsService{inventory: options.PluginInventory},
 		Workloads: &WorkloadsService{reader: options.ScopedWorkloadReader,logical: options.LogicalWorkloadReader},
+		Environments: &EnvironmentsService{reader: options.EnvironmentReader,defaultProject: options.DefaultProject,defaultID: options.DefaultEnvironmentID},
 	}
 }
