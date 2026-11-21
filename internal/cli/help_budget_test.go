@@ -35,6 +35,7 @@ func TestBasicHelpBudgetRealTree(t *testing.T) {
 	if len(paths) < 15 { t.Fatalf("unexpectedly small command inventory: %d", len(paths)) }
 
 	for path := range paths {
+		if path == "help" { continue } // Help uses its own mode parser, not Cobra --help.
 		t.Run(strings.ReplaceAll(path, " ", "/"), func(t *testing.T) {
 			args := append(strings.Fields(path), "--help")
 			if path == "" { args = []string{"--help"} }
