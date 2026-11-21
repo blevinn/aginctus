@@ -11,6 +11,8 @@ without an updated owner decision.
 
 | Root file | Test function | File's assigned current owner | Owner disposition / review |
 | --- | --- | --- | --- |
+| `commands_output_test.go` | `TestStructuredErrorUsesStderrAndDoesNotClaimSuccess` | CLI composition / machine error serialization | Retain root integration and non-disclosure evidence |
+| `commands_output_test.go` | `TestUnexpectedStructuredErrorDoesNotLeakBackendDetails` | CLI composition / machine error serialization | Retain root integration and non-disclosure evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveDependencyOrder` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveStopsBeforeNetworkOnGatewayFailure` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveRejectsFlags` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
