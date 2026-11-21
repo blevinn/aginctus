@@ -61,3 +61,18 @@ func TestStateReadRequiresAuthorityAndHonorsCancellation(t *testing.T){
 	ctx,cancel:=context.WithCancel(context.Background());cancel()
 	if _,err:=s.Diff(ctx,req);!errors.Is(err,context.Canceled)||source.calls!=0{t.Fatalf("cancel: %v",err)}
 }
+
+func TestStateAcceptedSanitizesBackendErrors(t *testing.T) {
+	req:=ReadStateRequest{Project:"team",EnvironmentID:diffEnvID}
+	source:=&acceptedStateTestReader{result:goodAcceptedStatus()}
+	s:=New(Options{AcceptedStateReader:source}).State
+	got,err:=s.Accepted(context.Background(),req)
+	if err!=nil||got.Kind!="AcceptedStateStatus"||got.HasAccepted{t.Fatalf("got=%+v err=%v",got,err)}
+	source.err=errors.New("sensitive credential or storage details")
+	_,err=s.Accepted(context.Background(),req)
+	if err==nil||err.Error()=="sensitive credential or storage details"{
+		t.Fatalf("raw accepted-state error escaped: %v",err)
+	}
+	ctx,cancel:=context.WithCancel(context.Background());cancel()
+	if _,err:=s.Accepted(ctx,req);!errors.Is(err,context.Canceled){t.Fatalf("cancellation lost: %v",err)}
+}
