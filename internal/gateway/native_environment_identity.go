@@ -2,10 +2,13 @@ package gateway
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
 )
+
+var gatewayEnvironmentIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 // NativeGatewayResourceIdentity identifies one environment's gateway resources
 // in a shared Incus project. The IDs are derived from the immutable environment
@@ -34,6 +37,32 @@ func NativeGatewayIdentity(descriptor environment.Descriptor, observed environme
 		LiteLLMInstance:  base + "-llm",
 		DatabaseVolume:   base + "-pgdata",
 	}, nil
+}
+
+// BindNativeGatewayTopology derives an environment-owned topology from the
+// existing validated service graph. The project and deployment cannot be
+// silently rebound by a second caller; the descriptor is independently verified
+// before assigning resource names. The result remains a configured candidate.
+func BindNativeGatewayTopology(top NativeGatewayTopology, descriptor environment.Descriptor, observed environment.Binding) (NativeGatewayTopology, error) {
+	id, err := NativeGatewayIdentity(descriptor, observed)
+	if err != nil {
+		return NativeGatewayTopology{}, err
+	}
+	if top.EnvironmentID != "" || top.Project != id.Project || top.DatabaseVolume != "gateway-postgres" {
+		return NativeGatewayTopology{}, fmt.Errorf("gateway topology must be an unbound matching project candidate")
+	}
+	if err := top.ValidateExecutionShape(); err != nil {
+		return NativeGatewayTopology{}, err
+	}
+	bound := top
+	bound.EnvironmentID = id.EnvironmentID
+	bound.DatabaseVolume = id.DatabaseVolume
+	bound.Services = append([]NativeGatewayService(nil), top.Services...)
+	bound.Services[0].Volume = id.DatabaseVolume
+	if err := bound.ValidateExecutionShape(); err != nil {
+		return NativeGatewayTopology{}, err
+	}
+	return bound, nil
 }
 
 // ValidateEnvironmentIdentity confirms that a resource identity matches the
