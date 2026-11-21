@@ -26,9 +26,7 @@ func (s *StateService) Accepted(ctx context.Context, req ReadStateRequest) (api.
 	if s == nil {
 		return api.AcceptedStateStatus{}, errors.New("accepted-state reader unavailable")
 	}
-	result, err := (&AcceptedStatesService{reader: s.accepted}).Get(ctx, GetAcceptedStateRequest{
-		Project: req.Project, EnvironmentID: req.EnvironmentID,
-	})
+	result, err := (&AcceptedStatesService{reader: s.accepted}).Get(ctx, GetAcceptedStateRequest(req))
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return api.AcceptedStateStatus{}, err
