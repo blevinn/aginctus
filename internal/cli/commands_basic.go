@@ -11,6 +11,7 @@ import (
 
 	clihelp "github.com/blevinn/aginctus/internal/cli/help"
 	configops "github.com/blevinn/aginctus/internal/cli/operations/config"
+	gatewayops "github.com/blevinn/aginctus/internal/cli/operations/gateway"
 	clioutput "github.com/blevinn/aginctus/internal/cli/output"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/plugins"
@@ -34,6 +35,17 @@ func runBasicCobraWithGatewayInput(
 	ctx context.Context, args []string, stdout, stderr io.Writer,
 	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
 	logicalReader client.LogicalWorkloadReader, environmentReader client.EnvironmentReader, responsesInput io.Reader,
+) int {
+	return runBasicCobraWithGatewayCapabilities(ctx, args, stdout, stderr, incusClient, loader, registry, logicalReader, environmentReader, responsesInput, gatewayops.QueryIncusEgress)
+}
+
+// runBasicCobraWithGatewayCapabilities binds independent gateway read
+// capabilities to one invocation; no process-global query overrides.
+func runBasicCobraWithGatewayCapabilities(
+	ctx context.Context, args []string, stdout, stderr io.Writer,
+	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
+	logicalReader client.LogicalWorkloadReader, environmentReader client.EnvironmentReader,
+	responsesInput io.Reader, egressQuery func(context.Context, ...string) ([]byte, error),
 ) int {
 	var options config.Options
 	var outputFormat string
@@ -263,7 +275,7 @@ func runBasicCobraWithGatewayInput(
 	registerEnvironmentReads(root, stdout, environmentReader, &selectedIncusProject, &outputFormat)
 	gatewayCmd := addGatewayCoreCommands(root, stdout, stderr, load, &status)
 	addGatewayRegistryCommands(gatewayCmd, stdout, stderr, load, &status, options)
-	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status, responsesInput)
+	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status, responsesInput, egressQuery)
 	addOperatorCommands(root, stdout, stderr, load, &status, &options)
 	addTestenvCommands(root, stdout, stderr, &status, &options)
 	addImageCommands(root, stdout, stderr, load, &status)
