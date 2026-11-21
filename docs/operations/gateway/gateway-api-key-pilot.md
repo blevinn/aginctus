@@ -102,7 +102,7 @@ Offline synthetic acceptance does not close these live requirements.
 
 ```sh
 nix --quiet develop -c python3 -m unittest discover \
-  -s scripts/gateway -p 'test_register_openai_model.py' -v
+  -s tools/gateway -p 'test_register_openai_model.py' -v
 nix --quiet develop -c just check-all
 git diff --check
 ```

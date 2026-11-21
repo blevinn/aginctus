@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
@@ -100,5 +101,65 @@ func TestCandidateNoImplicitFileOrSettingsMerge(t *testing.T) {
 	}
 	if _, err := ReadCandidateFile(filepath.Join(t.TempDir(), "absent")); err == nil {
 		t.Fatal("missing selected candidate silently fell back")
+	}
+}
+
+func TestCandidateRejectsSpecialAndOversizedFiles(t *testing.T) {
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "pipe")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A blocking Open would hang this test indefinitely.
+	if _, err := ReadCandidateFile(fifo); err == nil {
+		t.Fatal("accepted FIFO as candidate")
+	}
+	if _, err := ReadCandidateFile(dir); err == nil {
+		t.Fatal("accepted directory as candidate")
+	}
+	oversized := filepath.Join(dir, "oversized.json")
+	f, err := os.Create(oversized)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(maxCandidateBytes + 1); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadCandidateFile(oversized); err == nil {
+		t.Fatal("accepted oversized candidate")
+	}
+	empty := filepath.Join(dir, "empty.json")
+	if err := os.WriteFile(empty, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadCandidateFile(empty); err == nil {
+		t.Fatal("accepted empty candidate")
+	}
+}
+
+func TestCandidateReadsExplicitSymlinkToRegularFile(t *testing.T) {
+	dir := t.TempDir()
+	payload, err := candidateFixture().Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dir, "candidate.json")
+	if err := os.WriteFile(target, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "selected.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	c, err := ReadCandidateFile(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Environment.ID != candidateFixture().Environment.ID {
+		t.Fatal("candidate identity changed through explicit file link")
 	}
 }
