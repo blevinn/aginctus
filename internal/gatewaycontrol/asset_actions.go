@@ -6,6 +6,27 @@ import (
 	"encoding/json"
 )
 
+// AssetOperations is the narrow command-facing gateway control capability.
+// Cobra registration may select an action but must not own persistence,
+// provider discovery or authentication policy.
+type AssetOperations interface {
+	Providers() (map[string]Provider, error)
+	FindProvider(string) (Provider, error)
+	ProviderModels(context.Context, string) (map[string][]Model, error)
+	SelectModel(context.Context, string, string) (map[string]Model, error)
+	MCPInventory(string) (map[string]any, error)
+	SelectMCP(string, string, bool) (json.RawMessage, error)
+	CatalogNames() ([]string, error)
+	SelectCatalog(string, string, string) (any, error)
+	ApplyProviderInstance(string, string, Configuration) (Provider, error)
+	LoginProvider(context.Context, string, LoginOptions) error
+	ProviderSession(context.Context, string, string) (any, error)
+	ApplyMCPDeclaration(string, []byte) (json.RawMessage, error)
+	ApplyCatalogDeclaration(string, Catalog) (Catalog, error)
+}
+
+var _ AssetOperations = (*Store)(nil)
+
 // ApplyProviderInstance validates the selected compiled plugin and resolves
 // its default name before any local declaration is persisted.
 func (s *Store) ApplyProviderInstance(pluginName, name string, configuration Configuration) (Provider, error) {
