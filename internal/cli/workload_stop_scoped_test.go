@@ -177,7 +177,7 @@ func TestScopedWorkloadStopUnverifiedPostflightAndDaemonFailure(t *testing.T) {
 }
 
 func TestScopedWorkloadStopHelpAvailableOffline(t *testing.T) {
-	for _, args := range [][]string{{"help"}, {"help", "workload"}, {"workload", "--help"}} {
+	for _, args := range [][]string{{"help", "--full"}, {"help", "--full", "workload"}, {"help", "--full", "workload", "stop"}} {
 		var stdout, stderr bytes.Buffer
 		code := Run(context.Background(), args, &stdout, &stderr, nil, nil)
 		if code != 0 || stderr.Len() != 0 ||

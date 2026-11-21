@@ -19,6 +19,7 @@ type Options struct {
 	ScopedWorkloadReader  ScopedWorkloadStatusReader
 	LogicalWorkloadReader LogicalWorkloadReader
 	EnvironmentReader     EnvironmentReader
+	AcceptedStateReader   AcceptedStateReader
 	DefaultProject        string
 	DefaultEnvironmentID  string
 }
@@ -29,6 +30,7 @@ type Client struct {
 	Plugins      *PluginsService
 	Workloads    *WorkloadsService
 	Environments *EnvironmentsService
+	AcceptedStates *AcceptedStatesService
 }
 
 // New constructs a client without loading ambient configuration or touching
@@ -38,5 +40,6 @@ func New(options Options) *Client {
 		Plugins:      &PluginsService{inventory: options.PluginInventory},
 		Workloads:    &WorkloadsService{reader: options.ScopedWorkloadReader, logical: options.LogicalWorkloadReader},
 		Environments: &EnvironmentsService{reader: options.EnvironmentReader, defaultProject: options.DefaultProject, defaultID: options.DefaultEnvironmentID},
+		AcceptedStates: &AcceptedStatesService{reader: options.AcceptedStateReader},
 	}
 }
