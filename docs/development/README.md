@@ -2,7 +2,9 @@
 
 Aginctus uses Nix to provide a small, reproducible development environment. For release versioning, human sign-off and publication, use the separate [release process](releasing.md). For CLI behavior and the Incus trust boundary, use the [CLI reference](../reference/cli.md).
 
-For repository directory ownership and colocation rules, see the [repository layout contract](repository-layout.md). Run `just check layout` to verify tracked top-level paths.\n\n## Compatibility expectations
+For repository directory ownership and colocation rules, see the [repository layout contract](repository-layout.md). Run `just check layout` to verify tracked top-level paths.
+
+## Compatibility expectations
 
 Aginctus has [no general backward-compatibility or forward-migration commitment
 before an explicitly adopted stability policy](compatibility.md), including for
