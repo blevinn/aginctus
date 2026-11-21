@@ -158,3 +158,35 @@ All local coding must use isolated worktrees. Stacks are updated without
 rebase/force-push; after merge, retarget the immediate successor to `main`
 before forward-integrating main. Repository writes only to
 `blevinn/aginctus`.
+
+## Gateway registration audit (2026-11-21)
+
+Following direct `Register` tests for gateway root, gateway egress, and
+workload, the remaining gateway family owners are
+`commands/gateway/registry` and `commands/gateway/assets`. The independent
+registration-test PRs add direct syntax, selector, help and no-loader/store
+access assertions beside those owners without touching the live plugin
+implementation.
+
+The following root tests **remain deliberately** until end-to-end coverage
+has an independently demonstrated replacement:
+
+| Root test | Justification |
+| --- | --- |
+| `commands_gateway_assets_test.go:TestGatewayAssetCommandsAndSelectors` | Crosses root configuration/store wiring, built-in plugin inventory, provider/model/MCP/catalog persistence and real CLI JSON rendering |
+| `commands_gateway_assets_test.go:TestGatewayAssetSyntaxAndHelpStayOffline` | Confirms actual `Run` exit codes, help/output contract and no creation of XDG state paths, not merely a Cobra direct parser |
+| `commands_gateway_registry_test.go:TestGatewayRegistryLegacyMapping` | Root compatibility rewriting of deprecated provider/model positional spellings |
+| `commands_gateway_registry_test.go:TestGatewayRegistryCobraSyntaxBeforeConfig` | Actual root `Run` exit-2/Usage contract and no config load |
+| `commands_gateway_core_test.go` | Full root error handling and help/exit contract |
+| `commands_gateway_egress_test.go` | Public root mutation confirmations and explicit no-config denial |
+
+These test names are not evidence of duplication: direct command tests own
+handler dispatch and validation timing; root tests own the complete entrypoint
+contract. Deleting the latter just to reduce the count would weaken the
+architectural gate. Revisit them after #906 separates gateway asset store
+actions into typed `gatewaycontrol` operations, when those domain tests can
+cover persistence and auth paths independently.
+
+No completed host acceptance is implied. Keep #903 and #755 open until the
+remaining root test-function inventory and global mutable-hook audit are
+finished and the CLI acceptance runbook is executed.

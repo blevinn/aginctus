@@ -1,6 +1,6 @@
 # Home Manager operator integration (v0.2 stack)
 
-Status: **CLI-only standalone Home Manager integration merged** (#448); disposable VM validation and authorized user lifecycle support remain incremental v0.2 work.
+Status: **Standalone Home Manager CLI/configuration and opt-in environment candidate output are available.** Actual project-scoped accepted-state promotion, authorized user lifecycle and migration remain gated; disposable VM checks cover only the specific cases described below.
 See [design](../../design/home-manager-operator.md), [#426](https://github.com/blevinn/aginctus/issues/426)
 and [NixOS configuration](../../reference/configuration.md#nixos-module). This does **not**
 replace the v0.1 pilot activation/runbooks.
@@ -60,10 +60,13 @@ Removing that conflict permits retry.
 The test reactivates the recorded previous generation to roll back the user
 configuration, checks the selected profile and CLI, then switches forward again.
 This is package/configuration rollback, not Incus or credential rollback. It
-checks the installed CLI/config and
-OS-observed package identity, rejects mismatched system/user package declarations
-and denied Incus access, and verifies unchanged Incus inventories on a disposable
-Btrfs-backed pool and Linux bridge. Starting/stopping a lingering user manager
+checks the installed CLI/config and observed package identity, verifies
+denied Incus access for an uncredentialed operator, and verifies unchanged
+Incus inventories on a disposable Btrfs-backed pool and Linux bridge.
+**It does not compare system and user package declarations**: the former
+package-parity ownership audit was removed in [#923](https://github.com/blevinn/aginctus/pull/923).
+A package version or installed unit is diagnostic context, not proof of an
+authorized environment writer. Starting/stopping a lingering user manager
 introduces no Aginctus user services or timers. The host independently runs only
 root-managed DNS/DHCP and egress firewall services/timers; synthetic protected
 host state stays unreadable/unwritable to the operator and unchanged. User
@@ -205,7 +208,52 @@ The user still requires separately provisioned Incus authorization to operate
 resources. `incus-admin` access is effectively host-root-equivalent.
 Restricted project identities cannot provision host-level Linux bridges.
 
-## Optional pinned workload candidate (no activation)
+## Explicit environment candidate (current direction; no activation)
+
+The Home Manager option `programs.aginctus.environmentCandidate` (default
+`null`) emits a complete, **nonsecret**, versioned
+`EnvironmentCandidate` to
+`$XDG_CONFIG_HOME/aginctus/environment-candidate.json`. It is distinct
+from ordinary `programs.aginctus.settings` and the legacy
+`workloadCandidate` below. For example, add to the existing
+`programs.aginctus` declaration:
+
+```nix
+environmentCandidate = {
+  id = "123e4567-e89b-42d3-a456-426614174000";
+  name = "example-environment";
+  serverId = "example-incus-server";
+  project = "example-project";
+  workloads = [ ];
+};
+```
+
+The `id` is an immutable environment identity; `name` can be renamed.
+The `serverId` and `project` are **declared bindings**, not verified
+authority or trusted evidence of an Incus connection. One Incus project may
+contain several independently managed environments. The candidate's
+project may differ from ordinary `settings.incus.project`; the latter
+does **not** override or redirect the environment's binding.
+
+A caller must explicitly select one candidate file through the
+[versioned source-neutral API](../../design/environment-candidate-sources.md)
+and compare its identity with independently authenticated Incus server/project
+observations before any future accepted-state workflow. NixOS, Home Manager
+and local-file candidates are **alternatives**, never privileged partial
+system/user fragments to merge. Rendering or switching a Home Manager
+generation never contacts Incus, promotes an accepted revision, creates a
+state service or starts a workload. A project-scoped accepted-state writer,
+controller fence and activation remain independently gated by
+[#695](https://github.com/blevinn/aginctus/issues/695),
+[#696](https://github.com/blevinn/aginctus/issues/696) and
+[#704](https://github.com/blevinn/aginctus/issues/704).
+
+The Home Manager module rejects simultaneous declarations of
+`environmentCandidate` and `workloadCandidate`. Keep all secrets,
+OAuth tokens and host firewall configuration out of candidate JSON and Nix
+derivations.
+
+## Legacy experimental workload candidate (no activation)
 
 A Home Manager operator can optionally render a **nonsecret, workload-only
 configured candidate** that is compatible with the experimental
@@ -291,6 +339,31 @@ remain tracked in [#438](https://github.com/blevinn/aginctus/issues/438)
 and [#439](https://github.com/blevinn/aginctus/issues/439). This candidate
 feature does not implement either one.
 
+## Supported operation and permission boundaries
+
+| Mode | Package/configuration activation | Host firewall, bridges and pools | Incus lifecycle |
+| --- | --- | --- | --- |
+| NixOS-only host | Privileged host activation, after administrator review | Host administrator / NixOS only | Existing explicit or separately enabled NixOS operations |
+| Standalone Home Manager operator | Unprivileged `home-manager build/switch`, settings and candidate files only | **Not permitted by HM** | No automatic actions; separate Incus credentials and explicit authorization required |
+| Combined NixOS host + Home Manager operator | Independent host and user generations | Host NixOS remains authoritative | Future selected environment operations require real project authorization and write-time fencing |
+
+`aginctus version`, `aginctus config show`, `home-manager build` and
+`aginctus operator preflight --project <project>` are non-mutating
+inspections (preflight performs daemon reads only). A **NixOS activation**,
+a future environment accept/apply, image import, project creation, or any
+firewall reconciliation is a distinct mutating action requiring an
+authorized operator and explicit review; none is implied by changing an HM
+candidate or by `operator preflight` success. Do not run destructive
+cutover or bridge/firewall mutation on the pilot host as part of a module
+documentation check.
+
+An HM-only installation never creates systemd user reconciler units.
+System and user systemd managers have independent lifecycles:
+`After=incus.service` in a user unit does not establish host service
+ordering. Any future user unit must handle login, lingering, bounded daemon
+availability and explicit Incus credentials without `sudo` or automatic
+`incus-admin` enrollment.
+
 ## NixOS: retain host firewall authority without guest orchestration
 
 An existing, approved NixOS host can keep just the NixOS-side Aginctus policy
@@ -342,6 +415,10 @@ on iptables. Gateway egress enforcement requires firewalld and remains opt-in.
 - Incus project-scoped operator access and bridge permission handoff depend
   on [#198](https://github.com/blevinn/aginctus/issues/198) and
   [#200](https://github.com/blevinn/aginctus/issues/200).
+  **Migration or replacement** of an existing deployment is a separate
+  authorized, inventoried, backed-up operation tracked in
+  [#202](https://github.com/blevinn/aginctus/issues/202); switching HM
+  generations is **not** Incus migration or credential rollback.
 - Safe owner-conflict detection and a reversible cutover are tracked in
   [#441](https://github.com/blevinn/aginctus/issues/441) and
   [#442](https://github.com/blevinn/aginctus/issues/442).
