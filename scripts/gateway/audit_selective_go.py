@@ -161,7 +161,7 @@ def bundle_hashes(directory):
         hashes = {}
         for name, source in SOURCES.items():
             data = read_public(directory / name)
-            if data != read_public(Path(__file__).parent / source):
+            if data != read_public(Path(__file__).resolve().parents[2] / "plugins/litellm/runtime" / source):
                 raise ValueError
             hashes[name] = hashlib.sha256(data).hexdigest()
         if decode(read_public(directory / "manifest.json")) != hashes:
