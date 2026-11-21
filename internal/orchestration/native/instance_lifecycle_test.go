@@ -365,3 +365,25 @@ func TestNativeInstanceLifecycleNeverLeaksUpstreamDetail(t *testing.T) {
 		t.Fatalf("upstream failure detail leaked: %v", err)
 	}
 }
+
+func TestNativeEnvironmentInstanceLifecycleRequiresExactOwnerAtMutationBoundary(t *testing.T){
+	intent:=workloadLifecycleIntent(t,InstanceRunning)
+	intent.Name="ag-123e4567e89b42d3a456426614174000-pg"
+	intent.Resource="gateway-instance"
+	intent.Role="postgres"
+	intent.WorkloadID=""
+	intent.EnvironmentID="123e4567-e89b-42d3-a456-426614174000"
+	guest:=ownedInstance(t,intent,"Stopped")
+	guest.Config["user.aginctus.environment-id"]="123e4567-e89b-42d3-a456-426614174001"
+	client:=&fakeInstanceClient{scope:intent.Scope,instance:guest,etag:"etag-1"}
+	if _,err:=EnsureInstanceStateWithClient(context.Background(),intent,client);err==nil||client.transfers!=0{
+		t.Fatal("same-project foreign environment transitioned")
+	}
+	guest.Config["user.aginctus.environment-id"]=intent.EnvironmentID
+	result,err:=EnsureInstanceStateWithClient(context.Background(),intent,client)
+	if err!=nil||!result.Verified||!result.Changed||client.transfers!=1{
+		t.Fatalf("owned gateway transition failed: %+v %v",result,err)
+	}
+	intent.EnvironmentID="unverified"
+	if err:=intent.Validate();err==nil{t.Fatal("invalid environment owner accepted")}
+}

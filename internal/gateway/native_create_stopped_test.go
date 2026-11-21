@@ -48,6 +48,7 @@ func (f *fakeGatewayStoppedClient) CreateInstance(req api.InstancesPost) (native
 				"user.aginctus.managed": "true", "user.aginctus.resource": "gateway-instance",
 				"user.aginctus.role":       req.Config["user.aginctus.role"],
 				"user.aginctus.deployment": req.Config["user.aginctus.deployment"],
+				"user.aginctus.environment-id":req.Config["user.aginctus.environment-id"],
 				"volatile.base_image":      fingerprint,
 			},
 		},
