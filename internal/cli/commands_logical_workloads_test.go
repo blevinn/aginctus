@@ -28,7 +28,7 @@ func (r testLogicalWorkloadReader) WorkloadStatus(_ context.Context,req api.Work
 func TestInjectedLogicalWorkloadCLIOutput(t *testing.T){
 	const env="11111111-1111-4111-8111-111111111111"
 	for _,tc:=range []struct{args []string;want string}{
-		{[]string{"--environment",env,"--incus-project","aginctus","workloads","list","-o","json"},`"kind":"WorkloadList"`},
+		{[]string{"--environment",env,"--incus-project","aginctus","workloads","list","-o","json"},`"kind": "WorkloadList"`},
 		{[]string{"workloads","list","--environment",env,"--incus-project","aginctus","-o","wide"},"COMPONENTS"},
 		{[]string{"--environment",env,"--incus-project","aginctus","workloads","show","gateway","-o","yaml"},"kind: Workload"},
 		{[]string{"--environment",env,"--incus-project","aginctus","workloads","status","gateway"},"Running"},
