@@ -120,6 +120,7 @@ func CreateStoppedGatewayWithClient(ctx context.Context, top NativeGatewayTopolo
 					"user.aginctus.resource":"gateway-instance",
 					"user.aginctus.role":spec.Role,
 					"user.aginctus.deployment":spec.Project,
+					"user.aginctus.environment-id":spec.EnvironmentID,
 				},
 				Devices:cloneGatewayDevices(spec.Devices),
 			},
@@ -137,6 +138,7 @@ func CreateStoppedGatewayWithClient(ctx context.Context, top NativeGatewayTopolo
 			inst.Config["user.aginctus.resource"]!="gateway-instance" ||
 			inst.Config["user.aginctus.role"]!=spec.Role ||
 			inst.Config["user.aginctus.deployment"]!=spec.Project ||
+			!gatewayOwnerMatches(inst.Config,spec.EnvironmentID) ||
 			len(inst.Profiles)!=0 || !equalNativeDevices(inst.Devices,spec.Devices) {
 			return fail("verification",spec.Name,true,fmt.Errorf("created gateway service postcondition unverified"))
 		}
@@ -153,7 +155,7 @@ func cloneGatewayDevices(source map[string]map[string]string)map[string]map[stri
 }
 func sameGatewayPair(a,b NativeGatewayInstancePair)bool{
 	eq:=func(x,y NativeGatewayInstanceSpec)bool{
-		return x.Project==y.Project && x.Name==y.Name && x.Role==y.Role &&
+		return x.Project==y.Project && x.EnvironmentID==y.EnvironmentID && x.Name==y.Name && x.Role==y.Role &&
 			x.ImageAlias==y.ImageAlias && slices.Equal(x.DependsOn,y.DependsOn) &&
 			slices.Equal(x.SecretEnvironment,y.SecretEnvironment) &&
 			equalNativeDevices(x.Devices,y.Devices)

@@ -29,7 +29,7 @@ Preview without reading credentials or contacting LiteLLM. `GATEWAY_ENDPOINT`
 must be the rediscovered private IPv4 endpoint, including port:
 
 ```sh
-nix --quiet develop -c python3 scripts/gateway/register-openai-model.py \
+nix --quiet develop -c python3 tools/gateway/register-openai-model.py \
   --endpoint "$GATEWAY_ENDPOINT" \
   --alias aginctus-verified-openai --source openai/gpt-4o-mini
 ```
