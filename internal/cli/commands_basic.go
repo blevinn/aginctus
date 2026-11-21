@@ -10,8 +10,8 @@ import (
 	"text/tabwriter"
 
 	clihelp "github.com/blevinn/aginctus/internal/cli/help"
-	gatewayops "github.com/blevinn/aginctus/internal/cli/operations/gateway"
 	configops "github.com/blevinn/aginctus/internal/cli/operations/config"
+	gatewayops "github.com/blevinn/aginctus/internal/cli/operations/gateway"
 	clioutput "github.com/blevinn/aginctus/internal/cli/output"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/plugins"
