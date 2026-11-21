@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type gatewayAction func(*cobra.Command, []string, *gatewaycontrol.Store) (any, error)
+type gatewayAction func(*cobra.Command, []string, gatewaycontrol.AssetOperations) (any, error)
 
 type gatewayAssetBuilder struct {
 	plugins gatewaycontrol.Plugins
@@ -66,9 +66,9 @@ func (b gatewayAssetBuilder) addPlugins(gateway *cobra.Command) {
 	add, plugins := b.add, b.plugins
 	pluginGroup := &cobra.Command{Use: "plugin", Short: "Inspect compiled gateway plugin behavior and defaults"}
 	gateway.AddCommand(pluginGroup)
-	add(pluginGroup, "list", cobra.NoArgs, func(*cobra.Command, []string, *gatewaycontrol.Store) (any, error) { return plugins.List(), nil })
+	add(pluginGroup, "list", cobra.NoArgs, func(*cobra.Command, []string, gatewaycontrol.AssetOperations) (any, error) { return plugins.List(), nil })
 	var pluginName string
-	showPlugin := add(pluginGroup, "show [PLUGIN]", selectorArgs(&pluginName), func(_ *cobra.Command, args []string, _ *gatewaycontrol.Store) (any, error) {
+	showPlugin := add(pluginGroup, "show [PLUGIN]", selectorArgs(&pluginName), func(_ *cobra.Command, args []string, _ gatewaycontrol.AssetOperations) (any, error) {
 		name, _ := selected(pluginName, args)
 		plugin, ok := plugins[name]
 		if !ok {
@@ -81,15 +81,15 @@ func (b gatewayAssetBuilder) addPlugins(gateway *cobra.Command) {
 
 func (b gatewayAssetBuilder) addProviders(providers *cobra.Command) {
 	add, plugins := b.add, b.plugins
-	add(providers, "list", cobra.NoArgs, func(_ *cobra.Command, _ []string, s *gatewaycontrol.Store) (any, error) { return s.Providers() })
+	add(providers, "list", cobra.NoArgs, func(_ *cobra.Command, _ []string, s gatewaycontrol.AssetOperations) (any, error) { return s.Providers() })
 	var providerShow string
-	showProvider := add(providers, "show [PROVIDER]", selectorArgs(&providerShow), func(_ *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
+	showProvider := add(providers, "show [PROVIDER]", selectorArgs(&providerShow), func(_ *cobra.Command, args []string, s gatewaycontrol.AssetOperations) (any, error) {
 		name, _ := selected(providerShow, args)
 		return s.FindProvider(name)
 	})
 	showProvider.Flags().StringVar(&providerShow, "provider", "", "Provider instance name")
 	var pluginApply, providerApply, providerConfig, providerFile string
-	applyProvider := add(providers, "apply [PLUGIN]", selectorArgs(&pluginApply), func(_ *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
+	applyProvider := add(providers, "apply [PLUGIN]", selectorArgs(&pluginApply), func(_ *cobra.Command, args []string, s gatewaycontrol.AssetOperations) (any, error) {
 		plugin, _ := selected(pluginApply, args)
 		if _, ok := plugins[plugin]; !ok { return nil, fmt.Errorf("unknown compiled plugin") }
 		var configuration gatewaycontrol.Configuration
@@ -102,7 +102,7 @@ func (b gatewayAssetBuilder) addProviders(providers *cobra.Command) {
 	var providerLogin string
 	var enablePlan bool
 	var consentApp, consentBackground bool
-	login := add(providers, "login [PROVIDER]", cobra.MaximumNArgs(1), func(cmd *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
+	login := add(providers, "login [PROVIDER]", cobra.MaximumNArgs(1), func(cmd *cobra.Command, args []string, s gatewaycontrol.AssetOperations) (any, error) {
 		name, err := selected(providerLogin, args)
 		if err != nil {
 			return nil, err
@@ -127,7 +127,7 @@ func (b gatewayAssetBuilder) addProviders(providers *cobra.Command) {
 	}
 	for _, action := range []string{"status", "logout"} {
 		var providerName string
-		command := add(providers, action+" [PROVIDER]", selectorArgs(&providerName), func(cmd *cobra.Command, args []string, store *gatewaycontrol.Store) (any, error) {
+		command := add(providers, action+" [PROVIDER]", selectorArgs(&providerName), func(cmd *cobra.Command, args []string, store gatewaycontrol.AssetOperations) (any, error) {
 			name, _ := selected(providerName, args)
 			return store.ProviderSession(cmd.Context(), name, action)
 		})
@@ -138,12 +138,12 @@ func (b gatewayAssetBuilder) addProviders(providers *cobra.Command) {
 func (b gatewayAssetBuilder) addModels(models *cobra.Command) {
 	add := b.add
 	var modelProvider string
-	listModels := add(models, "list", cobra.NoArgs, func(cmd *cobra.Command, _ []string, s *gatewaycontrol.Store) (any, error) {
+	listModels := add(models, "list", cobra.NoArgs, func(cmd *cobra.Command, _ []string, s gatewaycontrol.AssetOperations) (any, error) {
 		return s.ProviderModels(cmd.Context(), modelProvider)
 	})
 	listModels.Flags().StringVar(&modelProvider, "provider", "", "Filter by provider (may discover upstream models)")
 	var showModelProvider, modelName string
-	showModel := add(models, "show [PROVIDER] [MODEL]", cobra.MaximumNArgs(2), func(cmd *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
+	showModel := add(models, "show [PROVIDER] [MODEL]", cobra.MaximumNArgs(2), func(cmd *cobra.Command, args []string, s gatewaycontrol.AssetOperations) (any, error) {
 		provider, name, err := modelSelection(showModelProvider, modelName, args)
 		if err != nil {
 			return nil, err
@@ -163,13 +163,13 @@ func (b gatewayAssetBuilder) addMCPs(gateway *cobra.Command) {
 	mcps := &cobra.Command{Use: "mcp", Short: "Declare and inspect local or provider-offered MCP servers"}
 	gateway.AddCommand(mcps)
 	var mcpProvider string
-	listMCP := add(mcps, "list", cobra.NoArgs, func(_ *cobra.Command, _ []string, s *gatewaycontrol.Store) (any, error) {
+	listMCP := add(mcps, "list", cobra.NoArgs, func(_ *cobra.Command, _ []string, s gatewaycontrol.AssetOperations) (any, error) {
 		return s.MCPInventory(mcpProvider)
 	})
 	listMCP.Flags().StringVar(&mcpProvider, "provider", "", "Filter by provider")
 	var showMCP, showMCPProvider string
 	var localMCP bool
-	mcpShow := add(mcps, "show [MCP]", selectorArgs(&showMCP), func(_ *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
+	mcpShow := add(mcps, "show [MCP]", selectorArgs(&showMCP), func(_ *cobra.Command, args []string, s gatewaycontrol.AssetOperations) (any, error) {
 		name, _ := selected(showMCP, args)
 		return s.SelectMCP(name, showMCPProvider, localMCP)
 	})
@@ -179,7 +179,7 @@ func (b gatewayAssetBuilder) addMCPs(gateway *cobra.Command) {
 	mcpShow.MarkFlagsMutuallyExclusive("provider", "local")
 	var applyMCP, mcpConfig, mcpFile string
 	var applyLocal bool
-	mcpApply := add(mcps, "apply [MCP]", selectorArgs(&applyMCP), func(_ *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
+	mcpApply := add(mcps, "apply [MCP]", selectorArgs(&applyMCP), func(_ *cobra.Command, args []string, s gatewaycontrol.AssetOperations) (any, error) {
 		name, _ := selected(applyMCP, args)
 		var raw json.RawMessage
 		if err := b.readConfig(mcpConfig, mcpFile, &raw); err != nil {
@@ -196,11 +196,11 @@ func (b gatewayAssetBuilder) addCatalogs(gateway *cobra.Command) {
 	add := b.add
 	catalogs := &cobra.Command{Use: "catalog", Short: "Select, inherit and rename models and MCP declarations"}
 	gateway.AddCommand(catalogs)
-	add(catalogs, "list", cobra.NoArgs, func(_ *cobra.Command, _ []string, s *gatewaycontrol.Store) (any, error) {
+	add(catalogs, "list", cobra.NoArgs, func(_ *cobra.Command, _ []string, s gatewaycontrol.AssetOperations) (any, error) {
 		return s.CatalogNames()
 	})
 	var showCatalog, filterModel, filterMCP string
-	catalogShow := add(catalogs, "show [CATALOG]", selectorArgs(&showCatalog), func(_ *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
+	catalogShow := add(catalogs, "show [CATALOG]", selectorArgs(&showCatalog), func(_ *cobra.Command, args []string, s gatewaycontrol.AssetOperations) (any, error) {
 		name, _ := selected(showCatalog, args)
 		return s.SelectCatalog(name, filterModel, filterMCP)
 	})
@@ -211,7 +211,7 @@ func (b gatewayAssetBuilder) addCatalogs(gateway *cobra.Command) {
 	catalogShow.Flags().Lookup("mcp").NoOptDefVal = "*"
 	catalogShow.MarkFlagsMutuallyExclusive("model", "mcp")
 	var applyCatalog, catalogConfig, catalogFile string
-	catalogApply := add(catalogs, "apply [CATALOG]", selectorArgs(&applyCatalog), func(_ *cobra.Command, args []string, s *gatewaycontrol.Store) (any, error) {
+	catalogApply := add(catalogs, "apply [CATALOG]", selectorArgs(&applyCatalog), func(_ *cobra.Command, args []string, s gatewaycontrol.AssetOperations) (any, error) {
 		name, _ := selected(applyCatalog, args)
 		var catalog gatewaycontrol.Catalog
 		if err := b.readConfig(catalogConfig, catalogFile, &catalog); err != nil {
