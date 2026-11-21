@@ -44,3 +44,27 @@ without an updated owner decision.
 | `commands_logical_workloads_test.go` | `TestInjectedLogicalWorkloadCLIOutput` | Cross-family logical workload read entrypoint | Retain root Run/output and explicit scope evidence |
 | `commands_logical_workloads_test.go` | `TestLogicalWorkloadCLIFailsClosed` | Cross-family logical workload read entrypoint | Retain root Run/output and explicit scope evidence |
 | `commands_operator_test.go` | `TestCobraOperatorInvalidInputDoesNotReadConfigOrInspectIncus` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
+| `commands_output_test.go` | `TestPluginInventoryExplicitStructuredOutput` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_output_test.go` | `TestPluginInventoryLegacyDefaultAndExplicitHuman` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_output_test.go` | `TestExplicitUnsupportedOutputFailsBeforeConfig` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_plugin_show_test.go` | `TestPluginShowClientBackedOutput` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_plugin_show_test.go` | `TestPluginShowMissingAndUnsupportedOutput` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_root_test.go` | `TestCobraRootGlobalOptionsPreserveAliasesAndOrder` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_root_test.go` | `TestCobraRootHelpAndErrorsDoNotLoadConfiguration` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_root_test.go` | `TestCobraRootNormalizesLegacyWithGlobalFlags` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_scoped_workload_output_test.go` | `TestScopedWorkloadTypedOutputAndLegacyDefault` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_scoped_workload_output_test.go` | `TestScopedWorkloadTypedOutputFailsClosed` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_syntax_matrix_test.go` | `TestCobraSyntaxBeforeConfigurationMatrix` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_syntax_matrix_test.go` | `TestCobraHelpOfflineNestedMatrix` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_testenv_test.go` | `TestCobraTestenvSyntaxDoesNotCallConfig` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_testenv_test.go` | `TestPublicTestenvDoesNotRegisterPrivilegedWorkerLeaves` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_workload_aliases_test.go` | `TestWorkloadClassAliasesFilterVerifiedResources` | Cross-family class-filtered workload entrypoint | Retain root Run/output and class-mismatch evidence |
+| `commands_workload_test.go` | `TestCobraWorkloadLegacyRewrite` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
+| `commands_workload_test.go` | `TestCobraWorkloadInvalidSyntaxHasNoConfigAccess` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
+| `credential_storage_test.go` | `TestGatewayCredentialStorageEnsure` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `credential_storage_test.go` | `TestCredentialStorageEnsureValidatesProjectBeforeMutation` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `doctor_https_test.go` | `TestDoctorDoesNotFixPreexistingUnsafeHTTPSListener` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `doctor_https_test.go` | `TestDoctorAcceptsConfiguredLoopbackWithoutMutation` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `egress_dhcp_render_test.go` | `TestApplyRenderEgressDHCP` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `gateway_credential_attach_test.go` | `TestGatewayCredentialAttachmentCommand` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `gateway_credential_audit_test.go` | `TestGatewayCredentialStorageAuditCLI` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
