@@ -22,10 +22,11 @@ import (
 // parser; all command families are registered here and reuse shared services.
 func runBasicCobra(
 	ctx context.Context, args []string, stdout, stderr io.Writer,
-	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
+	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry, logicalReader client.LogicalWorkloadReader,
 ) int {
 	var options config.Options
 	var outputFormat string
+	var selectedEnvironmentID, selectedIncusProject string
 	root := &cobra.Command{
 		Use: "aginctus", SilenceUsage: true, SilenceErrors: true,
 		Long: "Aginctus uses explicit commands and scopes. Inspection, plans, rendering and supported dry-runs do not authorize writes. Apply/remove/start/stop, provisioning and repair can mutate resources; --confirm-* guards apply only to the commands that declare them.",
@@ -122,6 +123,8 @@ func runBasicCobra(
 	root.PersistentFlags().Var(overrides, "configure", "Alias for --config")
 	root.PersistentFlags().StringVar(&options.ConfigurationFile, "configuration-file", "", "Explicit JSON configuration file")
 	root.PersistentFlags().StringVarP(&outputFormat, "output", "o", "", "Output format: table, wide, json, yaml, name (supported commands only)")
+	root.PersistentFlags().StringVar(&selectedEnvironmentID, "environment", "", "Explicit immutable environment UUID for verified workload reads")
+	root.PersistentFlags().StringVar(&selectedIncusProject, "incus-project", "", "Explicit authenticated Incus project for environment workload reads")
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		if root.PersistentFlags().Changed("configuration-file") && options.ConfigurationFile == "" {
 			return fmt.Errorf("--configuration-file requires a path")
@@ -134,11 +137,17 @@ func runBasicCobra(
 				return err
 			}
 			pluginInventory := cmd.Parent() == pluginCmd && (cmd.Name() == "inventory" || cmd.Name() == "show")
+			logicalWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workloads" &&
+				(cmd.Name() == "list" || cmd.Name() == "show" || cmd.Name() == "status")
 			verifiedScopedWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workload" &&
 				(cmd.Name() == "ls" || cmd.Name() == "status") && cmd.Flags().Changed("project")
-			if !pluginInventory && !verifiedScopedWorkload {
+			if !pluginInventory && !verifiedScopedWorkload && !logicalWorkload {
 				return fmt.Errorf("--output is not yet supported by %s", cmd.CommandPath())
 			}
+		}
+		logicalWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workloads"
+		if (root.PersistentFlags().Changed("environment") || root.PersistentFlags().Changed("incus-project")) && !logicalWorkload {
+			return fmt.Errorf("environment and Incus project selectors require a verified workloads read")
 		}
 		return nil
 	}
@@ -211,6 +220,7 @@ func runBasicCobra(
 	addNetworkCommands(root, stdout, stderr, load, &status)
 	addHerdrCommands(root, stdout, stderr, load, &status)
 	addWorkloadCommands(root, stdout, stderr, load, &status)
+	registerLogicalWorkloadReads(root, stdout, logicalReader, &selectedIncusProject, &selectedEnvironmentID, &outputFormat)
 	gatewayCmd := addGatewayCoreCommands(root, stdout, stderr, load, &status)
 	addGatewayRegistryCommands(gatewayCmd, stdout, stderr, load, &status, options)
 	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status)
@@ -247,7 +257,7 @@ func normalizeLegacyCLIArgs(args []string) []string {
 	idx := 0
 	for idx < len(args) {
 		switch {
-		case args[idx] == "--config", args[idx] == "--configure", args[idx] == "--configuration-file", args[idx] == "--output", args[idx] == "-o":
+		case args[idx] == "--config", args[idx] == "--configure", args[idx] == "--configuration-file", args[idx] == "--output", args[idx] == "-o", args[idx] == "--environment", args[idx] == "--incus-project":
 			if idx+1 >= len(args) {
 				return args
 			}
@@ -256,6 +266,8 @@ func normalizeLegacyCLIArgs(args []string) []string {
 			strings.HasPrefix(args[idx], "--configure="),
 			strings.HasPrefix(args[idx], "--configuration-file="),
 			strings.HasPrefix(args[idx], "--output="),
+			strings.HasPrefix(args[idx], "--environment="),
+			strings.HasPrefix(args[idx], "--incus-project="),
 			(strings.HasPrefix(args[idx], "-o") && len(args[idx]) > 2):
 			idx++
 		default:
