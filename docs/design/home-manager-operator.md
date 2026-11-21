@@ -1,6 +1,18 @@
 # Home Manager operator / NixOS host authority
 
-Status: **accepted design target for v0.2; implementation is incremental**.
+Status: **Historical operator/host split design; authoritative environment
+lifecycle direction is [ADR 0006](../adr/0006-environment-incus-authority.md).**
+The non-mutating HM module, host-owned firewall limits and rootless-access
+restrictions below remain applicable, but proposals to select a lifecycle
+controller by system/user configuration origin are superseded. Current
+`programs.aginctus.environmentCandidate` output is a nonsecret data
+producer, not a controller or privilege grant; see
+[environment candidate sources](environment-candidate-sources.md).
+One Incus project may contain multiple environments, each with one verified
+server/project binding and one resource lifecycle owner. Independent Incus
+authorization, accepted-revision CAS and writer fences remain required.
+
+This is an implementation-incremental v0.2 design, not live-pilot signoff.
 Tracking: [#426](https://github.com/blevinn/aginctus/issues/426),
 [#434](https://github.com/blevinn/aginctus/issues/434).
 This is not a v0.1 host migration or authorization to modify a pilot.
@@ -61,9 +73,12 @@ closure, including when a nested object supplies a `null` value.
 
 Do not conflate `/var/lib/aginctus/state` (root-owned NixOS reconciliation)
 with `~/.local/state/aginctus` (operator-owned). A prior pilot mismatch caused
-a 401 (#122). A state handoff is a distinct, authorized, backed-up transaction
-with exactly one active owner; never auto-`chown`, copy, rotate, or initialize
-secrets when switching Home Manager generations.
+a 401 (#122). Moving a gateway credential owner remains a distinct, authorized, backed-up
+transaction; never auto-`chown`, copy, rotate, or initialize secrets when
+switching Home Manager generations. **Credential locations do not define the
+authority of an environment's accepted state**: an Incus-authorized caller
+must satisfy the selected environment's independent project/revision and
+single-writer checks.
 
 ## User service semantics
 
@@ -72,7 +87,9 @@ An optional user unit must independently check Incus reachability,
 authorization and selected project; bound waits and failures. Account for
 login-only managers versus lingering, restart behavior during Home Manager
 activation, explicit destructive-operation authorization, and competing system
-and user reconcilers. Default to no boot/login reconciliation.
+and user-manager processes. Duplicate controllers for the **same environment**
+require project-scoped write-time fencing, regardless of configuration origin.
+Default to no boot/login reconciliation.
 
 ## Alternatives rejected
 
@@ -96,9 +113,10 @@ and user reconcilers. Default to no boot/login reconciliation.
 3. Add read-only Incus capability preflight (#437), then *optional* image
    updates and scoped reconciliation (#438/#439) after #198/#200 supplies an
    unambiguous project scope.
-4. Preserve the authoritative NixOS host module (#440), guard against
-   competing system/user owners and version skew (#441), and perform any
-   reversible ownership cutover separately (#442).
+4. Preserve the authoritative NixOS host module (#440); keep version and
+   credential-location diagnostics separate from authorization. Reject
+   competing environment writers through project-scoped fencing (#441/#704),
+   and perform any actual credential/resource migration separately (#442/#202).
 5. Validate in disposable VMs (including Btrfs/bridge policy and forbidden
    operations), not on the pilot host (#443), and document the supported
    combined deployment (#444).

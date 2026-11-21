@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/binary"
+	"strings"
 	"fmt"
 	"net/netip"
 	"reflect"
@@ -19,7 +20,7 @@ var nativeGatewayDigest = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]*@sha2
 // credentials, image identity/aliases, volume state, and mutation-time races.
 func (p NativeGatewayTopology) ValidateExecutionShape() error {
 	if p.Deployment == "" || p.Project == "" || p.Project == "default" ||
-		p.ManagementNetwork == "" || p.DatabaseVolume != "gateway-postgres" ||
+		p.ManagementNetwork == "" || !gatewayTopologyVolumeMatches(p) ||
 		p.EgressNetwork == p.ManagementNetwork {
 		return fmt.Errorf("native gateway requires an explicit nondefault project and managed database volume")
 	}
@@ -65,6 +66,15 @@ func (p NativeGatewayTopology) ValidateExecutionShape() error {
 		return fmt.Errorf("native gateway application attachment or secret-reference contract mismatch")
 	}
 	return nil
+}
+
+// gatewayTopologyVolumeMatches permits historical fixed names only for
+// unbound legacy topology. Bound environments must have the exact UUID-derived
+// database name; arbitrary volumes and partial owner identifiers fail closed.
+func gatewayTopologyVolumeMatches(p NativeGatewayTopology) bool {
+	if p.EnvironmentID=="" {return p.DatabaseVolume=="gateway-postgres"}
+	return gatewayEnvironmentIDPattern.MatchString(p.EnvironmentID) &&
+		p.DatabaseVolume=="ag-"+strings.ReplaceAll(p.EnvironmentID,"-","")+"-pgdata"
 }
 
 func lastIPv4Address(prefix netip.Prefix) netip.Addr {
