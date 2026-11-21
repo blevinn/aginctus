@@ -1,4 +1,4 @@
-package gateway
+package firewall
 
 import (
 	"errors"
@@ -8,6 +8,10 @@ import (
 )
 
 func TestInterpretFirewalldUnassignedInterface(t *testing.T) {
+	if got, err := interpretFirewalldResult([]string{"--get-zones"}, "normal output", nil); err != nil || got != "normal output" {
+		t.Fatalf("successful firewalld query changed: %q, %v", got, err)
+	}
+
 	err := exec.Command("sh", "-c", "exit 2").Run()
 	if err == nil {
 		t.Fatal("expected exit status")
