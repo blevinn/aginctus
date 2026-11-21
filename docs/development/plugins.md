@@ -178,7 +178,7 @@ They do not deploy guests, evaluate runtime probes or import concrete products.
 
 ## Build-time selection and explicit composition
 
-`internal/appplugins/plugins.json` is the application's build manifest, separate
+`internal/plugins/composition/plugins.json` is the application's build manifest, separate
 from runtime configuration. `aginctus-plugin-gen` emits checked-in Go source at
 that composition point. Each selection names an `import_path` and exported
 parameterless `constructor` returning `plugin.Plugin` or an implementing concrete
@@ -207,9 +207,9 @@ Dependency declarations do not silently select missing packages.
 Generate and verify from the repository root:
 
 ```sh
-nix develop -c go generate ./internal/appplugins
-nix develop -c go run ./cmd/aginctus-plugin-gen -manifest internal/appplugins/plugins.json -out internal/appplugins/generated.go -check
-nix develop -c go test ./internal/plugins/build/... ./internal/appplugins/... ./cmd/aginctus-plugin-gen/... ./internal/plugins/...
+nix develop -c go generate ./internal/plugins/composition
+nix develop -c go run ./cmd/aginctus-plugin-gen -manifest internal/plugins/composition/plugins.json -out internal/plugins/composition/generated.go -check
+nix develop -c go test ./internal/plugins/build/... ./internal/plugins/composition/... ./cmd/aginctus-plugin-gen/... ./internal/plugins/...
 ```
 
 Generation validates source-safe selections and rejects unknown fields, repeated
