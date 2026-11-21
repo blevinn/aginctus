@@ -24,17 +24,17 @@ type AcceptedStateStatus struct {
 // It is read-only; an unselected workload is NOT permission to delete it.
 type ConfiguredAcceptedDiff struct {
 	TypeMeta
-	Environment       Environment               `json:"environment"`
-	FromLayer         string                    `json:"fromLayer"`
-	ToLayer           string                    `json:"toLayer"`
-	HasAccepted       bool                      `json:"hasAccepted"`
-	Revision          *AcceptedRevisionIdentity `json:"revision,omitempty"`
-	ProposedDigest    string                    `json:"proposedDigest"`
-	Changed           bool                      `json:"changed"`
-	DisplayNameChanged bool                     `json:"displayNameChanged"`
-	NewlySelected     []string                  `json:"newlySelected"`
-	Unselected        []string                  `json:"unselected"`
-	Modified          []AcceptedWorkloadChange  `json:"modified"`
+	Environment        Environment               `json:"environment"`
+	FromLayer          string                    `json:"fromLayer"`
+	ToLayer            string                    `json:"toLayer"`
+	HasAccepted        bool                      `json:"hasAccepted"`
+	Revision           *AcceptedRevisionIdentity `json:"revision,omitempty"`
+	ProposedDigest     string                    `json:"proposedDigest"`
+	Changed            bool                      `json:"changed"`
+	DisplayNameChanged bool                      `json:"displayNameChanged"`
+	NewlySelected      []string                  `json:"newlySelected"`
+	Unselected         []string                  `json:"unselected"`
+	Modified           []AcceptedWorkloadChange  `json:"modified"`
 }
 
 // AcceptedWorkloadChange contains field NAMES, never old/new field values.
