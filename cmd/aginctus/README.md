@@ -7,10 +7,12 @@ The primary Aginctus operator CLI for inspecting and managing Incus-backed agent
 ```sh
 go run ./cmd/aginctus help
 go run ./cmd/aginctus help workload
+go run ./cmd/aginctus help --examples environment
+go run ./cmd/aginctus help --full gateway
 go run ./cmd/aginctus <command> --help
 ```
 
-High-level command families include `apply`, `remove`, `status`, `doctor`, `config`, `network`, `workload`, `herdr`, `gateway`, and `images`. Subcommands and flags vary by family; consult help before using a mutating action.
+High-level command families include `apply`, `remove`, `status`, `doctor`, `config`, `network`, `workload`, `herdr`, `gateway`, and `images`. Basic help is intentionally compact and lists immediate subcommands. Use `help --full` for exhaustive inherited and local flags; `help --examples` shows reviewed examples when available. Subcommands and flags vary by family; consult full help before using a mutating action.
 
 ```sh
 go run ./cmd/aginctus doctor
