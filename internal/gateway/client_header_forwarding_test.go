@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
-	gatewayassets "github.com/blevinn/aginctus/scripts/gateway"
+	gatewayassets "github.com/blevinn/aginctus/plugins/litellm/runtime"
 	composeproject "github.com/lxc/incus-compose/project"
 	"sigs.k8s.io/yaml"
 )
