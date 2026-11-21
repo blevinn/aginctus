@@ -185,18 +185,18 @@ func TestHelpEgressPreviewAndConfirmationSyntax(t *testing.T) {
 		var out, errOut bytes.Buffer
 		code := runBasicCobraWithGatewayCapabilities(
 			context.Background(), args, &out, &errOut, nil, loader, nil, nil, nil, strings.NewReader(""), query)
-		return code, out.String(), errOut
+		return code, out.String(), errOut.String()
 	}
 	for _, command := range []string{"egress audit", "egress dhcp plan --ranges=10.20.30.100-10.20.30.200", "egress reconcile --dry-run"} {
 		called = false
-		code, out, errOut := runWithQuery(append([]string{"gateway"}, strings.Fields(command)...), &fakeConfigLoader{cfg: cfg})
+		code, _, errOut := runWithQuery(append([]string{"gateway"}, strings.Fields(command)...), &fakeConfigLoader{cfg: cfg})
 		if code != 1 || !called || !strings.Contains(errOut, "hermetic inspection stop") {
 			t.Fatalf("%s: code=%d inspected=%v stderr=%s", command, code, called, errOut)
 		}
 	}
 	for _, command := range []string{"egress reconcile", "egress reconcile --force", "egress dhcp apply --ranges=10.20.30.100-10.20.30.200", "apply --dry-run"} {
 		called = false
-		code, out, errOut := runWithQuery(append([]string{"gateway"}, strings.Fields(command)...), &fakeConfigLoader{})
+		code, _, errOut := runWithQuery(append([]string{"gateway"}, strings.Fields(command)...), &fakeConfigLoader{})
 		if code != 2 || called || !strings.Contains(errOut, "Usage:") {
 			t.Fatalf("%s: code=%d inspected=%v stderr=%s", command, code, called, errOut)
 		}
