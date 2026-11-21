@@ -58,7 +58,6 @@ func runNetworkFirewallPolicy(ctx context.Context, stdout, stderr io.Writer, cfg
 
 // Root bindings supply the existing testable host command and authority seams.
 var firewallEffectiveUID = os.Geteuid
-var discoverFirewallPolicy = deriveFirewallPolicy
 var firewallCommand = func(ctx context.Context, input string, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	if input != "" {
@@ -72,12 +71,19 @@ func firewallActions() networkops.FirewallActions {
 	return networkops.FirewallActions{
 		EffectiveUID: firewallEffectiveUID,
 		Command:      firewallCommand,
-		Discover:     discoverFirewallPolicy,
+		Discover:     deriveFirewallPolicy,
 	}
 }
 
 func runNetworkFirewallReconcile(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config) int {
-	return networkops.Reconcile(ctx, stdout, stderr, cfg, firewallActions())
+	return runNetworkFirewallReconcileWithActions(ctx, stdout, stderr, cfg, firewallActions())
+}
+
+// runNetworkFirewallReconcileWithActions uses an invocation-specific authority
+// bundle. Privilege checks remain inside the host firewall domain and cannot
+// be bypassed merely by substituting a command runner in a test.
+func runNetworkFirewallReconcileWithActions(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config, actions networkops.FirewallActions) int {
+	return networkops.Reconcile(ctx, stdout, stderr, cfg, actions)
 }
 
 func selectFirewallBackend(ruleset, requested string) (string, error) {

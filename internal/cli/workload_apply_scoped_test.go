@@ -174,7 +174,7 @@ func TestScopedWorkloadApplyRenderRequiresPresentOwnedInstance(t *testing.T) {
 }
 
 func TestScopedWorkloadApplyRenderHelpOffline(t *testing.T) {
-	for _, args := range [][]string{{"help"}, {"help", "workload"}, {"workload", "--help"}} {
+	for _, args := range [][]string{{"help", "--full"}, {"help", "--full", "workload"}, {"help", "--full", "workload", "apply"}} {
 		var out, errOut bytes.Buffer
 		code := Run(context.Background(), args, &out, &errOut, nil, nil)
 		if code != 0 || errOut.Len() != 0 ||

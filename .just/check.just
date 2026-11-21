@@ -92,7 +92,7 @@ markdown:
 # Never executes any command copied from a document.
 [no-cd]
 docs-examples:
-    go run ./cmd/aginctus help | python3 tools/docs/check_docs_examples.py
+    go run ./cmd/aginctus help --full | python3 tools/docs/check_docs_examples.py
 
 
 # Standard concise suite reporting. The @ prefix suppresses Just's recipe

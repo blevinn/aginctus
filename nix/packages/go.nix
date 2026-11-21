@@ -52,6 +52,15 @@ in
     inherit vendorHash;
     subPackages = [ "./cmd/aginctus-state" ];
   };
+  # Test-only project-volume fixture. It accepts only same-UID local candidate
+  # revisions and cannot authenticate a project or invoke the Incus daemon.
+  state-project-fixture = pkgs.buildGoModule {
+    pname = "aginctus-project-state-fixture";
+    version = releaseVersion;
+    src = sourceRoot;
+    inherit vendorHash;
+    subPackages = [ "./cmd/aginctus-project-state-fixture" ];
+  };
   state-local = pkgs.buildGoModule {
     pname = "aginctus-state-local";
     version = releaseVersion;

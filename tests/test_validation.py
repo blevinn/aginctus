@@ -33,7 +33,7 @@ class ValidationDispatchTests(unittest.TestCase):
             "shell opencode-live-adapter-test.sh",
             "git ls-files -z -- *.sh",
             "python3 tools/docs/check_markdown_links.py",
-            "go run ./cmd/aginctus help",
+            "go run ./cmd/aginctus help --full",
             "python3 tools/docs/check_docs_examples.py",
             "nix --quiet flake check --no-update-lock-file",
         ]
@@ -141,7 +141,7 @@ if name == "git":
                     seen = log.read_text().splitlines()
                     # The docs checker is a pipe: both commands must run,
                     # but the OS can schedule either child to log first.
-                    producer = "go run ./cmd/aginctus help"
+                    producer = "go run ./cmd/aginctus help --full"
                     consumer = "python3 tools/docs/check_docs_examples.py"
                     if producer in seen or consumer in seen:
                         first = min(

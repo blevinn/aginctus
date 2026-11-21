@@ -20,7 +20,8 @@ type Options struct {
 	LogicalWorkloadReader LogicalWorkloadReader
 	EnvironmentReader     EnvironmentReader
 	ConfigSelectionReader ConfigSelectionReader
-	SystemReader SystemReader
+	SystemReader          SystemReader
+	AcceptedStateReader   AcceptedStateReader
 	DefaultProject        string
 	DefaultEnvironmentID  string
 }
@@ -28,21 +29,23 @@ type Options struct {
 // Client is safe for concurrent read operations when its injected inventory
 // follows the immutable snapshot contract.
 type Client struct {
-	Plugins      *PluginsService
-	Workloads    *WorkloadsService
-	Environments *EnvironmentsService
-	Config *ConfigService
-	System *SystemService
+	Plugins        *PluginsService
+	Workloads      *WorkloadsService
+	Environments   *EnvironmentsService
+	Config         *ConfigService
+	System         *SystemService
+	AcceptedStates *AcceptedStatesService
 }
 
 // New constructs a client without loading ambient configuration or touching
 // Incus. A nil plugin inventory represents an empty compiled selection.
 func New(options Options) *Client {
 	return &Client{
-		Plugins:      &PluginsService{inventory: options.PluginInventory},
-		Workloads:    &WorkloadsService{reader: options.ScopedWorkloadReader, logical: options.LogicalWorkloadReader},
-		Environments: &EnvironmentsService{reader: options.EnvironmentReader, defaultProject: options.DefaultProject, defaultID: options.DefaultEnvironmentID},
-		Config: &ConfigService{reader: options.ConfigSelectionReader},
-		System: &SystemService{reader: options.SystemReader},
+		Plugins:        &PluginsService{inventory: options.PluginInventory},
+		Workloads:      &WorkloadsService{reader: options.ScopedWorkloadReader, logical: options.LogicalWorkloadReader},
+		Environments:   &EnvironmentsService{reader: options.EnvironmentReader, defaultProject: options.DefaultProject, defaultID: options.DefaultEnvironmentID},
+		Config:         &ConfigService{reader: options.ConfigSelectionReader},
+		System:         &SystemService{reader: options.SystemReader},
+		AcceptedStates: &AcceptedStatesService{reader: options.AcceptedStateReader},
 	}
 }

@@ -8,15 +8,16 @@ import (
 	"testing"
 
 	"github.com/blevinn/aginctus/internal/config"
+	networkops "github.com/blevinn/aginctus/internal/cli/operations/network"
 	"github.com/blevinn/aginctus/internal/host/net/firewall"
 )
 
 // Use the shared command/privilege fixture, but pin the native backend
 // exactly as the NixOS systemd service does. Automatic native detection is
 // deliberately disabled to avoid mutating an incidental nftables table.
-func nativeNftReconcileFixture(t *testing.T) *config.Config {
+func nativeNftReconcileFixture(t *testing.T) (*config.Config, *networkops.FirewallActions) {
 	t.Helper()
-	firewallReconcileFixture(t)
+	_, actions := firewallReconcileFixture(t)
 	loader := config.NewLoader()
 	loader.SystemPath = ""
 	loader.UserPath = ""
@@ -27,13 +28,13 @@ func nativeNftReconcileFixture(t *testing.T) *config.Config {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cfg
+	return cfg, actions
 }
 
 func TestNativeNftReconcileScopedToOwnedChildChain(t *testing.T) {
-	cfg := nativeNftReconcileFixture(t)
+	cfg, actions := nativeNftReconcileFixture(t)
 	var txn string
-	firewallCommand = func(_ context.Context, input, name string, args ...string) (string, error) {
+	actions.Command = func(_ context.Context, input, name string, args ...string) (string, error) {
 		call := name + " " + strings.Join(args, " ")
 		switch call {
 		case "nft -a list ruleset":
@@ -52,11 +53,11 @@ func TestNativeNftReconcileScopedToOwnedChildChain(t *testing.T) {
 			return "", nil
 		}
 	}
-	discoverFirewallPolicy = func(context.Context, *config.Config) (firewall.Policy, error) {
+	actions.Discover = func(context.Context, *config.Config) (firewall.Policy, error) {
 		return firewall.Policy{Interface: "dynamic-net", Address: "10.40.50.1", Subnet: "10.40.50.0/24"}, nil
 	}
 	var out, errs bytes.Buffer
-	if got := runNetworkFirewallReconcile(context.Background(), &out, &errs, cfg); got != 0 {
+	if got := runNetworkFirewallReconcileWithActions(context.Background(), &out, &errs, cfg, *actions); got != 0 {
 		t.Fatalf("exit=%d stderr=%q", got, errs.String())
 	}
 	for _, want := range []string{"flush chain inet nixos-fw aginctus_dns_input", "iifname \"dynamic-net\"", "udp dport 53", "tcp dport 53", "udp dport 67"} {
@@ -67,9 +68,9 @@ func TestNativeNftReconcileScopedToOwnedChildChain(t *testing.T) {
 }
 
 func TestNativeNftDeletedBridgeClearsOnlyOwnedPermissions(t *testing.T) {
-	cfg := nativeNftReconcileFixture(t)
+	cfg, actions := nativeNftReconcileFixture(t)
 	var txn string
-	firewallCommand = func(_ context.Context, input, name string, args ...string) (string, error) {
+	actions.Command = func(_ context.Context, input, name string, args ...string) (string, error) {
 		switch name + " " + strings.Join(args, " ") {
 		case "nft -a list ruleset":
 			return "table inet nixos-fw { }", nil
@@ -87,11 +88,11 @@ func TestNativeNftDeletedBridgeClearsOnlyOwnedPermissions(t *testing.T) {
 			return "", nil
 		}
 	}
-	discoverFirewallPolicy = func(context.Context, *config.Config) (firewall.Policy, error) {
+	actions.Discover = func(context.Context, *config.Config) (firewall.Policy, error) {
 		return firewall.Policy{}, errors.New("foreign network")
 	}
 	var out, errs bytes.Buffer
-	if got := runNetworkFirewallReconcile(context.Background(), &out, &errs, cfg); got != 1 {
+	if got := runNetworkFirewallReconcileWithActions(context.Background(), &out, &errs, cfg, *actions); got != 1 {
 		t.Fatalf("exit=%d", got)
 	}
 	if txn != "flush chain inet nixos-fw aginctus_dns_input\n" {
@@ -100,8 +101,8 @@ func TestNativeNftDeletedBridgeClearsOnlyOwnedPermissions(t *testing.T) {
 }
 
 func TestNativeNftMissingInputHookNeverMutates(t *testing.T) {
-	cfg := nativeNftReconcileFixture(t)
-	firewallCommand = func(_ context.Context, _ string, name string, args ...string) (string, error) {
+	cfg, actions := nativeNftReconcileFixture(t)
+	actions.Command = func(_ context.Context, _ string, name string, args ...string) (string, error) {
 		switch name + " " + strings.Join(args, " ") {
 		case "nft -a list ruleset":
 			return "table inet nixos-fw { }", nil
@@ -115,7 +116,7 @@ func TestNativeNftMissingInputHookNeverMutates(t *testing.T) {
 		}
 	}
 	var out, errs bytes.Buffer
-	if got := runNetworkFirewallReconcile(context.Background(), &out, &errs, cfg); got != 1 {
+	if got := runNetworkFirewallReconcileWithActions(context.Background(), &out, &errs, cfg, *actions); got != 1 {
 		t.Fatalf("exit=%d", got)
 	}
 }
