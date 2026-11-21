@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,6 +24,16 @@ import (
 func runBasicCobra(
 	ctx context.Context, args []string, stdout, stderr io.Writer,
 	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry, logicalReader client.LogicalWorkloadReader,
+) int {
+	return runBasicCobraWithGatewayInput(ctx, args, stdout, stderr, incusClient, loader, registry, logicalReader, os.Stdin)
+}
+
+// runBasicCobraWithGatewayInput binds the verifier's stdin to one fresh Cobra
+// tree. Callers never need to replace a package-level reader.
+func runBasicCobraWithGatewayInput(
+	ctx context.Context, args []string, stdout, stderr io.Writer,
+	incusClient IncusClient, loader ConfigLoader, registry *plugins.Registry,
+	logicalReader client.LogicalWorkloadReader, responsesInput io.Reader,
 ) int {
 	var options config.Options
 	var outputFormat string
@@ -223,7 +234,7 @@ func runBasicCobra(
 	registerLogicalWorkloadReads(root, stdout, logicalReader, &selectedIncusProject, &selectedEnvironmentID, &outputFormat)
 	gatewayCmd := addGatewayCoreCommands(root, stdout, stderr, load, &status)
 	addGatewayRegistryCommands(gatewayCmd, stdout, stderr, load, &status, options)
-	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status)
+	addGatewayEgressCommands(gatewayCmd, stdout, stderr, load, &status, responsesInput)
 	addOperatorCommands(root, stdout, stderr, load, &status, &options)
 	addTestenvCommands(root, stdout, stderr, &status, &options)
 	addImageCommands(root, stdout, stderr, load, &status)
