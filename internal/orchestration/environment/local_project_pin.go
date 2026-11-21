@@ -220,7 +220,9 @@ func (s *LocalProjectStateStore) ReadLocalUnverifiedStart(ctx context.Context,en
 		return LocalUnverifiedEnvironmentAttempt{},errors.New("foreign or invalid local operation record")
 	}
 	if err:=checkPrivateLocalDir(filepath.Join(path,"revisions"));err!=nil{return LocalUnverifiedEnvironmentAttempt{},err}
-	revision,candidate,err:=s.readRevision(path,record.RevisionID)
+	// The referenced revision must actually have been published, not merely
+	// left as a hash-named orphan by an interrupted acceptance.
+	revision,candidate,err:=s.ReadLocalRevision(ctx,enrolled,record.RevisionID)
 	if err!=nil{return LocalUnverifiedEnvironmentAttempt{},err}
 	if revision.EnvironmentID!=enrolled.ID || revision.ServerID!=enrolled.Binding.ServerID ||
 		revision.Project!=enrolled.Binding.Project || revision.Generation!=record.Generation ||
