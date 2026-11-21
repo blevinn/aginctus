@@ -48,10 +48,8 @@ func TestOperatorProjectPlanConservativeReadOnly(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			before := inspectOperatorIncus
-			t.Cleanup(func() { inspectOperatorIncus = before })
 			calls := 0
-			inspectOperatorIncus = func(_ context.Context, args ...string) ([]byte, error) {
+			query := func(_ context.Context, args ...string) ([]byte, error) {
 				calls++
 				if strings.Join(args, " ") != "project list --format json" {
 					t.Fatalf("unexpected incus command: %q", args)
@@ -59,7 +57,7 @@ func TestOperatorProjectPlanConservativeReadOnly(t *testing.T) {
 				return tc.data, tc.err
 			}
 			var out, errOut bytes.Buffer
-			code := runOperatorProjectPlan(context.Background(), []string{"--project", "aginctus"}, &out, &errOut)
+			code := runOperatorProjectPlanWithQuery(context.Background(), []string{"--project", "aginctus"}, &out, &errOut, query)
 			if code != tc.code || calls != 1 {
 				t.Fatalf("code=%d want=%d calls=%d stderr=%q", code, tc.code, calls, errOut.String())
 			}
@@ -101,15 +99,13 @@ func TestOperatorProjectPlanCannotLoadHostConfiguration(t *testing.T) {
 }
 
 func TestOperatorProjectPlanRejectsInvalidNameBeforeIncus(t *testing.T) {
-	before := inspectOperatorIncus
-	t.Cleanup(func() { inspectOperatorIncus = before })
-	inspectOperatorIncus = func(_ context.Context, args ...string) ([]byte, error) {
+	query := func(_ context.Context, args ...string) ([]byte, error) {
 		t.Fatalf("Incus called for invalid explicit project: %q", args)
 		return nil, nil
 	}
 	for _, args := range [][]string{{"--project=default"}, {"--project", "../other"}, nil} {
 		var out, errOut bytes.Buffer
-		if code := runOperatorProjectPlan(context.Background(), args, &out, &errOut); code != 2 || out.Len() != 0 {
+		if code := runOperatorProjectPlanWithQuery(context.Background(), args, &out, &errOut, query); code != 2 || out.Len() != 0 {
 			t.Errorf("args=%q code=%d out=%q err=%q", args, code, out.String(), errOut.String())
 		}
 	}
