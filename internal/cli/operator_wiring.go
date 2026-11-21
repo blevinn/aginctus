@@ -125,7 +125,16 @@ func assessObservedProjectList(scope incusscope.ProjectScope, raw []byte) (strin
 }
 
 func runOperatorProjectPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	return operatorops.RunProjectPlan(ctx, args, stdout, stderr, inspectOperatorIncus, maxProjectListBytes)
+	return runOperatorProjectPlanWithQuery(ctx, args, stdout, stderr, inspectOperatorIncus)
+}
+
+// Keep the public operator call unchanged while allowing independent,
+// per-invocation project-list readers in negative-security tests. The
+// operation owner continues to validate explicit scope and output bounds.
+func runOperatorProjectPlanWithQuery(ctx context.Context, args []string, stdout, stderr io.Writer,
+	query func(context.Context, ...string) ([]byte, error),
+) int {
+	return operatorops.RunProjectPlan(ctx, args, stdout, stderr, query, maxProjectListBytes)
 }
 
 const operatorSystemStateRoot = operatorops.SystemStateRoot
