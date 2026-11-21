@@ -27,8 +27,12 @@
     {
       nixosModules = {
         aginctus = import ./nix/modules/nixos-module.nix { inherit self; };
-        aginctusTestenvRecovery = import ./internal/testing/testenv/nix/recovery-worker.nix { inherit self; };
-        aginctusTestenvWorker = import ./internal/testing/testenv/nix/installed-worker.nix { inherit self; };
+        aginctusTestenvRecovery = import ./internal/testing/testenv/nix/recovery-worker.nix {
+          inherit self;
+        };
+        aginctusTestenvWorker = import ./internal/testing/testenv/nix/installed-worker.nix {
+          inherit self;
+        };
         default = self.nixosModules.aginctus;
       };
 
@@ -247,7 +251,12 @@
             '';
 
           oauth-gateway = import ./nix/workloads/oauth-gateway.nix {
-            inherit pkgs nixpkgs system oauthGatewayDaemon;
+            inherit
+              pkgs
+              nixpkgs
+              system
+              oauthGatewayDaemon
+              ;
           };
 
           herdr-client = herdrClientImage.image;
