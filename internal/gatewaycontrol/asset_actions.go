@@ -82,3 +82,10 @@ func (s *Store) ApplyCatalogDeclaration(name string, catalog Catalog) (Catalog, 
 	if err := s.ApplyCatalog(name, catalog); err != nil { return Catalog{}, err }
 	return catalog, nil
 }
+
+// Find returns compiled plugin metadata without invoking plugin capabilities.
+func (plugins Plugins) Find(name string) (Plugin, error) {
+	plugin, ok := plugins[name]
+	if !ok { return Plugin{}, fmt.Errorf("unknown compiled plugin") }
+	return plugin, nil
+}
