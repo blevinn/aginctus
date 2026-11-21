@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -33,13 +34,16 @@ const instanceNoTimeout = -1
 // InstanceLifecycleIntent describes the required running state of one
 // Aginctus-owned instance. It never creates, replaces or removes an
 // instance, and it never adopts a foreign instance.
+var nativeEnvironmentUUID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+
 type InstanceLifecycleIntent struct {
-	Scope      incusscope.ProjectScope
-	Name       string
-	Resource   string
-	Role       string
-	WorkloadID string
-	State      InstanceState
+	Scope         incusscope.ProjectScope
+	Name          string
+	Resource      string
+	Role          string
+	WorkloadID    string
+	EnvironmentID string
+	State         InstanceState
 }
 
 // Validate refuses an intent that does not identify one owned instance in
@@ -50,6 +54,9 @@ func (intent InstanceLifecycleIntent) Validate() error {
 	}
 	if !localName(intent.Name) {
 		return fmt.Errorf("instance name must be an explicit local name")
+	}
+	if intent.EnvironmentID != "" && !nativeEnvironmentUUID.MatchString(intent.EnvironmentID) {
+		return fmt.Errorf("native instance lifecycle requires a canonical environment UUID")
 	}
 	if intent.Resource == "" {
 		return fmt.Errorf("instance lifecycle requires an ownership resource")
@@ -74,6 +81,9 @@ func (intent InstanceLifecycleIntent) markers() map[string]string {
 	}
 	if intent.WorkloadID != "" {
 		markers["user.aginctus.workload"] = intent.WorkloadID
+	}
+	if intent.EnvironmentID != "" {
+		markers["user.aginctus.environment-id"] = intent.EnvironmentID
 	}
 	return markers
 }

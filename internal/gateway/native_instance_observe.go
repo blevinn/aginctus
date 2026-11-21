@@ -82,9 +82,7 @@ func ObserveNativeGatewayInstancesWithReader(ctx context.Context, pair NativeGat
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if pair.Postgres.Project != pair.LiteLLM.Project || pair.Postgres.Name != "postgres-1" ||
-		pair.LiteLLM.Name != "litellm-1" || pair.Postgres.Role != "postgres" ||
-		pair.LiteLLM.Role != "litellm" || pair.Postgres.ImageAlias == pair.LiteLLM.ImageAlias {
+	if validateNativeGatewayPairOwner(pair) != nil {
 		return nil, fmt.Errorf("native gateway instance identities invalid")
 	}
 	scope, err := incusscope.NewProjectScope(pair.Postgres.Project)
@@ -127,6 +125,7 @@ func ObserveNativeGatewayInstancesWithReader(ctx context.Context, pair NativeGat
 			inst.Config["user.aginctus.resource"] != "gateway-instance" ||
 			inst.Config["user.aginctus.role"] != spec.Role ||
 			inst.Config["user.aginctus.deployment"] != scope.Name ||
+			!gatewayOwnerMatches(inst.Config,spec.EnvironmentID) ||
 			inst.Config["volatile.base_image"] != alias.Target ||
 			!equalNativeDevices(inst.Devices, spec.Devices) || len(inst.Profiles) != 0 {
 			return nil, fmt.Errorf("native gateway existing instance ownership or attachments unverified")
