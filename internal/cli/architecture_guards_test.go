@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -139,4 +140,28 @@ func TestCLICommandGlobalStateGuardRejectsUnsafeDeclarations(t *testing.T) {
 			t.Errorf("source %q: got %d violations, want %d", tc.src, got, tc.violations)
 		}
 	}
+}
+
+
+// TestRootTestOwnerLedgerPreventsDrift requires an explicit disposition when
+// a root test is added or moved. This deliberately does not count files in
+// other packages: they own their direct registration/domain unit tests.
+func TestRootTestOwnerLedgerPreventsDrift(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "design", "cli-root-test-inventory.md"))
+	if err != nil { t.Fatal(err) }
+	listed := map[string]bool{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, "| `") { continue }
+		parts := strings.SplitN(line, "`", 3)
+		if len(parts) < 3 || !strings.HasSuffix(parts[1], "_test.go") { continue }
+		if listed[parts[1]] { t.Errorf("duplicate ownership entry %s", parts[1]) }
+		listed[parts[1]] = true
+	}
+	files, err := filepath.Glob("*_test.go")
+	if err != nil { t.Fatal(err) }
+	for _, path := range files {
+		if !listed[path] { t.Errorf("root test %s has no documented owner", path) }
+		delete(listed, path)
+	}
+	for path := range listed { t.Errorf("stale owner entry for nonexistent root test %s", path) }
 }
