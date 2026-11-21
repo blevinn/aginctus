@@ -159,7 +159,7 @@ The opt-in proxy suite requires an isolated environment with
 
 ```sh
 AGINCTUS_TEST_PINNED_LITELLM=1 LITELLM_LOCAL_MODEL_COST_MAP=True \
-  python -m unittest discover -s scripts/gateway -p test_siwc_litellm.py -v
+  python -m unittest discover -s plugins/litellm/runtime -p test_siwc_litellm.py -v
 ```
 
 Set `AGINCTUS_TEST_OPENCODE_BINARY` to the reviewed client to include actual
