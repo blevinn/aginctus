@@ -35,6 +35,8 @@ without an updated owner decision.
 | `commands_basic_test.go` | `TestCobraBasicRejectsSyntaxBeforeConfiguration` | CLI composition / global output | Retain; guard root-wide semantics |
 | `commands_basic_test.go` | `TestCobraBasicDoesNotRetainFlagStateAcrossRuns` | CLI composition / global output | Retain; guard root-wide semantics |
 | `commands_basic_test.go` | `TestCobraConfigLoadsOnlyAfterValidArguments` | CLI composition / global output | Retain; guard root-wide semantics |
+| `commands_config_scope_test.go` | `TestConfigScopeStructuredOutputAndNoAuthorityClaim` | Cross-family configured project preference presentation | Retain root Run/format/authorization disclaimer evidence |
+| `commands_config_scope_test.go` | `TestConfigScopeDoesNotExtendLegacyOutputGate` | Cross-family configured project preference presentation | Retain root Run/format/authorization disclaimer evidence |
 | `commands_gateway_assets_test.go` | `TestGatewayAssetCommandsAndSelectors` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
 | `commands_gateway_assets_test.go` | `TestGatewayAssetSyntaxAndHelpStayOffline` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
 | `commands_gateway_core_test.go` | `TestCobraGatewayCoreRejectsInvalidSyntaxBeforeConfig` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
@@ -93,6 +95,8 @@ without an updated owner decision.
 | `help_test.go` | `TestHelpEgressPreviewAndConfirmationSyntax` | CLI composition / global output | Retain; guard root-wide semantics |
 | `help_test.go` | `TestHelpApplyFromStreamSyntax` | CLI composition / global output | Retain; guard root-wide semantics |
 | `help_budget_test.go` | `TestBasicHelpBudgetRealTree` | CLI composition / bounded help presentation | Retain; verify output limits across registered commands |
+| `help_modes_test.go` | `TestHelpExamplesUsesReadOnlyAuthoredExamples` | CLI composition / reviewed examples help mode | Retain; verify parsed modes and authored examples |
+| `help_modes_test.go` | `TestHelpExamplesRejectsUnknownModes` | CLI composition / reviewed examples help mode | Retain; verify parsed modes and authored examples |
 | `herdr_authorize_test.go` | `TestParseHerdrPublicIdentity` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `herdr_authorize_test.go` | `TestHerdrAuthorizeAbsentKeyReconcilesAndVerifies` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `herdr_authorize_test.go` | `TestHerdrAuthorizeAlreadyInstalledDoesNotRewrite` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |

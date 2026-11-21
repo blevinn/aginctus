@@ -24,6 +24,7 @@ without dropping their integration evidence.
 | `architecture_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
 | `commands_basic_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
 | `help_budget_test.go` | CLI composition / bounded help presentation | Retain; verify output limits across registered commands |
+| `commands_config_scope_test.go` | Cross-family configured project preference presentation | Retain root Run/format/authorization disclaimer evidence |
 | `commands_gateway_assets_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
 | `commands_gateway_core_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
 | `commands_gateway_egress_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
@@ -54,6 +55,7 @@ without dropping their integration evidence.
 | `gateway_siwc_test.go` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `gateway_status_test.go` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `help_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
+| `help_modes_test.go` | CLI composition / reviewed examples help mode | Retain; verify parsed modes and authored examples |
 | `herdr_authorize_test.go` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `herdr_console_test.go` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `herdr_lifecycle_test.go` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
@@ -122,5 +124,5 @@ without dropping their integration evidence.
 - The full Go/Nix/hermetic/privileged manual acceptance gate remains
   separate from this accounting check.
 
-The ledger deliberately records **70 files** and does not
+The ledger deliberately records **71 files** and does not
 set a numerical target for deleting cross-family root integration tests.
