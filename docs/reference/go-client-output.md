@@ -64,6 +64,11 @@ The `agents`, `frontends` and `gateways` aliases use the same typed
 workload read service with fixed class expectations. They are not independent
 resource stores. Legacy `aginctus workload ...` commands remain separate.
 
+The `environment list/show` commands are registered through the same
+`cli.RunWithAuthorizedReaders` injection boundary and support the standard
+JSON/YAML, table, wide, and name formats. Without a verified enrollment
+reader they fail closed, rather than returning an empty project inventory.
+
 Environment name resolution, default selection from effective configuration,
 `environment list/show` command integration, and genuine project-state
 discovery require the still-gated authoritative enrollment backend. No new
