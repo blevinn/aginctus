@@ -5,6 +5,7 @@ import (
 	"io"
 
 	networkops "github.com/blevinn/aginctus/internal/cli/operations/network"
+	gatewayops "github.com/blevinn/aginctus/internal/cli/operations/gateway"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/host/net/firewall"
 )
