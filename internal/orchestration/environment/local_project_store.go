@@ -164,14 +164,27 @@ func publishLocalProjectPointer(dir string, data []byte) error {
 	return syncLocalProjectDir(dir)
 }
 
-func (s *LocalProjectStateStore) namespace(desc Descriptor) (string,error) {
-	if s==nil {return "",errors.New("missing local project state store")}
-	if err:=desc.Validate();err!=nil{return "",err}
-	if desc.Binding!=s.binding {return "",errors.New("environment binding differs from project state scope")}
+func (s *LocalProjectStateStore) namespace(desc Descriptor) (string, error) {
+	if s == nil {
+		return "", errors.New("missing local project state store")
+	}
+	if err := desc.Validate(); err != nil {
+		return "", err
+	}
+	if desc.Binding != s.binding {
+		return "", errors.New("environment binding differs from project state scope")
+	}
 	// Revalidate the immutable server/project anchor on every operation;
 	// an old handle is not entitled to trust a replaced or corrupted root.
-	if _,err:=OpenLocalProjectStateStore(s.root,s.binding);err!=nil{return "",err}
-	return filepath.Join(s.root,"environments",desc.ID),nil
+	if _, err := OpenLocalProjectStateStore(s.root, s.binding); err != nil {
+		return "", err
+	}
+	// The environment ID must name one directory beneath the project root.
+	id := desc.ID
+	if !filepath.IsLocal(id) || filepath.Base(id) != id {
+		return "", errors.New("environment ID must be a single local path component")
+	}
+	return filepath.Join(s.root, "environments", id), nil
 }
 
 func (s *LocalProjectStateStore) readNamespace(ctx context.Context, desc Descriptor) (*AcceptedRevision,*Candidate,error) {
