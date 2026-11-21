@@ -44,8 +44,9 @@ Highest priority for later per-invocation conversion:
 1. **Host/Incus authority:** `commands_network.go`,
    `network_firewall_egress.go` and `operator_wiring.go`. Do not allow
    injected transport to bypass effective-root, exact-project or backend
-   evidence. Firewall reconciliation now has a per-call action route;
-   egress/observer call sites are still pending.
+   evidence. Firewall reconciliation (#1014) and egress evidence discovery (#1019)
+   now have per-call action routes in independently reviewable PRs;
+   the remaining shared host/Incus observation bindings are not yet removed.
 2. **Incus images:** `images_mutation_wiring.go` and `images_wiring.go`.
    Keep ambient v0.1 alias replacement separate from scoped create-only
    imported image lifecycle.
@@ -57,9 +58,9 @@ Highest priority for later per-invocation conversion:
    native orchestration tracking issues. Do not migrate these a second
    time in a CLI-specific service layer.
 
-These are **documented architectural debt**, not signoff. A follow-on
-issue should own residual mutable injection migration if it is deferred
-beyond this CLI epic.
+These are **documented architectural debt**, not signoff. A follow-on issue must own residual mutable injection migration if it is
+explicitly deferred beyond this CLI epic. Issue closure is inappropriate
+until that deferral is accepted and reviewed.
 
 ## Validation gates before #755 and #725 can close
 
