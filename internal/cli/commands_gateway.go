@@ -59,7 +59,8 @@ func addGatewayAssetCommands(gateway, providers, models *cobra.Command,
 	assetscmd.Register(gateway, providers, models, status, options, load, configuredGatewayStore, gatewayPlugins(), gatewayops.ReadAssetConfig)
 }
 
-// Keep an injectable read-only Incus query for network/firewall and gateway tests.
+// Compatibility seam: the root help/preview integration test still injects a
+// read-only gateway query. Scoped network egress no longer depends on it.
 var gatewayEgressQuery = gatewayops.QueryIncusEgress
 
 func executeGatewayEgress(ctx context.Context, action, zone, ranges string,
