@@ -19,7 +19,7 @@ type GetEnvironmentRequest struct { Project string; ID string }
 
 // EnvironmentsService delegates verified reads to the injected domain reader.
 // It never invents enrollment based on a configured candidate.
-type EnvironmentsService struct {reader EnvironmentReader}
+type EnvironmentsService struct {reader EnvironmentReader; defaultProject string; defaultID string}
 func (s *EnvironmentsService) List(ctx context.Context,request ListEnvironmentsRequest)(api.EnvironmentList,error){
 	if err:=ctx.Err();err!=nil{return api.EnvironmentList{},err}
 	if request.Project=="" {return api.EnvironmentList{},fmt.Errorf("explicit project required for environment inventory")}
@@ -31,4 +31,14 @@ func (s *EnvironmentsService) Get(ctx context.Context,request GetEnvironmentRequ
 	if request.Project==""||request.ID=="" {return api.EnvironmentDetail{},fmt.Errorf("explicit project and immutable environment ID required")}
 	if s==nil||s.reader==nil {return api.EnvironmentDetail{},fmt.Errorf("authenticated environment enrollment reader unavailable")}
 	return s.reader.GetEnvironment(ctx,request.Project,request.ID)
+}
+
+// Selected resolves an invocation-scoped default or explicit immutable UUID.
+// Explicit targets override defaults, but neither changes Incus credentials.
+// The reader must authenticate and verify the requested project each time.
+func (s *EnvironmentsService) Selected(ctx context.Context,request GetEnvironmentRequest)(api.EnvironmentDetail,error){
+	if s==nil {return api.EnvironmentDetail{},fmt.Errorf("environment client unavailable")}
+	if request.Project=="" {request.Project=s.defaultProject}
+	if request.ID=="" {request.ID=s.defaultID}
+	return s.Get(ctx,request)
 }
