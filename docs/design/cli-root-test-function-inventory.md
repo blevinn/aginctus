@@ -166,3 +166,78 @@ without an updated owner decision.
 | `operator_preflight_test.go` | `TestOperatorPreflightRejectsNullInstanceInventory` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `operator_preflight_test.go` | `TestOperatorProbeFailureClassification` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `operator_preflight_test.go` | `TestOperatorPreflightCancellationDuringOptionalRead` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_project_confinement_test.go` | `TestInspectProjectConfinementGetOnlyAndFailClosed` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_project_ensure_test.go` | `TestOperatorProjectEnsureFailClosed` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_project_ensure_test.go` | `TestOperatorProjectEnsureNeverCreatesOnUnsafeArgs` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_project_ensure_test.go` | `TestOperatorProjectEnsureRejectsConfigOverridesBeforeLoading` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_project_plan_test.go` | `TestOperatorProjectPlanConservativeReadOnly` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_project_plan_test.go` | `TestOperatorProjectPlanCannotLoadHostConfiguration` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_project_plan_test.go` | `TestOperatorProjectPlanRejectsInvalidNameBeforeIncus` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_state_audit_test.go` | `TestOperatorGatewayStateMetadata` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_state_audit_test.go` | `TestOperatorGatewayCredentialLocationIsNotAnOwnerHandoff` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_state_audit_test.go` | `TestOperatorGatewayCredentialAuditRejectsUnsafeLocation` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_units_audit_test.go` | `TestOperatorUnitsInventoryDoesNotInferControllerOwnership` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `operator_units_audit_test.go` | `TestOperatorUnitsInventoryRejectsOwnerSelection` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `plugins_test.go` | `TestCompiledPluginInventoryIsLocal` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestDoctorSuccess` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestConfigAlias` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestConfigurationOptions` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestNetworkEnsureUsesEffectiveConfiguration` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestNetworkEnsureRejectsWrongConfigurationType` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestConfigurationLoadFailure` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestUnknownCommand` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestNetworkEnsureDryRunOutput` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestNetworkTeardownUsesConfiguredNameAndOptions` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestNetworkTeardownAbsent` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestNetworkRejectsUnknownOption` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestHerdrClientEnsureUsesEffectiveConfiguration` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestHerdrClientTeardownUsesConfiguredNameAndForce` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestHerdrClientStopsWhenOrchestrationFails` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestGatewayRenderUsesEffectiveConfiguration` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestGatewayUpStopsBeforeNetworkMutationWhenSecretInitializationFails` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestWorkloadEnsureUsesGenericConfiguredWorkload` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestWorkloadTeardownMapsForceAndDelete` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestWorkloadUnknownNameFailsConfigurationLookup` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestDoctorDetectsMissingHTTPSListener` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestDoctorFixConfiguresLoopbackOnly` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestNetworkApplyAndRemoveCommands` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestHerdrClientApplyAndRemoveCommands` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestWorkloadListAndApplyAll` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestWorkloadRemoveNamed` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestGeneratedGatewayHelpIsDispatchable` | CLI composition / global output | Retain; guard root-wide semantics |
+| `run_test.go` | `TestGeneratedGatewayHelpMatchesHelpCommand` | CLI composition / global output | Retain; guard root-wide semantics |
+| `testenv_test.go` | `TestTestenvOfflineHelpListAndPlan` | CLI composition / global output | Retain; guard root-wide semantics |
+| `testenv_test.go` | `TestTestenvRejectsUnexpectedCommandsWithoutExecution` | CLI composition / global output | Retain; guard root-wide semantics |
+| `testenv_test.go` | `TestTestenvDispatchesOnlyKnownScenario` | CLI composition / global output | Retain; guard root-wide semantics |
+| `testenv_test.go` | `TestTestenvMCPIsConfigFreeAndReadOnly` | CLI composition / global output | Retain; guard root-wide semantics |
+| `testenv_test.go` | `TestTestenvBackendDiscoveryIsReadOnlyAndUninstalled` | CLI composition / global output | Retain; guard root-wide semantics |
+| `testenv_test.go` | `TestTestenvIncusPolicyIsOfflineAndRestricted` | CLI composition / global output | Retain; guard root-wide semantics |
+| `version_test.go` | `TestVersionVCSFallback` | CLI composition / global output | Retain; guard root-wide semantics |
+| `version_test.go` | `TestVersionInjectedRevisionOffline` | CLI composition / global output | Retain; guard root-wide semantics |
+| `version_test.go` | `TestVersionEmbeddedSource` | CLI composition / global output | Retain; guard root-wide semantics |
+| `workload_apply_scoped_dry_run_test.go` | `TestScopedWorkloadApplyNativeDryRunSummarizesWithoutSecrets` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_apply_scoped_dry_run_test.go` | `TestScopedWorkloadApplyNativeDryRunFailsClosed` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_apply_scoped_dry_run_test.go` | `TestScopedWorkloadApplyNativeDryRunRejectsDriftAndUnownedProject` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_apply_scoped_dry_run_test.go` | `TestScopedWorkloadApplyNativeDryRunHelpOffline` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_apply_scoped_execute_test.go` | `TestConfirmedScopedApplyBoundaries` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_apply_scoped_execute_test.go` | `TestScopedApplyConfirmationSyntax` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_apply_scoped_test.go` | `TestScopedWorkloadApplyRenderOnlyOneProjectBoundInstance` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_apply_scoped_test.go` | `TestScopedWorkloadApplyRenderRefusesMutatingSyntax` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_apply_scoped_test.go` | `TestScopedWorkloadApplyRenderRequiresPresentOwnedInstance` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_apply_scoped_test.go` | `TestScopedWorkloadApplyRenderHelpOffline` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_gateway_provision_test.go` | `TestDiscoverGatewayIPv4` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_gateway_provision_test.go` | `TestReadWorkloadKey` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_gateway_provision_test.go` | `TestReadWorkloadKeyRejectsUnsafeParentOversizeAndSpecialFile` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_lifecycle_test.go` | `TestWorkloadLifecycleTransitions` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_lifecycle_test.go` | `TestWorkloadLifecycleRejectsForeignInstance` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_lifecycle_test.go` | `TestWorkloadCLIStartStop` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_lifecycle_test.go` | `TestWorkloadStopFailurePreventsDeletion` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_start_scoped_test.go` | `TestScopedWorkloadStartRequiresExplicitProjectAndConfirmation` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_start_scoped_test.go` | `TestScopedWorkloadStartSingleOwnedInstance` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_start_scoped_test.go` | `TestScopedWorkloadStartRejectsUnverifiedStateWithoutMutation` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_start_scoped_test.go` | `TestScopedWorkloadStartPostflightFailureNotReportedAsSuccess` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_stop_scoped_test.go` | `TestScopedWorkloadStopExactArgsAndSingleTarget` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_stop_scoped_test.go` | `TestScopedWorkloadStopRefusesUnconfirmedOrUnscopedAction` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_stop_scoped_test.go` | `TestScopedWorkloadStopFailsClosedBeforeMutation` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_stop_scoped_test.go` | `TestScopedWorkloadStopUnverifiedPostflightAndDaemonFailure` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
+| `workload_stop_scoped_test.go` | `TestScopedWorkloadStopHelpAvailableOffline` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
