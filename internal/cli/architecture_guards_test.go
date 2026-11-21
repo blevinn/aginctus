@@ -165,3 +165,67 @@ func TestRootTestOwnerLedgerPreventsDrift(t *testing.T) {
 	}
 	for path := range listed { t.Errorf("stale owner entry for nonexistent root test %s", path) }
 }
+
+// TestCLIRootFunctionInjectionSeamsAreAccountedFor prevents new mutable
+// function-literal transports from silently appearing in root composition.
+// The existing exceptions must each have an explicit owner/disposition in
+// cli-root-mutable-seams.md. It does not endorse those exceptions.
+func TestCLIRootFunctionInjectionSeamsAreAccountedFor(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "design", "cli-root-mutable-seams.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed := map[string]map[string]bool{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, "| `") {
+			continue
+		}
+		fields := strings.Split(line, "|")
+		if len(fields) < 4 {
+			continue
+		}
+		file := strings.Trim(fields[1], " `")
+		if !strings.HasSuffix(file, ".go") {
+			continue
+		}
+		names := strings.Trim(fields[2], " `")
+		allowed[file] = map[string]bool{}
+		for _, name := range strings.Split(names, ",") {
+			allowed[file][strings.TrimSpace(name)] = true
+		}
+	}
+	entries, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range entries {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, declaration := range file.Decls {
+			decl, ok := declaration.(*ast.GenDecl)
+			if !ok || decl.Tok != token.VAR {
+				continue
+			}
+			for _, entry := range decl.Specs {
+				spec, ok := entry.(*ast.ValueSpec)
+				if !ok {
+					continue
+				}
+				for index, value := range spec.Values {
+					_, isFunc := value.(*ast.FuncLit)
+					if !isFunc {
+						continue
+					}
+					if index >= len(spec.Names) || !allowed[path][spec.Names[index].Name] {
+						t.Errorf("%s: package-level mutable function needs a named owner and migration disposition", path)
+					}
+				}
+			}
+		}
+	}
+}
