@@ -21,6 +21,7 @@ type Options struct {
 	EnvironmentReader     EnvironmentReader
 	ConfigSelectionReader ConfigSelectionReader
 	SystemReader          SystemReader
+	ConfiguredStateReader ConfiguredStateReader
 	AcceptedStateReader   AcceptedStateReader
 	DefaultProject        string
 	DefaultEnvironmentID  string
@@ -34,6 +35,7 @@ type Client struct {
 	Environments   *EnvironmentsService
 	Config         *ConfigService
 	System         *SystemService
+	State          *StateService
 	AcceptedStates *AcceptedStatesService
 }
 
@@ -46,6 +48,7 @@ func New(options Options) *Client {
 		Environments:   &EnvironmentsService{reader: options.EnvironmentReader, defaultProject: options.DefaultProject, defaultID: options.DefaultEnvironmentID},
 		Config:         &ConfigService{reader: options.ConfigSelectionReader},
 		System:         &SystemService{reader: options.SystemReader},
+		State:          &StateService{configured: options.ConfiguredStateReader},
 		AcceptedStates: &AcceptedStatesService{reader: options.AcceptedStateReader},
 	}
 }
