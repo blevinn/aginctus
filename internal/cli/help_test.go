@@ -176,26 +176,28 @@ func TestHelpEgressPreviewAndConfirmationSyntax(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previous := gatewayEgressQuery
-	t.Cleanup(func() { gatewayEgressQuery = previous })
 	called := false
-	gatewayEgressQuery = func(context.Context, ...string) ([]byte, error) {
+	query := func(context.Context, ...string) ([]byte, error) {
 		called = true
 		return nil, errors.New("hermetic inspection stop")
 	}
+	runWithQuery := func(args []string, loader ConfigLoader) (int, string, string) {
+		var out, errOut bytes.Buffer
+		code := runBasicCobraWithGatewayCapabilities(
+			context.Background(), args, &out, &errOut, nil, loader, nil, nil, nil, strings.NewReader(""), query)
+		return code, out.String(), errOut.String()
+	}
 	for _, command := range []string{"egress audit", "egress dhcp plan --ranges=10.20.30.100-10.20.30.200", "egress reconcile --dry-run"} {
 		called = false
-		var out, errOut bytes.Buffer
-		code := Run(context.Background(), append([]string{"gateway"}, strings.Fields(command)...), &out, &errOut, nil, &fakeConfigLoader{cfg: cfg})
-		if code != 1 || !called || !strings.Contains(errOut.String(), "hermetic inspection stop") {
+		code, out, errOut := runWithQuery(append([]string{"gateway"}, strings.Fields(command)...), &fakeConfigLoader{cfg: cfg})
+		if code != 1 || !called || !strings.Contains(errOut, "hermetic inspection stop") {
 			t.Fatalf("%s: code=%d inspected=%v stderr=%s", command, code, called, errOut.String())
 		}
 	}
 	for _, command := range []string{"egress reconcile", "egress reconcile --force", "egress dhcp apply --ranges=10.20.30.100-10.20.30.200", "apply --dry-run"} {
 		called = false
-		var out, errOut bytes.Buffer
-		code := Run(context.Background(), append([]string{"gateway"}, strings.Fields(command)...), &out, &errOut, nil, &fakeConfigLoader{})
-		if code != 2 || called || !strings.Contains(errOut.String(), "Usage:") {
+		code, out, errOut := runWithQuery(append([]string{"gateway"}, strings.Fields(command)...), &fakeConfigLoader{})
+		if code != 2 || called || !strings.Contains(errOut, "Usage:") {
 			t.Fatalf("%s: code=%d inspected=%v stderr=%s", command, code, called, errOut.String())
 		}
 	}
