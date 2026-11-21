@@ -295,4 +295,3 @@ func (s *LocalProjectStateStore) ReadLocalRevision(ctx context.Context, enrolled
 	if err:=ctx.Err();err!=nil{return AcceptedRevision{},Candidate{},err}
 	return rev,c,nil
 }
-
