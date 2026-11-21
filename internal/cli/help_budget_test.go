@@ -5,7 +5,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"unicode/utf8"
 )
 
 // TestBasicHelpBudgetRealTree checks registered command paths without executing
@@ -37,8 +36,8 @@ func TestBasicHelpBudgetRealTree(t *testing.T) {
 	for path := range paths {
 		if path == "help" { continue } // Help uses its own mode parser, not Cobra --help.
 		t.Run(strings.ReplaceAll(path, " ", "/"), func(t *testing.T) {
-			args := append(strings.Fields(path), "--help")
-			if path == "" { args = []string{"--help"} }
+			args := append([]string{"help"}, strings.Fields(path)...)
+			if path == "" { args = []string{"help"} }
 			var out, errOut bytes.Buffer
 			if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
 				if strings.Contains(errOut.String(), "permanent staging commands are retired") {
@@ -52,8 +51,8 @@ func TestBasicHelpBudgetRealTree(t *testing.T) {
 			lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
 			if len(lines) > 35 { t.Errorf("help is %d lines (limit 35)", len(lines)) }
 			for i, line := range lines {
-				if utf8.RuneCountInString(line) > 80 {
-					t.Errorf("line %d is %d columns (limit 80): %s", i+1, utf8.RuneCountInString(line), line)
+				if len([]rune(line)) > 80 {
+					t.Errorf("line %d is %d columns (limit 80): %s", i+1, len([]rune(line)), line)
 				}
 			}
 		})
