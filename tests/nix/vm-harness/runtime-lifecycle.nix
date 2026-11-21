@@ -55,7 +55,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus info aginctus-dev")
 
     import runpy
-    verify_routes = runpy.run_path("${../../tests/acceptance/opencode-pilot-preflight.py}")["verify_ipv4_routes"]
+    verify_routes = runpy.run_path("${../../acceptance/opencode-pilot-preflight.py}")["verify_ipv4_routes"]
     for instance in ("aginctus-dev", "aginctus-herdr"):
         machine.wait_until_succeeds(f"timeout 15 incus exec --disable-stdin {instance} -- ip -4 addr show dev eth0 | grep -q 'inet '", timeout=120)
         verify_routes(machine.succeed(f"timeout 15 incus exec --disable-stdin {instance} -- cat /proc/net/route"))
