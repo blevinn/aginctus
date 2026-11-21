@@ -229,3 +229,56 @@ func TestCLIRootFunctionInjectionSeamsAreAccountedFor(t *testing.T) {
 		}
 	}
 }
+
+// TestCLIRootTestFunctionsHaveOwnerRecords checks individual test functions,
+// not just filenames. The inventory explicitly identifies provisional
+// ownership, so moving a function cannot silently drop negative CLI coverage.
+func TestCLIRootTestFunctionsHaveOwnerRecords(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "design", "cli-root-test-function-inventory.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	records := map[string]map[string]bool{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, "| `") {
+			continue
+		}
+		tokens := strings.Split(line, "`")
+		if len(tokens) < 4 || !strings.HasSuffix(tokens[1], "_test.go") || !strings.HasPrefix(tokens[3], "Test") {
+			continue
+		}
+		file, name := tokens[1], tokens[3]
+		if records[file] == nil {
+			records[file] = map[string]bool{}
+		}
+		if records[file][name] {
+			t.Errorf("duplicate root test owner: %s:%s", file, name)
+		}
+		records[file][name] = true
+	}
+	paths, err := filepath.Glob("*_test.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, declaration := range file.Decls {
+			fn, ok := declaration.(*ast.FuncDecl)
+			if !ok || fn.Recv != nil || !strings.HasPrefix(fn.Name.Name, "Test") {
+				continue
+			}
+			if !records[path][fn.Name.Name] {
+				t.Errorf("missing root test function owner: %s:%s", path, fn.Name.Name)
+			}
+			delete(records[path], fn.Name.Name)
+		}
+	}
+	for path, functions := range records {
+		for name := range functions {
+			t.Errorf("stale test function owner: %s:%s", path, name)
+		}
+	}
+}
