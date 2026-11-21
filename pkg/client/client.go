@@ -17,6 +17,7 @@ type PluginInventory interface {
 type Options struct {
 	PluginInventory PluginInventory
 	ScopedWorkloadReader ScopedWorkloadStatusReader
+	LogicalWorkloadReader LogicalWorkloadReader
 }
 
 // Client is safe for concurrent read operations when its injected inventory
@@ -31,6 +32,6 @@ type Client struct {
 func New(options Options) *Client {
 	return &Client{
 		Plugins: &PluginsService{inventory: options.PluginInventory},
-		Workloads: &WorkloadsService{reader: options.ScopedWorkloadReader},
+		Workloads: &WorkloadsService{reader: options.ScopedWorkloadReader,logical: options.LogicalWorkloadReader},
 	}
 }

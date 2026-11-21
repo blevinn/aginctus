@@ -18,6 +18,7 @@ type ScopedWorkloadStatusReader interface {
 // observation; environment-scoped list/show/status require their own authority.
 type WorkloadsService struct {
 	reader ScopedWorkloadStatusReader
+	logical LogicalWorkloadReader
 }
 
 func (s *WorkloadsService) ScopedStatus(ctx context.Context, request api.ScopedWorkloadStatusRequest) (api.ScopedWorkloadStatusList, error) {
