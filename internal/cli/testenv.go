@@ -6,7 +6,7 @@ import (
 	"os"
 
 	testenvops "github.com/blevinn/aginctus/internal/cli/operations/testenv"
-	"github.com/blevinn/aginctus/internal/testenv"
+	"github.com/blevinn/aginctus/internal/testing/testenv"
 )
 
 // Test injection proves malformed CLI invocations do not start a VM.

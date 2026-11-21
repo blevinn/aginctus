@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	gatewayassets "github.com/blevinn/aginctus/scripts/gateway"
+	gatewayassets "github.com/blevinn/aginctus/plugins/litellm/runtime"
 	"sigs.k8s.io/yaml"
 )
 
