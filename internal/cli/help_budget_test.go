@@ -42,7 +42,7 @@ func TestBasicHelpBudgetRealTree(t *testing.T) {
 			var out, errOut bytes.Buffer
 			if code := Run(context.Background(), args, &out, &errOut, nil, nil); code != 0 || errOut.Len() != 0 {
 				if strings.Contains(errOut.String(), "permanent staging commands are retired") {
-					return // Retired command stubs intentionally refuse even help dispatch.
+					t.Skip("retired staging command intentionally refuses help dispatch")
 				}
 				t.Fatalf("help failed: code=%d stderr=%s", code, errOut.String())
 			}
