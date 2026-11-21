@@ -122,3 +122,67 @@ func TestFixtureCLIRequiresExplicitScopeAndConfirmation(t *testing.T) {
 		t.Fatalf("cancelled fixture operation proceeded: %v", err)
 	}
 }
+
+func TestFixtureAuditCommandIsReadOnlyAndScoped(t *testing.T) {
+	ctx := context.Background()
+	root := filepath.Join(t.TempDir(), "project-state")
+	common := []string{"--state-dir", root, "--server-id", "fixture-server", "--project", "owned-project"}
+	call := func(action string, flags ...string) ([]byte, error) {
+		args := append([]string{action}, common...)
+		args = append(args, flags...)
+		var out bytes.Buffer
+		err := run(ctx, args, &out)
+		return out.Bytes(), err
+	}
+	if _, err := call("init"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := call("audit", "--environment", testID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report environment.LocalHistoryAudit
+	if err := json.Unmarshal(raw, &report); err != nil || report.HasAccepted || report.Reachable != 0 {
+		t.Fatalf("empty audit: %+v %v", report, err)
+	}
+	candidate := fixtureCandidate(testID)
+	data, err := candidate.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "candidate.json")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := call("accept", "--environment", testID, "--candidate", path,
+		"--expected-revision", "none", "--confirm"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err = call("audit", "--environment", testID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &report); err != nil || !report.HasAccepted ||
+		report.Generation != 1 || report.Reachable != 1 || report.HeadID == "" {
+		t.Fatalf("published audit: %+v %v", report, err)
+	}
+	for _, flags := range [][]string{
+		{"--environment", testID, "--confirm"},
+		{"--environment", testID, "--candidate", path},
+		{"--environment", "not-a-uuid"},
+		{"--environment", testID, "--expected-revision", "none"},
+	} {
+		if _, err := call("audit", flags...); err == nil {
+			t.Fatalf("audit accepted write or invalid selection flags: %v", flags)
+		}
+	}
+	raw, err = call("status", "--environment", testID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var status acceptedStatus
+	if err := json.Unmarshal(raw, &status); err != nil || !status.HasAccepted ||
+		status.Revision == nil || status.Revision.ID != report.HeadID {
+		t.Fatalf("audit changed published pointer: %+v %v", status, err)
+	}
+}
