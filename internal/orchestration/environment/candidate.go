@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 
 	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
 )
@@ -201,14 +202,17 @@ func ReadCandidateFile(path string) (Candidate, error) {
 	if path == "" || !filepath.IsAbs(path) {
 		return Candidate{}, errors.New("explicit absolute candidate path required")
 	}
-	file, err := os.Open(path)
+	// Opening a FIFO in ordinary blocking mode can hang before Stat can
+	// reject it. Check type and size on the SAME opened descriptor used to
+	// read the candidate; a Nix-store symlink to a regular file is allowed.
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return Candidate{}, fmt.Errorf("open selected candidate: %w", err)
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		return Candidate{}, errors.New("candidate must be a regular file")
+	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxCandidateBytes {
+		return Candidate{}, errors.New("candidate must be a bounded regular file")
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maxCandidateBytes+1))
 	if err != nil {
