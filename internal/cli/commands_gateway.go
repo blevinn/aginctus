@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"io"
-	"os"
 
 	gatewaycmd "github.com/blevinn/aginctus/internal/cli/commands/gateway"
 	assetscmd "github.com/blevinn/aginctus/internal/cli/commands/gateway/assets"
@@ -47,13 +46,6 @@ func addGatewayCoreCommands(
 	})
 }
 
-// Test-visible input seam preserves offline transcript injection.
-var gatewayResponsesInput io.Reader = os.Stdin
-
-func verifyGatewayResponsesStream(args []string, stdout, stderr io.Writer) int {
-	return gatewayops.VerifyResponsesStream(args, stdout, stderr, gatewayResponsesInput)
-}
-
 // Other in-package gateway operations use this compiled registry as well.
 func gatewayPlugins() gatewaycontrol.Plugins {
 	plugins := gatewaycontrol.Builtins()
@@ -78,11 +70,13 @@ func executeGatewayEgress(ctx context.Context, action, zone, ranges string,
 
 func addGatewayEgressCommands(
 	gatewayCmd *cobra.Command, stdout, stderr io.Writer,
-	load func() (*config.Config, error), status *int,
+	load func() (*config.Config, error), status *int, responsesInput io.Reader,
 ) {
 	egresscmd.Register(gatewayCmd, stdout, stderr, load, status, egresscmd.Handlers{
 		Egress: executeGatewayEgress,
-		Verify: verifyGatewayResponsesStream,
+		Verify: func(args []string, stdout, stderr io.Writer) int {
+			return gatewayops.VerifyResponsesStream(args, stdout, stderr, responsesInput)
+		},
 	})
 }
 
