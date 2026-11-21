@@ -70,11 +70,7 @@ func (b gatewayAssetBuilder) addPlugins(gateway *cobra.Command) {
 	var pluginName string
 	showPlugin := add(pluginGroup, "show [PLUGIN]", selectorArgs(&pluginName), func(_ *cobra.Command, args []string, _ gatewaycontrol.AssetOperations) (any, error) {
 		name, _ := selected(pluginName, args)
-		plugin, ok := plugins[name]
-		if !ok {
-			return nil, fmt.Errorf("unknown compiled plugin")
-		}
-		return plugin, nil
+		return plugins.Find(name)
 	})
 	showPlugin.Flags().StringVar(&pluginName, "plugin", "", "Compiled plugin name")
 }
@@ -91,7 +87,7 @@ func (b gatewayAssetBuilder) addProviders(providers *cobra.Command) {
 	var pluginApply, providerApply, providerConfig, providerFile string
 	applyProvider := add(providers, "apply [PLUGIN]", selectorArgs(&pluginApply), func(_ *cobra.Command, args []string, s gatewaycontrol.AssetOperations) (any, error) {
 		plugin, _ := selected(pluginApply, args)
-		if _, ok := plugins[plugin]; !ok { return nil, fmt.Errorf("unknown compiled plugin") }
+		if _, err := plugins.Find(plugin); err != nil { return nil, err }
 		var configuration gatewaycontrol.Configuration
 		if err := b.readConfig(providerConfig, providerFile, &configuration); err != nil { return nil, err }
 		return s.ApplyProviderInstance(plugin, providerApply, configuration)
