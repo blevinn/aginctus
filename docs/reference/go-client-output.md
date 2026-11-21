@@ -70,8 +70,8 @@ JSON/YAML, table, wide, and name formats. Without a verified enrollment
 reader they fail closed, rather than returning an empty project inventory.
 
 Environment name resolution, default selection from effective configuration,
-and genuine project-state discovery require the still-gated authoritative
-enrollment backend. No new
+`environment list/show` command integration, and genuine project-state
+discovery require the still-gated authoritative enrollment backend. No new
 CLI command enables privilege escalation or reconciles resources.
 
 ## Wire compatibility discipline

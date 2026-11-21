@@ -11,6 +11,30 @@ Go callers must use `environment.ReadCandidateFile(absolutePath)` with a **singl
 
 Candidate parsing rejects unknown, duplicated, case-aliased, null, privileged and credential-like fields. Workloads must use immutable SHA256 image fingerprints and explicit profiles. Canonicalization sorts the selected workload set but preserves Incus profile order.
 
+## Pure source-to-source drift inspection
+
+`environment.CompareCandidates(enrolled, observed, previous, proposed)` is a
+**read-only comparison of two fully typed configured declarations** for the
+same enrolled immutable environment identity. Both must match the enrolled UUID
+and exact server/project binding, and `observed` must be established
+independently by an authenticated Incus client before it is passed to this
+helper. Passing an arbitrary `observed` value does **not** authenticate it.
+
+The result contains only environment ID, project, canonical candidate digests,
+a display-name-change flag, and selected/unselected workload IDs and modified
+**field names**. An unselected workload is not a deletion order. A display name
+may change without changing the environment's immutable identity. No file is
+written; no accepted-state service is contacted and no credential, CAS
+promotion, fencing lease or Incus writer is introduced. The comparison does
+**not** establish which declaration was accepted, who supplied it, or whether
+its recorded project is authorized.
+
+The comparison temporarily reuses the legacy workload-only field diff
+algorithm, but **does not** convert, migrate, adopt, or publish any legacy
+`DeploymentSpec` revision. Authentic configured→accepted→observed drift and
+revision history require independently authenticated state-service reads and
+project-scoped environment records under #695/#696/#704.
+
 ## Declaration producers
 
 | Source | Candidate declaration | Output | Activation |
