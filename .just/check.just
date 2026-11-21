@@ -58,7 +58,7 @@ python:
     python3 -m unittest discover -s nix/guest/ssh -p 'test_*.py' -v
     python3 -m unittest discover -s tests/acceptance -p 'test_*.py' -v
     python3 -m unittest discover -s plugins/litellm/runtime -p 'test_*.py' -v
-    python3 -m unittest discover -s scripts/gateway -p 'test_*.py' -v
+    python3 -m unittest discover -s tests/gateway -p 'test_*.py' -v
     python3 -m unittest discover -s tools/gateway -p 'test_*.py' -v
     python3 -m unittest discover -s tests -p 'test_*.py' -v
 
@@ -125,11 +125,11 @@ acceptance-report-json run_id:
 # Not a dependency of ci/all; never runs a live acceptance or model request.
 [no-cd]
 preflight-report check:
-    @python3 scripts/checks/preflight_report.py --format text {{quote(check)}}
+    @python3 tools/validation/preflight_report.py --format text {{quote(check)}}
 
 [no-cd]
 preflight-report-json check:
-    @python3 scripts/checks/preflight_report.py --format json {{quote(check)}}
+    @python3 tools/validation/preflight_report.py --format json {{quote(check)}}
 
 # Read-only composition of an explicitly supplied prior hermetic JSON report.
 # This never runs checks or imports live acceptance as proof of inference.

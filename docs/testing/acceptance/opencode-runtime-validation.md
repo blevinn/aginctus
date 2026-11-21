@@ -82,7 +82,7 @@ for mode in incremental buffered; do
     -e PYTHONUNBUFFERED=1 -e LITELLM_LOCAL_MODEL_COST_MAP=True \
     -v "$PWD:/probe:ro" -v /nix/store:/nix/store:ro \
     --entrypoint /app/.venv/bin/python "$IMAGE" \
-    /probe/scripts/gateway/probe_pinned_litellm_responses.py \
+    /probe/tests/gateway/probe_pinned_litellm_responses.py \
     /probe/tests/gateway/fixtures/model-group-forwarding.yaml --direct-only \
     --production-launcher /probe/plugins/opencode/guest/launch.py \
     --opencode "$RUNTIME" --delivery-mode "$mode" || break
@@ -93,7 +93,7 @@ for mode in incremental buffered; do
     -v "$PWD:/probe:ro" -v "$WORK/deployment:/bundle:ro" \
     -v /nix/store:/nix/store:ro \
     --entrypoint /app/.venv/bin/python "$IMAGE" \
-    /probe/scripts/gateway/probe_pinned_litellm_responses.py \
+    /probe/tests/gateway/probe_pinned_litellm_responses.py \
     /probe/tests/gateway/fixtures/model-group-forwarding.yaml --packaged-hook /bundle \
     --production-launcher /probe/plugins/opencode/guest/launch.py \
     --opencode "$RUNTIME" --postgres-bin "$POSTGRES_BIN" \
