@@ -53,6 +53,7 @@ without dropping their integration evidence.
 | `gateway_siwc_test.go` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `gateway_status_test.go` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `help_test.go` | CLI composition / global output | Retain; guard root-wide semantics |
+| `help_modes_test.go` | CLI composition / reviewed examples help mode | Retain; verify parsed modes and authored examples |
 | `herdr_authorize_test.go` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `herdr_console_test.go` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `herdr_lifecycle_test.go` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
