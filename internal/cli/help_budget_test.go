@@ -5,7 +5,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	
 )
 
 // TestBasicHelpBudgetRealTree checks registered command paths without executing
@@ -53,7 +52,7 @@ func TestBasicHelpBudgetRealTree(t *testing.T) {
 			if len(lines) > 35 { t.Errorf("help is %d lines (limit 35)", len(lines)) }
 			for i, line := range lines {
 				if len([]rune(line)) > 80 {
-					t.Errorf("line %d is %d columns (limit 80): %s", i+1, utf8.RuneCountInString(line), line)
+					t.Errorf("line %d is %d columns (limit 80): %s", i+1, len([]rune(line)), line)
 				}
 			}
 		})
