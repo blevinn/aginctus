@@ -26,9 +26,16 @@ func (s *StateService) Accepted(ctx context.Context, req ReadStateRequest) (api.
 	if s == nil {
 		return api.AcceptedStateStatus{}, errors.New("accepted-state reader unavailable")
 	}
-	return (&AcceptedStatesService{reader: s.accepted}).Get(ctx, GetAcceptedStateRequest{
+	result, err := (&AcceptedStatesService{reader: s.accepted}).Get(ctx, GetAcceptedStateRequest{
 		Project: req.Project, EnvironmentID: req.EnvironmentID,
 	})
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return api.AcceptedStateStatus{}, err
+		}
+		return api.AcceptedStateStatus{}, errors.New("authenticated accepted-state read unavailable")
+	}
+	return result, nil
 }
 
 // Diff does not promote configured state. It checks the result's environment,
