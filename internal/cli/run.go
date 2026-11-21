@@ -17,6 +17,7 @@ import (
 	"github.com/blevinn/aginctus/internal/orchestration/managementnetwork"
 	"github.com/blevinn/aginctus/internal/plugins"
 	"github.com/blevinn/aginctus/internal/workload"
+	"github.com/blevinn/aginctus/pkg/client"
 )
 
 type IncusClient interface {
@@ -65,7 +66,16 @@ func Run(
 func RunWithPlugins(ctx context.Context, args []string, stdout, stderr io.Writer,
 	incusClient IncusClient, configLoader ConfigLoader, registry *plugins.Registry,
 ) int {
-	return runBasicCobra(ctx, args, stdout, stderr, incusClient, configLoader, registry)
+	return runBasicCobra(ctx, args, stdout, stderr, incusClient, configLoader, registry, nil)
+}
+
+// RunWithLogicalWorkloads is for hosts that inject an authenticated,
+// environment-owned workload reader. Passing nil deliberately fails closed.
+// This is not a credentialed remote management interface.
+func RunWithLogicalWorkloads(ctx context.Context,args []string,stdout,stderr io.Writer,
+	incusClient IncusClient, configLoader ConfigLoader, registry *plugins.Registry,
+	reader client.LogicalWorkloadReader) int {
+	return runBasicCobra(ctx,args,stdout,stderr,incusClient,configLoader,registry,reader)
 }
 
 var setIncusHTTPSAddress = func(ctx context.Context, address string) error {
