@@ -257,6 +257,9 @@
         accepted-state-incus = import ./tests/nix/vm-harness/accepted-state-incus.nix {
           inherit self nixpkgs system;
         };
+        environment-project-state-incus = import ./tests/nix/vm-harness/environment-project-state-incus.nix {
+          inherit self nixpkgs system;
+        };
       });
 
       checks = forAllSystems (
