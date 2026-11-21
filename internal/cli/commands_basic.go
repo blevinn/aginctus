@@ -137,13 +137,14 @@ func runBasicCobra(
 				return err
 			}
 			pluginInventory := cmd.Parent() == pluginCmd && (cmd.Name() == "inventory" || cmd.Name() == "show")
+			configSelection := cmd.Parent() != nil && cmd.Parent().Name() == "config" && cmd.Name() == "scope"
 			logicalWorkload := cmd.Parent() != nil && (cmd.Parent().Name() == "workloads" || cmd.Parent().Name() == "agents" || cmd.Parent().Name() == "frontends" || cmd.Parent().Name() == "gateways") &&
 				(cmd.Name() == "list" || cmd.Name() == "show" || cmd.Name() == "status")
 			environmentRead := cmd.Parent() != nil && cmd.Parent().Name() == "environment" &&
 				(cmd.Name() == "list" || cmd.Name() == "show")
 			verifiedScopedWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workload" &&
 				(cmd.Name() == "ls" || cmd.Name() == "status") && cmd.Flags().Changed("project")
-			if !pluginInventory && !verifiedScopedWorkload && !logicalWorkload && !environmentRead {
+			if !pluginInventory && !verifiedScopedWorkload && !logicalWorkload && !environmentRead && !configSelection {
 				return fmt.Errorf("--output is not yet supported by %s", cmd.CommandPath())
 			}
 		}
@@ -202,6 +203,7 @@ func runBasicCobra(
 			return nil
 		},
 	})
+	addConfigScope(configCmd, root, stdout, load, &outputFormat)
 	root.AddCommand(configCmd)
 
 	var fix bool
