@@ -66,7 +66,7 @@ func Run(
 func RunWithPlugins(ctx context.Context, args []string, stdout, stderr io.Writer,
 	incusClient IncusClient, configLoader ConfigLoader, registry *plugins.Registry,
 ) int {
-	return runBasicCobra(ctx, args, stdout, stderr, incusClient, configLoader, registry, nil)
+	return runBasicCobra(ctx, args, stdout, stderr, incusClient, configLoader, registry, nil, nil)
 }
 
 // RunWithLogicalWorkloads is for hosts that inject an authenticated,
@@ -75,7 +75,16 @@ func RunWithPlugins(ctx context.Context, args []string, stdout, stderr io.Writer
 func RunWithLogicalWorkloads(ctx context.Context,args []string,stdout,stderr io.Writer,
 	incusClient IncusClient, configLoader ConfigLoader, registry *plugins.Registry,
 	reader client.LogicalWorkloadReader) int {
-	return runBasicCobra(ctx,args,stdout,stderr,incusClient,configLoader,registry,reader)
+	return runBasicCobra(ctx,args,stdout,stderr,incusClient,configLoader,registry,reader,nil)
+}
+
+// RunWithAuthorizedReaders is used only by an embedding host supplying
+// independently authenticated enrollment and logical workload readers.
+// A nil reader never falls back to instance labels or the local state socket.
+func RunWithAuthorizedReaders(ctx context.Context,args []string,stdout,stderr io.Writer,
+	incusClient IncusClient, configLoader ConfigLoader, registry *plugins.Registry,
+	environments client.EnvironmentReader, workloads client.LogicalWorkloadReader) int {
+	return runBasicCobra(ctx,args,stdout,stderr,incusClient,configLoader,registry,workloads,environments)
 }
 
 var setIncusHTTPSAddress = func(ctx context.Context, address string) error {
