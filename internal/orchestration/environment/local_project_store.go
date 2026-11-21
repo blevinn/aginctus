@@ -320,4 +320,3 @@ func (s *LocalProjectStateStore) ReadLocalRevision(ctx context.Context, enrolled
 	}
 	return AcceptedRevision{},Candidate{},errors.New("revision is not in published accepted history")
 }
-
