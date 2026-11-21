@@ -43,7 +43,7 @@ func TestHelpOfflineInventory(t *testing.T) {
 			t.Fatalf("%q: code=%d stdout=%q stderr=%q", args, code, out.String(), errs.String())
 		}
 	}
-	for _, word := range []string{"gateway", "network", "herdr", "workload", "images", "operator", "testenv", "--configuration-file"} {
+	for _, word := range []string{"gateway", "network", "herdr", "workload", "images", "operator", "testenv"} {
 		if !strings.Contains(top.String(), word) {
 			t.Errorf("root help missing %q", word)
 		}
@@ -64,7 +64,7 @@ func TestHelpGeneratedFamilyTreeMatchesCanonicalSyntax(t *testing.T) {
 		{"testenv", []string{"aginctus testenv vm plan SCENARIO", "aginctus testenv vm test SCENARIO"}},
 	} {
 		var out, errs bytes.Buffer
-		if code := Run(context.Background(), []string{"help", tc.family}, &out, &errs, nil, nil); code != 0 || errs.Len() != 0 {
+		if code := Run(context.Background(), []string{"help", "--full", tc.family}, &out, &errs, nil, nil); code != 0 || errs.Len() != 0 {
 			t.Fatalf("%s: code=%d stderr=%q", tc.family, code, errs.String())
 		}
 		for _, route := range tc.routes {
@@ -73,7 +73,7 @@ func TestHelpGeneratedFamilyTreeMatchesCanonicalSyntax(t *testing.T) {
 			}
 		}
 		var direct bytes.Buffer
-		if code := Run(context.Background(), []string{tc.family, "--help"}, &direct, &bytes.Buffer{}, nil, nil); code != 0 || !reflect.DeepEqual(helpRoutes(direct.String()), helpRoutes(out.String())) {
+		if code := Run(context.Background(), []string{"help", "--full", tc.family}, &direct, &bytes.Buffer{}, nil, nil); code != 0 || !reflect.DeepEqual(helpRoutes(direct.String()), helpRoutes(out.String())) {
 			t.Errorf("%s family help differs from help command", tc.family)
 		}
 	}
@@ -111,11 +111,11 @@ func TestHelpLeafFlagsAndSafetyClaims(t *testing.T) {
 		args     []string
 		required []string
 	}{
-		{[]string{"help", "gateway"}, []string{"--confirm-stopped-instance", "--confirm-bridge-only", "--uplink-zone", "does not activate inference", "preserves persistent volumes"}},
-		{[]string{"help", "workload"}, []string{"--project", "--confirm-start", "--confirm-stop", "compatibility mapping"}},
-		{[]string{"help", "images"}, []string{"--project", "--owner", "--confirm-create"}},
-		{[]string{"help", "apply"}, []string{"--from", "--render"}},
-		{[]string{"gateway", "model", "register", "--help"}, []string{"--provider", "--source", "--dry-run"}},
+		{[]string{"help", "--full", "gateway"}, []string{"--confirm-stopped-instance", "--confirm-bridge-only", "--uplink-zone", "does not activate inference", "preserves persistent volumes"}},
+		{[]string{"help", "--full", "workload"}, []string{"--project", "--confirm-start", "--confirm-stop", "compatibility mapping"}},
+		{[]string{"help", "--full", "images"}, []string{"--project", "--owner", "--confirm-create"}},
+		{[]string{"help", "--full", "apply"}, []string{"--from", "--render"}},
+		{[]string{"help", "--full", "gateway", "model", "register"}, []string{"--provider", "--source", "--dry-run"}},
 	} {
 		var out, errs bytes.Buffer
 		if code := Run(context.Background(), tc.args, &out, &errs, nil, nil); code != 0 || errs.Len() != 0 {

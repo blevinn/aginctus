@@ -77,9 +77,17 @@ CLI command enables privilege escalation or reconciles resources.
 ## Wire compatibility discipline
 
 `internal/cli/output/testdata/` contains v1alpha1 golden JSON documents
-for `PluginList`, `ScopedWorkloadStatusList`, and `Error`. Tests
-compare complete serialization bytes and verify YAML→JSON semantic parity,
-while separate tests require empty collections to serialize as `[]`.
+for `PluginList`, `PluginDetail`, `EnvironmentList`, `WorkloadList`,
+`ConfiguredWorkloadList`, `WorkloadStatus`, `ScopedWorkloadStatusList`, and
+`Error`. Tests compare complete serialized JSON bytes and verify YAML→JSON
+semantic parity, while separate tests require empty collections to serialize
+as `[]`.
+
+`EnvironmentList` and `WorkloadList` describe authenticated resource identity;
+`ConfiguredWorkloadList` is specifically a **configured candidate projection**;
+`WorkloadStatus` describes observation and may contain an accepted revision
+only when supplied by an authoritative reader. Their similar names do not
+make these layers interchangeable.
 
 For schema updates:
 1. Change public `pkg/api` types intentionally; never derive them
