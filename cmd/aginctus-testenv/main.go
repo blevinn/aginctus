@@ -11,7 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	workercmd "github.com/blevinn/aginctus/internal/testenv/commands/worker"
+	workercmd "github.com/blevinn/aginctus/internal/testing/testenv/commands/worker"
 	"github.com/spf13/cobra"
 )
 
