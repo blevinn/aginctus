@@ -50,7 +50,7 @@ func RenderBasic(cmd *cobra.Command, out io.Writer) error {
 				padding := 18 - displayColumns(line)
 				if padding < 2 { padding = 2 }
 				label := line + strings.Repeat(" ", padding)
-				if utf8.RuneCountInString(label+child.Short) <= BasicHelpWidth {
+				if displayColumns(label+child.Short) <= BasicHelpWidth {
 					line = label + child.Short
 				}
 			}
@@ -91,7 +91,7 @@ func RenderBasic(cmd *cobra.Command, out io.Writer) error {
 		return fmt.Errorf("%s: basic help is %d lines (maximum %d); group commands or revise hierarchy", cmd.CommandPath(), len(lines), BasicHelpMaxLines)
 	}
 	for i, line := range lines {
-		if utf8.RuneCountInString(line) > BasicHelpWidth {
+		if displayColumns(line) > BasicHelpWidth {
 			return fmt.Errorf("%s: basic help line %d exceeds %d columns: %q", cmd.CommandPath(), i+1, BasicHelpWidth, line)
 		}
 	}
@@ -100,7 +100,7 @@ func RenderBasic(cmd *cobra.Command, out io.Writer) error {
 }
 
 func wrapWords(line string, width int) []string {
-	if utf8.RuneCountInString(line) <= width { return []string{line} }
+	if displayColumns(line) <= width { return []string{line} }
 	words := strings.Fields(line)
 	if len(words) == 0 { return []string{""} }
 	lines := []string{}
@@ -109,7 +109,7 @@ func wrapWords(line string, width int) []string {
 		next := current
 		if strings.TrimSpace(current) != "" { next += " " }
 		next += word
-		if utf8.RuneCountInString(next) > width && strings.TrimSpace(current) != "" {
+		if displayColumns(next) > width && strings.TrimSpace(current) != "" {
 			lines = append(lines, current)
 			current = "    " + word
 		} else {
