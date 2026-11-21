@@ -277,22 +277,47 @@ func (s *LocalProjectStateStore) CommitLocalCandidate(
 	return next,nil
 }
 
-// ReadLocalRevision locates an immutable historical revision by ID in the
-// selected environment, never by display name or a project-global lookup.
-// It rejects foreign revisions and broken content/identity relationships.
+// ReadLocalRevision only returns revisions reachable from the CURRENT
+// published active pointer through verified parent links. An immutable record
+// can exist after a crash before active-pointer publication; such an orphan
+// is NOT an accepted revision merely because it has a valid content hash.
+// This fixture bounds lineage traversal; production history will need an
+// indexed/paginated authenticated service for long-running environments.
 func (s *LocalProjectStateStore) ReadLocalRevision(ctx context.Context, enrolled Descriptor, id string)(AcceptedRevision,Candidate,error){
 	if ctx==nil{return AcceptedRevision{},Candidate{},errors.New("local historical read requires context")}
 	if err:=ctx.Err();err!=nil{return AcceptedRevision{},Candidate{},err}
+	if !validAcceptedHash(id){return AcceptedRevision{},Candidate{},errors.New("invalid historical revision ID")}
 	path,err:=s.namespace(enrolled)
 	if err!=nil{return AcceptedRevision{},Candidate{},err}
 	if err:=checkPrivateLocalDir(path);err!=nil{return AcceptedRevision{},Candidate{},err}
 	if err:=checkPrivateLocalDir(filepath.Join(path,"revisions"));err!=nil{return AcceptedRevision{},Candidate{},err}
-	rev,c,err:=s.readRevision(path,id)
+	active,_,err:=s.readNamespace(ctx,enrolled)
 	if err!=nil{return AcceptedRevision{},Candidate{},err}
-	if rev.EnvironmentID!=enrolled.ID || rev.ServerID!=s.binding.ServerID || rev.Project!=s.binding.Project{
-		return AcceptedRevision{},Candidate{},errors.New("historical revision belongs to different environment")
+	if active==nil{return AcceptedRevision{},Candidate{},errors.New("no published accepted environment revision")}
+	if active.Generation>8192{return AcceptedRevision{},Candidate{},errors.New("local history exceeds bounded inspection limit")}
+	current:=*active
+	for step:=uint64(0);step<active.Generation;step++{
+		if err:=ctx.Err();err!=nil{return AcceptedRevision{},Candidate{},err}
+		revision,candidate,err:=s.readRevision(path,current.ID)
+		if err!=nil{return AcceptedRevision{},Candidate{},err}
+		if revision!=current || revision.EnvironmentID!=enrolled.ID ||
+			revision.ServerID!=s.binding.ServerID || revision.Project!=s.binding.Project {
+			return AcceptedRevision{},Candidate{},errors.New("broken environment accepted revision lineage")
+		}
+		if current.ID==id{return revision,candidate,nil}
+		if current.Generation==1 {break}
+		if !validAcceptedHash(current.ParentID){
+			return AcceptedRevision{},Candidate{},errors.New("invalid accepted parent reference")
+		}
+		parent,_,err:=s.readRevision(path,current.ParentID)
+		if err!=nil{return AcceptedRevision{},Candidate{},err}
+		if parent.Generation!=current.Generation-1 || parent.ID!=current.ParentID ||
+			parent.EnvironmentID!=current.EnvironmentID || parent.ServerID!=current.ServerID ||
+			parent.Project!=current.Project {
+			return AcceptedRevision{},Candidate{},errors.New("accepted parent lineage mismatch")
+		}
+		current=parent
 	}
-	if err:=ctx.Err();err!=nil{return AcceptedRevision{},Candidate{},err}
-	return rev,c,nil
+	return AcceptedRevision{},Candidate{},errors.New("revision is not in published accepted history")
 }
 
