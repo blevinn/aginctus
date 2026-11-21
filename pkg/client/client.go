@@ -19,6 +19,7 @@ type Options struct {
 	ScopedWorkloadReader  ScopedWorkloadStatusReader
 	LogicalWorkloadReader LogicalWorkloadReader
 	EnvironmentReader     EnvironmentReader
+	ConfiguredStateReader ConfiguredStateReader
 	AcceptedStateReader   AcceptedStateReader
 	DefaultProject        string
 	DefaultEnvironmentID  string
@@ -29,7 +30,8 @@ type Options struct {
 type Client struct {
 	Plugins      *PluginsService
 	Workloads    *WorkloadsService
-	Environments *EnvironmentsService
+	Environments   *EnvironmentsService
+	State          *StateService
 	AcceptedStates *AcceptedStatesService
 }
 
@@ -39,7 +41,8 @@ func New(options Options) *Client {
 	return &Client{
 		Plugins:      &PluginsService{inventory: options.PluginInventory},
 		Workloads:    &WorkloadsService{reader: options.ScopedWorkloadReader, logical: options.LogicalWorkloadReader},
-		Environments: &EnvironmentsService{reader: options.EnvironmentReader, defaultProject: options.DefaultProject, defaultID: options.DefaultEnvironmentID},
+		Environments:   &EnvironmentsService{reader: options.EnvironmentReader, defaultProject: options.DefaultProject, defaultID: options.DefaultEnvironmentID},
+		State:          &StateService{configured: options.ConfiguredStateReader},
 		AcceptedStates: &AcceptedStatesService{reader: options.AcceptedStateReader},
 	}
 }
