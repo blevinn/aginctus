@@ -200,7 +200,7 @@ entry point (the preflight input paths must refer to saved JSON from the
 explicit pilot preflight reporting commands):
 
 ```sh
-nix develop -c python3 -m scripts.checks.coverage --format json \
+nix develop -c python3 -m tests.validation.coverage --format json \
   --hermetic-json /tmp/aginctus-hermetic.json \
   --vm-run-id <24-hex-run-id> \
   --pilot-topology-json /path/to/prior-pilot-topology.json \
@@ -212,7 +212,7 @@ result** from the private directory created by the accepted OpenCode harness:
 
 ```sh
 export AGINCTUS_ACCEPTANCE_REPORT_ROOT="$HOME/.local/state/aginctus/acceptance-results"
-nix develop -c python3 -m scripts.checks.coverage --format json \
+nix develop -c python3 -m tests.validation.coverage --format json \
   --local-acceptance-run-id <existing-aginctus-acceptance-run-id>
 ```
 

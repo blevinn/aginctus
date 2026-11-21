@@ -25,7 +25,7 @@ class AuditTest(unittest.TestCase):
         self.bundle.mkdir()
         self.hashes = {}
         for name, source in audit.SOURCES.items():
-            data = (Path(audit.__file__).parent / source).read_bytes()
+            data = (Path(audit.__file__).resolve().parents[2] / "plugins/litellm/runtime" / source).read_bytes()
             (self.bundle / name).write_bytes(data)
             self.hashes[name] = hashlib.sha256(data).hexdigest()
         (self.bundle / "manifest.json").write_text(json.dumps(self.hashes))
@@ -119,7 +119,7 @@ class AuditTest(unittest.TestCase):
             config.write_bytes(data)
             self.assert_failure("FAIL_BUNDLE", audit.bundle_hashes, self.bundle)
         config.unlink()
-        config.symlink_to(Path(audit.__file__).parent / "selective-go.yaml")
+        config.symlink_to(Path(audit.__file__).resolve().parents[2] / "plugins/litellm/runtime/selective-go.yaml")
         self.assert_failure("FAIL_BUNDLE", audit.bundle_hashes, self.bundle)
         config.unlink()
         config.write_bytes(original)

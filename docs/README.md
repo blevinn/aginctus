@@ -7,7 +7,7 @@ Use this guide to find the **current** operator path, implementation contract or
 - [Getting started](getting-started.md) — build, inspect prerequisites and understand NixOS/Incus side effects before any deployment.
 - [Operations](operations/README.md) — explicit host, gateway and workload administration; authorization and recovery rules.
 - [Testing and acceptance](testing/README.md) — choose hermetic, VM, dedicated-worker, read-only or live inference tiers; understand proof limits.
-- [Reference](reference/README.md) — current CLI semantics, configuration precedence, declaration contracts, security limitations.
+- [Reference](reference/README.md) — current CLI semantics, configuration precedence, declaration contracts, security limitations, and [Go client output contracts](reference/go-client-output.md).
 - [Architecture](architecture/README.md) — implemented topology and its transitional boundaries; [native reconciliation ADR](adr/0002-native-incus-reconciliation.md).
 - [Development](development/README.md) — reproducible tools, checks, CI and release workflow.
 

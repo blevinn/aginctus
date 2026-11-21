@@ -1,0 +1,18 @@
+{
+  "apiVersion": "aginctus.dev/v1alpha1",
+  "kind": "PluginList",
+  "items": [
+    {
+      "name": "example-agent",
+      "version": "1.0",
+      "pluginApiVersion": "aginctus.dev/plugin/v1alpha1",
+      "capabilities": [
+        {
+          "name": "assistant",
+          "kind": "agent"
+        }
+      ],
+      "dependencies": []
+    }
+  ]
+}
