@@ -3,6 +3,50 @@
 Status: design contract, **not an approved authenticated state-service implementation**.
 Parent: [ADR 0006](../adr/0006-environment-incus-authority.md). Gates: [#695](https://github.com/blevinn/aginctus/issues/695), [#696](https://github.com/blevinn/aginctus/issues/696), [#704](https://github.com/blevinn/aginctus/issues/704). Existing experimental store: [accepted-state local](../operations/accepted-state-local.md).
 
+## Implementation checkpoint (2026-11-21)
+
+The first environment-scoped persistence engineering stack is
+[#1007](https://github.com/blevinn/aginctus/pull/1007) →
+[#1009](https://github.com/blevinn/aginctus/pull/1009) →
+[#1010](https://github.com/blevinn/aginctus/pull/1010) →
+[#1011](https://github.com/blevinn/aginctus/pull/1011):
+
+- A versioned `AcceptedRevision` content identity binds immutable
+  environment UUID, server/project, generation, parent and canonical
+  nonsecret `EnvironmentCandidate` digest.
+- `LocalProjectStateStore` is a deliberately **same-UID, local filesystem
+  fixture**, holding a versioned server/project anchor and a separate
+  `environments/<UUID>/` accepted pointer, immutable revision history and
+  cooperative lock for each environment. It tests two revision histories
+  under one project, CAS conflict, restart and tampering.
+- `PinLocalAccepted` and the immutable **unverified** start-intention record
+  test retention of selected accepted state and process-crash recovery,
+  without authorizing an Incus mutation.
+- Historical reads verify reachability from the *published* active pointer;
+  an immutable revision written before a crash but never published does
+  **not** count as accepted history. Explicit CAS may safely reuse an
+  identical uncommitted immutable record after inspection.
+
+**None of these APIs authenticates a project principal or makes this
+fixture a project-accessible state authority.** The root path is caller
+provided and must be under a trusted same-UID directory. Its exact
+server/project anchor is validated for correctness but was not obtained
+from an Incus daemon. A caller-supplied observed binding is not credential
+evidence; a filesystem `.flock` cannot prevent another Incus client from
+changing a resource. Do not expose the fixture directly as a user-facing
+`accept` endpoint or infer from its tests that #695/#696/#704 are complete.
+
+The **next physical implementation** must choose and deploy project-owned
+Incus-accessible storage/service topology, independently prove the
+effective daemon project identity on every trust-boundary crossing, and
+enforce project credential restrictions without a privileged root deputy.
+It must bootstrap and recover without reading its own unavailable accepted
+pointer, independently fence cooperating environment writers, and persist
+durable unknown/partial outcomes around the actual SDK operation. Exercise
+multiple environments, cross-project denial, crash/backup/restore and
+in-flight revocation against disposable *real* Incus before enabling
+Home Manager or NixOS automatic environment reconciliation.
+
 ## Scope and authority
 
 The **Incus project is the logical three-layer configured → accepted → observed state authority**, identified by verified server identity plus exact project. A project can contain many independently managed environments. Environment state is a subordinate namespace keyed by immutable environment UUID; it is not a separate authentication or authorization principal. Never identify a project authority by display name, selected remote alias, Unix UID or XDG path. Never identify an environment's accepted records by project alone. Two environments in one project have distinct active pointers, immutable revision lineages, operation histories and cooperating-writer fences; no project-wide monolithic accepted revision is required.
