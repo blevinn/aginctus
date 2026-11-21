@@ -3,7 +3,6 @@ package environment
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 )
 
@@ -39,12 +38,12 @@ func (r Catalog) List(ctx context.Context, project string) ([]Descriptor, error)
 	}
 	if project == "" { return nil, errors.New("explicit Incus project required") }
 	binding, err := r.Verifier.VerifyProject(ctx, project)
-	if err != nil { return nil, fmt.Errorf("verified environment project unavailable: %w", err) }
+	if err != nil { return nil, errors.New("verified environment project unavailable") }
 	if binding.Project != project || binding.ServerID == "" {
 		return nil, errors.New("verified connection does not match selected project")
 	}
 	records, err := r.Source.Enrolled(ctx, binding)
-	if err != nil { return nil, fmt.Errorf("enrolled environment inventory unavailable: %w", err) }
+	if err != nil { return nil, errors.New("enrolled environment inventory unavailable") }
 	if records == nil { return nil, errors.New("enrolled environment inventory unavailable") }
 	seen := make(map[string]bool, len(records))
 	out := make([]Descriptor, 0, len(records))
