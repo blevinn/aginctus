@@ -15,7 +15,10 @@ import (
 // reader. Ordinary CLI invocations have no such authority until an approved
 // project-scoped state backend is deployed; they fail closed.
 func registerLogicalWorkloadReads(root *cobra.Command, stdout io.Writer, reader client.LogicalWorkloadReader, project, environmentID, requestedFormat *string) {
-	parent := &cobra.Command{Use:"workloads",Short:"Read environment-owned logical workloads",Args:cobra.NoArgs}
+	for _,family := range []struct{name string; class api.WorkloadClass}{
+		{"workloads",""},{"agents",api.WorkloadClassAgent},{"frontends",api.WorkloadClassFrontend},{"gateways",api.WorkloadClassGateway},
+	} {
+	parent := &cobra.Command{Use:family.name,Short:"Read environment-owned logical workloads",Args:cobra.NoArgs}
 	root.AddCommand(parent)
 	format := func()(clioutput.Format,error){
 		if !root.PersistentFlags().Changed("output"){return clioutput.Table,nil}
@@ -29,7 +32,7 @@ func registerLogicalWorkloadReads(root *cobra.Command, stdout io.Writer, reader 
 		RunE:func(cmd *cobra.Command,_ []string)error{
 			f,err:=format();if err!=nil{return err}
 			// Same scope and logical result for every format.
-			list,err:=newService().List(cmd.Context(),api.ListWorkloadsRequest{Project:*project,EnvironmentID:*environmentID})
+			list,err:=newService().List(cmd.Context(),api.ListWorkloadsRequest{Project:*project,EnvironmentID:*environmentID,Class:family.class})
 			if err!=nil{return err}
 			return renderLogicalWorkloadList(stdout,f,list)
 		},
@@ -40,6 +43,7 @@ func registerLogicalWorkloadReads(root *cobra.Command, stdout io.Writer, reader 
 			f,err:=format();if err!=nil{return err}
 			item,err:=newService().Get(cmd.Context(),api.GetWorkloadRequest{Project:*project,EnvironmentID:*environmentID,Name:args[0]})
 			if err!=nil{return err}
+			if family.class!=""&&item.Class!=family.class{return fmt.Errorf("workload class does not match %s",family.name)}
 			return renderLogicalWorkloadDetail(stdout,f,item)
 		},
 	})
@@ -47,11 +51,17 @@ func registerLogicalWorkloadReads(root *cobra.Command, stdout io.Writer, reader 
 		Use:"status NAME",Args:cobra.ExactArgs(1),Short:"Inspect workload observations",
 		RunE:func(cmd *cobra.Command,args []string)error{
 			f,err:=format();if err!=nil{return err}
+			if family.class!="" {
+				owned,err:=newService().Get(cmd.Context(),api.GetWorkloadRequest{Project:*project,EnvironmentID:*environmentID,Name:args[0]})
+				if err!=nil{return err}
+				if owned.Class!=family.class{return fmt.Errorf("workload class does not match %s",family.name)}
+			}
 			item,err:=newService().Status(cmd.Context(),api.WorkloadStatusRequest{Project:*project,EnvironmentID:*environmentID,Name:args[0]})
 			if err!=nil{return err}
 			return renderLogicalWorkloadStatus(stdout,f,item)
 		},
 	})
+	}
 }
 func renderLogicalWorkloadList(out io.Writer,f clioutput.Format,list api.WorkloadList)error{
 	switch f{
