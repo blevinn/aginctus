@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/blevinn/aginctus/internal/testenv"
+	"github.com/blevinn/aginctus/internal/testing/testenv"
 )
 
 // Actions delegates only the explicitly parsed VM test or MCP action to

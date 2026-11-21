@@ -25,29 +25,14 @@ type EgressActions struct {
 }
 
 func ReconcileEgress(ctx context.Context, stdout, stderr io.Writer, cfg *config.Config, revoke bool, actions EgressActions) int {
-	if actions.EffectiveUID() != 0 {
-		fmt.Fprintln(stderr, "egress firewall reconciliation requires root; no authorization prompt attempted")
-		return 1
-	}
-	unlock, err := actions.Lock("/run/aginctus-firewall")
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return 1
-	}
-	defer unlock()
-	bridge, err := cfg.String("gateway.egress.network.name")
-	if err != nil || bridge == "" {
-		fmt.Fprintln(stderr, "configured egress bridge required")
-		return 1
-	}
-	discover := func(ctx context.Context) (firewall.EgressGrant, error) {
-		if revoke {
-			return firewall.EgressGrant{}, nil
-		}
+	if err := firewall.ReconcileAuthorizedEgress(ctx, revoke, firewall.AuthorizedEgressActions{
+		EffectiveUID: actions.EffectiveUID,
+		Lock: actions.Lock,
+		Bridge: func() (string, error) { return cfg.String("gateway.egress.network.name") },
+	}, func(ctx context.Context) (firewall.EgressGrant, error) {
 		return DiscoverEgressGrant(ctx, cfg, actions)
-	}
-	if err := firewall.ReconcileEgress(ctx, firewall.Busctl{}, firewall.EgressStateFile("/run/aginctus-firewall/state.json"), bridge, discover); err != nil {
-		fmt.Fprintf(stderr, "egress firewall: %v\n", err)
+	}); err != nil {
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	fmt.Fprintln(stdout, "egress runtime permissions reconciled; permanent default-deny boundary unchanged")
