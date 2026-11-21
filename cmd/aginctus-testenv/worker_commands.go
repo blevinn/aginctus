@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/blevinn/aginctus/internal/testenv"
-	workercmd "github.com/blevinn/aginctus/internal/testenv/commands/worker"
+	"github.com/blevinn/aginctus/internal/testing/testenv"
+	workercmd "github.com/blevinn/aginctus/internal/testing/testenv/commands/worker"
 )
 
 type workerServices struct {

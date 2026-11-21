@@ -54,7 +54,7 @@ func TestSIWCExchangeCommitsThroughRealPythonProtocol(t *testing.T) {
 		t.Skip("Python protocol probe requires the development shell")
 	}
 	directory := filepath.Join(t.TempDir(), "credentials")
-	command := exec.Command(python, "-c", `import sys;sys.path.insert(0,sys.argv[1]);import siwc,siwc_admin;siwc_admin.exchange(siwc.Store(sys.argv[2]),sys.stdin,sys.stdout)`, filepath.Join("..", "..", "scripts", "gateway"), directory)
+	command := exec.Command(python, "-c", `import sys;sys.path.insert(0,sys.argv[1]);import siwc,siwc_admin;siwc_admin.exchange(siwc.Store(sys.argv[2]),sys.stdin,sys.stdout)`, filepath.Join("..", "..", "plugins", "litellm", "runtime"), directory)
 	input, err := command.StdinPipe()
 	if err != nil {
 		t.Fatal(err)

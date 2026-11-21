@@ -1,0 +1,12 @@
+{
+  "apiVersion": "aginctus.dev/v1alpha1",
+  "kind": "ScopedWorkloadStatusList",
+  "project": "aginctus",
+  "items": [
+    {
+      "name": "dev",
+      "instance": "aginctus-dev",
+      "state": "Running"
+    }
+  ]
+}
