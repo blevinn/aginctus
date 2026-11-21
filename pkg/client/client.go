@@ -20,6 +20,7 @@ type Options struct {
 	LogicalWorkloadReader LogicalWorkloadReader
 	EnvironmentReader     EnvironmentReader
 	ConfigSelectionReader ConfigSelectionReader
+	SystemReader SystemReader
 	DefaultProject        string
 	DefaultEnvironmentID  string
 }
@@ -31,6 +32,7 @@ type Client struct {
 	Workloads    *WorkloadsService
 	Environments *EnvironmentsService
 	Config *ConfigService
+	System *SystemService
 }
 
 // New constructs a client without loading ambient configuration or touching
@@ -41,5 +43,6 @@ func New(options Options) *Client {
 		Workloads:    &WorkloadsService{reader: options.ScopedWorkloadReader, logical: options.LogicalWorkloadReader},
 		Environments: &EnvironmentsService{reader: options.EnvironmentReader, defaultProject: options.DefaultProject, defaultID: options.DefaultEnvironmentID},
 		Config: &ConfigService{reader: options.ConfigSelectionReader},
+		System: &SystemService{reader: options.SystemReader},
 	}
 }
