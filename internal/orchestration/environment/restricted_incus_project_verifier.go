@@ -68,7 +68,7 @@ func (v RestrictedIncusProjectVerifier) VerifyProject(ctx context.Context, proje
 		return Binding{}, errors.New("pinned restricted Incus project required")
 	}
 	for _, ch := range v.PinnedServerCertificateSHA256 {
-		if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')) {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
 			return Binding{}, errors.New("invalid trusted Incus server pin")
 		}
 	}
@@ -84,14 +84,14 @@ func (v RestrictedIncusProjectVerifier) VerifyProject(ctx context.Context, proje
 	}
 	fingerprint, err := incusServerCertificateFingerprint(conn.Certificate)
 	if err != nil || fingerprint != v.PinnedServerCertificateSHA256 {
-		return Binding{}, errors.New("Incus server certificate differs from trusted pin")
+		return Binding{}, errors.New("incus server certificate differs from trusted pin")
 	}
 	if err := ctx.Err(); err != nil {
 		return Binding{}, err
 	}
 	server, _, err := v.Observer.GetServer()
 	if err != nil || server == nil || server.Auth != "trusted" {
-		return Binding{}, errors.New("Incus project principal is not authenticated")
+		return Binding{}, errors.New("incus project principal is not authenticated")
 	}
 	if err := ctx.Err(); err != nil {
 		return Binding{}, err
@@ -108,8 +108,8 @@ func (v RestrictedIncusProjectVerifier) VerifyProject(ctx context.Context, proje
 	// an administrative or unexpectedly broad principal. A transport error
 	// cannot masquerade as a permission denial.
 	foreign, _, denied := v.Observer.GetProject("default")
-	if foreign != nil || !(api.StatusErrorCheck(denied, http.StatusForbidden) ||
-		api.StatusErrorCheck(denied, http.StatusNotFound)) {
+	if foreign != nil || (!api.StatusErrorCheck(denied, http.StatusForbidden) &&
+		!api.StatusErrorCheck(denied, http.StatusNotFound)) {
 		return Binding{}, errors.New("restricted Incus principal confinement unverified")
 	}
 	if err := ctx.Err(); err != nil {
@@ -119,7 +119,7 @@ func (v RestrictedIncusProjectVerifier) VerifyProject(ctx context.Context, proje
 	if err != nil || again == nil || again.Protocol != conn.Protocol ||
 		again.SocketPath != conn.SocketPath || again.Project != conn.Project ||
 		again.Certificate != conn.Certificate || again.URL != conn.URL {
-		return Binding{}, errors.New("Incus connection identity changed during verification")
+		return Binding{}, errors.New("incus connection identity changed during verification")
 	}
 	if err := ctx.Err(); err != nil {
 		return Binding{}, err
