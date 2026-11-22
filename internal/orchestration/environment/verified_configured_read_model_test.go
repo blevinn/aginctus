@@ -41,7 +41,8 @@ func TestVerifiedConfiguredReadModelDeniesForeignAndBrokenSources(t *testing.T) 
 			}
 		})
 	}
-	if result, err := reader.GetConfiguredWorkloads(nil, project, id); err == nil || result.Kind != "" {
+	var noContext context.Context
+	if result, err := reader.GetConfiguredWorkloads(noContext, project, id); err == nil || result.Kind != "" {
 		t.Fatalf("nil context=%+v err=%v", result, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
