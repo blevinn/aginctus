@@ -58,3 +58,22 @@ Run with a genuinely restricted certificate for one nondefault project:
 project-state transport are not yet implemented by this verifier. The
 `RestrictedPublishedSource` and ordinary CLI remain fail-closed. Do not
 record the Phase 1 read acceptance gate as passing based on this PR alone.
+
+## Explicit SDK TLS connector
+
+`OpenExplicitRestrictedIncusProject` provides a narrower SDK constructor
+requiring the caller to supply all credentials, exact HTTPS endpoint, project,
+trusted server PEM and separately obtained fingerprint. It validates the
+certificate hostname and validity interval and the client keypair **before**
+attempting a network connection, then uses Incus SDK's verified TLS connection
+and the restricted project verifier above. No ambient Incus remote, default
+project, Unix admin socket or auto-generated credential is consulted. Connection
+failure never falls back to an administrative transport.
+
+The returned SDK client can itself make Incus mutations, so it belongs only in
+the trusted composition process, not in a lower-privilege HTTP handler, a
+candidate parser, or a generic project-state service method.
+
+This does not implement the accepted-state service transport or grant access
+to a project volume; it is only the Incus principal and enrollment read
+connection. Real TLS denial and revocation evidence remains required.
