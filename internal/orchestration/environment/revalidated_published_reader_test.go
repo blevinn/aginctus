@@ -44,8 +44,8 @@ func TestRevalidatedReadDetectsProjectRetargetAcrossSourceRead(t *testing.T) {
 	if rev, body, err := reader.Read(context.Background(), c.Environment.Binding.Project, c.Environment.ID); err == nil || rev != nil || body != nil {
 		t.Fatal("published read succeeded after project identity changed")
 	}
-	if source.calls != 1 || verifier.calls != 2 {
-		t.Fatalf("required separate pre/post checks: source=%d verification=%d", source.calls, verifier.calls)
+	if source.calls != 0 || verifier.calls != 2 {
+		t.Fatalf("catalog post-check must block source read: source=%d verification=%d", source.calls, verifier.calls)
 	}
 	verifier.calls = 0
 	verifier.second = verifier.first
