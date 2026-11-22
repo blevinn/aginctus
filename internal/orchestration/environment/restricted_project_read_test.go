@@ -80,7 +80,8 @@ func TestRestrictedReadRejectsCorruptionErrorsAndForeignScope(t *testing.T) {
 	if _,_,err:=ReadRestrictedProjectAccepted(context.Background(),s,c.Environment);err==nil || strings.Contains(err.Error(),"sensitive") {
 		t.Fatal("source error leaked or passed")
 	}
-	if _,_,err:=ReadRestrictedProjectAccepted(nil,s,c.Environment);err==nil {
+	var nilContext context.Context
+	if _,_,err:=ReadRestrictedProjectAccepted(nilContext,s,c.Environment);err==nil {
 		t.Fatal("accepted nil context")
 	}
 	ctx,cancel:=context.WithCancel(context.Background())
