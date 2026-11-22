@@ -143,3 +143,21 @@ func equalStringMap(a,b map[string]string) bool {
 	for k,v := range a { if b[k]!=v { return false } }
 	return true
 }
+
+
+// ObserveLocalProjectServiceAttachment is an explicit administrator-only,
+// read-only helper for the host Incus Unix socket. It must NEVER be called
+// from a lower-privilege client, state-service HTTP handler, candidate loader,
+// or project-scoped user workflow: the local socket may grant host-wide
+// administrator power. It does not create or change Incus resources.
+func ObserveLocalProjectServiceAttachment(ctx context.Context, expected ProjectServiceAttachment) error {
+	if ctx == nil { return errors.New("state-service attachment inspection requires context") }
+	if err := ctx.Err(); err != nil { return err }
+	if (Descriptor{ID:"7c82e6d1-1212-4123-8123-0123456789ab", Name:"state-service", Binding:expected.Binding}).Validate()!=nil {
+		return errors.New("invalid state-service project selection")
+	}
+	server, err := incusclient.ConnectIncusUnixWithContext(ctx,"",&incusclient.ConnectionArgs{SkipGetServer:true})
+	if err != nil { return errors.New("local administrative Incus observation unavailable") }
+	defer server.Disconnect()
+	return VerifyProjectServiceAttachment(ctx,server.UseProject(expected.Binding.Project),expected)
+}
