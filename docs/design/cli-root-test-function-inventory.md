@@ -15,6 +15,8 @@ without an updated owner decision.
 | `commands_output_test.go` | `TestUnexpectedStructuredErrorDoesNotLeakBackendDetails` | CLI composition / machine error serialization | Retain root integration and non-disclosure evidence |
 | `commands_acceptance_preview_test.go` | `TestAcceptancePlanCLIUsesVerifiedStateRead` | State planning CLI composition | Retain read-only and fail-closed root integration evidence |
 | `commands_acceptance_preview_test.go` | `TestAcceptancePlanCLIRejectsAbsentAuthority` | State planning CLI composition | Retain read-only and fail-closed root integration evidence |
+| `read_capabilities_test.go` | `TestUnifiedReadCapabilitiesShareOneInvocation` | CLI read composition | Retain root cross-family and missing-authority evidence |
+| `read_capabilities_test.go` | `TestUnifiedReadCapabilitiesFailClosedWhenMissing` | CLI read composition | Retain root cross-family and missing-authority evidence |
 | `commands_state_reads_test.go` | `TestStateCLIReadOnlyTypedOutput` | State read-only CLI composition | Retain fail-closed root entrypoint and typed output evidence |
 | `commands_state_reads_test.go` | `TestStateCLIDeniesAbsentAuthorityAndProject` | State read-only CLI composition | Retain fail-closed root entrypoint and typed output evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveDependencyOrder` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
