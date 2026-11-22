@@ -16,7 +16,7 @@ type LogicalWorkloadReader interface {
 	WorkloadStatus(context.Context,api.WorkloadStatusRequest)(api.WorkloadStatus,error)
 }
 func readScope(project,environment string) error{
-	if project==""||!IsEnvironmentUUID(environment){return fmt.Errorf("verified project and immutable environment UUID required")}
+	if project==""||!environmentUUIDPattern.MatchString(environment){return fmt.Errorf("verified project and immutable environment UUID required")}
 	return nil
 }
 func (s *WorkloadsService) List(ctx context.Context,req api.ListWorkloadsRequest)(api.WorkloadList,error){
