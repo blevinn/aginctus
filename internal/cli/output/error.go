@@ -21,11 +21,17 @@ func WriteError(w io.Writer, format Format, cause error) error {
 	var typed *api.Error
 	if errors.As(cause, &typed) && typed != nil {
 		switch typed.Code {
-		case api.CodeInvalidArgument, api.CodeNotFound, api.CodePermissionDenied, api.CodeConflict,
-			api.CodeUnavailable, api.CodeInternal:
+		case api.CodeInvalidArgument, api.CodeNotFound, api.CodePermissionDenied,
+			api.CodeConflict, api.CodeUnavailable:
+			// These classifications are explicitly public-facing; their
+			// messages must already have been sanitized at the boundary.
 			if typed.Message != "" {
 				document = api.NewError(typed.Code, typed.Message)
 			}
+		case api.CodeInternal:
+			// An internal error category never authorizes disclosure of an
+			// arbitrary internal message, even when wrapped as api.Error.
+			document = api.NewError(api.CodeInternal, "operation failed")
 		}
 	}
 	return WriteStructured(w, format, document)
