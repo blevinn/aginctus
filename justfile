@@ -69,6 +69,10 @@ test-vm-runtime-lifecycle:
 test-vm-native-instance:
     python3 tests/vm_harness/runner.py test native-instance
 
+# Gate C: explicit project policy and create-only owned image import in guest Incus.
+test-vm-acceptance-project-image:
+    python3 tests/vm_harness/runner.py test acceptance-project-image
+
 # Real LiteLLM/PostgreSQL OCI and Herdr/OpenCode topology (no model calls).
 # May need OCI registry access; use a disposable NixOS KVM worker only.
 test-vm-gateway-topology:
