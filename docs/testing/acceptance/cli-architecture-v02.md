@@ -97,7 +97,7 @@ a Python NixOS driver directly in the caller's host context. Before
 accepting a run on a multipurpose development host:
 
 - [ ] Confirm the repository and `flake.lock` are reviewed and pinned,
-  the checkout is clean, and `nix config show sandbox` reports
+  the checkout is clean, and `nix config show` reports
   `true` (not `false` or `relaxed`). Confirm the Nix daemon's
   applicable sandbox setting if the client view differs.
 - [ ] Use the current-source CLI: the installed system binary can be
