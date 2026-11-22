@@ -33,6 +33,10 @@ SCENARIOS = (
     "full-stack",
     "opencode-tool-loopback",
     "ownership-recovery",
+    "acceptance-project-authority",
+    "acceptance-environment-state",
+    "acceptance-accepted-state",
+    "acceptance-home-manager",
 )
 RUN_ID = re.compile(r"[0-9a-f]{24}\Z")
 REVISION = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
