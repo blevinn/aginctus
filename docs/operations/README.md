@@ -6,5 +6,6 @@ Start with [getting started](../getting-started.md) before provisioning. Every m
 - [Gateway workflow](gateway/README.md) — read-only baseline, separately approved egress maintenance, model registration, scoped keys, inference and recovery.
 - [Workload operations](workloads/README.md) — Herdr registration, SSH identity and workspace/resource lifecycle.
 - [Experimental local accepted-state workflow](accepted-state-local.md) — same-UID typed candidate status, diff and explicit offline CAS; **not** a deployed state service or privileged delegation.
+- [Legacy workload migration preview](accepted-state-legacy-preview.md) — non-mutating, explicitly mapped candidate projection; not resource ownership proof or migration execution.
 
 Use [reference](../reference/README.md) for CLI semantics and config sources; [testing](../testing/README.md) for what a validation PASS does and does not establish.

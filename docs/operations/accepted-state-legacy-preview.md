@@ -2,9 +2,11 @@
 
 Status: **non-mutating library preview** (#1046), not a migration executable or resource adoption process.
 
-The pure `environment.PreviewLegacyCandidate` API requires a valid legacy `WorkloadDeployment`, its explicitly pinned canonical source digest, an enrolled environment UUID with explicit server/project binding, and exactly one reviewed workload mapping for every selected workload. It refuses changed Incus projects, ambiguous target IDs and implicit instance renames. It preserves pinned image fingerprints, ordered profiles and boolean running intent, and emits a complete typed environment candidate with nonsecret source provenance.
+The pure `environment.PreviewLegacyCandidate` API requires a valid legacy `DeploymentSpec`, its explicitly pinned canonical source digest, an enrolled environment UUID with explicit server/project binding, and exactly one reviewed workload mapping for every selected workload. It refuses changed Incus projects, ambiguous target IDs and implicit instance renames. It preserves pinned image fingerprints, ordered profiles and boolean running intent, and emits a complete typed environment candidate with nonsecret source provenance.
 
 The mapping is **a proposal, not evidence of resource ownership**. Matching a name, label, image fingerprint, UUID or digest cannot authorize adoption. The preview does not read or write either state service, install credentials, mutate Incus, copy volumes, change running instances or activate a reconciler. Existing accepted revision history and operation journal entries remain separate.
+
+This preview is a narrow explicitly requested projection, not a compatibility or preservation promise. Before-stability deployments should prefer clean reinstantiation from current authoritative declarations where practical. The preview does not make old state authoritative, guarantee that all runtime state is represented, or authorize deleting/replacing any existing resource. See the [pre-stability compatibility policy](../development/compatibility.md).
 
 ## Prerequisites for eventual migration execution
 
