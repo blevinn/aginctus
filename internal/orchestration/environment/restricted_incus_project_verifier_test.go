@@ -66,7 +66,7 @@ func restrictedIncusVerifierFixture(t *testing.T) (RestrictedIncusProjectVerifie
 		conn: &incusclient.ConnectionInfo{
 			Protocol: "incus", Project: "team", URL: "https://incus.test:8443", Certificate: certificate,
 		},
-		server: &api.Server{Auth: "trusted"},
+		server: &api.Server{ServerUntrusted: api.ServerUntrusted{Auth: "trusted"}},
 		selected: &api.Project{Name: "team"},
 		foreignErr: api.StatusErrorf(http.StatusForbidden, "not authorized"),
 	}
