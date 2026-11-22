@@ -14,7 +14,7 @@ func (r *testEnvironmentReader) ListEnvironments(_ context.Context,project strin
 }
 func (r *testEnvironmentReader) GetEnvironment(_ context.Context,project,id string)(api.EnvironmentDetail,error){
 	r.calls++
-	return api.EnvironmentDetail{TypeMeta:api.NewTypeMeta("Environment"),Environment:api.Environment{ID:id}},nil
+	return api.EnvironmentDetail{TypeMeta:api.NewTypeMeta("Environment"),Environment:api.Environment{ID:id,Name:"dev",Binding:api.EnvironmentBinding{ServerID:"server-1",Project:project}}},nil
 }
 func TestEnvironmentClientRequiresExplicitAuthenticatedScope(t *testing.T){
 	reader:=&testEnvironmentReader{}
