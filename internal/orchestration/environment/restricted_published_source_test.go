@@ -58,3 +58,24 @@ func TestRestrictedPublishedSourceRejectsMissingAuthorityAndLeakyErrors(t *testi
 		t.Fatal("nil restricted session treated as verified absence")
 	}
 }
+
+func TestRestrictedPublishedSourceComposesWithAcceptedStateReadModel(t *testing.T) {
+	model,_,_,candidate:=acceptedModelFixture()
+	revision,err:=BuildAcceptedRevision(nil,nil,candidate)
+	if err!=nil{t.Fatal(err)}
+	session:=&restrictedReadTestSession{
+		before:candidate.Environment.Binding,after:candidate.Environment.Binding,
+		revision:&revision,candidate:&candidate,
+	}
+	model.Source=RestrictedPublishedSource{Factory:&testRestrictedFactory{session:session}}
+	result,err:=model.GetAcceptedState(context.Background(),candidate.Environment.Binding.Project,candidate.Environment.ID)
+	if err!=nil || !result.HasAccepted || result.Revision==nil || result.Revision.ID!=revision.ID {
+		t.Fatalf("verified accepted read=%+v err=%v",result,err)
+	}
+	session.verifications=0
+	session.after.ServerID="foreign-server"
+	if result,err:=model.GetAcceptedState(context.Background(),candidate.Environment.Binding.Project,candidate.Environment.ID);
+		err==nil || result.Kind!="" {
+		t.Fatalf("retargeted project escaped through read model: %+v err=%v",result,err)
+	}
+}
