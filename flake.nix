@@ -227,6 +227,14 @@
             synthetic = true;
             fullStack = true;
           };
+          # Existing full guest firewall integration fixtures, exposed as
+          # explicit operator-selected testenv scenarios (never default CI).
+          vm-harness-acceptance-nft = import ./tests/nix/firewall/firewall-nixos-nft-test.nix {
+            inherit self nixpkgs system;
+          };
+          vm-harness-acceptance-egress-denial = import ./tests/nix/firewall/firewall-egress-bootstrap-test.nix {
+            inherit self nixpkgs system;
+          };
           vm-harness-ownership-recovery = import ./tests/nix/vm-harness/ownership-recovery.nix {
             inherit self nixpkgs system;
           };
