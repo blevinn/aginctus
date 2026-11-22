@@ -39,6 +39,10 @@ SCENARIOS = {
     "full-stack": "vm-harness-full-stack",
     "opencode-tool-loopback": "vm-harness-opencode-tool-loopback",
     "ownership-recovery": "vm-harness-ownership-recovery",
+    "acceptance-project-authority": "vmTests.x86_64-linux.incus-project-authority",
+    "acceptance-environment-state": "vmTests.x86_64-linux.environment-project-state-incus",
+    "acceptance-accepted-state": "vmTests.x86_64-linux.accepted-state-incus",
+    "acceptance-home-manager": "vmTests.x86_64-linux.home-manager-operator",
 }
 NETWORKED_SCENARIOS = {
     "gateway-topology",
