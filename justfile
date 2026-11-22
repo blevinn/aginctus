@@ -69,6 +69,26 @@ test-vm-runtime-lifecycle:
 test-vm-native-instance:
     python3 tests/vm_harness/runner.py test native-instance
 
+# Gate C project/image lease and collision
+test-vm-acceptance-project-image:
+    python3 tests/vm_harness/runner.py test acceptance-project-image
+
+# Gate D nftables policy
+test-vm-acceptance-nft:
+    python3 tests/vm_harness/runner.py test acceptance-nft
+
+# Gate D dormant deny
+test-vm-acceptance-egress-denial:
+    python3 tests/vm_harness/runner.py test acceptance-egress-denial
+
+# Gate D firewalld grant/revoke
+test-vm-acceptance-firewalld:
+    python3 tests/vm_harness/runner.py test acceptance-firewalld
+
+# Gate E: guest-local multi-environment state and public CLI authority boundaries.
+test-vm-acceptance-state-boundary:
+    python3 tests/vm_harness/runner.py test acceptance-state-boundary
+
 # Real LiteLLM/PostgreSQL OCI and Herdr/OpenCode topology (no model calls).
 # May need OCI registry access; use a disposable NixOS KVM worker only.
 test-vm-gateway-topology:
@@ -90,6 +110,19 @@ test-vm-opencode-tool-loopback:
 # Real Incus foreign-resource and daemon-outage recovery assertions.
 test-vm-ownership-recovery:
     python3 tests/vm_harness/runner.py test ownership-recovery
+
+# Heavyweight vmTests are explicit NixOS builds (never default CI or host Incus).
+test-vm-acceptance-project-authority:
+    python3 tests/vm_harness/runner.py test acceptance-project-authority
+
+test-vm-acceptance-environment-state:
+    python3 tests/vm_harness/runner.py test acceptance-environment-state
+
+test-vm-acceptance-accepted-state:
+    python3 tests/vm_harness/runner.py test acceptance-accepted-state
+
+test-vm-acceptance-home-manager:
+    python3 tests/vm_harness/runner.py test acceptance-home-manager
 
 # Inspect the same VM fixture with the interactive NixOS test driver.
 # Run under a dedicated unprivileged worker identity, never on pilot host.

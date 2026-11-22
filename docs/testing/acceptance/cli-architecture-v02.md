@@ -178,6 +178,48 @@ runner supplies it.
   ownership. No reusable host-level worker privileges are inferred
   from a VM or hermetic test.
 
+## Pinned testenv scenario coverage (explicit operator runs)
+
+Use the current-source `aginctus testenv vm test SCENARIO` binary at the
+accepted revision. All scenarios below are selected by the fixed public
+catalog and produce `.vm-harness-results/<run-id>/result.json`; validate
+each record through `just check vm-report-json <run-id>`. A green Nix
+derivation is evidence for assertions in that specific scenario, not for
+other rows or live provider inference.
+
+| Gate | Scenario | Positively exercises | Still not established |
+| --- | --- | --- | --- |
+| C | `native-instance` | Real scoped instance SDK and packaged CLI lifecycle | Project creation and image import |
+| C | `ownership-recovery` | Foreign instance denial, daemon outage and recovery | Other projects/images |
+| C | `storage-network` | Guest Btrfs and managed bridge ownership/idempotency | Firewall grant policy |
+| C | `acceptance-project-image` | CLI project create/readback and owned create-only image collision refusal | Injected uncertain post-write response |
+| C | `acceptance-project-authority` | Restricted TLS principal, server-side foreign project denial with populated controls | Production identity enrollment |
+| D | `acceptance-nft` | Native NixOS nft DNS/DHCP chain, bridge ownership, unrelated port denial, restart | Full cross-backend egress grants |
+| D | `acceptance-egress-denial` | Firewalld default-deny egress under zone contamination, reload and daemon outage | Explicit grant/revoke convergence and all wrong-zone cases |
+| E | `acceptance-state-boundary` | Public CLI fails closed with no authenticated reader; multi-ID test fixture not accepted | Authenticated positive production reads |
+| E | `acceptance-environment-state` | Two independent CAS revisions in project-owned Incus volume and read-only service | Authenticated production enrollment |
+| E | `acceptance-accepted-state` | Persistence across service reconstruction, same-UID read boundary | Three-layer observed-state reconciliation |
+| E | `acceptance-home-manager` | User/root permissions, HM activation/rollback, host policy, report redaction | Full v0.2 live pilot |
+| E | `runtime-lifecycle` | Real Herdr/OpenCode image and instance convergence | Gateway OCI start and inference |
+| E | `gateway-topology`, `synthetic-gateway`, `synthetic-tool-gateway`, `full-stack` | Existing OCI or synthetic gateway and tool contract fixtures | Live provider credentials/inference |
+
+**Admission:** the non-networked scenarios above run as Nix test
+derivations, requiring the reviewed checkout and active Nix build sandbox.
+The four `vmTests.x86_64-linux` cases are heavyweight and deliberately
+*outside* ordinary flake `packages`/`checks`, but are still fixed
+operator-selected Nix test builds. The networked scenarios launch the NixOS
+Python test driver under the worker's Unix identity and must not run under a
+privileged pilot identity; follow the dedicated worker runbook first.
+
+**Remaining feature-level obligations:** deliberately fault uncertain project
+and image writes; prove
+firewall allowlisted grant/revoke on real guest-local rules and independently
+compare unrelated chains; establish positive authenticated
+accepted/configured/observed reads on one project with several enrolled
+environments and environment-owned gateways; test private credential volume
+ownership and redaction without login; and independently prove host/guest
+cleanup under a single run ID. Until implemented, retain these as NOT RUN.
+
 ## Cleanup and replay
 
 - [ ] Inventory resources created under this run ID; remove *only*

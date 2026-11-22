@@ -74,7 +74,7 @@ func TestVMScenarioParity(t *testing.T) {
 	evidence := readSource(t, "tests/validation/vm_evidence.py")
 
 	pythonScenarios := manifestBody(t, runner, "SCENARIOS = {", "\n}")
-	pattern := regexp.MustCompile(`"([a-z0-9-]+)": "(vm-harness-[a-z0-9-]+)"`)
+	pattern := regexp.MustCompile(`"([a-z0-9-]+)": "((?:vm-harness-[a-z0-9-]+)|(?:vmTests\.x86_64-linux\.[a-z0-9-]+))"`)
 	pythonTargets := make(map[string]string)
 	for _, match := range pattern.FindAllStringSubmatch(pythonScenarios, -1) {
 		if _, exists := pythonTargets[match[1]]; exists {
@@ -94,7 +94,9 @@ func TestVMScenarioParity(t *testing.T) {
 		if pythonTargets[scenario.Name] != scenario.Target {
 			t.Fatalf("Python target mismatch for %q: %q != %q", scenario.Name, pythonTargets[scenario.Name], scenario.Target)
 		}
-		if !strings.Contains(flake, scenario.Target+" =") {
+		flakeTarget := scenario.Target
+		flakeTarget = strings.TrimPrefix(flakeTarget, "vmTests.x86_64-linux.")
+		if !strings.Contains(flake, flakeTarget+" =") {
 			t.Fatalf("flake target %q missing", scenario.Target)
 		}
 		if scenario.Networked {
