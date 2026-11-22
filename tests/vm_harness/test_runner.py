@@ -199,6 +199,22 @@ class RunnerTests(unittest.TestCase):
             runner.clean_environment({"AGINCTUS_NATIVE_OCI_SPIKE": "disposable-vm"}),
         )
 
+    def test_heavyweight_state_and_authority_scenarios_are_fixed_nix_derivations(self):
+        expected = {
+            "acceptance-project-authority": "incus-project-authority",
+            "acceptance-environment-state": "environment-project-state-incus",
+            "acceptance-accepted-state": "accepted-state-incus",
+            "acceptance-home-manager": "home-manager-operator",
+        }
+        for scenario, target in expected.items():
+            with self.subTest(scenario=scenario):
+                args = runner.build_arguments(scenario, False)
+                self.assertEqual(
+                    args[-1], f".#vmTests.x86_64-linux.{target}"
+                )
+                self.assertNotIn("bash", args)
+                self.assertNotIn("sh", args)
+
     def test_opencode_tool_loopback_is_an_isolated_fixed_target(self):
         self.assertEqual(
             runner.build_arguments("opencode-tool-loopback", False)[-1],
