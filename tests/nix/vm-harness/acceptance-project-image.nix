@@ -26,6 +26,7 @@ pkgs.testers.runNixOSTest {
       incus.enable = true;
       incus.package = pkgs.incus;
     };
+    networking.nftables.enable = true;
     environment.systemPackages = [ pkgs.incus pkgs.jq pkgs.python3 self.packages.${system}.aginctus ];
     system.stateVersion = "26.05";
   };
@@ -67,23 +68,23 @@ pkgs.testers.runNixOSTest {
     images_before_lease = json.loads(machine.succeed("incus --force-local --project aginctus image list --format json"))
     machine.succeed("systemd-run --unit=aginctus-acceptance-image-lease --collect ${pkgs.python3}/bin/python3 ${leaseHolder}")
     machine.wait_until_succeeds("test -e /run/aginctus-acceptance-lease-ready")
-    code, output = machine.execute(f"{cli} images import-owned --project aginctus --owner system accept-image {image} --confirm-create 2>&1")
+    code, output = machine.execute(f"{cli} images import-owned --project aginctus --owner system accept-image ${image} --confirm-create 2>&1")
     assert code == 1 and "writer lease unavailable" in output, output
     assert json.loads(machine.succeed("incus --force-local --project aginctus image list --format json")) == images_before_lease
     machine.succeed("systemctl stop aginctus-acceptance-image-lease.service")
 
-    machine.fail(f"{cli} images import-owned --project aginctus --owner system accept-image {image}")
-    machine.succeed(f"{cli} images import-owned --project aginctus --owner system accept-image {image} --confirm-create", timeout=240)
+    machine.fail(f"{cli} images import-owned --project aginctus --owner system accept-image ${image}")
+    machine.succeed(f"{cli} images import-owned --project aginctus --owner system accept-image ${image} --confirm-create", timeout=240)
     inventory = json.loads(machine.succeed("incus --force-local --project aginctus image list --format json"))
     matches = [i for i in inventory if any(a["name"] == "accept-image" for a in i.get("aliases", []))]
     assert len(matches) == 1, inventory
     fingerprint = matches[0]["fingerprint"]
     assert len(fingerprint) == 64
     # No implicit adoption/overwrite even with the same source and alias.
-    machine.fail(f"{cli} images import-owned --project aginctus --owner system accept-image {image} --confirm-create")
+    machine.fail(f"{cli} images import-owned --project aginctus --owner system accept-image ${image} --confirm-create")
     assert json.loads(machine.succeed("incus --force-local --project aginctus image list --format json")) == inventory
-    machine.fail(f"{cli} images import-owned --project foreign --owner system reject-image {image} --confirm-create")
-    machine.fail(f"{cli} images import-owned --project default --owner system reject-image {image} --confirm-create")
+    machine.fail(f"{cli} images import-owned --project foreign --owner system reject-image ${image} --confirm-create")
+    machine.fail(f"{cli} images import-owned --project default --owner system reject-image ${image} --confirm-create")
     assert json.loads(machine.succeed("incus --force-local --project aginctus image list --format json")) == inventory
     assert machine.succeed("incus project get foreign user.aginctus.managed").strip() == ""
     assert machine.succeed("incus project get default user.aginctus.managed").strip() == ""

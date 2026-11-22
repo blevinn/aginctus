@@ -95,9 +95,7 @@ func TestVMScenarioParity(t *testing.T) {
 			t.Fatalf("Python target mismatch for %q: %q != %q", scenario.Name, pythonTargets[scenario.Name], scenario.Target)
 		}
 		flakeTarget := scenario.Target
-		if strings.HasPrefix(flakeTarget, "vmTests.x86_64-linux.") {
-			flakeTarget = strings.TrimPrefix(flakeTarget, "vmTests.x86_64-linux.")
-		}
+		flakeTarget = strings.TrimPrefix(flakeTarget, "vmTests.x86_64-linux.")
 		if !strings.Contains(flake, flakeTarget+" =") {
 			t.Fatalf("flake target %q missing", scenario.Target)
 		}
