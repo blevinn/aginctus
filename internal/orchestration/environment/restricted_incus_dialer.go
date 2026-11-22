@@ -53,7 +53,7 @@ func OpenExplicitRestrictedIncusProject(
 		c.ServerCertificatePEM == "" {
 		return nil, errors.New("explicit project and independent TLS credentials required")
 	}
-	if _, err := (Descriptor{
+	if err := (Descriptor{
 		ID: "11111111-1111-4111-8111-111111111111", Name: "verified",
 		Binding: Binding{ServerID: "sha256:" + c.TrustedServerSHA256, Project: c.Project},
 	}).Validate(); err != nil {
