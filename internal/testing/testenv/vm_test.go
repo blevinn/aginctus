@@ -10,8 +10,8 @@ import (
 
 func TestVMScenariosAreFixedAndIndependent(t *testing.T) {
 	all := VMScenarios()
-	if len(all) != 12 {
-		t.Fatalf("expected twelve public pinned scenarios, got %d", len(all))
+	if len(all) != 13 {
+		t.Fatalf("expected thirteen public pinned scenarios, got %d", len(all))
 	}
 	all[0].Name = "injected"
 	found, err := VMScenario("smoke")
