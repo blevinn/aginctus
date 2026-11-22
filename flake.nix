@@ -207,6 +207,9 @@
           vm-harness-native-oci = import ./tests/nix/vm-harness/native-oci.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-acceptance-state-boundary = import ./tests/nix/vm-harness/acceptance-state-boundary.nix {
+            inherit self nixpkgs system;
+          };
           vm-harness-native-instance = import ./tests/nix/vm-harness/native-instance.nix {
             inherit self nixpkgs system;
           };
