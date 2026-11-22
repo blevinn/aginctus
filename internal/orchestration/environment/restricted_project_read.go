@@ -42,6 +42,11 @@ func ReadRestrictedProjectAccepted(
 	if err != nil || enrolled.VerifyBinding(binding) != nil {
 		return nil, nil, errors.New("restricted project authentication unavailable")
 	}
+	// Authentication may finish after cancellation or credential revocation.
+	// Do not initiate a published-state read after that boundary.
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	revision, candidate, err := session.ReadPublished(ctx, enrolled.ID)
 	if err != nil {
 		return nil, nil, errors.New("restricted published read unavailable")
