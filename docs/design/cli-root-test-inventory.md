@@ -26,6 +26,7 @@ without dropping their integration evidence.
 | `help_budget_test.go` | CLI composition / bounded help presentation | Retain; verify output limits across registered commands |
 | `commands_config_scope_test.go` | Cross-family configured project preference presentation | Retain root Run/format/authorization disclaimer evidence |
 | `commands_system_status_test.go` | Cross-family Incus server observation presentation | Retain root Run/format and missing-backend evidence |
+| `read_capabilities_test.go` | Unified read-only CLI dependency injection | Retain cross-family root invocation and fail-closed evidence |
 | `commands_state_reads_test.go` | State read-only invocation and missing-authority contract | Retain root Run and structured output integration evidence |
 | `commands_acceptance_preview_test.go` | Read-only lifecycle plan and missing-authority contract | Retain root typed output and fail-closed integration evidence |
 | `commands_gateway_assets_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
@@ -127,5 +128,5 @@ without dropping their integration evidence.
 - The full Go/Nix/hermetic/privileged manual acceptance gate remains
   separate from this accounting check.
 
-The ledger deliberately records **74 files** and does not
+The ledger deliberately records **75 files** and does not
 set a numerical target for deleting cross-family root integration tests.
