@@ -16,10 +16,12 @@ type restrictedReadTestSession struct {
 	verifications int
 	reads int
 	readEnvironment string
+	onVerify func()
 }
 
 func (s *restrictedReadTestSession) VerifiedBinding(context.Context) (Binding,error) {
 	s.verifications++
+	if s.onVerify != nil { s.onVerify() }
 	if s.err != nil { return Binding{},s.err }
 	if s.verifications==1 { return s.before,nil }
 	return s.after,nil
@@ -88,5 +90,22 @@ func TestRestrictedReadRejectsCorruptionErrorsAndForeignScope(t *testing.T) {
 	cancel()
 	if _,_,err:=ReadRestrictedProjectAccepted(ctx,s,c.Environment);!errors.Is(err,context.Canceled) {
 		t.Fatal("canceled operation continued")
+	}
+}
+
+// Cancellation during the initial authentication verification must prevent
+// publication access, even if a backend ignores the canceled context.
+func TestRestrictedReadStopsAfterAuthenticationCancellation(t *testing.T) {
+	c := candidateFixture()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := &restrictedReadTestSession{
+		before: c.Environment.Binding,
+		after: c.Environment.Binding,
+		onVerify: cancel,
+	}
+	rev, body, err := ReadRestrictedProjectAccepted(ctx, s, c.Environment)
+	if !errors.Is(err, context.Canceled) || rev != nil || body != nil || s.reads != 0 || s.verifications != 1 {
+		t.Fatalf("canceled authentication accessed published state: revision=%+v candidate=%+v err=%v reads=%d verifications=%d", rev, body, err, s.reads, s.verifications)
 	}
 }
