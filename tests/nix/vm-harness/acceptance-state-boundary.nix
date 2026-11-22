@@ -36,9 +36,9 @@ pkgs.testers.runNixOSTest {
 
     # The explicit test-only state store models multiple environments within
     # one project. It is not authenticated authority or deployed control plane.
-    machine.succeed("install -d -m 0700 /var/lib/aginctus-state-acceptance")
+    machine.succeed("install -d -m 0700 /var/lib/aginctus-state-acceptance-parent")
     fixture = "aginctus-project-state-fixture"
-    scope = "--state-dir /var/lib/aginctus-state-acceptance --server-id guest-test --project aginctus"
+    scope = "--state-dir /var/lib/aginctus-state-acceptance-parent/state --server-id guest-test --project aginctus"
     initialized = json.loads(machine.succeed(f"{fixture} init {scope}"))
     assert initialized["initialized"]
     for environment in (first, second):
@@ -47,8 +47,8 @@ pkgs.testers.runNixOSTest {
         machine.succeed(f"{fixture} audit {scope} --environment {environment}")
         machine.fail(f"{fixture} accept {scope} --environment {environment}")
     # A foreign/default project cannot reuse the project's local-state identity.
-    machine.fail(f"{fixture} status --state-dir /var/lib/aginctus-state-acceptance --server-id guest-test --project default --environment {first}")
-    machine.fail(f"{fixture} status --state-dir /var/lib/aginctus-state-acceptance --server-id guest-test --project foreign --environment {first}")
+    machine.fail(f"{fixture} status --state-dir /var/lib/aginctus-state-acceptance-parent/state --server-id guest-test --project default --environment {first}")
+    machine.fail(f"{fixture} status --state-dir /var/lib/aginctus-state-acceptance-parent/state --server-id guest-test --project foreign --environment {first}")
 
     # No gateway credentials are provisioned by this scenario. Read-only
     # discovery must work, but help cannot trigger registration or login.
