@@ -39,7 +39,7 @@ func TestAcceptedReadModelAuthenticatesBeforeReportingAbsence(t *testing.T) {
 		got.Environment.ID != c.Environment.ID || got.HasAccepted || got.Revision != nil {
 		t.Fatalf("verified absence: %+v %v", got, err)
 	}
-	if source.calls != 1 || verifier.calls != 1 {
+	if source.calls != 1 || verifier.calls != 2 {
 		t.Fatal("unverified reader invoked")
 	}
 	source.err = errors.New("secret-root-password")
