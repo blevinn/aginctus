@@ -67,7 +67,7 @@ func (s IncusProjectEnrollmentSource) Enrolled(
 	project, etag, err := s.Observer.GetProject(binding.Project)
 	if err != nil || project == nil || project.Name != binding.Project ||
 		etag == "" || project.Config == nil {
-		return nil, errors.New("Incus project enrollment unavailable")
+		return nil, errors.New("incus project enrollment unavailable")
 	}
 	raw, present := project.Config[incusEnvironmentEnrollmentKey]
 	if !present || len(raw) == 0 || len(raw) > maxIncusEnvironmentEnrollmentBytes {
@@ -109,7 +109,7 @@ func (s IncusProjectEnrollmentSource) Enrolled(
 	again, againETag, err := s.Observer.GetProject(binding.Project)
 	if err != nil || again == nil || again.Name != project.Name ||
 		againETag != etag || again.Config[incusEnvironmentEnrollmentKey] != raw {
-		return nil, errors.New("Incus enrollment changed during read")
+		return nil, errors.New("incus enrollment changed during read")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
