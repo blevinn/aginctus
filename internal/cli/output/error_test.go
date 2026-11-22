@@ -16,6 +16,8 @@ func TestWriteErrorPreservesOnlySafeTypedFailures(t *testing.T) {
 		{"wrapped",JSON,errors.Join(errors.New("outer"),api.NewError(api.CodeConflict,"revision changed")),`"code": "conflict"`,"outer"},
 		{"unknown",JSON,errors.New("secret-storage-path"),`"code": "internal"`,"secret-storage-path"},
 		{"unknown-code",JSON,api.NewError("private_backend_code","private message"),`"message": "operation failed"`,"private message"},
+		{"typed-internal",JSON,api.NewError(api.CodeInternal,"private host path /var/lib/aginctus/secret"),`"message": "operation failed"`,"/var/lib/aginctus/secret"},
+		{"wrapped-internal",YAML,errors.Join(errors.New("transport failed"),api.NewError(api.CodeInternal,"private token")), "message: operation failed","private token"},
 	}{
 		t.Run(tc.name,func(t *testing.T){
 			var out bytes.Buffer
