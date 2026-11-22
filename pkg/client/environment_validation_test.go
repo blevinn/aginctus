@@ -43,6 +43,9 @@ func TestEnvironmentClientRejectsForeignAndCorruptInventory(t *testing.T) {
 		func(f *environmentProjectionFixture){f.list.Items[0].Binding.ServerID=""},
 		func(f *environmentProjectionFixture){f.list.Items[0].ID="not-a-uuid"},
 		func(f *environmentProjectionFixture){f.list.Items[0].Name=""},
+		func(f *environmentProjectionFixture){f.list.Items[0].Name="Invalid Name"},
+		func(f *environmentProjectionFixture){f.list.Items[0].Binding.ServerID="bad\\nserver"},
+		func(f *environmentProjectionFixture){f.list.Items[0].ID="11111111-1111-1111-1111-111111111111"},
 		func(f *environmentProjectionFixture){f.list.Items=append(f.list.Items,f.list.Items[0])},
 	}{
 		r:=environmentValidationFixture()
