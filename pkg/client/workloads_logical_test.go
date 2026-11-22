@@ -19,7 +19,7 @@ func (r *fakeLogicalReader) GetWorkload(_ context.Context,req api.GetWorkloadReq
 	r.calls++
 	env:=req.EnvironmentID
 	if r.foreign{env="22222222-2222-4222-8222-222222222222"}
-	return api.WorkloadDetail{TypeMeta:api.NewTypeMeta("Workload"),Workload:api.Workload{Name:req.Name,EnvironmentID:env,Class:api.WorkloadClassGateway,Components:[]api.WorkloadComponent{}}},nil
+	return api.WorkloadDetail{TypeMeta:api.NewTypeMeta("Workload"),Workload:api.Workload{Name:req.Name,EnvironmentID:env,Class:api.WorkloadClassGateway,Implementation:"litellm",Components:[]api.WorkloadComponent{}}},nil
 }
 func (r *fakeLogicalReader) WorkloadStatus(_ context.Context,req api.WorkloadStatusRequest)(api.WorkloadStatus,error){
 	r.calls++
