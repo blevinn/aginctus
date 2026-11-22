@@ -4,6 +4,17 @@
 let
   pkgs = import nixpkgs { inherit system; };
   image = self.packages.${system}.vm-harness-opencode-workload;
+  leaseHolder = pkgs.writeText "aginctus-acceptance-image-lease.py" ''
+    import hashlib
+    import pathlib
+    import socket
+    import time
+    name = "\\0aginctus-image-write-v1-" + hashlib.sha256(b"aginctus").hexdigest()
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.bind(name)
+    pathlib.Path("/run/aginctus-acceptance-lease-ready").touch()
+    time.sleep(90)
+  '';
 in
 pkgs.testers.runNixOSTest {
   name = "aginctus-acceptance-project-image";
@@ -15,7 +26,7 @@ pkgs.testers.runNixOSTest {
       incus.enable = true;
       incus.package = pkgs.incus;
     };
-    environment.systemPackages = [ pkgs.incus pkgs.jq self.packages.${system}.aginctus ];
+    environment.systemPackages = [ pkgs.incus pkgs.jq pkgs.python3 self.packages.${system}.aginctus ];
     system.stateVersion = "26.05";
   };
   testScript = ''
@@ -51,6 +62,16 @@ pkgs.testers.runNixOSTest {
     # Import the pinned image artifacts with a self-declared ownership claim.
     # The claim is not caller authentication; exact-project checks still apply.
     cli = "aginctus --config=incus.project=aginctus"
+    # Hold the actual Linux abstract socket from another guest process.
+    # The CLI must refuse without reading or changing the project inventory.
+    images_before_lease = json.loads(machine.succeed("incus --force-local --project aginctus image list --format json"))
+    machine.succeed("systemd-run --unit=aginctus-acceptance-image-lease --collect ${pkgs.python3}/bin/python3 ${leaseHolder}")
+    machine.wait_until_succeeds("test -e /run/aginctus-acceptance-lease-ready")
+    code, output = machine.execute(f"{cli} images import-owned --project aginctus --owner system accept-image {image} --confirm-create 2>&1")
+    assert code == 1 and "writer lease unavailable" in output, output
+    assert json.loads(machine.succeed("incus --force-local --project aginctus image list --format json")) == images_before_lease
+    machine.succeed("systemctl stop aginctus-acceptance-image-lease.service")
+
     machine.fail(f"{cli} images import-owned --project aginctus --owner system accept-image {image}")
     machine.succeed(f"{cli} images import-owned --project aginctus --owner system accept-image {image} --confirm-create", timeout=240)
     inventory = json.loads(machine.succeed("incus --force-local --project aginctus image list --format json"))
