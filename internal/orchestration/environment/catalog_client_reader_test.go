@@ -25,7 +25,7 @@ func TestCatalogClientReaderProvidesTypedEnvironmentReads(t *testing.T) {
 	detail, err := service.Get(context.Background(), client.GetEnvironmentRequest{
 		Project: binding.Project, ID: secondID,
 	})
-	if err != nil || detail.Environment.ID != secondID || detail.Environment.Binding.Project != binding.Project {
+	if err != nil || detail.ID != secondID || detail.Binding.Project != binding.Project {
 		t.Fatalf("typed detail=%+v err=%v", detail, err)
 	}
 	if _, err := service.Get(context.Background(), client.GetEnvironmentRequest{
@@ -49,10 +49,11 @@ func TestCatalogClientReaderFailsClosedWithoutAuthority(t *testing.T) {
 			}
 		})
 	}
-	if result, err := reader.ListEnvironments(nil, binding.Project); err == nil || result.Kind != "" {
+	var noContext context.Context
+	if result, err := reader.ListEnvironments(noContext, binding.Project); err == nil || result.Kind != "" {
 		t.Fatalf("nil-context inventory=%+v err=%v", result, err)
 	}
-	if result, err := reader.GetEnvironment(nil, binding.Project, firstID); err == nil || result.Kind != "" {
+	if result, err := reader.GetEnvironment(noContext, binding.Project, firstID); err == nil || result.Kind != "" {
 		t.Fatalf("nil-context detail=%+v err=%v", result, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
