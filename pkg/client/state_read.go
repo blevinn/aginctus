@@ -36,7 +36,7 @@ func (s *StateService) Accepted(ctx context.Context, req ReadStateRequest) (api.
 	return result, nil
 }
 
-// Diff does not promote configured state. It checks the result's environment,
+// Diff compares accepted state to the proposed configured candidate without\n// promotion. It checks the result's environment,
 // layer provenance and revision consistency before releasing any response.
 func (s *StateService) Diff(ctx context.Context, req ReadStateRequest) (api.ConfiguredAcceptedDiff, error) {
 	if ctx == nil {
@@ -56,7 +56,7 @@ func (s *StateService) Diff(ctx context.Context, req ReadStateRequest) (api.Conf
 		return api.ConfiguredAcceptedDiff{}, errors.New("authenticated state diff unavailable")
 	}
 	if result.APIVersion != api.APIVersionV1Alpha1 || result.Kind != "ConfiguredAcceptedDiff" ||
-		result.FromLayer != "configured" || result.ToLayer != "accepted" ||
+		result.FromLayer != "accepted" || result.ToLayer != "configured" ||
 		result.Environment.ID != req.EnvironmentID || result.Environment.Binding.Project != req.Project ||
 		result.Environment.Binding.ServerID == "" || result.HasAccepted != (result.Revision != nil) ||
 		result.NewlySelected == nil || result.Unselected == nil || result.Modified == nil ||
