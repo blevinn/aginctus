@@ -229,6 +229,26 @@ func runBasicCobraWithStateCapabilities(
 		if root.PersistentFlags().Changed("incus-project") && !logicalWorkload && !environmentRead && !stateRead {
 			return fmt.Errorf("incus project selector requires a verified environment or workloads read")
 		}
+		// Resolve display names only through a verified project enrollment
+		// inventory. This is invocation-local convenience, not authorization;
+		// the resource reader must still independently check project scope.
+		// Existing UUID-only injected readers remain usable without an
+		// environment inventory reader.
+		if (logicalWorkload || stateRead) && selectedEnvironmentID != "" &&
+			!client.IsEnvironmentUUID(selectedEnvironmentID) {
+			if environmentReader == nil {
+				return fmt.Errorf("authenticated environment inventory required to resolve a display name")
+			}
+			resolved, err := client.New(client.Options{
+				EnvironmentReader: environmentReader,
+			}).Environments.Resolve(cmd.Context(), client.ResolveEnvironmentRequest{
+				Project: selectedIncusProject, Selector: selectedEnvironmentID,
+			})
+			if err != nil {
+				return err
+			}
+			selectedEnvironmentID = resolved.ID
+		}
 		return nil
 	}
 	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
