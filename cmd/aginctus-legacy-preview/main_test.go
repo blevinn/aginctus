@@ -104,7 +104,18 @@ func TestLegacyPreviewRejectsMalformedMappingsWithoutOutput(t *testing.T) {
 			t.Fatalf("accepted invalid mapping %s", invalid)
 		}
 	}
-	if err := syscall.Mkfifo(filepath.Join(t.TempDir(), "fifo"), 0o600); err != nil {
+	fifo := filepath.Join(t.TempDir(), "fifo")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
 		t.Fatal(err)
+	}
+	fifoArgs := append([]string(nil), args...)
+	for i := range fifoArgs {
+		if fifoArgs[i] == "--mappings" {
+			fifoArgs[i+1] = fifo
+			break
+		}
+	}
+	if err := run(fifoArgs, &bytes.Buffer{}); err == nil {
+		t.Fatal("accepted FIFO as mapping file")
 	}
 }
