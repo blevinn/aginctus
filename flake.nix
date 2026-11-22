@@ -207,6 +207,21 @@
           vm-harness-native-oci = import ./tests/nix/vm-harness/native-oci.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-acceptance-project-image = import ./tests/nix/vm-harness/acceptance-project-image.nix {
+            inherit self nixpkgs system;
+          };
+          vm-harness-acceptance-nft = import ./tests/nix/firewall/firewall-nixos-nft-test.nix {
+            inherit self nixpkgs system;
+          };
+          vm-harness-acceptance-egress-denial = import ./tests/nix/firewall/firewall-egress-bootstrap-test.nix {
+            inherit self nixpkgs system;
+          };
+          vm-harness-acceptance-firewalld = import ./tests/nix/firewall/firewall-firewalld-test.nix {
+            inherit self nixpkgs system;
+          };
+          vm-harness-acceptance-state-boundary = import ./tests/nix/vm-harness/acceptance-state-boundary.nix {
+            inherit self nixpkgs system;
+          };
           vm-harness-native-instance = import ./tests/nix/vm-harness/native-instance.nix {
             inherit self nixpkgs system;
           };
