@@ -318,7 +318,14 @@ pkgs.testers.runNixOSTest {
     machine.fail(connects("10.66.0.2"))
     machine.fail(connects("11.12.13.2"))
 
-    machine.succeed("systemctl reset-failed aginctus-firewall-reconcile.service; systemctl start aginctus-firewall-reconcile.service")
+    reconcile_unit = "aginctus-firewall-reconcile.service"
+    reconcile_timer = "aginctus-firewall-reconcile.timer"
+    # A blocking start can join a timer's running start job. Stop new timer
+    # activations and let the first blocking start finish any in-flight job
+    # before asserting the results of subsequent manual reconciliations.
+    machine.succeed(f"systemctl stop {reconcile_timer}")
+    machine.succeed(f"systemctl reset-failed {reconcile_unit}")
+    machine.succeed(f"systemctl start {reconcile_unit}")
 
     def owned_rules():
         return firewall(zone, "--list-rich-rules")
@@ -328,7 +335,7 @@ pkgs.testers.runNixOSTest {
     assert 'port="67"' in rules, rules
     assert 'port="22"' not in rules, rules
 
-    machine.succeed("systemctl start aginctus-firewall-reconcile.service")
+    machine.succeed(f"systemctl start {reconcile_unit}")
     assert owned_rules() == rules, "reconciliation duplicated rules"
     assert firewall(zone, "--list-interfaces").split().count("aginctus-test") == 1
 
@@ -341,32 +348,50 @@ pkgs.testers.runNixOSTest {
     machine.succeed("ip -n test-guest link set lo up")
     machine.succeed("ip -n test-guest link set guest0 up")
 
-    machine.wait_until_succeeds(
-        "ip netns exec test-guest dig +time=1 +tries=1 @10.247.82.1 fixture.incus A"
-        " | grep -F 10.247.82.1"
-    )
-    machine.wait_until_succeeds(
-        "ip netns exec test-guest dig +tcp +time=1 +tries=1 @10.247.82.1 fixture.incus A"
-        " | grep -F 10.247.82.1"
-    )
+    guest_dns = "ip netns exec test-guest dig +time=1 +tries=1 @10.247.82.1 fixture.incus A"
+    for transport in ("+notcp", "+tcp"):
+        machine.wait_until_succeeds(f"{guest_dns} {transport} | grep -F 10.247.82.1")
 
     machine.succeed("systemd-run --unit=aginctus-test-tcp --collect "
                     " ${pkgs.python3}/bin/python3 -m http.server 18080 --bind 10.247.82.1")
     machine.wait_until_succeeds("ss -lnt | grep -F ':18080'")
     machine.fail("ip netns exec test-guest nc -z -w 2 10.247.82.1 18080")
 
-    machine.succeed("incus network set aginctus-test user.aginctus.managed false")
-    machine.fail("systemctl start aginctus-firewall-reconcile.service")
-    assert 'port="53"' not in owned_rules(), owned_rules()
-    machine.succeed("incus network set aginctus-test user.aginctus.managed true")
-    machine.succeed("systemctl reset-failed aginctus-firewall-reconcile.service")
-    machine.succeed("systemctl start aginctus-firewall-reconcile.service")
-    assert 'port="53"' in owned_rules()
+    def set_management_marker(value):
+        machine.succeed(f"incus network set local:aginctus-test --project default user.aginctus.managed={value}")
+        marker = machine.succeed("incus network get local:aginctus-test --project default user.aginctus.managed")
+        assert marker.strip() == value, marker
+
+    def exec_start_time():
+        return int(machine.succeed(f"systemctl show -p ExecMainStartTimestampMonotonic --value {reconcile_unit}"))
+
+    previous_start = exec_start_time()
+    set_management_marker("false")
+    machine.fail(f"systemctl start {reconcile_unit}")
+    assert exec_start_time() > previous_start, "no fresh reconciliation after disowning the bridge"
+    result = machine.succeed(f"systemctl show -p ExecMainCode -p ExecMainStatus {reconcile_unit}")
+    assert set(result.splitlines()) == {"ExecMainCode=1", "ExecMainStatus=1"}, result
+    machine.succeed(
+        f"journalctl -u {reconcile_unit} --invocation=0 --no-pager"
+        " | grep -F 'Aginctus firewalld exceptions cleared (fail closed): network identity or ownership mismatch'"
+    )
+    remaining_rules = owned_rules()
+    assert not remaining_rules.strip(), remaining_rules
+    for transport in ("+notcp", "+tcp"):
+        machine.fail(f"{guest_dns} {transport}")
+
+    set_management_marker("true")
+    machine.succeed(f"systemctl reset-failed {reconcile_unit}")
+    machine.succeed(f"systemctl start {reconcile_unit}")
+    restored_rules = owned_rules()
+    assert sorted(restored_rules.splitlines()) == sorted(rules.splitlines()), restored_rules
+    for transport in ("+notcp", "+tcp"):
+        machine.succeed(f"{guest_dns} {transport} | grep -F 10.247.82.1")
 
     # Do not wait in the driver after restart: the service must handle the
     # daemon becoming active before its nftables INPUT table is ready.
     machine.succeed("systemctl restart firewalld.service")
-    machine.succeed("systemctl start aginctus-firewall-reconcile.service")
+    machine.succeed(f"systemctl start {reconcile_unit}")
     assert firewall("--permanent", zone, "--get-target").strip() == "DROP"
     assert any(
         line.strip() == "target: DROP"
@@ -374,6 +399,7 @@ pkgs.testers.runNixOSTest {
     )
     assert 'port="53"' in owned_rules()
     assert "aginctus-test" in firewall(zone, "--list-interfaces")
+    machine.succeed(f"systemctl start {reconcile_timer}")
 
     machine.shutdown()
     machine.start()
