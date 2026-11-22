@@ -25,7 +25,7 @@ func (stateCLIFixture) GetAcceptedState(context.Context,string,string)(api.Accep
 func (stateCLIFixture) DiffConfiguredAccepted(context.Context,string,string)(api.ConfiguredAcceptedDiff,error){
 	return api.ConfiguredAcceptedDiff{TypeMeta:api.NewTypeMeta("ConfiguredAcceptedDiff"),
 		Environment:api.Environment{ID:stateCLIEnv,Name:"dev",Binding:api.EnvironmentBinding{ServerID:"srv",Project:"team"}},
-		FromLayer:"configured",ToLayer:"accepted",ProposedDigest:"sha256:abc",
+		FromLayer:"accepted",ToLayer:"configured",ProposedDigest:"sha256:abc",
 		HasAccepted:false,NewlySelected:[]string{"worker"},Unselected:[]string{},Modified:[]api.AcceptedWorkloadChange{},
 		Changed:true},nil
 }
@@ -34,7 +34,7 @@ func TestStateCLIReadOnlyTypedOutput(t *testing.T){
 	for _,tc:=range []struct{args []string;expected string}{
 		{[]string{"state","show","-o","json"},`"kind": "AcceptedStateStatus"`},
 		{[]string{"state","show","--layer","configured","-o","json"},`"kind": "ConfiguredWorkloadList"`},
-		{[]string{"state","diff","-o","yaml"},"fromLayer: configured"},
+		{[]string{"state","diff","-o","yaml"},"fromLayer: accepted"},
 		{[]string{"state","diff","-o","table"},"NEWLY SELECTED"},
 	}{
 		args:=append([]string{"--environment",stateCLIEnv,"--incus-project","team"},tc.args...)
