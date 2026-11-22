@@ -15,6 +15,13 @@ type ResolveEnvironmentRequest struct {
 	Selector string
 }
 
+// IsEnvironmentUUID reports whether a selector has the canonical immutable
+// environment-ID spelling. Callers must still use an authenticated reader
+// before treating any UUID as enrolled or authorized.
+func IsEnvironmentUUID(selector string) bool {
+	return environmentUUIDPattern.MatchString(selector)
+}
+
 // Resolve verifies the project inventory before selecting a display name,
 // fails on ambiguity, then re-reads the immutable UUID and requires identity
 // and binding to match the inventory snapshot. The underlying reader must
