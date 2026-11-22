@@ -24,13 +24,26 @@ func (s *EnvironmentsService) List(ctx context.Context,request ListEnvironmentsR
 	if err:=ctx.Err();err!=nil{return api.EnvironmentList{},err}
 	if request.Project=="" {return api.EnvironmentList{},fmt.Errorf("explicit project required for environment inventory")}
 	if s==nil||s.reader==nil {return api.EnvironmentList{},fmt.Errorf("authenticated environment enrollment reader unavailable")}
-	return s.reader.ListEnvironments(ctx,request.Project)
+	result,err:=s.reader.ListEnvironments(ctx,request.Project)
+	if err!=nil{
+		if ctx.Err()!=nil{return api.EnvironmentList{},ctx.Err()}
+		return api.EnvironmentList{},fmt.Errorf("authenticated environment inventory unavailable")
+	}
+	if err:=validatedEnvironmentList(ctx,result,request.Project);err!=nil{return api.EnvironmentList{},err}
+	return result,nil
 }
 func (s *EnvironmentsService) Get(ctx context.Context,request GetEnvironmentRequest)(api.EnvironmentDetail,error){
 	if err:=ctx.Err();err!=nil{return api.EnvironmentDetail{},err}
 	if request.Project==""||request.ID=="" {return api.EnvironmentDetail{},fmt.Errorf("explicit project and immutable environment ID required")}
 	if s==nil||s.reader==nil {return api.EnvironmentDetail{},fmt.Errorf("authenticated environment enrollment reader unavailable")}
-	return s.reader.GetEnvironment(ctx,request.Project,request.ID)
+	if !environmentUUIDPattern.MatchString(request.ID){return api.EnvironmentDetail{},fmt.Errorf("immutable environment UUID required")}
+	result,err:=s.reader.GetEnvironment(ctx,request.Project,request.ID)
+	if err!=nil{
+		if ctx.Err()!=nil{return api.EnvironmentDetail{},ctx.Err()}
+		return api.EnvironmentDetail{},fmt.Errorf("authenticated environment identity unavailable")
+	}
+	if err:=validatedEnvironmentDetail(ctx,result,request.Project,request.ID);err!=nil{return api.EnvironmentDetail{},err}
+	return result,nil
 }
 
 // Selected resolves an invocation-scoped default or explicit immutable UUID.
