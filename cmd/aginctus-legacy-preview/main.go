@@ -4,7 +4,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -41,24 +40,39 @@ func readMappings(path string) ([]environment.LegacyWorkloadMapping, error) {
 	}
 	out := make([]environment.LegacyWorkloadMapping, 0, len(raw))
 	for _, entry := range raw {
-		// Inspect keys before decoding, rejecting unknown or case aliases.
-		var keys map[string]json.RawMessage
-		if err := json.Unmarshal(entry, &keys); err != nil || len(keys) != 3 {
-			return nil, errors.New("invalid mapping entry")
-		}
-		for _, key := range []string{"legacyId", "targetId", "instanceName"} {
-			v, ok := keys[key]
-			if !ok || bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
-				return nil, errors.New("missing or null mapping field")
-			}
-		}
-		var m environment.LegacyWorkloadMapping
+		// Tokenize rather than unmarshalling into a map first: the latter
+		// silently accepts duplicate JSON fields and case aliases.
 		decoder := json.NewDecoder(bytes.NewReader(entry))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&m); err != nil || m.LegacyID == "" || m.TargetID == "" || m.InstanceName == "" {
-			return nil, errors.New("invalid typed mapping entry")
+		start, err := decoder.Token()
+		if err != nil || start != json.Delim('{') {
+			return nil, errors.New("mapping entry must be an object")
 		}
-		out = append(out, m)
+		fields := map[string]string{}
+		for decoder.More() {
+			key, err := decoder.Token()
+			name, ok := key.(string)
+			if err != nil || !ok || (name != "legacyId" && name != "targetId" && name != "instanceName") {
+				return nil, errors.New("unknown mapping field")
+			}
+			if _, duplicate := fields[name]; duplicate {
+				return nil, errors.New("duplicate mapping field")
+			}
+			var value string
+			if err := decoder.Decode(&value); err != nil || value == "" {
+				return nil, errors.New("invalid mapping field value")
+			}
+			fields[name] = value
+		}
+		end, err := decoder.Token()
+		if err != nil || end != json.Delim('}') || len(fields) != 3 {
+			return nil, errors.New("incomplete mapping entry")
+		}
+		if _, err := decoder.Token(); err != io.EOF {
+			return nil, errors.New("trailing mapping content")
+		}
+		out = append(out, environment.LegacyWorkloadMapping{
+			LegacyID: fields["legacyId"], TargetID: fields["targetId"], InstanceName: fields["instanceName"],
+		})
 	}
 	return out, nil
 }
