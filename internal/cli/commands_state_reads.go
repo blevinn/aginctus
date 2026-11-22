@@ -56,6 +56,7 @@ func registerStateReads(root *cobra.Command, out io.Writer, configured client.Co
 	})
 	show := state.Commands()[0]
 	show.Flags().String("layer", "accepted", "State layer: configured or accepted (explicit provenance)")
+	registerAcceptancePreview(state, out, service, format, project, environmentID)
 	state.AddCommand(&cobra.Command{
 		Use: "diff", Short: "Compare accepted state to configured candidate (read only)", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
