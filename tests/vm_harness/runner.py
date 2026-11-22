@@ -33,6 +33,7 @@ SCENARIOS = {
     "gateway-topology": "vm-harness-gateway-topology",
     "native-oci": "vm-harness-native-oci",
     "native-instance": "vm-harness-native-instance",
+    "acceptance-state-boundary": "vm-harness-acceptance-state-boundary",
     "synthetic-gateway": "vm-harness-synthetic-gateway",
     "synthetic-tool-gateway": "vm-harness-synthetic-tool-gateway",
     "full-stack": "vm-harness-full-stack",
