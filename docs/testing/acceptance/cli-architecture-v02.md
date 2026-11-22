@@ -81,6 +81,45 @@ aginctus images --help
 - [ ] Verify public `aginctus-testenv` CLI cannot invoke any
   private worker/admin command without its independent authorization.
 
+## Gate C0 — programmatic testenv VM admission
+
+Use the public `aginctus testenv vm` interface, built from the pinned
+source, to discover, plan and run a fixed disposable scenario. **Do not
+manually create a host Unix account, project, storage pool or bridge merely
+to start CLI acceptance.** Do not run a host-local `incus` mutation in place
+of a guest operation.
+
+For the initial `native-instance` scenario, the runner calls
+`nix build --no-link --no-update-lock-file --print-out-paths
+.#vm-harness-native-instance`, which executes the fixture as a NixOS VM
+test derivation. This is **not** one of the networked scenarios that run
+a Python NixOS driver directly in the caller's host context. Before
+accepting a run on a multipurpose development host:
+
+- [ ] Confirm the repository and `flake.lock` are reviewed and pinned,
+  the checkout is clean, and `nix config show` reports
+  `true` (not `false` or `relaxed`). Confirm the Nix daemon's
+  applicable sandbox setting if the client view differs.
+- [ ] Use the current-source CLI: the installed system binary can be
+  older than the accepted checkout. Do not launch from an agent-writable
+  repository or delegate invocation to an untrusted coding agent.
+- [ ] Review resource headroom and the fixture's guest-only Incus
+  initialization. The Nix builder is a trusted build service; this
+  does not establish an adversarial sandbox for unreviewed build scripts.
+- [ ] Run the fixed `testenv vm test native-instance` command.
+  Read its owner-only evidence via `just check vm-report-json <run-id>`.
+  Distinguish derivation success from independent cleanup verification.
+- [ ] Treat any run failure as FAIL and investigate before attempting a
+  different execution mode. Do not use `vm-debug` or networked driver
+  scenarios under a privileged pilot identity.
+
+The scenario verifies a substantial native Incus instance contract, but
+does not itself prove project-create, image-import collision/lease or
+firewall mutation contracts. Those require subsequent appropriately
+isolated scenarios. The fully untrusted-agent-facing supervisor is still
+tracked separately under #428; don't claim the operator-driven batch
+runner supplies it.
+
 ## Gate C — scoped Incus and image lifecycle (disposable VM only)
 
 - [ ] In the VM, create a uniquely named, **explicitly operator-owned**
