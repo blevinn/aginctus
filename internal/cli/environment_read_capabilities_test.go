@@ -49,7 +49,7 @@ func TestPhaseOneReadCapabilityCompositionPreservesFailClosedCLI(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	for _, tc := range []struct{args []string; fragment string}{
 		{[]string{"--incus-project","team","environment","list","-o","json"}, phaseOneEnvironmentID},
-		{[]string{"--incus-project","team","environment","show","dev","-o","json"}, phaseOneEnvironmentID},
+		{[]string{"--incus-project","team","environment","show",phaseOneEnvironmentID,"-o","json"}, phaseOneEnvironmentID},
 		{[]string{"--incus-project","team","--environment","dev","state","show","-o","json"}, "\"hasAccepted\": false"},
 	} {
 		var stdout, stderr bytes.Buffer
