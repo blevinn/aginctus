@@ -105,6 +105,33 @@ workload-change field-name projection. Changes to this direction or revision
 shape are compatibility changes requiring deliberate review. YAML output
 must be semantically equivalent to JSON.
 
+## Composing verified read capabilities
+
+A trusted in-process embedding host can supply
+`cli.RunWithReadCapabilities(ctx, args, stdout, stderr, incus, loader, registry, readers)`,
+where `cli.ReadCapabilities` groups environment, logical workload, configured,
+accepted and accepted-to-configured diff readers **for that invocation only**.
+All of the read-only CLI paths then use the same injected capabilities:
+
+```sh
+aginctus --incus-project team environment list -o json
+aginctus --incus-project team --environment UUID workloads list -o json
+aginctus --incus-project team --environment UUID state show -o json
+aginctus --incus-project team --environment UUID state plan-accept -o json
+```
+
+The `UUID` placeholder means an immutable enrolled environment ID. These
+commands are not evidence that a production restricted-project transport is
+deployed. The ordinary standalone CLI deliberately passes nil read
+capabilities until a real authenticated service is available and vetted.
+
+Each reader must authenticate its own project authority and enrollment,
+and must reject foreign environment identities; merely assembling a
+`ReadCapabilities` value does not grant access. The experimental same-UID
+local service and configuration preferences must never be used to fill in
+missing production reader implementations. Partial capability sets fail
+closed for the missing operations.
+
 ## Wire compatibility discipline
 
 `internal/cli/output/testdata/` contains v1alpha1 golden JSON documents
