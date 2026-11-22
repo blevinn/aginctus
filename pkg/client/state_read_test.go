@@ -33,6 +33,7 @@ func TestStateDiffRejectsUnverifiedAndContradictoryResults(t *testing.T){
 	for _,bad:=range []ReadStateRequest{{},{Project:"team"},{EnvironmentID:diffEnvID}}{
 		if _,err:=s.Diff(context.Background(),bad);err==nil||source.calls!=0{t.Fatalf("unscoped diff: %+v %v",bad,err)}
 	}
+	source.value.Changed = true
 	result,err:=s.Diff(context.Background(),req)
 	if err!=nil||len(result.NewlySelected)!=1||source.calls!=1{t.Fatalf("result=%+v err=%v",result,err)}
 	for _,alter:=range []func(*api.ConfiguredAcceptedDiff){
@@ -42,8 +43,14 @@ func TestStateDiffRejectsUnverifiedAndContradictoryResults(t *testing.T){
 		func(v *api.ConfiguredAcceptedDiff){v.HasAccepted=true},
 		func(v *api.ConfiguredAcceptedDiff){v.Modified=nil},
 		func(v *api.ConfiguredAcceptedDiff){v.Unselected=[]string{"agent"}},
+		func(v *api.ConfiguredAcceptedDiff){v.Changed=true;v.NewlySelected=[]string{}},
+		func(v *api.ConfiguredAcceptedDiff){v.Changed=false;v.DisplayNameChanged=true},
+		func(v *api.ConfiguredAcceptedDiff){v.Changed=true;v.Modified=[]api.AcceptedWorkloadChange{{ID:"gateway",Fields:[]string{}}}},
+		func(v *api.ConfiguredAcceptedDiff){v.Changed=true;v.Modified=[]api.AcceptedWorkloadChange{{ID:"gateway",Fields:[]string{"imageFingerprint","imageFingerprint"}}}},
+		func(v *api.ConfiguredAcceptedDiff){v.Changed=true;v.Modified=[]api.AcceptedWorkloadChange{{ID:"gateway",Fields:[]string{""}}}},
 	}{
 		source.value=validStateDiff()
+		source.value.Changed=true
 		alter(&source.value)
 		got,err:=s.Diff(context.Background(),req)
 		if err==nil||got.Kind!=""{t.Fatalf("unverified result escaped %+v err=%v",got,err)}
