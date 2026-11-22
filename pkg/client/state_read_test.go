@@ -22,7 +22,7 @@ func validStateDiff() api.ConfiguredAcceptedDiff{
 	return api.ConfiguredAcceptedDiff{
 		TypeMeta:api.NewTypeMeta("ConfiguredAcceptedDiff"),
 		Environment:api.Environment{ID:diffEnvID,Name:"dev",Binding:api.EnvironmentBinding{ServerID:"verified",Project:"team"}},
-		FromLayer:"configured",ToLayer:"accepted",HasAccepted:false,ProposedDigest:"candidate-digest",
+		FromLayer:"accepted",ToLayer:"configured",HasAccepted:false,ProposedDigest:"candidate-digest",
 		NewlySelected:[]string{"agent"},Unselected:[]string{},Modified:[]api.AcceptedWorkloadChange{},
 	}
 }
