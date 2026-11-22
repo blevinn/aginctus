@@ -91,6 +91,20 @@ not cross that boundary.
 This is a serialization/presentation contract, not a substitute for a
 verified state reader or the executor's authorization checks.
 
+## Accepted and configured state contracts
+
+`State.Accepted` reports the published accepted revision or a verified
+absence; a backend failure must never be reported as absence. `State.Diff`
+compares the **accepted baseline** (`fromLayer: accepted`) with one explicitly
+selected **configured candidate** (`toLayer: configured`). Neither operation
+promotes a candidate or authorizes deletion of an unselected workload.
+
+Public `AcceptedStateStatus` and `ConfiguredAcceptedDiff` JSON fixtures
+pin the layer direction, immutable revision identity and the nonsecret
+workload-change field-name projection. Changes to this direction or revision
+shape are compatibility changes requiring deliberate review. YAML output
+must be semantically equivalent to JSON.
+
 ## Wire compatibility discipline
 
 `internal/cli/output/testdata/` contains v1alpha1 golden JSON documents

@@ -66,6 +66,13 @@ func (s *StateService) Diff(ctx context.Context, req ReadStateRequest) (api.Conf
 	if result.Revision != nil && (result.Revision.ID == "" || result.Revision.Generation == 0 || result.Revision.CandidateDigest == "") {
 		return api.ConfiguredAcceptedDiff{}, errors.New("state diff returned invalid accepted revision")
 	}
+	// A drift result must not silently claim "no change" when its
+	// component details describe a change (or the inverse).
+	anyChanges := result.DisplayNameChanged || len(result.NewlySelected) > 0 ||
+		len(result.Unselected) > 0 || len(result.Modified) > 0
+	if result.Changed != anyChanges {
+		return api.ConfiguredAcceptedDiff{}, errors.New("state diff returned contradictory change summary")
+	}
 	seen := map[string]bool{}
 	for _, id := range result.NewlySelected {
 		if id == "" || seen[id] { return api.ConfiguredAcceptedDiff{}, errors.New("state diff returned duplicate workload identity") }
@@ -76,8 +83,15 @@ func (s *StateService) Diff(ctx context.Context, req ReadStateRequest) (api.Conf
 		seen[id] = true
 	}
 	for _, change := range result.Modified {
-		if change.ID == "" || seen[change.ID] || change.Fields == nil {
+		if change.ID == "" || seen[change.ID] || len(change.Fields) == 0 {
 			return api.ConfiguredAcceptedDiff{}, errors.New("state diff returned contradictory workload change")
+		}
+		fields := make(map[string]bool, len(change.Fields))
+		for _, field := range change.Fields {
+			if field == "" || fields[field] {
+				return api.ConfiguredAcceptedDiff{}, errors.New("state diff returned invalid or duplicate field name")
+			}
+			fields[field] = true
 		}
 		seen[change.ID] = true
 	}
