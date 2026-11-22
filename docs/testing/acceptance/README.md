@@ -128,3 +128,6 @@ See the [operator evidence and attribution guide](evidence.md#native-opencode-se
 ## Related targeted checks
 
 The [pinned OpenCode runtime validation](opencode-runtime-validation.md) documents separate runtime/control verification. It is **not** an alternative path around the above explicit live provider and agent opt-in stages.
+
+For the separate, read-only same-UID project-volume fixture recovery inventory,
+see [project-state backup and recovery](project-state-backup-recovery.md).
