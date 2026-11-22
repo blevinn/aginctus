@@ -95,6 +95,19 @@ test-vm-opencode-tool-loopback:
 test-vm-ownership-recovery:
     python3 tests/vm_harness/runner.py test ownership-recovery
 
+# Heavyweight vmTests are explicit NixOS builds (never default CI or host Incus).
+test-vm-acceptance-project-authority:
+    python3 tests/vm_harness/runner.py test acceptance-project-authority
+
+test-vm-acceptance-environment-state:
+    python3 tests/vm_harness/runner.py test acceptance-environment-state
+
+test-vm-acceptance-accepted-state:
+    python3 tests/vm_harness/runner.py test acceptance-accepted-state
+
+test-vm-acceptance-home-manager:
+    python3 tests/vm_harness/runner.py test acceptance-home-manager
+
 # Inspect the same VM fixture with the interactive NixOS test driver.
 # Run under a dedicated unprivileged worker identity, never on pilot host.
 vm-debug:
