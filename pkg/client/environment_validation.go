@@ -4,18 +4,22 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"strings"
 
 	"github.com/blevinn/aginctus/pkg/api"
 )
 
-var environmentUUIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var environmentUUIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+var environmentNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 
 // validateEnvironmentProjection checks a reader result, not caller authority.
 // Authentication must already be enforced by the injected domain reader.
 // Inconsistent identity or binding evidence cannot escape as a valid result.
 func validateEnvironmentProjection(env api.Environment, project string) error {
-	if !environmentUUIDPattern.MatchString(env.ID) || env.Name == "" ||
-		env.Binding.ServerID == "" || env.Binding.Project != project {
+	if !environmentUUIDPattern.MatchString(env.ID) || !environmentNamePattern.MatchString(env.Name) ||
+		env.Binding.ServerID == "" || env.Binding.ServerID != strings.TrimSpace(env.Binding.ServerID) ||
+		len(env.Binding.ServerID)>256 || strings.ContainsAny(env.Binding.ServerID,"\\x00\\n\\r\\t") ||
+		env.Binding.Project != project {
 		return errors.New("environment reader returned inconsistent identity or binding")
 	}
 	return nil
