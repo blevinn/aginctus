@@ -1,0 +1,20 @@
+{
+  "apiVersion": "aginctus.dev/v1alpha1",
+  "kind": "AcceptedStateStatus",
+  "environment": {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "name": "dev",
+    "binding": {
+      "serverId": "server-1",
+      "project": "team"
+    }
+  },
+  "layer": "accepted",
+  "hasAccepted": true,
+  "revision": {
+    "id": "revision-2",
+    "generation": 2,
+    "parentId": "revision-1",
+    "candidateDigest": "candidate-digest"
+  }
+}
