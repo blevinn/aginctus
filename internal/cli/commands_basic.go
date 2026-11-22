@@ -192,7 +192,7 @@ func runBasicCobraWithStateCapabilities(
 	root.PersistentFlags().Var(overrides, "configure", "Alias for --config")
 	root.PersistentFlags().StringVar(&options.ConfigurationFile, "configuration-file", "", "Explicit JSON configuration file")
 	root.PersistentFlags().StringVarP(&outputFormat, "output", "o", "", "Output format: table, wide, json, yaml, name (supported commands only)")
-	root.PersistentFlags().StringVar(&selectedEnvironmentID, "environment", "", "Explicit immutable environment UUID for verified workload reads")
+	root.PersistentFlags().StringVar(&selectedEnvironmentID, "environment", "", "Immutable environment UUID or uniquely enrolled name (verified read commands)")
 	root.PersistentFlags().StringVar(&selectedIncusProject, "incus-project", "", "Explicit authenticated Incus project for environment workload reads")
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		if root.PersistentFlags().Changed("configuration-file") && options.ConfigurationFile == "" {
