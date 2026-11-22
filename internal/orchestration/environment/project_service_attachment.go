@@ -121,9 +121,13 @@ func VerifyProjectServiceAttachment(ctx context.Context, reader ProjectServiceAt
 }
 
 func validServiceComponent(s string) bool {
-	if s == "" || s == "." || s == ".." || len(s) > 100 { return false }
+	if s == "" || s == "." || s == ".." || len(s) > 100 {
+		return false
+	}
 	for _, r := range s {
-		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') { return false }
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+			return false
+		}
 	}
 	return true
 }
