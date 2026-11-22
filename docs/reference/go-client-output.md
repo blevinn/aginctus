@@ -74,6 +74,23 @@ Environment name resolution, default selection from effective configuration,
 discovery require the still-gated authoritative enrollment backend. No new
 CLI command enables privilege escalation or reconciles resources.
 
+## Machine-readable failures
+
+An explicit supported `-o json` or `-o yaml` request produces a single
+versioned `Error` document on **stderr** and a nonzero process exit when the
+command fails. A successful result is emitted on stdout only. Human output
+retains the existing diagnostic style.
+
+Error classification is deliberate: public-facing typed error codes can carry
+pre-sanitized messages, while an unclassified error or any `internal` category
+always emits the generic text `operation failed`. Wrapping an internal error
+in `api.Error` does not make its message safe to disclose. Source errors,
+Incus credentials, filesystem paths, and raw state-service diagnostics must
+not cross that boundary.
+
+This is a serialization/presentation contract, not a substitute for a
+verified state reader or the executor's authorization checks.
+
 ## Wire compatibility discipline
 
 `internal/cli/output/testdata/` contains v1alpha1 golden JSON documents
