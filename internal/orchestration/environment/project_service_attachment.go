@@ -8,6 +8,8 @@ import (
 
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
+
+	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
 
 // ProjectServiceAttachment identifies a preprovisioned service instance and
@@ -27,6 +29,7 @@ type ProjectServiceAttachment struct {
 // provision, attach, snapshot, modify, or delete Incus resources.
 type ProjectServiceAttachmentReader interface {
 	GetConnectionInfo() (*incusclient.ConnectionInfo, error)
+	GetProject(string) (*api.Project, string, error)
 	GetInstance(string) (*api.Instance, string, error)
 	GetStoragePoolVolume(string, string, string) (*api.StorageVolume, string, error)
 }
@@ -49,6 +52,13 @@ func VerifyProjectServiceAttachment(ctx context.Context, reader ProjectServiceAt
 		return errors.New("service inspection requires exact administrative project connection")
 	}
 	if err := ctx.Err(); err != nil { return err }
+	scope, err := incusscope.NewProjectScope(expected.Binding.Project)
+	if err != nil { return errors.New("invalid selected project scope") }
+	project, projectETag, err := reader.GetProject(scope.Name)
+	if err != nil || project == nil || projectETag == "" ||
+		scope.AssessProject(project.Name, project.Config) != incusscope.ProjectCompatible {
+		return errors.New("state-service project ownership or storage isolation unverified")
+	}
 	instance, etag, err := reader.GetInstance(expected.Instance)
 	if err != nil || instance == nil || etag == "" ||
 		instance.Project != expected.Binding.Project || instance.Name != expected.Instance ||
@@ -97,6 +107,11 @@ func VerifyProjectServiceAttachment(ctx context.Context, reader ProjectServiceAt
 		return errors.New("service volume attachment changed during observation")
 	}
 	if err := ctx.Err(); err != nil { return err }
+	projectAgain, projectETagAgain, err := reader.GetProject(scope.Name)
+	if err != nil || projectAgain == nil || projectETagAgain != projectETag ||
+		scope.AssessProject(projectAgain.Name, projectAgain.Config) != incusscope.ProjectCompatible {
+		return errors.New("state-service project policy changed during observation")
+	}
 	endConnection, err := reader.GetConnectionInfo()
 	if err != nil || endConnection == nil || endConnection.Project != connection.Project ||
 		endConnection.Protocol != connection.Protocol || endConnection.SocketPath != connection.SocketPath {
