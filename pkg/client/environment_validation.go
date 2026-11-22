@@ -18,7 +18,7 @@ var environmentNamePattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 func validateEnvironmentProjection(env api.Environment, project string) error {
 	if !environmentUUIDPattern.MatchString(env.ID) || !environmentNamePattern.MatchString(env.Name) ||
 		env.Binding.ServerID == "" || env.Binding.ServerID != strings.TrimSpace(env.Binding.ServerID) ||
-		len(env.Binding.ServerID)>256 || strings.ContainsAny(env.Binding.ServerID,"\\x00\\n\\r\\t") ||
+		len(env.Binding.ServerID)>256 || strings.ContainsAny(env.Binding.ServerID,"\x00\n\r\t") ||
 		env.Binding.Project != project {
 		return errors.New("environment reader returned inconsistent identity or binding")
 	}
