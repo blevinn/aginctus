@@ -33,11 +33,11 @@ func registerEnvironmentReads(root *cobra.Command,out io.Writer,reader client.En
 		},
 	})
 	parent.AddCommand(&cobra.Command{
-		Use:"show ID",Args:cobra.ExactArgs(1),Short:"Inspect an enrolled immutable environment identity",
-		Example:"  aginctus environment show <environment-uuid>",
+		Use:"show ID|NAME",Args:cobra.ExactArgs(1),Short:"Inspect an enrolled environment by verified UUID or name",
+		Example:"  aginctus --incus-project lab environment show <environment-uuid>\n  aginctus --incus-project lab environment show dev",
 		RunE:func(cmd *cobra.Command,args []string)error{
 			f,err:=format();if err!=nil{return err}
-			result,err:=service().Get(cmd.Context(),client.GetEnvironmentRequest{Project:*project,ID:args[0]})
+			result,err:=service().Resolve(cmd.Context(),client.ResolveEnvironmentRequest{Project:*project,Selector:args[0]})
 			if err!=nil{return err}
 			return renderEnvironmentDetail(out,f,result)
 		},
