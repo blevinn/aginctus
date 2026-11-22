@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
-	"path"
 	"path/filepath"
-	"strings"
 
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
@@ -93,8 +91,16 @@ func VerifyProjectServiceAttachment(ctx context.Context, reader ProjectServiceAt
 	}
 	again, againETag, err := reader.GetStoragePoolVolume(expected.Pool,"custom",expected.Volume)
 	if err != nil || again == nil || volumeETag != againETag ||
-		len(again.UsedBy) != 1 || again.UsedBy[0] != volume.UsedBy[0] {
+		len(again.UsedBy) != 1 || again.UsedBy[0] != volume.UsedBy[0] ||
+		again.Name != volume.Name || again.Type != volume.Type ||
+		again.ContentType != volume.ContentType || !equalStringMap(again.Config, volume.Config) {
 		return errors.New("service volume attachment changed during observation")
+	}
+	if err := ctx.Err(); err != nil { return err }
+	endConnection, err := reader.GetConnectionInfo()
+	if err != nil || endConnection == nil || endConnection.Project != connection.Project ||
+		endConnection.Protocol != connection.Protocol || endConnection.SocketPath != connection.SocketPath {
+		return errors.New("service project connection changed during observation")
 	}
 	return ctx.Err()
 }
@@ -110,11 +116,11 @@ func validServiceComponent(s string) bool {
 func instanceUseMatches(raw, name, project string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "" || u.Host != "" || u.Fragment != "" || u.User != nil ||
-		path.Clean(u.Path) != "/1.0/instances/"+name {
+		u.Path != "/1.0/instances/"+name {
 		return false
 	}
 	q, err := url.ParseQuery(u.RawQuery)
-	return err == nil && len(q) == 1 && len(q["project"]) == 1 && strings.EqualFold(q.Get("project"),project) && q.Get("project") == project
+	return err == nil && len(q) == 1 && len(q["project"]) == 1 && q.Get("project") == project
 }
 
 func equalStringMap(a,b map[string]string) bool {
