@@ -192,7 +192,7 @@ func runBasicCobraWithStateCapabilities(
 	root.PersistentFlags().Var(overrides, "configure", "Alias for --config")
 	root.PersistentFlags().StringVar(&options.ConfigurationFile, "configuration-file", "", "Explicit JSON configuration file")
 	root.PersistentFlags().StringVarP(&outputFormat, "output", "o", "", "Output format: table, wide, json, yaml, name (supported commands only)")
-	root.PersistentFlags().StringVar(&selectedEnvironmentID, "environment", "", "Explicit immutable environment UUID for verified workload reads")
+	root.PersistentFlags().StringVar(&selectedEnvironmentID, "environment", "", "Immutable environment UUID or uniquely enrolled name (verified read commands)")
 	root.PersistentFlags().StringVar(&selectedIncusProject, "incus-project", "", "Explicit authenticated Incus project for environment workload reads")
 	root.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		if root.PersistentFlags().Changed("configuration-file") && options.ConfigurationFile == "" {
@@ -228,6 +228,26 @@ func runBasicCobraWithStateCapabilities(
 		environmentRead := cmd.Parent() != nil && cmd.Parent().Name() == "environment"
 		if root.PersistentFlags().Changed("incus-project") && !logicalWorkload && !environmentRead && !stateRead {
 			return fmt.Errorf("incus project selector requires a verified environment or workloads read")
+		}
+		// Resolve display names only through a verified project enrollment
+		// inventory. This is invocation-local convenience, not authorization;
+		// the resource reader must still independently check project scope.
+		// Existing UUID-only injected readers remain usable without an
+		// environment inventory reader.
+		if (logicalWorkload || stateRead) && selectedEnvironmentID != "" &&
+			!client.IsEnvironmentUUID(selectedEnvironmentID) {
+			if environmentReader == nil {
+				return fmt.Errorf("authenticated environment inventory required to resolve a display name")
+			}
+			resolved, err := client.New(client.Options{
+				EnvironmentReader: environmentReader,
+			}).Environments.Resolve(cmd.Context(), client.ResolveEnvironmentRequest{
+				Project: selectedIncusProject, Selector: selectedEnvironmentID,
+			})
+			if err != nil {
+				return err
+			}
+			selectedEnvironmentID = resolved.ID
 		}
 		return nil
 	}

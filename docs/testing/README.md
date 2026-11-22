@@ -26,6 +26,14 @@ verification required for #725/#755. It is **NOT RUN** until the operator
 records observed command results, cleanup evidence and signoff. Neither
 hermetic checks nor an acceptance template constitute real host evidence.
 
+## Go client and structured output acceptance
+
+The [v0.2 Go client read acceptance checklist](acceptance/go-client-read-v02.md)
+separates hermetic client/API checks, the standalone CLI fail-closed baseline,
+production authenticated read activation, and disposable-VM authorization /
+recovery evidence. Its status is **NOT RUN**; it never grants authorization
+to enable the production state service or perform lifecycle mutations.
+
 ## Further testenv and acceptance detail
 
 - [Testenv procedure index](testenv/README.md) and [VM scenario catalog](testenv/scenarios.md) — disposable nested VM, isolated worker, OCI staging and authorization boundaries.

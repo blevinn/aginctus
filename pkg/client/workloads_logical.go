@@ -16,7 +16,7 @@ type LogicalWorkloadReader interface {
 	WorkloadStatus(context.Context,api.WorkloadStatusRequest)(api.WorkloadStatus,error)
 }
 func readScope(project,environment string) error{
-	if project==""||environment==""{return fmt.Errorf("verified project and immutable environment ID required")}
+	if project==""||!environmentUUIDPattern.MatchString(environment){return fmt.Errorf("verified project and immutable environment UUID required")}
 	return nil
 }
 func (s *WorkloadsService) List(ctx context.Context,req api.ListWorkloadsRequest)(api.WorkloadList,error){
@@ -25,10 +25,10 @@ func (s *WorkloadsService) List(ctx context.Context,req api.ListWorkloadsRequest
 	if s==nil||s.logical==nil{return api.WorkloadList{},fmt.Errorf("authenticated logical workload reader unavailable")}
 	result,err:=s.logical.ListWorkloads(ctx,req)
 	if err!=nil{return api.WorkloadList{},err}
-	if result.EnvironmentID!=req.EnvironmentID||result.Kind!="WorkloadList"||result.Items==nil{return api.WorkloadList{},fmt.Errorf("logical workload response scope mismatch")}
+	if result.APIVersion!=api.APIVersionV1Alpha1||result.EnvironmentID!=req.EnvironmentID||result.Kind!="WorkloadList"||result.Items==nil{return api.WorkloadList{},fmt.Errorf("logical workload response scope mismatch")}
 	seen:=map[string]bool{}
 	for _,w:=range result.Items{
-		if w.EnvironmentID!=req.EnvironmentID||w.Name==""||seen[w.Name]||(req.Class!=""&&w.Class!=req.Class){
+		if validateLogicalWorkload(w,req.EnvironmentID)!=nil||seen[w.Name]||(req.Class!=""&&w.Class!=req.Class){
 			return api.WorkloadList{},fmt.Errorf("logical workload response ownership mismatch")
 		}
 		seen[w.Name]=true
@@ -42,7 +42,7 @@ func (s *WorkloadsService) Get(ctx context.Context,req api.GetWorkloadRequest)(a
 	if s==nil||s.logical==nil{return api.WorkloadDetail{},fmt.Errorf("authenticated logical workload reader unavailable")}
 	result,err:=s.logical.GetWorkload(ctx,req)
 	if err!=nil{return api.WorkloadDetail{},err}
-	if result.Kind!="Workload"||result.EnvironmentID!=req.EnvironmentID||result.Name!=req.Name{return api.WorkloadDetail{},fmt.Errorf("logical workload response ownership mismatch")}
+	if result.APIVersion!=api.APIVersionV1Alpha1||result.Kind!="Workload"||result.Name!=req.Name||validateLogicalWorkload(result.Workload,req.EnvironmentID)!=nil{return api.WorkloadDetail{},fmt.Errorf("logical workload response ownership mismatch")}
 	return result,nil
 }
 func (s *WorkloadsService) Status(ctx context.Context,req api.WorkloadStatusRequest)(api.WorkloadStatus,error){
@@ -52,6 +52,6 @@ func (s *WorkloadsService) Status(ctx context.Context,req api.WorkloadStatusRequ
 	if s==nil||s.logical==nil{return api.WorkloadStatus{},fmt.Errorf("authenticated logical workload reader unavailable")}
 	result,err:=s.logical.WorkloadStatus(ctx,req)
 	if err!=nil{return api.WorkloadStatus{},err}
-	if result.Kind!="WorkloadStatus"||result.EnvironmentID!=req.EnvironmentID||result.Name!=req.Name||result.Observed==nil{return api.WorkloadStatus{},fmt.Errorf("logical workload observation scope mismatch")}
+	if result.APIVersion!=api.APIVersionV1Alpha1||result.Kind!="WorkloadStatus"||result.EnvironmentID!=req.EnvironmentID||result.Name!=req.Name||validateLogicalObservations(result)!=nil{return api.WorkloadStatus{},fmt.Errorf("logical workload observation scope mismatch")}
 	return result,nil
 }
