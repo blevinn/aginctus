@@ -38,6 +38,8 @@ SCENARIOS = {
     "full-stack": "vm-harness-full-stack",
     "opencode-tool-loopback": "vm-harness-opencode-tool-loopback",
     "ownership-recovery": "vm-harness-ownership-recovery",
+    "acceptance-nft": "vm-harness-acceptance-nft",
+    "acceptance-egress-denial": "vm-harness-acceptance-egress-denial",
 }
 NETWORKED_SCENARIOS = {
     "gateway-topology",
