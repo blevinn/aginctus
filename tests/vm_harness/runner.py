@@ -40,6 +40,7 @@ SCENARIOS = {
     "ownership-recovery": "vm-harness-ownership-recovery",
     "acceptance-nft": "vm-harness-acceptance-nft",
     "acceptance-egress-denial": "vm-harness-acceptance-egress-denial",
+    "acceptance-firewalld": "vm-harness-acceptance-firewalld",
 }
 NETWORKED_SCENARIOS = {
     "gateway-topology",
