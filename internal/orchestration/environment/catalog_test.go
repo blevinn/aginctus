@@ -137,7 +137,8 @@ func TestCatalogRefusesRetargetedProjectAfterInventoryRead(t *testing.T) {
 func TestCatalogRejectsNilContextBeforeAuthentication(t *testing.T) {
 	verifier := &testProjectVerifier{binding: testDescriptor(firstID).Binding}
 	source := &testEnrollmentSource{descriptors: []Descriptor{testDescriptor(firstID)}}
-	if got, err := (Catalog{Verifier: verifier, Source: source}).List(nil, "aginctus");
+	var noContext context.Context
+	if got, err := (Catalog{Verifier: verifier, Source: source}).List(noContext, "aginctus");
 		err == nil || len(got) != 0 || verifier.calls != 0 || source.calls != 0 {
 		t.Fatalf("nil context accessed enrollment: got=%+v err=%v", got, err)
 	}
