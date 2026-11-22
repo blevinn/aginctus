@@ -32,6 +32,9 @@ type Catalog struct {
 // List reads records from exactly one authenticated project. Foreign, corrupt
 // and duplicate records fail the entire read; no partial identities escape.
 func (r Catalog) List(ctx context.Context, project string) ([]Descriptor, error) {
+	if ctx == nil {
+		return nil, errors.New("environment enrollment requires context")
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -55,6 +58,9 @@ func (r Catalog) List(ctx context.Context, project string) ([]Descriptor, error)
 	if records == nil {
 		return nil, errors.New("enrolled environment inventory unavailable")
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	seen := make(map[string]bool, len(records))
 	out := make([]Descriptor, 0, len(records))
 	for _, d := range records {
@@ -72,6 +78,19 @@ func (r Catalog) List(ctx context.Context, project string) ([]Descriptor, error)
 		}
 		seen[d.ID] = true
 		out = append(out, d)
+	}
+	// A revoked or retargeted project cannot release even a previously
+	// verified enrollment inventory. The concrete verifier must enforce
+	// revocation through the physical restricted Incus connection.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	refreshed, err := r.Verifier.VerifyProject(ctx, project)
+	if err != nil || refreshed != binding {
+		return nil, errors.New("environment project binding changed during enrollment read")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
