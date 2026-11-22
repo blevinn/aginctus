@@ -16,6 +16,7 @@ import (
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/plugins"
 	"github.com/blevinn/aginctus/pkg/client"
+	"github.com/blevinn/aginctus/pkg/api"
 	"github.com/spf13/cobra"
 )
 
@@ -312,6 +313,20 @@ func runBasicCobraWithStateCapabilities(
 	addImageCommands(root, stdout, stderr, load, &status)
 
 	if err := root.ExecuteContext(ctx); err != nil {
+		if root.PersistentFlags().Changed("output") {
+			format, parseErr := clioutput.ParseFormat(outputFormat)
+			if parseErr == nil && (format == clioutput.JSON || format == clioutput.YAML) {
+				// Public API errors are pre-sanitized; arbitrary backend errors
+				// must not be printed into a machine-readable document.
+				if strings.Contains(err.Error(), "--output is not yet supported") {
+					err = api.NewError(api.CodeInvalidArgument, "output format is not supported by this command")
+				}
+				if writeErr := clioutput.WriteError(stderr, format, err); writeErr == nil {
+					return 2
+				}
+				return 2
+			}
+		}
 		fmt.Fprintf(stderr, "%v\nUsage: %s\n", err, root.UseLine())
 		return 2
 	}

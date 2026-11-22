@@ -81,3 +81,31 @@ func TestExplicitUnsupportedOutputFailsBeforeConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestStructuredErrorUsesStderrAndDoesNotClaimSuccess(t *testing.T) {
+	for _, tc := range []struct{args []string;code api.ErrorCode}{
+		{[]string{"plugins","show","missing","-o","json"}, api.CodeNotFound},
+		{[]string{"-o","yaml","plugins","show","missing"}, api.CodeNotFound},
+		{[]string{"-o","json","config","get","incus.project"}, api.CodeInvalidArgument},
+	} {
+		var stdout,stderr bytes.Buffer
+		status:=Run(context.Background(),tc.args,&stdout,&stderr,nil,nil)
+		if status==0||stdout.Len()!=0{t.Fatalf("status=%d stdout=%q stderr=%q",status,stdout.String(),stderr.String())}
+		if !strings.Contains(stderr.String(),string(tc.code)) ||
+			strings.Contains(stderr.String(),"Usage:") || !strings.Contains(stderr.String(),"apiVersion") {
+			t.Fatalf("unexpected machine error %q",stderr.String())
+		}
+	}
+}
+
+func TestUnexpectedStructuredErrorDoesNotLeakBackendDetails(t *testing.T) {
+	// This branch is a domain service unavailable failure, which must not
+	// serialize arbitrary low-level errors as a public API message.
+	var stdout,stderr bytes.Buffer
+	status:=Run(context.Background(),[]string{"-o","json","environment","list","--incus-project","aginctus"},
+		&stdout,&stderr,nil,nil)
+	if status==0||stdout.Len()!=0||!strings.Contains(stderr.String(),`"code": "internal"`) ||
+		!strings.Contains(stderr.String(),`"message": "operation failed"`){
+		t.Fatalf("status=%d stdout=%q stderr=%q",status,stdout.String(),stderr.String())
+	}
+}
