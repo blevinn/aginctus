@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -64,10 +65,11 @@ func TestFixtureUnixClientRejectsCorruptAndOversizedResponses(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer listener.Close()
-	body := string(nominal)
+	var body atomic.Value
+	body.Store(string(nominal))
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(body))
+		_, _ = w.Write([]byte(body.Load().(string)))
 	})}
 	defer server.Close()
 	go func() { _ = server.Serve(listener) }()
@@ -78,7 +80,7 @@ func TestFixtureUnixClientRejectsCorruptAndOversizedResponses(t *testing.T) {
 		"{}",
 		strings.Repeat("x", maxLocalFixtureResponseBytes+1),
 	} {
-		body = bad
+		body.Store(bad)
 		if _, err := ReadLocalFixtureRevisionStatus(context.Background(), socket, candidate.Environment); err == nil {
 			t.Fatalf("accepted malformed fixture response %q", bad[:min(len(bad), 40)])
 		}
