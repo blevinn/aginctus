@@ -76,8 +76,5 @@ func CompareLocalRestoredProject(
 	if err := ctx.Err(); err != nil {
 		return LocalRestoreVerification{}, err
 	}
-	return LocalRestoreVerification{
-		ServerID: left.ServerID, Project: left.Project,
-		Environments: left.Environments,
-	}, nil
+	return LocalRestoreVerification(left), nil
 }
