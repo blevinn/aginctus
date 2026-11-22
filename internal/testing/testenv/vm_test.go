@@ -27,7 +27,7 @@ func TestVMScenariosAreFixedAndIndependent(t *testing.T) {
 
 func TestVMTestRequestFixedCommand(t *testing.T) {
 	root := t.TempDir()
-	file := filepath.Join(root, "scripts", "vm_harness", "runner.py")
+	file := filepath.Join(root, "tests", "vm_harness", "runner.py")
 	if err := os.MkdirAll(filepath.Dir(file), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestVMTestRequestFixedCommand(t *testing.T) {
 
 func TestVMTestRequestRefusesUntrustedScriptPathAndScenario(t *testing.T) {
 	root := t.TempDir()
-	file := filepath.Join(root, "scripts", "vm_harness", "runner.py")
+	file := filepath.Join(root, "tests", "vm_harness", "runner.py")
 	if err := os.MkdirAll(filepath.Dir(file), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -65,5 +65,22 @@ func TestVMTestRequestRefusesUntrustedScriptPathAndScenario(t *testing.T) {
 	}
 	if _, err := VMTestRequest(root, "smoke"); err == nil {
 		t.Fatal("symlink still accepted")
+	}
+}
+
+// TestVMTestRequestUsesActualCheckoutRunner prevents another CLI adapter
+// path drift from being masked by synthetic fixture directories.
+func TestVMTestRequestUsesActualCheckoutRunner(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := VMTestRequest(root, "native-instance")
+	if err != nil {
+		t.Fatalf("public VM command cannot resolve repository runner: %v", err)
+	}
+	want := filepath.Join(root, "tests", "vm_harness", "runner.py")
+	if req.Program != "python3" || !reflect.DeepEqual(req.Args, []string{want, "test", "native-instance"}) {
+		t.Fatalf("incorrect repository runner binding: %+v", req)
 	}
 }
