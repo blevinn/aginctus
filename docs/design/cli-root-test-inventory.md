@@ -26,7 +26,6 @@ without dropping their integration evidence.
 | `help_budget_test.go` | CLI composition / bounded help presentation | Retain; verify output limits across registered commands |
 | `commands_config_scope_test.go` | Cross-family configured project preference presentation | Retain root Run/format/authorization disclaimer evidence |
 | `commands_system_status_test.go` | Cross-family Incus server observation presentation | Retain root Run/format and missing-backend evidence |
-| `environment_read_capabilities_test.go` | CLI project-scoped domain read composition | Retain root positive and fail-closed cross-family output evidence |
 | `read_capabilities_test.go` | Unified read-only CLI dependency injection | Retain cross-family root invocation and fail-closed evidence |
 | `commands_state_reads_test.go` | State read-only invocation and missing-authority contract | Retain root Run and structured output integration evidence |
 | `commands_acceptance_preview_test.go` | Read-only lifecycle plan and missing-authority contract | Retain root typed output and fail-closed integration evidence |
