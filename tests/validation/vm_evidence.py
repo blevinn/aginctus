@@ -26,6 +26,7 @@ SCENARIOS = (
     "storage-network",
     "runtime-lifecycle",
     "native-instance",
+    "acceptance-project-image",
     "gateway-topology",
     "synthetic-gateway",
     "synthetic-tool-gateway",
