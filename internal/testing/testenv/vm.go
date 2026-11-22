@@ -64,7 +64,7 @@ func VMTestRequest(root, scenarioName string) (VMRunnerRequest, error) {
 	if err != nil || !info.IsDir() {
 		return VMRunnerRequest{}, errors.New("testenv requires a local Aginctus checkout")
 	}
-	script := filepath.Join(absolute, "scripts", "vm_harness", "runner.py")
+	script := filepath.Join(absolute, "tests", "vm_harness", "runner.py")
 	fi, err := os.Lstat(script)
 	if err != nil || !fi.Mode().IsRegular() {
 		return VMRunnerRequest{}, errors.New("testenv requires the repository VM runner (regular file)")
