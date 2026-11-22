@@ -96,6 +96,8 @@ test-vm-acceptance-nft:
     python3 tests/vm_harness/runner.py test acceptance-nft
 test-vm-acceptance-egress-denial:
     python3 tests/vm_harness/runner.py test acceptance-egress-denial
+test-vm-acceptance-firewalld:
+    python3 tests/vm_harness/runner.py test acceptance-firewalld
 
 # Inspect the same VM fixture with the interactive NixOS test driver.
 # Run under a dedicated unprivileged worker identity, never on pilot host.
