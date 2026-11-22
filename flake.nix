@@ -232,6 +232,9 @@
           vm-harness-acceptance-nft = import ./tests/nix/firewall/firewall-nixos-nft-test.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-acceptance-firewalld = import ./tests/nix/firewall/firewall-firewalld-test.nix {
+            inherit self nixpkgs system;
+          };
           vm-harness-acceptance-egress-denial = import ./tests/nix/firewall/firewall-egress-bootstrap-test.nix {
             inherit self nixpkgs system;
           };
