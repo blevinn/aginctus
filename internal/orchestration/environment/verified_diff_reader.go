@@ -19,7 +19,7 @@ type ConfiguredCandidateSource interface {
 // enrollment source, published revision source and configured candidate source
 // must be supplied by a trusted embedding host.
 type VerifiedConfiguredDiffReader struct {
-	Model AcceptedReadModel
+	Model      AcceptedReadModel
 	Configured ConfiguredCandidateSource
 }
 
@@ -29,20 +29,32 @@ type VerifiedConfiguredDiffReader struct {
 func (r VerifiedConfiguredDiffReader) DiffConfiguredAccepted(
 	ctx context.Context, project, environmentID string,
 ) (api.ConfiguredAcceptedDiff, error) {
-	if ctx == nil { return api.ConfiguredAcceptedDiff{}, errors.New("state diff requires context") }
-	if err := ctx.Err(); err != nil { return api.ConfiguredAcceptedDiff{}, err }
-	if r.Configured == nil { return api.ConfiguredAcceptedDiff{}, errors.New("verified configured candidate source unavailable") }
+	if ctx == nil {
+		return api.ConfiguredAcceptedDiff{}, errors.New("state diff requires context")
+	}
+	if err := ctx.Err(); err != nil {
+		return api.ConfiguredAcceptedDiff{}, err
+	}
+	if r.Configured == nil {
+		return api.ConfiguredAcceptedDiff{}, errors.New("verified configured candidate source unavailable")
+	}
 
 	enrolled, err := r.Model.Catalog.Get(ctx, project, environmentID)
-	if err != nil { return api.ConfiguredAcceptedDiff{}, errors.New("verified environment selection unavailable") }
+	if err != nil {
+		return api.ConfiguredAcceptedDiff{}, errors.New("verified environment selection unavailable")
+	}
 	candidate, err := r.Configured.ReadConfigured(ctx, enrolled)
-	if err != nil { return api.ConfiguredAcceptedDiff{}, errors.New("configured candidate read unavailable") }
+	if err != nil {
+		return api.ConfiguredAcceptedDiff{}, errors.New("configured candidate read unavailable")
+	}
 	if _, err := SelectCandidate(candidate, enrolled, enrolled.Binding); err != nil {
 		return api.ConfiguredAcceptedDiff{}, errors.New("configured candidate does not match enrolled environment")
 	}
 
 	diff, err := r.Model.DiffConfiguredAgainstAccepted(ctx, project, environmentID, candidate)
-	if err != nil { return api.ConfiguredAcceptedDiff{}, errors.New("accepted-state comparison unavailable") }
+	if err != nil {
+		return api.ConfiguredAcceptedDiff{}, errors.New("accepted-state comparison unavailable")
+	}
 	if diff.FromLayer != "accepted" || diff.ToLayer != "configured" ||
 		diff.Environment.ID != enrolled.ID ||
 		diff.Environment.Binding.ServerID != enrolled.Binding.ServerID ||
@@ -56,6 +68,8 @@ func (r VerifiedConfiguredDiffReader) DiffConfiguredAccepted(
 	if err != nil || verified != enrolled.Binding {
 		return api.ConfiguredAcceptedDiff{}, errors.New("project binding changed during comparison")
 	}
-	if err := ctx.Err(); err != nil { return api.ConfiguredAcceptedDiff{}, err }
+	if err := ctx.Err(); err != nil {
+		return api.ConfiguredAcceptedDiff{}, err
+	}
 	return diff, nil
 }
