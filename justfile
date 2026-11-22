@@ -69,6 +69,10 @@ test-vm-runtime-lifecycle:
 test-vm-native-instance:
     python3 tests/vm_harness/runner.py test native-instance
 
+# Gate E: guest-local multi-environment state and public CLI authority boundaries.
+test-vm-acceptance-state-boundary:
+    python3 tests/vm_harness/runner.py test acceptance-state-boundary
+
 # Real LiteLLM/PostgreSQL OCI and Herdr/OpenCode topology (no model calls).
 # May need OCI registry access; use a disposable NixOS KVM worker only.
 test-vm-gateway-topology:
