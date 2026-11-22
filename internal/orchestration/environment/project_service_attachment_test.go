@@ -6,10 +6,14 @@ import (
 
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
+
+	incusscope "github.com/blevinn/aginctus/internal/incus"
 )
 
 type projectServiceInspectionFake struct {
 	connection incusclient.ConnectionInfo
+	project api.Project
+	projectETag string
 	instance api.Instance
 	volume api.StorageVolume
 	instanceETag string
@@ -19,6 +23,7 @@ type projectServiceInspectionFake struct {
 func (f *projectServiceInspectionFake) GetConnectionInfo() (*incusclient.ConnectionInfo,error) {
 	return &f.connection,nil
 }
+func (f *projectServiceInspectionFake) GetProject(string) (*api.Project,string,error) { return &f.project,f.projectETag,nil }
 func (f *projectServiceInspectionFake) GetInstance(string) (*api.Instance,string,error) {
 	f.reads++
 	return &f.instance,f.instanceETag,nil
@@ -34,6 +39,10 @@ func projectAttachmentFixture() (ProjectServiceAttachment,*projectServiceInspect
 	}
 	f:=&projectServiceInspectionFake{
 		connection:incusclient.ConnectionInfo{Protocol:"incus",SocketPath:"/var/lib/incus/unix.socket",Project:want.Binding.Project},
+		project:api.Project{Name:want.Binding.Project,ProjectPut:api.ProjectPut{
+			Config:incusscope.ProjectScope{Name:want.Binding.Project}.DesiredConfig(),
+		}},
+		projectETag:"project-etag",
 		instance:api.Instance{
 			Name:want.Instance,Project:want.Binding.Project,
 			InstancePut:api.InstancePut{
@@ -72,6 +81,8 @@ func TestProjectServiceAttachmentFailsClosedOnForeignAndAmbiguousResources(t *te
 	}{
 		{"cross-project connection",func(_ *ProjectServiceAttachment,f *projectServiceInspectionFake){f.connection.Project="other"}},
 		{"missing socket",func(_ *ProjectServiceAttachment,f *projectServiceInspectionFake){f.connection.SocketPath=""}},
+		{"project storage isolation off",func(_ *ProjectServiceAttachment,f *projectServiceInspectionFake){f.project.Config["features.storage.volumes"]="false"}},
+		{"project ownership forged",func(_ *ProjectServiceAttachment,f *projectServiceInspectionFake){f.project.Config["user.aginctus.deployment"]="foreign"}},
 		{"foreign instance",func(_ *ProjectServiceAttachment,f *projectServiceInspectionFake){f.instance.Project="other"}},
 		{"unmarked instance",func(_ *ProjectServiceAttachment,f *projectServiceInspectionFake){f.instance.Config["user.aginctus.resource"]="foreign"}},
 		{"foreign device",func(_ *ProjectServiceAttachment,f *projectServiceInspectionFake){f.instance.Devices["state"]["pool"]="other"}},
