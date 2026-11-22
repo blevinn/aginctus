@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/blevinn/aginctus/pkg/api"
@@ -21,6 +22,7 @@ type GetEnvironmentRequest struct { Project string; ID string }
 // It never invents enrollment based on a configured candidate.
 type EnvironmentsService struct {reader EnvironmentReader; defaultProject string; defaultID string}
 func (s *EnvironmentsService) List(ctx context.Context,request ListEnvironmentsRequest)(api.EnvironmentList,error){
+	if ctx==nil {return api.EnvironmentList{},errors.New("environment inventory requires context")}
 	if err:=ctx.Err();err!=nil{return api.EnvironmentList{},err}
 	if request.Project=="" {return api.EnvironmentList{},fmt.Errorf("explicit project required for environment inventory")}
 	if s==nil||s.reader==nil {return api.EnvironmentList{},fmt.Errorf("authenticated environment enrollment reader unavailable")}
@@ -33,6 +35,7 @@ func (s *EnvironmentsService) List(ctx context.Context,request ListEnvironmentsR
 	return result,nil
 }
 func (s *EnvironmentsService) Get(ctx context.Context,request GetEnvironmentRequest)(api.EnvironmentDetail,error){
+	if ctx==nil {return api.EnvironmentDetail{},errors.New("environment detail requires context")}
 	if err:=ctx.Err();err!=nil{return api.EnvironmentDetail{},err}
 	if request.Project==""||request.ID=="" {return api.EnvironmentDetail{},fmt.Errorf("explicit project and immutable environment ID required")}
 	if s==nil||s.reader==nil {return api.EnvironmentDetail{},fmt.Errorf("authenticated environment enrollment reader unavailable")}

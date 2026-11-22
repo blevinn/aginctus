@@ -29,3 +29,23 @@ func TestEnvironmentClientRequiresExplicitAuthenticatedScope(t *testing.T){
 	if _,err:=service.List(ctx,ListEnvironmentsRequest{Project:"aginctus"});!errors.Is(err,context.Canceled)||reader.calls!=2 {t.Fatalf("cancel: %v",err)}
 	if _,err:=New(Options{}).Environments.List(context.Background(),ListEnvironmentsRequest{Project:"aginctus"});err==nil {t.Fatal("no provider accepted")}
 }
+
+func TestEnvironmentClientRejectsNilContextWithoutCallingReader(t *testing.T) {
+	reader := &testEnvironmentReader{}
+	service := New(Options{EnvironmentReader: reader}).Environments
+	const environmentID = "11111111-1111-4111-8111-111111111111"
+	var nilContext context.Context
+
+	if result, err := service.List(nilContext, ListEnvironmentsRequest{Project: "team"}); err == nil || result.Kind != "" {
+		t.Fatalf("nil-context list must fail without output: result=%+v err=%v", result, err)
+	}
+	if result, err := service.Get(nilContext, GetEnvironmentRequest{Project: "team", ID: environmentID}); err == nil || result.Kind != "" {
+		t.Fatalf("nil-context get must fail without output: result=%+v err=%v", result, err)
+	}
+	if result, err := service.Selected(nilContext, GetEnvironmentRequest{Project: "team", ID: environmentID}); err == nil || result.Kind != "" {
+		t.Fatalf("nil-context selected must fail without output: result=%+v err=%v", result, err)
+	}
+	if reader.calls != 0 {
+		t.Fatalf("nil context reached authenticated reader %d times", reader.calls)
+	}
+}
