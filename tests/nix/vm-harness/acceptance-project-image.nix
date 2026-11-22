@@ -9,7 +9,7 @@ let
     import pathlib
     import socket
     import time
-    name = "\\0aginctus-image-write-v1-" + hashlib.sha256(b"aginctus").hexdigest()
+    name = "\0aginctus-image-write-v1-" + hashlib.sha256(b"aginctus").hexdigest()
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.bind(name)
     pathlib.Path("/run/aginctus-acceptance-lease-ready").touch()
