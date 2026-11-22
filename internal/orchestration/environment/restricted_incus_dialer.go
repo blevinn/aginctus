@@ -67,7 +67,7 @@ func OpenExplicitRestrictedIncusProject(
 	serverCert, err := x509.ParseCertificate(serverBlock.Bytes)
 	if err != nil || time.Now().Before(serverCert.NotBefore) || time.Now().After(serverCert.NotAfter) ||
 		serverCert.VerifyHostname(u.Hostname()) != nil {
-		return nil, errors.New("Incus server certificate invalid for selected endpoint")
+		return nil, errors.New("incus server certificate invalid for selected endpoint")
 	}
 	if _, err := tls.X509KeyPair([]byte(c.ClientCertificatePEM), []byte(c.ClientPrivateKeyPEM)); err != nil {
 		return nil, errors.New("invalid restricted client TLS keypair")
