@@ -91,6 +91,12 @@ test-vm-opencode-tool-loopback:
 test-vm-ownership-recovery:
     python3 tests/vm_harness/runner.py test ownership-recovery
 
+# Gate D: full guest-local firewall integration without host firewall mutation.
+test-vm-acceptance-nft:
+    python3 tests/vm_harness/runner.py test acceptance-nft
+test-vm-acceptance-egress-denial:
+    python3 tests/vm_harness/runner.py test acceptance-egress-denial
+
 # Inspect the same VM fixture with the interactive NixOS test driver.
 # Run under a dedicated unprivileged worker identity, never on pilot host.
 vm-debug:
