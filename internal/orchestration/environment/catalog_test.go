@@ -102,3 +102,44 @@ func TestCatalogFailsClosedBeforeDisclosure(t *testing.T) {
 		t.Fatalf("cancellation: %v", err)
 	}
 }
+
+type retargetingEnrollmentVerifier struct {
+	before Binding
+	after Binding
+	calls int
+}
+
+func (v *retargetingEnrollmentVerifier) VerifyProject(_ context.Context, _ string) (Binding, error) {
+	v.calls++
+	if v.calls == 1 { return v.before, nil }
+	return v.after, nil
+}
+
+func TestCatalogRefusesRetargetedProjectAfterInventoryRead(t *testing.T) {
+	original := testDescriptor(firstID)
+	for _, tc := range []struct{name string; after Binding}{
+		{"changed project", Binding{ServerID: original.Binding.ServerID, Project: "foreign"}},
+		{"changed server", Binding{ServerID: "foreign-server", Project: original.Binding.Project}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			verifier := &retargetingEnrollmentVerifier{before: original.Binding, after: tc.after}
+			source := &testEnrollmentSource{descriptors: []Descriptor{original}}
+			got, err := (Catalog{Verifier: verifier, Source: source}).List(
+				context.Background(), original.Binding.Project,
+			)
+			if err == nil || len(got) != 0 || verifier.calls != 2 || source.calls != 1 {
+				t.Fatalf("retargeted inventory escaped: got=%+v err=%v verify=%d source=%d", got, err, verifier.calls, source.calls)
+			}
+		})
+	}
+}
+
+func TestCatalogRejectsNilContextBeforeAuthentication(t *testing.T) {
+	verifier := &testProjectVerifier{binding: testDescriptor(firstID).Binding}
+	source := &testEnrollmentSource{descriptors: []Descriptor{testDescriptor(firstID)}}
+	var noContext context.Context
+	if got, err := (Catalog{Verifier: verifier, Source: source}).List(noContext, "aginctus");
+		err == nil || len(got) != 0 || verifier.calls != 0 || source.calls != 0 {
+		t.Fatalf("nil context accessed enrollment: got=%+v err=%v", got, err)
+	}
+}
