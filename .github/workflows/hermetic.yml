@@ -57,7 +57,7 @@ jobs:
           test ! -e "$fixture/target/namespace-marker"
 
       - name: install Nix
-        uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
+        uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -139,7 +139,7 @@ jobs:
         with:
           persist-credentials: false
       - name: install pinned Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: true
@@ -198,7 +198,7 @@ jobs:
       # Python regression tests invoke the actual Go validation coordinator.
       # Pin Go rather than silently using Ubuntu's older preinstalled version.
       - name: install pinned Go for Python fixtures
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: true
@@ -285,7 +285,7 @@ jobs:
           # Do not weaken this contract or alter runner security settings.
           unshare --user --map-root-user --mount --fork -- true
       - name: install Nix
-        uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31
+        uses: cachix/install-nix-action@bb0495a1086c46893eee56f32fd192dfe4a15bb9 # v32.0.0
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
