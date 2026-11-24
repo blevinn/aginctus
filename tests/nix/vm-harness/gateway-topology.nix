@@ -103,6 +103,7 @@ pkgs.testers.runNixOSTest {
     };
   testScript = ''
     import json
+    import sys
     start_all()
     machine.wait_for_unit("incus.service")
   ''
