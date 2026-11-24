@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -35,6 +36,15 @@ func validateReport(t *testing.T, result Result, terminal report.State) []report
 		t.Fatalf("terminal/gap mismatch: %+v dropped=%d", last, result.Report.Dropped)
 	}
 	return events
+}
+
+func requireSlot(t *testing.T, status report.Snapshot, step string, kind report.Kind, want report.State) report.Event {
+	t.Helper()
+	i := slices.IndexFunc(status.Entries, func(e report.Event) bool { return e.StepID == step && e.Kind == kind })
+	if i < 0 || status.Entries[i].State != want {
+		t.Fatalf("expected %s %s=%s in status: %+v", step, kind, want, status.Entries)
+	}
+	return status.Entries[i]
 }
 
 type inspectingDriver struct {
@@ -117,8 +127,8 @@ func TestReportingIsOptInAndRunLocal(t *testing.T) {
 	}
 	events := validateReport(t, first, report.Completed)
 	want := []report.Kind{report.Run, report.Validation, report.Validation, report.Authorization, report.Authorization,
-		report.Preflight, report.Preflight, report.Step, report.Operation, report.Operation, report.Step,
-		report.Step, report.Operation, report.Operation, report.Step, report.Run}
+		report.Preflight, report.Preflight, report.Step, report.Operation, report.Operation, report.PostconditionVerification, report.Step,
+		report.Step, report.Operation, report.Operation, report.PostconditionVerification, report.Step, report.Run}
 	var kinds []report.Kind
 	for _, event := range events {
 		kinds = append(kinds, event.Kind)
@@ -131,6 +141,7 @@ func TestReportingIsOptInAndRunLocal(t *testing.T) {
 		t.Fatal(err)
 	}
 	validateReport(t, second, report.Completed)
+	requireSlot(t, second.Report.Status, "step-1", report.PostconditionVerification, report.NotRequired)
 	if first.Report.RunID == second.Report.RunID || second.Report.Events[0].Sequence != 1 {
 		t.Fatal("independent runs share correlation/sequence")
 	}
@@ -140,8 +151,12 @@ func TestReadinessEventsCorrelateAttemptsAndGateStepCompletion(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		check := readinessCheck(true)
 		check.AcceptedRevision = "accepted-1"
+		monitor := collection.NewMonitor()
 		calls := 0
 		check.Evaluate = func(context.Context) (contract.Finding, error) {
+			status := monitor.Snapshot()
+			requireSlot(t, status, "step-1", report.Operation, report.Completed)
+			requireSlot(t, status, "step-1", report.PostconditionVerification, report.Running)
 			calls++
 			outcome := contract.Unknown
 			if calls == 2 {
@@ -151,11 +166,12 @@ func TestReadinessEventsCorrelateAttemptsAndGateStepCompletion(t *testing.T) {
 				ObservedAt: time.Now(), Code: "fixture", AcceptedRevision: "accepted-1"}, nil
 		}
 		engine, _, second, plan := gateEngine(map[string]StepConditions{"first": {Scope: gateScope, Postconditions: []BoundCheck{check}}}, CheckPolicy{})
-		result, err := engine.Execute(t.Context(), plan, ExecuteOptions{Reporting: true})
+		result, err := engine.Execute(t.Context(), plan, ExecuteOptions{Monitor: monitor})
 		if err != nil || second.executions != 1 {
 			t.Fatalf("ready operation blocked: %v", err)
 		}
 		events := validateReport(t, result, report.Completed)
+		verified := requireSlot(t, result.Report.Status, "step-1", report.PostconditionVerification, report.Passed)
 		var states []report.State
 		var attempts []int
 		passed, dependent := -1, -1
@@ -174,7 +190,8 @@ func TestReadinessEventsCorrelateAttemptsAndGateStepCompletion(t *testing.T) {
 			}
 		}
 		if !reflect.DeepEqual(states, []report.State{report.Running, report.Running, report.Unknown, report.Waiting, report.Running, report.Passed, report.Passed}) ||
-			!reflect.DeepEqual(attempts, []int{0, 1, 1, 1, 2, 2, 0}) || passed < 0 || dependent <= passed {
+			!reflect.DeepEqual(attempts, []int{0, 1, 1, 1, 2, 2, 0}) || passed < 0 || dependent <= passed ||
+			events[passed].Sequence >= verified.Sequence || events[dependent].Sequence <= verified.Sequence {
 			t.Fatalf("attempt/lifecycle order wrong: states=%v attempts=%v passed=%d dependent=%d", states, attempts, passed, dependent)
 		}
 	})
@@ -196,6 +213,8 @@ func TestReportingPreservesBlockedPartialResultsWithoutLeakingPayloads(t *testin
 		t.Fatalf("postflight lost partial result: %+v error=%v", result, err)
 	}
 	events := validateReport(t, result, report.Blocked)
+	requireSlot(t, result.Report.Status, "step-1", report.Operation, report.Completed)
+	requireSlot(t, result.Report.Status, "step-1", report.PostconditionVerification, report.Failed)
 	encoded, err := json.Marshal(result.Report)
 	if err != nil || strings.Contains(string(encoded), secret) {
 		t.Fatalf("trace copied arbitrary input/finding text: %s error=%v", encoded, err)
@@ -243,6 +262,13 @@ func TestReportingTerminalFailuresAndDryRunAreHonest(t *testing.T) {
 				if event.Kind == report.Operation && event.State == report.Completed {
 					t.Fatalf("failed/simulated operation claimed completion: %+v", event)
 				}
+				if name != "dry-run" && event.Kind == report.PostconditionVerification {
+					t.Fatalf("unreached gate reported evidence: %+v", event)
+				}
+			}
+			if name == "dry-run" {
+				requireSlot(t, result.Report.Status, "step-1", report.Operation, report.Simulated)
+				requireSlot(t, result.Report.Status, "step-1", report.PostconditionVerification, report.Simulated)
 			}
 			encoded, _ := json.Marshal(result.Report)
 			if strings.Contains(string(encoded), "SECRET") {
@@ -283,6 +309,7 @@ func TestOptionalConditionFailureDoesNotFailReportedRun(t *testing.T) {
 		t.Fatalf("optional finding blocked: %v", err)
 	}
 	events := validateReport(t, result, report.Completed)
+	requireSlot(t, result.Report.Status, "step-1", report.PostconditionVerification, report.NotRequired)
 	found := false
 	for _, event := range events {
 		if event.Kind == report.Condition && event.State == report.Failed && !event.Required {
@@ -292,6 +319,56 @@ func TestOptionalConditionFailureDoesNotFailReportedRun(t *testing.T) {
 	if !found {
 		t.Fatal("optional diagnostic missing from trace")
 	}
+}
+
+func TestVerificationRequiresEveryRequiredPostcondition(t *testing.T) {
+	for _, tc := range []struct {
+		outcome contract.Outcome
+		want    report.State
+	}{
+		{contract.Passed, report.Passed},
+		{contract.Unknown, report.Unknown},
+		{contract.Skipped, report.Skipped},
+	} {
+		t.Run(string(tc.outcome), func(t *testing.T) {
+			checks := []BoundCheck{gateCheck("first-check", true, contract.Passed), gateCheck("second-check", true, tc.outcome)}
+			monitor := collection.NewMonitor()
+			evaluate := checks[1].Evaluate
+			checks[1].Evaluate = func(ctx context.Context) (contract.Finding, error) {
+				requireSlot(t, monitor.Snapshot(), "step-1", report.PostconditionVerification, report.Running)
+				return evaluate(ctx)
+			}
+			engine, _, second, plan := gateEngine(map[string]StepConditions{"first": {Scope: gateScope, Postconditions: checks}}, CheckPolicy{})
+			result, err := engine.Execute(t.Context(), plan, ExecuteOptions{Monitor: monitor})
+			if tc.want == report.Passed {
+				if err != nil || second.executions != 1 {
+					t.Fatalf("passing checks did not release dependent: %v", err)
+				}
+			} else if !errors.Is(err, ErrConditionNotMet) || second.executions != 0 {
+				t.Fatalf("non-passing check released dependent: %v", err)
+			}
+			requireSlot(t, result.Report.Status, "step-1", report.Operation, report.Completed)
+			requireSlot(t, result.Report.Status, "step-1", report.PostconditionVerification, tc.want)
+		})
+	}
+}
+
+func TestOptionalCancellationDoesNotEraseVerifiedRequiredChecks(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	optional := gateCheck("diagnostic", false, contract.Unknown)
+	optional.Evaluate = func(context.Context) (contract.Finding, error) {
+		cancel()
+		return contract.Finding{}, context.Canceled
+	}
+	checks := []BoundCheck{gateCheck("required", true, contract.Passed), optional}
+	engine, _, second, plan := gateEngine(map[string]StepConditions{"first": {Scope: gateScope, Postconditions: checks}}, CheckPolicy{})
+	result, err := engine.Execute(ctx, plan, ExecuteOptions{Reporting: true})
+	if !errors.Is(err, context.Canceled) || second.executions != 0 || len(result.Steps) != 0 {
+		t.Fatalf("canceled phase released dependent: %v", err)
+	}
+	validateReport(t, result, report.Canceled)
+	requireSlot(t, result.Report.Status, "step-1", report.PostconditionVerification, report.Passed)
 }
 
 func TestReadinessWaitTimeoutAndCancellationDoNotInventAttempts(t *testing.T) {
@@ -312,6 +389,12 @@ func TestReadinessWaitTimeoutAndCancellationDoNotInventAttempts(t *testing.T) {
 				t.Fatal("wait released a blocked dependent")
 			}
 			events := validateReport(t, result, want)
+			verification := report.Unknown
+			if cancelParent {
+				verification = report.Canceled
+			}
+			requireSlot(t, result.Report.Status, "step-1", report.Operation, report.Completed)
+			requireSlot(t, result.Report.Status, "step-1", report.PostconditionVerification, verification)
 			started := 0
 			var last report.Event
 			for _, event := range events {
@@ -342,6 +425,13 @@ func TestTraceOverflowDoesNotChangeExecutionOrLoseTerminal(t *testing.T) {
 		validateReport(t, result, report.Blocked)
 		if len(result.Report.Events) != collection.EventLimit || result.Report.Dropped == 0 {
 			t.Fatal("overflow was unbounded or unreported")
+		}
+		status := result.Report.Status
+		requireSlot(t, status, "step-1", report.Operation, report.Completed)
+		verification := requireSlot(t, status, "step-1", report.PostconditionVerification, report.Unknown)
+		condition := requireSlot(t, status, "step-1", report.Condition, report.Unknown)
+		if verification.Reason != report.Deadline || condition.ObservedAt.IsZero() || verification.Sequence <= result.Report.Events[len(result.Report.Events)-2].Sequence {
+			t.Fatal("terminal verification or observation was lost with truncated history")
 		}
 	})
 }
