@@ -169,8 +169,23 @@ pkgs.testers.runNixOSTest {
     machine.succeed("nft add table inet aginctus_full_stack")
     machine.succeed("nft 'add chain inet aginctus_full_stack output { type filter hook output priority -10; policy accept; }'")
     machine.succeed("nft 'add chain inet aginctus_full_stack forward { type filter hook forward priority -10; policy accept; }'")
+    # Mark only candidate external packets for nft tracing before the
+    # unchanged terminal reject rules. No payload capture is enabled.
     for chain in ("output", "forward"):
+        machine.succeed(f'nft add rule inet aginctus_full_stack {chain} oifname eth0 meta nftrace set 1')
         machine.succeed(f'nft add rule inet aginctus_full_stack {chain} oifname eth0 counter reject')
+    # Persist only bounded nft trace output, not terminal output. nftrace is
+    # set solely on eth0 egress candidates above; tracing reports packet
+    # headers/metadata but never captures payloads.
+    machine.succeed(
+        "touch /run/aginctus-packet-trace.log; "
+        "nft monitor trace >/run/aginctus-packet-trace.log 2>&1 & "
+        "echo $! >/run/aginctus-packet-trace.pid"
+    )
+    machine.wait_until_succeeds(
+        "kill -0 $(cat /run/aginctus-packet-trace.pid) && "
+        "test -f /run/aginctus-packet-trace.log"
+    )
     def packet_guard_counters():
         result = {}
         for chain in ("output", "forward"):
@@ -194,6 +209,13 @@ pkgs.testers.runNixOSTest {
             result[chain] = {"rules": rules, "matches": matches}
         return result
     def assert_no_external_packet_attempts(context):
+        code, output = machine.execute(
+            "printf 'trace-log-bytes='; wc -c </run/aginctus-packet-trace.log; "
+            "dd if=/run/aginctus-packet-trace.log bs=65536 count=1 status=none; "
+            "nft -a list table inet aginctus_full_stack"
+        )
+        print(f"{context}: bounded packet-header trace and protected rules (exit={code})")
+        print(output[:20000])
         observed = packet_guard_counters()
         failures = {
             chain: details for chain, details in observed.items()
