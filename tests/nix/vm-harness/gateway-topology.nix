@@ -69,14 +69,6 @@ pkgs.testers.runNixOSTest {
       # Compose needs OCI network gateway controls absent from the default LTS daemon.
       virtualisation.incus.package = pkgs.incus;
       networking.dhcpcd.allowInterfaces = [ "eth0" ];
-      networking.networkmanager.enable = false;
-      services.openssh.enable = lib.mkIf fullStack false;
-      systemd.network.wait-online.enable = lib.mkIf fullStack false;
-      networking.nameservers = lib.mkIf fullStack [ "10.0.2.3" ];
-      networking.dhcpcd.extraConfig = lib.mkIf fullStack ''
-        nohook resolv.conf
-        static domain_name_servers=10.0.2.3
-      '';
       services.aginctus.settings.incus.management.network.ipv4.address = "10.77.0.1/24";
       # Keep same-bridge database traffic at L2; Incus still rejects routed management traffic.
       boot.kernel.sysctl = {
@@ -111,7 +103,6 @@ pkgs.testers.runNixOSTest {
     };
   testScript = ''
     import json
-    import sys
     start_all()
     machine.wait_for_unit("incus.service")
   ''
@@ -179,22 +170,11 @@ pkgs.testers.runNixOSTest {
     machine.succeed("nft add table inet aginctus_full_stack")
     machine.succeed("nft 'add chain inet aginctus_full_stack output { type filter hook output priority -10; policy accept; }'")
     machine.succeed("nft 'add chain inet aginctus_full_stack forward { type filter hook forward priority -10; policy accept; }'")
-    # Mark only candidate external packets for nft tracing before the
-    # unchanged terminal reject rules. No payload capture is enabled.
+    # Trace only outer-interface candidates. No payload capture is enabled.
     for chain in ("output", "forward"):
-        machine.succeed(
-            f'nft add rule inet aginctus_full_stack {chain} '
-            'oifname eth0 meta nftrace set 1'
-        )
+        machine.succeed(f'nft add rule inet aginctus_full_stack {chain} oifname eth0 meta nftrace set 1')
         machine.succeed(f'nft add rule inet aginctus_full_stack {chain} oifname eth0 counter reject')
-    # The monitor output stays in the disposable guest. nftrace is
-    # set solely on eth0 egress candidates above; tracing reports packet
-    # headers/metadata but never captures payloads.
-    machine.succeed("${nft} monitor trace >/run/aginctus-packet-trace.log 2>&1 & echo $! >/run/aginctus-packet-trace.pid")
-    machine.wait_until_succeeds(
-        "kill -0 $(cat /run/aginctus-packet-trace.pid) && "
-        "test -f /run/aginctus-packet-trace.log"
-    )
+    machine.succeed("nft monitor trace >/run/aginctus-packet-trace.log 2>&1 & echo $! >/run/aginctus-packet-trace.pid")
     def packet_guard_counters():
         result = {}
         for chain in ("output", "forward"):
@@ -218,14 +198,6 @@ pkgs.testers.runNixOSTest {
             result[chain] = {"rules": rules, "matches": matches}
         return result
     def assert_no_external_packet_attempts(context):
-        trace_size = int(machine.succeed("wc -c </run/aginctus-packet-trace.log"))
-        trace = machine.succeed("dd if=/run/aginctus-packet-trace.log bs=65536 count=1 status=none")
-        rules = machine.succeed("${nft} -a list table inet aginctus_full_stack")
-        print(f"{context}: bounded packet-header trace (max=65536 bytes)", file=sys.stderr)
-        print(f"trace-log-bytes={trace_size}", file=sys.stderr)
-        print(trace[:65536], file=sys.stderr)
-        print(f"{context}: protected reject rules", file=sys.stderr)
-        print(rules, file=sys.stderr)
         observed = packet_guard_counters()
         failures = {
             chain: details for chain, details in observed.items()
@@ -237,6 +209,13 @@ pkgs.testers.runNixOSTest {
               f"forward matches={len(observed['forward']['matches'])} "
               f"counters={[match['counters'] for match in observed['forward']['matches']]}")
         if failures:
+            trace_size = int(machine.succeed("wc -c </run/aginctus-packet-trace.log"))
+            trace = machine.succeed("dd if=/run/aginctus-packet-trace.log bs=65536 count=1 status=none")
+            rules = machine.succeed("nft -a list table inet aginctus_full_stack")
+            print(f"{context}: trace bytes={trace_size}; guest eth0 headers (bounded to 65536 bytes)")
+            print(trace[:65536])
+            print(f"{context}: protected reject rules")
+            print(rules)
             raise AssertionError(
                 f"{context}: external packet guard mismatch; per-chain rules and counters="
                 f"{json.dumps(observed, sort_keys=True)}"
