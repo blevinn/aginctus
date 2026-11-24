@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os/exec"
-	"strings"
 
 	doctorops "github.com/blevinn/aginctus/internal/cli/operations/doctor"
 	herdrops "github.com/blevinn/aginctus/internal/cli/operations/herdr"
@@ -98,17 +96,16 @@ func RunWithStateReaders(ctx context.Context, args []string, stdout, stderr io.W
 		incusClient, configLoader, registry, configured, accepted, diff)
 }
 
-var setIncusHTTPSAddress = func(ctx context.Context, address string) error {
-	cmd := exec.CommandContext(ctx, "incus", "config", "set", "core.https_address="+address)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("incus config set: %w: %s", err, strings.TrimSpace(string(output)))
-	}
-	return nil
-}
-
 func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer, incusClient IncusClient) int {
-	return doctorops.Run(ctx, args, stdout, stderr, incusClient, setIncusHTTPSAddress)
+	return doctorops.Run(ctx, args, stdout, stderr, incusClient, func(ctx context.Context, address string) error {
+		setter, ok := incusClient.(interface {
+			SetHTTPSAddress(context.Context, string) error
+		})
+		if !ok {
+			return fmt.Errorf("Incus client does not support HTTPS listener remediation")
+		}
+		return setter.SetHTTPSAddress(ctx, address)
+	})
 }
 
 // executeNetworkOperation is the typed compatibility binding from Cobra.
