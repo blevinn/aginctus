@@ -78,14 +78,14 @@ func (c *Client) SetHTTPSAddress(ctx context.Context, address string) error {
 		UpdateServer(api.ServerPut, string) error
 	})
 	if !ok {
-		return fmt.Errorf("Incus connection cannot update server configuration")
+		return fmt.Errorf("incus connection cannot update server configuration")
 	}
 	status, etag, err := server.GetServer()
 	if err != nil {
 		return fmt.Errorf("get Incus server configuration: %w", err)
 	}
 	if status == nil || etag == "" || status.Config["core.https_address"] != "" {
-		return fmt.Errorf("Incus listener absence or revision unverified")
+		return fmt.Errorf("incus listener absence or revision unverified")
 	}
 	put := status.Writable()
 	if put.Config == nil {
@@ -100,7 +100,7 @@ func (c *Client) SetHTTPSAddress(ctx context.Context, address string) error {
 	}
 	after, _, err := server.GetServer()
 	if err != nil || after == nil || after.Config["core.https_address"] != address {
-		return fmt.Errorf("Incus listener update outcome unverified")
+		return fmt.Errorf("incus listener update outcome unverified")
 	}
 	return nil
 }

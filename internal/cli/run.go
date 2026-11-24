@@ -70,19 +70,19 @@ func RunWithPlugins(ctx context.Context, args []string, stdout, stderr io.Writer
 // RunWithLogicalWorkloads is for hosts that inject an authenticated,
 // environment-owned workload reader. Passing nil deliberately fails closed.
 // This is not a credentialed remote management interface.
-func RunWithLogicalWorkloads(ctx context.Context,args []string,stdout,stderr io.Writer,
+func RunWithLogicalWorkloads(ctx context.Context, args []string, stdout, stderr io.Writer,
 	incusClient IncusClient, configLoader ConfigLoader, registry *plugins.Registry,
 	reader client.LogicalWorkloadReader) int {
-	return runBasicCobra(ctx,args,stdout,stderr,incusClient,configLoader,registry,reader,nil)
+	return runBasicCobra(ctx, args, stdout, stderr, incusClient, configLoader, registry, reader, nil)
 }
 
 // RunWithAuthorizedReaders is used only by an embedding host supplying
 // independently authenticated enrollment and logical workload readers.
 // A nil reader never falls back to instance labels or the local state socket.
-func RunWithAuthorizedReaders(ctx context.Context,args []string,stdout,stderr io.Writer,
+func RunWithAuthorizedReaders(ctx context.Context, args []string, stdout, stderr io.Writer,
 	incusClient IncusClient, configLoader ConfigLoader, registry *plugins.Registry,
 	environments client.EnvironmentReader, workloads client.LogicalWorkloadReader) int {
-	return runBasicCobra(ctx,args,stdout,stderr,incusClient,configLoader,registry,workloads,environments)
+	return runBasicCobra(ctx, args, stdout, stderr, incusClient, configLoader, registry, workloads, environments)
 }
 
 // RunWithStateReaders lets a trusted embedding host supply independently
@@ -102,7 +102,7 @@ func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer, inc
 			SetHTTPSAddress(context.Context, string) error
 		})
 		if !ok {
-			return fmt.Errorf("Incus client does not support HTTPS listener remediation")
+			return fmt.Errorf("incus client does not support HTTPS listener remediation")
 		}
 		return setter.SetHTTPSAddress(ctx, address)
 	})
