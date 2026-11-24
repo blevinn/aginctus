@@ -59,3 +59,57 @@ workloads still need a production authenticated state-service transport
 and authoritative candidate/observation readers. Those commands remain
 unavailable; a missing reader must never produce empty success. This change
 does not authorize acceptance, project mutation, reconciliation or adoption.
+
+## Optional pinned project-state reads
+
+The same owner-private file can opt into a separately pinned mTLS
+project-state service by adding **all four** of these fields. Partial
+configuration is rejected; the server certificate and fingerprint must be
+obtained from independently trusted provisioning, not from a candidate or a
+service response.
+
+```json
+{
+  "stateServiceEndpoint": "https://state.example.invalid:8443",
+  "stateServiceCertificatePem": "-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\\n",
+  "stateServiceSha256": "64-lowercase-hex-digits-from-independent-trusted-provisioning",
+  "configuredCandidateFile": "/absolute/path/to/selected-nonsecret-candidate.json"
+}
+```
+
+Add these properties to the same top-level JSON object as the Incus TLS
+credentials; this snippet is not a standalone configuration document. It
+still cannot grant project rights on its own. The ordinary CLI then uses:
+
+- The **Incus project's independently verified restricted principal** to
+  discover enrollment, recheck binding and detect revocation.
+- The **separately pinned state-service HTTPS endpoint** and mTLS client
+  certificate to read a versioned accepted revision and candidate.
+- The **explicit selected nonsecret candidate file**, validated against
+  the enrolled immutable UUID, to project configured state and field-only
+  configured-versus-accepted drift.
+
+Examples (available only once the independently authenticated service is
+actually deployed, not through the same-UID fixture):
+
+```sh
+AGINCTUS_RESTRICTED_READ_CONFIG=/absolute/private/operator-read.json \\
+  aginctus --incus-project aginctus --environment <immutable-uuid> state show -o json
+AGINCTUS_RESTRICTED_READ_CONFIG=/absolute/private/operator-read.json \\
+  aginctus --incus-project aginctus --environment <immutable-uuid> state diff -o json
+```
+
+The client verifies that a 200 response is well-formed, that its published
+candidate matches the accepted revision digest, and that the Incus
+server/project binding is still authorized before returning results.
+A failed service connection or a denied/revoked principal **never becomes**
+`hasAccepted: false`.
+
+**Deployment remains blocked:** the state-service must authenticate the
+actual TLS peer against the current Incus trust/authorization policy using
+only non-administrator capabilities, restrict its project-owned storage,
+survive volume/service restart, and pass the disposable VM credential
+revocation and foreign-project negative tests. Merely filling these fields
+does not establish those properties. Logical workload status/observations
+remain independently gated and are not inferred from candidate instance
+names or labels. No automatic state service is started by this CLI.
