@@ -101,6 +101,7 @@ pkgs.testers.runNixOSTest {
       };
     };
   testScript = ''
+    import json
     start_all()
     machine.wait_for_unit("incus.service")
   ''
@@ -112,7 +113,6 @@ pkgs.testers.runNixOSTest {
         machine.succeed("incus admin init --minimal")
         machine.succeed("incus storage create default btrfs size=20GiB")
         machine.succeed("incus profile device add default root disk path=/ pool=default")
-        import json
         def inspect_storage():
             pool = json.loads(machine.succeed("incus query /1.0/storage-pools/default"))
             assert pool["driver"] == "btrfs", "full-stack storage is not Btrfs"
@@ -159,7 +159,6 @@ pkgs.testers.runNixOSTest {
   ''
   + lib.optionalString fullStack ''
     machine.succeed("oci-stage check")
-    import json
     rules = json.loads(machine.succeed("nft -j list table inet aginctus_full_stack"))["nftables"]
     counters = [expr["counter"]["packets"] for row in rules if "rule" in row
                 for expr in row["rule"]["expr"] if "counter" in expr]
@@ -214,7 +213,6 @@ pkgs.testers.runNixOSTest {
       "timeout 15 incus exec --disable-stdin --project aginctus-gateway litellm-1 -- python -c "
       "\"import socket; socket.create_connection(('postgres-1', 5432), timeout=5).close()\""
     )
-    import json
     gateway = json.loads(machine.succeed("incus list --project aginctus-gateway litellm-1 --format json"))[0]
     addresses = [addr["address"] for nic in gateway["state"]["network"].values()
                  for addr in nic.get("addresses", [])
