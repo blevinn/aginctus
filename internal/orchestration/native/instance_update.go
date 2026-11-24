@@ -100,6 +100,9 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 		if err != nil || instance == nil || etag == "" || instance.Name != intent.Identity.Name || instance.Project != scope.Name {
 			return nil, "", "", fmt.Errorf("selected instance observation unavailable")
 		}
+		if !environmentOwnerMatches(instance.Config, intent.EnvironmentID) {
+			return nil, "", "", fmt.Errorf("existing workload environment ownership unverified")
+		}
 		for key, want := range intent.ownership() {
 			if instance.Config[key] != want {
 				return nil, "", "", fmt.Errorf("existing workload ownership unverified")
