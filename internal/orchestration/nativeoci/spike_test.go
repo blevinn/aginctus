@@ -90,6 +90,7 @@ func TestDaemonOCI(t *testing.T) {
 		t.Fatal(err)
 	}
 	pinnedReferences := make(map[string]string)
+	createImages := make(map[string]gateway.NativeGatewayCreateImage)
 	for _, image := range []struct{ name, registry, repository, reference string }{
 		{"postgres", "docker.io", "library/postgres", "17-alpine"},
 		{"litellm", "ghcr.io", "berriai/litellm", "v1.103.0"},
@@ -200,6 +201,7 @@ func TestDaemonOCI(t *testing.T) {
 				t.Fatal("native alias create adopted a preexisting alias")
 			}
 			evidence := native.GatewayImageEvidence{Project: scope.Name, Alias: alias, Identity: identity}
+			createImages[image.name] = gateway.NativeGatewayCreateImage{Expected: identity, Evidence: evidence}
 			if err := native.ObserveLocalGatewayImageReuse(ctx, native.GatewayImageAcquireIntent{
 				Project: scope.Name, Image: identity,
 			}, alias, evidence); err != nil {
@@ -383,7 +385,8 @@ func TestDaemonOCI(t *testing.T) {
 	}
 	fenceChecks := 0
 	fence := func(context.Context) error { fenceChecks++; return nil }
-	created, err := gateway.CreateStoppedGatewayWithClient(ctx, topology, gatewayDevices, gatewayPair, gatewayStoppedVMClient{client}, fence)
+	gatewayImages := gateway.NativeGatewayCreateImages{Postgres: createImages["postgres"], LiteLLM: createImages["litellm"]}
+	created, err := gateway.CreateStoppedGatewayWithClient(ctx, topology, gatewayDevices, gatewayPair, gatewayImages, gatewayStoppedVMClient{client}, fence)
 	if err != nil || len(created.Created) != 2 || len(created.Verified) != 2 || fenceChecks != 2 {
 		t.Fatalf("real Incus stopped native gateway create: %+v %v guards=%d", created, err, fenceChecks)
 	}
@@ -396,7 +399,7 @@ func TestDaemonOCI(t *testing.T) {
 			t.Fatal("native create leaked runtime credentials")
 		}
 	}
-	repeat, err := gateway.CreateStoppedGatewayWithClient(ctx, topology, gatewayDevices, gatewayPair, gatewayStoppedVMClient{client}, fence)
+	repeat, err := gateway.CreateStoppedGatewayWithClient(ctx, topology, gatewayDevices, gatewayPair, gatewayImages, gatewayStoppedVMClient{client}, fence)
 	if err != nil || len(repeat.Created) != 0 || len(repeat.Verified) != 2 || fenceChecks != 2 {
 		t.Fatalf("native stopped gateway reuse was not a no-op: %+v %v", repeat, err)
 	}
