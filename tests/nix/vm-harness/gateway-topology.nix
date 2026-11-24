@@ -110,9 +110,27 @@ pkgs.testers.runNixOSTest {
       ''
         # Guest-local loopback Btrfs, as in storage-network.nix. Use it for all
         # workload roots, gateway roots and retained custom volumes, not just a probe.
-        machine.succeed("incus admin init --minimal")
-        machine.succeed("incus storage create default btrfs size=20GiB")
-        machine.succeed("incus profile device add default root disk path=/ pool=default")
+        # One preseed transaction: --minimal creates a conflicting dir pool.
+        # No network is provisioned; runtime networking is reconciled later.
+        machine.succeed(
+            "incus admin init --preseed <<'EOF'\n"
+            "config: {}\n"
+            "networks: []\n"
+            "storage_pools:\n"
+            "- name: default\n"
+            "  driver: btrfs\n"
+            "  config:\n"
+            "    size: 20GiB\n"
+            "profiles:\n"
+            "- name: default\n"
+            "  config: {}\n"
+            "  devices:\n"
+            "    root:\n"
+            "      type: disk\n"
+            "      path: /\n"
+            "      pool: default\n"
+            "EOF\n"
+        )
         def inspect_storage():
             pool = json.loads(machine.succeed("incus query /1.0/storage-pools/default"))
             assert pool["driver"] == "btrfs", "full-stack storage is not Btrfs"
