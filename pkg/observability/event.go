@@ -24,22 +24,27 @@ const (
 	Condition      Kind = "condition"
 	CheckAttempt   Kind = "check-attempt"
 	DomainProgress Kind = "progress"
+
+	// PostconditionVerification summarizes the required postcondition gate for
+	// one completed or simulated operation. It is not a runtime health claim.
+	PostconditionVerification Kind = "postcondition-verification"
 )
 
 type State string
 
 const (
-	Running   State = "running"
-	Completed State = "completed"
-	Simulated State = "simulated"
-	Passed    State = "passed"
-	Failed    State = "failed"
-	Unknown   State = "unknown"
-	Skipped   State = "skipped"
-	Waiting   State = "waiting"
-	Blocked   State = "blocked"
-	Canceled  State = "canceled"
-	Uncertain State = "uncertain"
+	Running     State = "running"
+	Completed   State = "completed"
+	Simulated   State = "simulated"
+	Passed      State = "passed"
+	Failed      State = "failed"
+	Unknown     State = "unknown"
+	Skipped     State = "skipped"
+	NotRequired State = "not-required"
+	Waiting     State = "waiting"
+	Blocked     State = "blocked"
+	Canceled    State = "canceled"
+	Uncertain   State = "uncertain"
 )
 
 type Reason string
@@ -131,7 +136,7 @@ func (e Event) Validate() error {
 		return fmt.Errorf("invalid event envelope")
 	}
 	switch e.State {
-	case Running, Completed, Simulated, Passed, Failed, Unknown, Skipped, Waiting, Blocked, Canceled, Uncertain:
+	case Running, Completed, Simulated, Passed, Failed, Unknown, Skipped, NotRequired, Waiting, Blocked, Canceled, Uncertain:
 	default:
 		return fmt.Errorf("invalid event state")
 	}
@@ -151,7 +156,7 @@ func (e Event) Validate() error {
 		if e.StepID != "" || e.OperationID != "" || e.Scope != (Scope{}) {
 			return fmt.Errorf("run phase cannot claim step scope")
 		}
-	case Step, Operation, Condition, CheckAttempt, DomainProgress:
+	case Step, Operation, PostconditionVerification, Condition, CheckAttempt, DomainProgress:
 		if !identifier.MatchString(e.StepID) || !identifier.MatchString(e.OperationID) {
 			return fmt.Errorf("step event requires correlation IDs")
 		}
@@ -166,6 +171,8 @@ func (e Event) Validate() error {
 		allowed = e.State == Running || e.State == Completed || e.State == Failed || e.State == Blocked || e.State == Canceled
 	case Operation:
 		allowed = e.State == Running || e.State == Completed || e.State == Simulated || e.State == Failed || e.State == Canceled || e.State == Uncertain
+	case PostconditionVerification:
+		allowed = e.State == Running || e.State == Passed || e.State == Failed || e.State == Unknown || e.State == Skipped || e.State == Canceled || e.State == NotRequired || e.State == Simulated
 	case Condition:
 		allowed = e.State == Running || e.State == Passed || e.State == Failed || e.State == Unknown || e.State == Skipped || e.State == Waiting || e.State == Canceled
 	case CheckAttempt:

@@ -97,6 +97,12 @@ func TestAcceptedLifecyclePreviewBlocksUnverifiedOrForeignResources(t *testing.T
 		{"environment-owned-same-project", func(_ *acceptedstate.PinnedWorkloadSnapshot, o *InstanceObservation) {
 			o.Config["user.aginctus.environment-id"] = "7c82e6d1-1212-4123-8123-0123456789ab"
 		}, "ownership-unverified"},
+		{"empty-environment-marker", func(_ *acceptedstate.PinnedWorkloadSnapshot, o *InstanceObservation) {
+			o.Config["user.aginctus.environment-id"] = ""
+		}, "ownership-unverified"},
+		{"old-environment-marker", func(_ *acceptedstate.PinnedWorkloadSnapshot, o *InstanceObservation) {
+			o.Config["user.aginctus.environment"] = "7c82e6d1-1212-4123-8123-0123456789ab"
+		}, "ownership-unverified"},
 		{"unknown-state", func(_ *acceptedstate.PinnedWorkloadSnapshot, o *InstanceObservation) { o.State = "Error" }, "lifecycle-unverified"},
 		{"wrong-type", func(_ *acceptedstate.PinnedWorkloadSnapshot, o *InstanceObservation) { o.Type = "virtual-machine" }, "replacement-or-profile-change-required"},
 		{"wrong-profiles", func(_ *acceptedstate.PinnedWorkloadSnapshot, o *InstanceObservation) { o.Profiles = []string{"other"} }, "replacement-or-profile-change-required"},

@@ -15,6 +15,21 @@ These rules apply throughout the repository unless a more specific `AGENTS.md` a
 - For feature work, prefer bite-sized, reviewable PRs, generally changing fewer than 10 files. Treat 10 files as a ceiling to avoid where possible, not a target or absolute limit.
 - Balance small PRs with functional completeness: each feature PR should strive to deliver a coherent, verifiable increment, not merely introduce orphaned code on `main`. Split larger features into independently useful vertical slices where practical.
 
+## Engineering guardrails
+
+Follow the [engineering contract](docs/development/engineering-contract.md) and accepted ADRs. For every substantive change:
+
+- Use an isolated worktree for local work; do not disrupt parallel worktrees. Never write to repositories or external resources outside the authorized `blevinn/aginctus` repository.
+- Identify the canonical contract, existing implementation and tracking issue before adding a new abstraction or parallel path. Prefer completing and replacing existing paths over adding scaffolding.
+- Preserve independent host authority, explicit environment acceptance, verified scope and ownership, pinned revision and writer exclusion. Configuration origin, names and labels do not grant authority. Never activate a privileged write path merely because a fixture passes.
+- Use typed JSON-first intent, native reconciliation and static plugin composition for new lifecycle work. Do not expand legacy drivers or introduce speculative compatibility layers.
+- Keep credentials out of accepted state, Nix store, readable resource configuration and diagnostics. Require explicit approval for host mutations, privileged integration and live providers.
+- Parse once, execute once, render once. Prefer explicit effect capabilities, typed outcomes and domain-owned contracts; avoid new mutable global transport hooks.
+- Distinguish applied, running, ready and converged. Report unknown or partial outcomes accurately. Test denial and failure paths as well as success.
+- Before removing code, verify indirect consumers, including Nix, generated/embedded assets, build tags and public APIs. Record unresolved reachability instead of guessing.
+- Record actual validation and its limits. Source inspection, hermetic checks, disposable VM tests and operator acceptance are distinct evidence tiers.
+- For stacked PRs, after a human merges a parent, retarget its child to the correct base before merging the new base down; propagate forward integrations through descendants without rewriting history. Revalidate affected changes.
+
 ## Pull requests
 
 PR descriptions should cover:
