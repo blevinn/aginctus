@@ -214,7 +214,7 @@ pkgs.testers.runNixOSTest {
         rules = machine.succeed("${nft} -a list table inet aginctus_full_stack")
         print(f"{context}: bounded packet-header trace (max=65536 bytes)")
         print(f"trace-log-bytes={trace_size}")
-        print(trace[:65536].decode("utf-8", "replace"))
+        print(trace[:65536])
         print(f"{context}: protected reject rules")
         print(rules)
         observed = packet_guard_counters()
