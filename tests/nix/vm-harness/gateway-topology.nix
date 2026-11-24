@@ -171,16 +171,52 @@ pkgs.testers.runNixOSTest {
     machine.succeed("nft 'add chain inet aginctus_full_stack forward { type filter hook forward priority -10; policy accept; }'")
     for chain in ("output", "forward"):
         machine.succeed(f'nft add rule inet aginctus_full_stack {chain} oifname eth0 counter reject')
+    def packet_guard_counters():
+        result = {}
+        for chain in ("output", "forward"):
+            rows = json.loads(machine.succeed(
+                f"nft -j list chain inet aginctus_full_stack {chain}"
+            ))["nftables"]
+            rules = [row["rule"] for row in rows if "rule" in row]
+            matches = []
+            for rule in rules:
+                expressions = rule.get("expr", [])
+                has_eth0_egress = any(
+                    expr.get("match", {}).get("left", {}).get("meta", {}).get("key") == "oifname"
+                    and expr.get("match", {}).get("right") == "eth0"
+                    for expr in expressions
+                )
+                is_reject = any("reject" in expr for expr in expressions)
+                counters = [expr["counter"].get("packets") for expr in expressions
+                            if "counter" in expr]
+                if has_eth0_egress and is_reject:
+                    matches.append({"rule": rule, "counters": counters})
+            result[chain] = {"rules": rules, "matches": matches}
+        return result
+    def assert_no_external_packet_attempts(context):
+        observed = packet_guard_counters()
+        failures = {
+            chain: details for chain, details in observed.items()
+            if len(details["matches"]) != 1
+            or details["matches"][0]["counters"] != [0]
+        }
+        print(f"{context}: output matches={len(observed['output']['matches'])} "
+              f"counters={[match['counters'] for match in observed['output']['matches']]}; "
+              f"forward matches={len(observed['forward']['matches'])} "
+              f"counters={[match['counters'] for match in observed['forward']['matches']]}")
+        if failures:
+            raise AssertionError(
+                f"{context}: external packet guard mismatch; per-chain rules and counters="
+                f"{json.dumps(observed, sort_keys=True)}"
+            )
+        return observed
   ''
   + ''
     machine.succeed(f"XDG_STATE_HOME=/run/aginctus-vm-gateway-state {cli} gateway up")
   ''
   + lib.optionalString fullStack ''
     machine.succeed("oci-stage check")
-    rules = json.loads(machine.succeed("nft -j list table inet aginctus_full_stack"))["nftables"]
-    counters = [expr["counter"]["packets"] for row in rules if "rule" in row
-                for expr in row["rule"]["expr"] if "counter" in expr]
-    assert len(counters) == 2 and sum(counters) == 0, "external traffic attempted during staged deployment"
+    assert_no_external_packet_attempts("staged deployment")
   ''
   + ''
     machine.succeed("incus project show aginctus-gateway")
@@ -259,17 +295,24 @@ pkgs.testers.runNixOSTest {
         try:
             machine.succeed("aginctus-vm-synthetic-probe")
             driver_gates["external_traffic"] = "fail"
-            rules = json.loads(machine.succeed("nft -j list table inet aginctus_full_stack"))["nftables"]
-            counters = [expr["counter"]["packets"] for row in rules if "rule" in row
-                        for expr in row["rule"]["expr"] if "counter" in expr]
-            assert len(counters) == 2 and sum(counters) == 0, "external traffic attempted during synthetic agent execution"
+            assert_no_external_packet_attempts("synthetic agent execution")
             driver_gates["external_traffic"] = "pass"
             # Narrow packet control, not fleet isolation or live inference.
             driver_gates["external_deny"] = "fail"
             def denied_packets():
                 rules = json.loads(machine.succeed("nft -j list chain inet aginctus_full_stack forward"))["nftables"]
-                return sum(expr["counter"]["packets"] for row in rules if "rule" in row
-                           for expr in row["rule"]["expr"] if "counter" in expr)
+                return sum(
+                    expr["counter"]["packets"]
+                    for row in rules if "rule" in row
+                    for expr in row["rule"].get("expr", [])
+                    if "counter" in expr
+                    and any("reject" in candidate for candidate in row["rule"].get("expr", []))
+                    and any(
+                        candidate.get("match", {}).get("left", {}).get("meta", {}).get("key") == "oifname"
+                        and candidate.get("match", {}).get("right") == "eth0"
+                        for candidate in row["rule"].get("expr", [])
+                    )
+                )
             before = denied_packets()
             machine.succeed(
               "timeout 15 incus exec --disable-stdin --project aginctus-gateway litellm-1 -- python -c "
