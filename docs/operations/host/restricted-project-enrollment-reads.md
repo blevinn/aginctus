@@ -4,7 +4,7 @@
 logical workload production completion. Requires administrator-provisioned
 restricted Incus TLS credentials, project enrollment manifest, and the
 disposable NixOS/Incus negative tests in
-[go-client-read-v02.md](../testing/acceptance/go-client-read-v02.md).
+[go-client-read-v02.md](../../testing/acceptance/go-client-read-v02.md).
 
 The ordinary `aginctus` binary can now use an explicitly selected
 private operator TLS configuration to list/show enrolled environments
