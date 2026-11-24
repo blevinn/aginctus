@@ -64,7 +64,7 @@ type GatewayVolumeClient interface {
 // EnsureNativeEnvironmentGatewayVolumeWithClient creates or verifies one
 // environment's PostgreSQL filesystem volume in an administrator-selected pool.
 // The selected binding must have been independently verified; the same local
-// Unix client must report that server certificate fingerprint and project.
+// Unix client must report that standalone server certificate fingerprint and project.
 // The caller must pin accepted state and hold exclusive writer authority;
 // guard must recheck that authority at the create boundary. Neither the
 // binding nor the volume's markers grant authority to create or attach it.
@@ -97,11 +97,11 @@ func EnsureNativeEnvironmentGatewayVolumeWithClient(ctx context.Context, descrip
 		}
 		connection, err := client.GetConnectionInfo()
 		if err != nil || connection == nil || connection.Protocol != "incus" ||
-			!filepath.IsAbs(connection.SocketPath) || connection.Project != scope.Name || connection.Target != "" {
+			!filepath.IsAbs(connection.SocketPath) || connection.Project != scope.Name {
 			return fmt.Errorf("local selected-project transport unavailable")
 		}
 		server, _, err := client.GetServer()
-		if err != nil || server == nil || !gatewayServerFingerprint.MatchString(server.Environment.CertificateFingerprint) ||
+		if err != nil || server == nil || server.Environment.ServerClustered || !gatewayServerFingerprint.MatchString(server.Environment.CertificateFingerprint) ||
 			"sha256:"+server.Environment.CertificateFingerprint != selected.ServerID || server.Environment.Project != scope.Name {
 			return fmt.Errorf("selected Incus server/project binding unverified")
 		}

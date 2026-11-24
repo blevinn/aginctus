@@ -67,6 +67,8 @@ func gatewayVolumeFixture(t *testing.T) (environment.Descriptor, NativeGatewayRe
 		t.Fatal(err)
 	}
 	f := &fakeGatewayVolumeClient{fakeGatewayAttachmentReader: reader, volumes: map[string]*api.StorageVolume{}}
+	// The SDK may populate Target from the daemon hostname even on standalone Incus.
+	f.info.Target = "standalone-host"
 	f.server.Environment.Project = top.Project
 	f.server.Environment.CertificateFingerprint = fingerprint
 	return d, id, f
@@ -140,7 +142,7 @@ func TestGatewayVolumeRefusesIncompatibleObservation(t *testing.T) {
 }
 
 func TestGatewayVolumeRequiresBindingAndWriteAuthority(t *testing.T) {
-	for _, name := range []string{"missing guard", "denied guard", "selected binding", "wrong transport", "daemon fingerprint", "daemon project", "project policy", "unknown volume", "boundary drift", "boundary collision", "canceled"} {
+	for _, name := range []string{"missing guard", "denied guard", "selected binding", "wrong transport", "daemon fingerprint", "daemon project", "clustered daemon", "project policy", "unknown volume", "boundary drift", "boundary collision", "canceled"} {
 		t.Run(name, func(t *testing.T) {
 			d, id, f := gatewayVolumeFixture(t)
 			selected := d.Binding
@@ -173,6 +175,8 @@ func TestGatewayVolumeRequiresBindingAndWriteAuthority(t *testing.T) {
 				f.server.Environment.CertificateFingerprint = ""
 			case "daemon project":
 				f.server.Environment.Project = "default"
+			case "clustered daemon":
+				f.server.Environment.ServerClustered = true
 			case "project policy":
 				f.project.Config["features.storage.volumes"] = "false"
 			case "unknown volume":
