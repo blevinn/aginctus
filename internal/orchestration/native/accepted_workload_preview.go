@@ -42,12 +42,12 @@ var acceptedFingerprint = regexp.MustCompile(`^[0-9a-f]{64}$`)
 // establish its same-UID provenance, and neither that provenance nor this
 // preview grants controller authority. This v1alpha1 workload-only preview
 // recognizes legacy deployment markers and intentionally refuses a resource
-// that already carries a new environment ownership marker: a project may
-// contain multiple independently versioned environments, so migration must
-// establish and verify the full project/environment binding first. Even
-// "would-start" is contingent on
-// separately validated server-restricted TLS, volume/device/host capability
-// policy, exclusive controller fencing and fresh mutation-time ETags.
+// with either environment ownership key, even if empty. A project may contain
+// multiple independently versioned environments, so migration must establish
+// and verify the full project/environment binding first. Even "would-start"
+// is contingent on separately validated server-restricted TLS,
+// volume/device/host capability policy, exclusive controller fencing and fresh
+// mutation-time ETags.
 func PreviewAcceptedWorkloadLifecycle(
 	snapshot acceptedstate.PinnedWorkloadSnapshot, observed *InstanceObservation,
 ) (AcceptedLifecyclePreview, error) {
@@ -101,7 +101,9 @@ func PreviewAcceptedWorkloadLifecycle(
 			return result, nil
 		}
 	}
-	if observed.Config["user.aginctus.environment-id"] != "" {
+	_, hasEnvironmentID := observed.Config[environmentOwnershipKey]
+	_, hasObsoleteID := observed.Config[obsoleteEnvironmentOwnershipKey]
+	if hasEnvironmentID || hasObsoleteID {
 		result.Reason = "ownership-unverified"
 		return result, nil
 	}

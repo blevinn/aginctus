@@ -7,6 +7,11 @@ import (
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
 )
 
+const (
+	environmentOwnershipKey = "user.aginctus.environment-id"
+	obsoleteEnvironmentOwnershipKey = "user.aginctus.environment"
+)
+
 // AcceptedWorkloadObservation is an EXPLICIT, completed read result for one
 // selected workload. Absent means the observer authoritatively determined
 // absence in the selected project. A timeout/permission error must NOT be
@@ -86,15 +91,22 @@ func AssessPinnedAcceptedWorkloads(
 			out.Workloads=append(out.Workloads,item)
 			continue
 		}
-		instance:=observed.Instance
-		if instance.Identity.Project!=enrolled.Binding.Project ||
-			instance.Identity.Name!=w.InstanceName ||
-			instance.Config["user.aginctus.managed"]!="true" ||
-			instance.Config["user.aginctus.resource"]!="workload" ||
-			instance.Config["user.aginctus.workload"]!=w.ID ||
-			instance.Config["user.aginctus.environment"]!=enrolled.ID ||
-			instance.Config["user.aginctus.role"]!="agent-workload" {
-			return AcceptedEnvironmentAssessment{},errors.New("foreign or unowned observed environment workload")
+		instance := observed.Instance
+		// The obsolete key cannot establish ownership, but contradictory
+		// evidence must still block assessment. As in native lifecycle, any
+		// nonempty legacy deployment marker must agree with project scope.
+		obsoleteID, hasObsoleteID := instance.Config[obsoleteEnvironmentOwnershipKey]
+		deployment := instance.Config["user.aginctus.deployment"]
+		if instance.Identity.Project != enrolled.Binding.Project ||
+			instance.Identity.Name != w.InstanceName ||
+			instance.Config["user.aginctus.managed"] != "true" ||
+			instance.Config["user.aginctus.resource"] != "workload" ||
+			instance.Config["user.aginctus.workload"] != w.ID ||
+			instance.Config[environmentOwnershipKey] != enrolled.ID ||
+			(hasObsoleteID && obsoleteID != enrolled.ID) ||
+			(deployment != "" && deployment != enrolled.Binding.Project) ||
+			instance.Config["user.aginctus.role"] != "agent-workload" {
+			return AcceptedEnvironmentAssessment{}, errors.New("foreign or unowned observed environment workload")
 		}
 		if instance.State!="Running" && instance.State!="Stopped" {
 			return AcceptedEnvironmentAssessment{},errors.New("unverified observed workload lifecycle")

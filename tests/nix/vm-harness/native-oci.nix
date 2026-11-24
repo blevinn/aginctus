@@ -54,6 +54,9 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus admin init --auto --storage-backend dir")
     machine.succeed("incus storage create spike btrfs size=20GiB")
     machine.succeed("printf 'native-oci-vm\\n' >/run/aginctus-native-oci-disposable")
-    machine.succeed("AGINCTUS_NATIVE_OCI_SPIKE=disposable-vm native-oci-spike -test.v -test.timeout=25m", timeout=1500)
+    with subtest("environment volume and attachment audit"):
+        print(machine.succeed("AGINCTUS_NATIVE_OCI_SPIKE=disposable-vm native-oci-spike -test.v -test.run '^TestNativeGatewayAttachmentAuditVM$' -test.timeout=2m", timeout=120))
+    with subtest("networked OCI lifecycle"):
+        machine.succeed("AGINCTUS_NATIVE_OCI_SPIKE=disposable-vm native-oci-spike -test.v -test.skip '^TestNativeGatewayAttachmentAuditVM$' -test.timeout=25m", timeout=1500)
   '';
 }
