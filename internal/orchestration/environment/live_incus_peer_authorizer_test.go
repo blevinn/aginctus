@@ -109,7 +109,13 @@ func TestLiveIncusPeerAuthorizerRefusesRevokedAndForeignCertificates(t *testing.
 func TestLiveIncusPeerRevocationBetweenHandlerChecksDeniesPayload(t *testing.T) {
 	authorizer, registry, peer := liveIncusTrustFixture(t)
 	registry.revokeAt = 2
-	model, _, source, candidate := acceptedModelFixture()
+	model, verifier, source, candidate := acceptedModelFixture()
+	// The enrolled catalog and the live TLS authorizer must independently
+	// agree on the exact *authenticated* server/project identity. Otherwise
+	// the handler must deny before opening its accepted-state source.
+	candidate.Environment.Binding.ServerID = "sha256:" + authorizer.PinnedServerCertificateSHA256
+	verifier.binding = candidate.Environment.Binding
+	model.Catalog.Source.(*testEnrollmentSource).descriptors = []Descriptor{candidate.Environment}
 	rev, err := BuildAcceptedRevision(nil, nil, candidate)
 	if err != nil { t.Fatal(err) }
 	source.revision, source.candidate = &rev, &candidate
