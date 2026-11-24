@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/sha256"
+	"encoding/hex"
 	"crypto/x509"
 	"encoding/json"
 	"errors"
@@ -71,6 +73,16 @@ func (f RestrictedHTTPSReadSessionFactory) OpenReadSession(
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12, RootCAs: pool,
 			Certificates: []tls.Certificate{cert},
+			// Keep normal X.509/hostname verification enabled, then require
+			// exactly the pinned leaf, even if the supplied cert is a CA.
+			VerifyConnection: func(state tls.ConnectionState) error {
+				if len(state.PeerCertificates) == 0 { return errors.New("missing service TLS peer") }
+				fingerprint := sha256.Sum256(state.PeerCertificates[0].Raw)
+				if hex.EncodeToString(fingerprint[:]) != f.ServiceCertificateSHA256 {
+					return errors.New("project state service TLS leaf differs from trusted pin")
+				}
+				return nil
+			},
 		},
 		DisableKeepAlives: true,
 		TLSHandshakeTimeout: 5 * time.Second,
