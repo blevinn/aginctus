@@ -60,6 +60,8 @@ without an updated owner decision.
 | `commands_leaf_help_test.go` | `TestCobraNestedHelpReflectsLeafFlagScope` | CLI composition / global output | Retain; guard root-wide semantics |
 | `commands_logical_workloads_test.go` | `TestInjectedLogicalWorkloadCLIOutput` | Cross-family logical workload read entrypoint | Retain root Run/output and explicit scope evidence |
 | `commands_logical_workloads_test.go` | `TestLogicalWorkloadCLIFailsClosed` | Cross-family logical workload read entrypoint | Retain root Run/output and explicit scope evidence |
+| `commands_environment_reads_test.go` | `TestEnvironmentShowResolvesUniqueNameThroughVerifiedInventory` | Environment CLI composition | Retain authenticated name-selection and fail-closed regression evidence |
+| `commands_environment_reads_test.go` | `TestEnvironmentShowRejectsAmbiguousAndStaleEnrollment` | Environment CLI composition | Retain authenticated name-selection and fail-closed regression evidence |
 | `commands_environment_reads_test.go` | `TestInjectedAuthenticatedEnvironmentCLI` | Cross-family authenticated environment read entrypoint | Retain root Run/output and fail-closed authority evidence |
 | `commands_environment_reads_test.go` | `TestEnvironmentCLIRequiresAuthenticatedBackend` | Cross-family authenticated environment read entrypoint | Retain root Run/output and fail-closed authority evidence |
 | `commands_operator_test.go` | `TestCobraOperatorInvalidInputDoesNotReadConfigOrInspectIncus` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
