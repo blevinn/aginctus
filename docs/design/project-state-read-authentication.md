@@ -72,3 +72,54 @@ always inspect `/proc/self/mountinfo` and refuse uid 0. The same-UID
 filesystem fixture used by tests is not sufficient to pass the production
 mountpoint check. This adapter remains non-deployable until the service
 peer-authority gate and physical instance/volume evidence pass.
+
+## Opt-in read-only daemon (2026-11-24)
+
+`cmd/aginctus-project-state-read` packages an explicit, nonroot, GET-only
+mTLS reader. The Nix package is `state-project-read`. It is **not**
+installed or started by NixOS/Home Manager activation; there is no
+automatic bootstrap, volume attachment, project creation, write endpoint,
+host Incus socket, or controller activation.
+
+The dedicated service instance needs an already-owned, exclusively attached
+custom volume containing the original accepted-state project layout, an
+independently provisioned **project-restricted** Incus client certificate,
+and separate inbound TLS listener credentials. The service checks the
+kernel mountpoint, nonroot UID, private file permissions, server certificate
+pin, exact project, a *live* named Incus certificate trust record, and
+already-enrolled environment UUIDs. If trust lookup is denied by Incus,
+**startup fails**: do not substitute an administrator credential.
+
+Set `AGINCTUS_PROJECT_STATE_READ_SERVICE_CONFIG` to one absolute,
+owner-private (0600), non-symlink JSON file with this shape:
+
+```json
+{
+  "apiVersion": "aginctus.dev/project-state-read-service/v1alpha1",
+  "project": "team",
+  "listenAddress": "10.10.10.5:8443",
+  "mountPath": "/srv/aginctus-state",
+  "operatorConfigFile": "/run/aginctus/private-incus-operator.json",
+  "serviceCertificatePem": "-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\\n",
+  "servicePrivateKeyPem": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n",
+  "trustedClientCertificatesPem": "-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\\n"
+}
+```
+
+The service uses the `operatorConfigFile` schema from
+`RestrictedOperatorReadConfig`, with an independently pinned Incus TLS
+server and restricted service client key. The inbound trusted client
+certificate bundle must be administrator provisioned, and the live
+certificate lookup checks the presented client again on every request.
+Only exact private-IP or loopback listeners are accepted; wildcards and
+public endpoints are refused.
+
+**Not an operator approval or live evidence:** The VM test in #1091 must
+prove the restricted certificate can query the current trust record.
+Independent host-side `VerifyProjectServiceAttachment` must establish
+the attached volume's project/instance/volume ownership and exclusivity;
+mountinfo alone cannot establish it. Exercise TLS revocation, project
+retarget, service crash/restart, recovery, and operator-host reads before
+relying on this binary. If the live trust lookup is forbidden to restricted
+identities, this executable remains intentionally non-operational until a
+different narrow non-admin authorization proof is implemented.
