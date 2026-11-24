@@ -76,3 +76,34 @@ func TestRestrictedOperatorConfigRejectsAmbiguousOrForeignData(t *testing.T) {
 		})
 	}
 }
+
+func TestRestrictedOperatorConfigOptionalStateAuthorityIsAllOrNothing(t *testing.T) {
+	selection := restrictedOperatorConfigFixture()
+	selection.StateServiceEndpoint = "https://state.test:8443"
+	selection.StateServiceCertificatePEM = "pinned-state-cert"
+	selection.StateServiceSHA256 = strings.Repeat("b", 64)
+	selection.ConfiguredCandidateFile = "/nix/store/explicit/candidate.json"
+	encoded, err := json.Marshal(selection)
+	if err != nil { t.Fatal(err) }
+	path := writeRestrictedConfig(t, encoded, 0o600)
+	got, err := ReadRestrictedOperatorReadConfig(path)
+	if err != nil || got.StateServiceEndpoint != selection.StateServiceEndpoint ||
+		got.ConfiguredCandidateFile != selection.ConfiguredCandidateFile {
+		t.Fatalf("full state authority selection refused: %+v %v", got, err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(encoded, &raw); err != nil { t.Fatal(err) }
+	for _, field := range []string{"stateServiceEndpoint", "stateServiceCertificatePem",
+		"stateServiceSha256", "configuredCandidateFile"} {
+		t.Run(field, func(t *testing.T) {
+			fewer := make(map[string]any, len(raw))
+			for k, v := range raw { if k != field { fewer[k] = v } }
+			partial, err := json.Marshal(fewer)
+			if err != nil { t.Fatal(err) }
+			if value, err := ReadRestrictedOperatorReadConfig(writeRestrictedConfig(t, partial, 0o600));
+				err == nil || value.StateServiceEndpoint != "" {
+				t.Fatalf("partial state authorization accepted: %+v %v", value, err)
+			}
+		})
+	}
+}
