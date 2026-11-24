@@ -28,7 +28,7 @@ func (f *gatewayStopFake) UpdateInstanceState(name string, req api.InstanceState
 }
 func stopFixture(t *testing.T) (NativeGatewayTopology, NativeGatewayDevices, NativeGatewayInstancePair, *gatewayStopFake) {
 	t.Helper()
-	top, devices, pair, base := stoppedClientFixture(t)
+	top, _, _, base := stoppedClientFixture(t)
 	// Native lifecycle now requires canonical environment ownership on every
 	// resource. Build the environment-owned fixture used by the real stop path.
 	descriptor := gatewayTestEnvironment("123e4567-e89b-42d3-a456-426614174000", top.Project)
@@ -36,11 +36,11 @@ func stopFixture(t *testing.T) (NativeGatewayTopology, NativeGatewayDevices, Nat
 	if err != nil {
 		t.Fatal(err)
 	}
-	devices, err = PlanNativeGatewayDevices(top, "rootpool", "datapool")
+	devices, err := PlanNativeGatewayDevices(top, "rootpool", "datapool")
 	if err != nil {
 		t.Fatal(err)
 	}
-	pair, err = PlanNativeGatewayInstances(top, devices, "pg-image", "llm-image")
+	pair, err := PlanNativeGatewayInstances(top, devices, "pg-image", "llm-image")
 	if err != nil {
 		t.Fatal(err)
 	}
