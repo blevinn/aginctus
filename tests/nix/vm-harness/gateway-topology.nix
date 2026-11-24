@@ -33,8 +33,9 @@ let
         "full_stack.py"
       else
         "synthetic_gateway_probe.py ${syntheticSources}/synthetic_responses.py"
-    }${if toolTransport then " --tool-sequence" else ""}
+  }${if toolTransport then " --tool-sequence" else ""}
   '';
+  nft = "${pkgs.nftables}/bin/nft";
 in
 assert (!toolTransport || synthetic);
 assert (!fullStack || (synthetic && !toolTransport));
@@ -180,7 +181,7 @@ pkgs.testers.runNixOSTest {
     # The monitor output stays in the disposable guest. nftrace is
     # set solely on eth0 egress candidates above; tracing reports packet
     # headers/metadata but never captures payloads.
-    machine.succeed(f"{pkgs.nftables}/bin/nft monitor trace >/run/aginctus-packet-trace.log 2>&1 & echo $! >/run/aginctus-packet-trace.pid")
+    machine.succeed("${nft} monitor trace >/run/aginctus-packet-trace.log 2>&1 & echo $! >/run/aginctus-packet-trace.pid")
     machine.wait_until_succeeds(
         "kill -0 $(cat /run/aginctus-packet-trace.pid) && "
         "test -f /run/aginctus-packet-trace.log"
@@ -210,7 +211,7 @@ pkgs.testers.runNixOSTest {
     def assert_no_external_packet_attempts(context):
         trace_size = int(machine.succeed("wc -c </run/aginctus-packet-trace.log"))
         trace = machine.succeed("dd if=/run/aginctus-packet-trace.log bs=65536 count=1 status=none")
-        rules = machine.succeed(f"{pkgs.nftables}/bin/nft -a list table inet aginctus_full_stack")
+        rules = machine.succeed("${nft} -a list table inet aginctus_full_stack")
         print(f"{context}: bounded packet-header trace (max=65536 bytes)")
         print(f"trace-log-bytes={trace_size}")
         print(trace[:65536])
