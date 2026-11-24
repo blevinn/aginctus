@@ -73,7 +73,6 @@ pkgs.testers.runNixOSTest {
       services.openssh.enable = lib.mkIf fullStack false;
       systemd.network.wait-online.enable = lib.mkIf fullStack false;
       networking.nameservers = lib.mkIf fullStack [ "10.0.2.3" ];
-      services.aginctus.images.herdrClient.enable = lib.mkIf fullStack (lib.mkForce false);
       networking.dhcpcd.extraConfig = lib.mkIf fullStack ''
         nohook resolv.conf
         static domain_name_servers=10.0.2.3
