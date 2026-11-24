@@ -47,7 +47,7 @@ func stopFixture(t *testing.T) (NativeGatewayTopology, NativeGatewayDevices, Nat
 	base.volume.Name = top.DatabaseVolume
 	base.volume.Config["user.aginctus.environment-id"] = top.EnvironmentID
 	client := base
-	_, err = CreateStoppedGatewayWithClient(context.Background(), top, devices, pair, client, func(context.Context) error { return nil })
+	_, err = CreateStoppedGatewayWithClient(context.Background(), top, devices, pair, client.imagesForCreate, client, func(context.Context) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}

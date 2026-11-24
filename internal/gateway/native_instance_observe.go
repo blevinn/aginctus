@@ -78,7 +78,23 @@ func ObserveLocalNativeGatewayInstances(ctx context.Context, pair NativeGatewayI
 // ObserveNativeGatewayInstancesWithReader rejects legacy compose instances
 // and anything with unknown ownership, devices, image or scope. The exact
 // service marker is intentionally distinct from workload/compose markers.
+// Image matching here is relative to the observed alias, not an OCI reuse proof.
 func ObserveNativeGatewayInstancesWithReader(ctx context.Context, pair NativeGatewayInstancePair, reader NativeGatewayInstanceReader) ([]NativeGatewayInstanceObservation, error) {
+	return observeNativeGatewayInstances(ctx, pair, reader, func(_ int, spec NativeGatewayInstanceSpec) (string, error) {
+		alias, _, err := reader.GetImageAlias(spec.ImageAlias)
+		if err != nil || alias == nil || alias.Name != spec.ImageAlias {
+			return "", fmt.Errorf("native gateway image alias unverified")
+		}
+		image, _, err := reader.GetImage(alias.Target)
+		if err != nil || image == nil || image.Project != spec.Project || image.Type != "container" ||
+			image.Fingerprint != alias.Target {
+			return "", fmt.Errorf("native gateway image identity unverified")
+		}
+		return alias.Target, nil
+	})
+}
+
+func observeNativeGatewayInstances(ctx context.Context, pair NativeGatewayInstancePair, reader NativeGatewayInstanceReader, imageFingerprint func(int, NativeGatewayInstanceSpec) (string, error)) ([]NativeGatewayInstanceObservation, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -99,38 +115,37 @@ func ObserveNativeGatewayInstancesWithReader(ctx context.Context, pair NativeGat
 		return nil, fmt.Errorf("native gateway project policy unverified")
 	}
 	result := make([]NativeGatewayInstanceObservation, 0, 2)
-	for _, spec := range []NativeGatewayInstanceSpec{pair.Postgres, pair.LiteLLM} {
+	for i, spec := range []NativeGatewayInstanceSpec{pair.Postgres, pair.LiteLLM} {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		if spec.Project != scope.Name || !nativeDeviceName.MatchString(spec.ImageAlias) || len(spec.Devices) == 0 {
 			return nil, fmt.Errorf("native gateway instance intent incomplete")
 		}
-		alias, _, err := reader.GetImageAlias(spec.ImageAlias)
-		if err != nil || alias == nil || alias.Name != spec.ImageAlias {
-			return nil, fmt.Errorf("native gateway image alias unverified")
-		}
-		image, _, err := reader.GetImage(alias.Target)
-		if err != nil || image == nil || image.Project != scope.Name || image.Type != "container" ||
-			image.Fingerprint != alias.Target {
-			return nil, fmt.Errorf("native gateway image identity unverified")
+		fingerprint, err := imageFingerprint(i, spec)
+		if err != nil {
+			return nil, err
 		}
 		inst, _, err := reader.GetInstance(spec.Name)
 		if api.StatusErrorCheck(err, http.StatusNotFound) {
 			result = append(result, NativeGatewayInstanceObservation{Name: spec.Name, Project: scope.Name, Status: NativeGatewayAbsent})
 			continue
 		}
-		if err != nil || inst == nil || inst.Name != spec.Name || inst.Project != scope.Name ||
-			string(inst.Type) != "container" || inst.Config["user.aginctus.managed"] != "true" ||
-			inst.Config["user.aginctus.resource"] != "gateway-instance" ||
-			inst.Config["user.aginctus.role"] != spec.Role ||
-			inst.Config["user.aginctus.deployment"] != scope.Name ||
-			!gatewayOwnerMatches(inst.Config,spec.EnvironmentID) ||
-			inst.Config["volatile.base_image"] != alias.Target ||
-			!equalNativeDevices(inst.Devices, spec.Devices) || len(inst.Profiles) != 0 {
+		if err != nil || !matchesNativeGatewayInstance(inst, spec, fingerprint) {
 			return nil, fmt.Errorf("native gateway existing instance ownership or attachments unverified")
 		}
 		result = append(result, NativeGatewayInstanceObservation{Name: spec.Name, Project: scope.Name, Status: NativeGatewayCompatible})
 	}
 	return result, ctx.Err()
+}
+
+func matchesNativeGatewayInstance(inst *api.Instance, spec NativeGatewayInstanceSpec, fingerprint string) bool {
+	return inst != nil && inst.Name == spec.Name && inst.Project == spec.Project &&
+		inst.Type == string(api.InstanceTypeContainer) && inst.Config["user.aginctus.managed"] == "true" &&
+		inst.Config["user.aginctus.resource"] == "gateway-instance" &&
+		inst.Config["user.aginctus.role"] == spec.Role &&
+		inst.Config["user.aginctus.deployment"] == spec.Project &&
+		gatewayOwnerMatches(inst.Config, spec.EnvironmentID) &&
+		inst.Config["volatile.base_image"] == fingerprint &&
+		equalNativeDevices(inst.Devices, spec.Devices) && len(inst.Profiles) == 0
 }
