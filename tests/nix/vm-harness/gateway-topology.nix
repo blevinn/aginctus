@@ -70,6 +70,7 @@ pkgs.testers.runNixOSTest {
       virtualisation.incus.package = pkgs.incus;
       networking.dhcpcd.allowInterfaces = [ "eth0" ];
       networking.networkmanager.enable = false;
+      services.openssh.enable = lib.mkIf fullStack false;
       systemd.network.wait-online.enable = lib.mkIf fullStack false;
       systemd.services.NetworkManager-wait-online.enable = lib.mkIf fullStack false;
       services.aginctus.settings.incus.management.network.ipv4.address = "10.77.0.1/24";
