@@ -583,8 +583,9 @@ result, err := engine.Execute(ctx, plan, orchestration.ExecuteOptions{Reporting:
 
 Default execution does not collect a report or change CLI output. Reporting uses
 the same execution loop, not replay after completion. Core owns run, validation,
-authorization, preflight, step, operation, condition-window and check-attempt
-transitions. These events carry closed kind/state/reason vocabularies, generated
+authorization, preflight, step, operation, postcondition-verification,
+condition-window and check-attempt transitions. These events carry closed
+kind/state/reason vocabularies, generated
 run IDs, per-run sequence/time, opaque step/operation IDs, logical target scope
 where bound, check phase/ID/required policy, attempt number, observation time and
 the host-bound accepted-revision expectation where supplied.
@@ -603,9 +604,21 @@ is not secret redaction or an audience authorization policy.
   A timeout while waiting retains the last observation time, reports the deadline
   reason and adds no fictional attempt or observation.
 - Required non-passes block later operations; optional non-passes remain visible
-  without changing run success. A step completes only after its required
-  postconditions pass, while a prior completed operation remains visible after
-  postflight failure. Cancellation during a wait stops even optional checks.
+  without changing run success. A completed `operation` records the driver outcome
+  independently of the `postcondition-verification` slot for the same operation.
+  The gate is `passed` when all bound required postconditions have passed, or
+  records the first blocking result (`failed`, `unknown`, `skipped`) or `canceled`
+  if interrupted before the required checks pass. Individual condition events
+  retain check evidence, including optional findings. With no
+  required checks the slot is `not-required`, not a pass; driver-only dry-run is
+  `simulated`, and condition-gated dry-run remains unsupported. Before the gate
+  is reached there is no verification slot. `running` here means verification
+  is in progress, not that the resource is running. A `passed` gate is evidence
+  for this run only, not current readiness or deployment convergence.
+  Text and JSON logs expose these same kind/state pairs. After a gap, use the
+  snapshot rather than inferring a pass from missing events in the retained trace.
+  Strict readers of the experimental event vocabulary need to recognize the new
+  kind and `not-required` state.
 - A real driver error or cancellation after driver entry is conservatively
   `uncertain`, including when a driver returns nil after cancellation. This does
   not assert that a write happened or rolled back. Cancellation before driver
