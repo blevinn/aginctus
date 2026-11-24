@@ -72,6 +72,8 @@ pkgs.testers.runNixOSTest {
       networking.networkmanager.enable = false;
       services.openssh.enable = lib.mkIf fullStack false;
       systemd.network.wait-online.enable = lib.mkIf fullStack false;
+      services.resolved.enable = lib.mkIf fullStack false;
+      networking.resolvconf.enable = lib.mkIf fullStack false;
       services.aginctus.settings.incus.management.network.ipv4.address = "10.77.0.1/24";
       # Keep same-bridge database traffic at L2; Incus still rejects routed management traffic.
       boot.kernel.sysctl = {
