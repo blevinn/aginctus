@@ -19,3 +19,34 @@ Every read must reject missing/invalid environment UUIDs; foreign project/server
 - Verify the service instance remains unprivileged across restart and reattachment of its project-owned custom volume
 
 No live `accept` endpoint, CAS grant or reconciling writer may be activated by these contracts. Promotion/writer fencing are separate gates under #696/#704.
+
+## Implemented read-only protocol candidates (2026-11-24)
+
+The implementation now includes a typed, pinned-mTLS accepted-state wire
+client and a GET-only service handler. The handler requires an independently
+authenticated TLS peer and an exact project binding. It checks the peer
+before and after publishing; the client independently rechecks the restricted
+Incus connection before and after every bounded, hash-validated read.
+
+`LiveIncusPeerAuthorizer` proposes a concrete source for the service's
+peer decision: the **current**, non-administratively fetched Incus certificate
+trust record for the presented TLS peer, with exactly one restricted project.
+This interface *fails closed* if the lookup is unavailable, denied, stale,
+foreign or inconsistent. It cannot rely on a cached project label.
+
+The opt-in `incus-project-authority` disposable VM now includes a **positive
+probe** of `GET /1.0/certificates/{fingerprint}` with the actual restricted TLS
+operator identity. **This test is NOT RUN here.** If Incus denies the trust
+lookup, the proposed authorizer is **not deployable** under the selected
+least-privilege service identity. That is a material architecture finding,
+not a test to weaken by adding a host-admin socket or certificate.
+
+The approved replacement would need an independent, non-admin, live
+certificate/project authorization proof with revocation semantics. Until one
+is demonstrated, do not enable any project-state service listener or treat
+the optional installed CLI state configuration as operationally complete.
+
+No service daemon, protected-volume read-only source, secret provisioning,
+NixOS systemd unit, or actual host/VM state service has been deployed by this
+stack. Existing same-UID local fixtures remain test-only; their normal
+absence/404 semantics are not authenticated production absence.
