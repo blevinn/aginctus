@@ -254,6 +254,9 @@ func EnsureInstanceStateWithClient(
 			Stage: "verification", Mutated: true, Uncertain: true, cause: fmt.Errorf("instance did not reach the required state"),
 		}
 	}
+	if !environmentOwnerMatches(after.Config, intent.EnvironmentID) {
+		return result, &ReconcileError{Stage: "verification", Mutated: true, Uncertain: true, cause: fmt.Errorf("instance environment ownership changed")}
+	}
 	for key, want := range intent.markers() {
 		if after.Config[key] != want {
 			return result, &ReconcileError{Stage: "verification", Mutated: true, Uncertain: true, cause: fmt.Errorf("instance ownership changed during transition")}
