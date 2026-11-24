@@ -37,7 +37,7 @@ func acceptedAssessmentFixture(t *testing.T) (environment.Candidate,environment.
 				"user.aginctus.resource":"workload",
 				"user.aginctus.role":"agent-workload",
 				"user.aginctus.workload":"worker",
-				"user.aginctus.environment":c.Environment.ID,
+				"user.aginctus.environment-id":c.Environment.ID,
 			},
 		},
 	}}
@@ -77,7 +77,6 @@ func TestPinnedAcceptedAssessmentRejectsStaleForeignOrAmbiguousReads(t *testing.
 		{"missing observation",func(_ *environment.Candidate,_ *environment.AcceptedRevision,o *[]AcceptedWorkloadObservation){*o=nil}},
 		{"ambiguous absence",func(_ *environment.Candidate,_ *environment.AcceptedRevision,o *[]AcceptedWorkloadObservation){(*o)[0].Absent=true}},
 		{"foreign project",func(_ *environment.Candidate,_ *environment.AcceptedRevision,o *[]AcceptedWorkloadObservation){(*o)[0].Instance.Identity.Project="foreign"}},
-		{"foreign environment label",func(_ *environment.Candidate,_ *environment.AcceptedRevision,o *[]AcceptedWorkloadObservation){(*o)[0].Instance.Config["user.aginctus.environment"]="foreign"}},
 		{"wrong instance",func(_ *environment.Candidate,_ *environment.AcceptedRevision,o *[]AcceptedWorkloadObservation){(*o)[0].Instance.Identity.Name="foreign"}},
 		{"no owned marker",func(_ *environment.Candidate,_ *environment.AcceptedRevision,o *[]AcceptedWorkloadObservation){delete((*o)[0].Instance.Config,"user.aginctus.managed")}},
 		{"unknown lifecycle",func(_ *environment.Candidate,_ *environment.AcceptedRevision,o *[]AcceptedWorkloadObservation){(*o)[0].Instance.State="Unknown"}},
@@ -94,5 +93,77 @@ func TestPinnedAcceptedAssessmentRejectsStaleForeignOrAmbiguousReads(t *testing.
 				t.Fatal("accepted stale, ambiguous or foreign observation")
 			}
 		})
+	}
+}
+
+func TestPinnedAcceptedAssessmentRequiresExactEnvironmentOwnership(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		edit func(map[string]string, environment.Descriptor)
+	}{
+		{"missing canonical marker", func(config map[string]string, _ environment.Descriptor) {
+			delete(config, "user.aginctus.environment-id")
+		}},
+		{"old key only", func(config map[string]string, env environment.Descriptor) {
+			delete(config, "user.aginctus.environment-id")
+			config["user.aginctus.environment"] = env.ID
+		}},
+		{"empty canonical marker", func(config map[string]string, _ environment.Descriptor) {
+			config["user.aginctus.environment-id"] = ""
+		}},
+		{"display name is not an ID", func(config map[string]string, env environment.Descriptor) {
+			config["user.aginctus.environment-id"] = env.Name
+		}},
+		{"noncanonical UUID", func(config map[string]string, env environment.Descriptor) {
+			config["user.aginctus.environment-id"] = strings.ToUpper(env.ID)
+		}},
+		{"old marker contradicts canonical owner", func(config map[string]string, _ environment.Descriptor) {
+			config["user.aginctus.environment"] = "7c82e6d1-1212-4123-8123-0123456789ac"
+		}},
+		{"empty old marker contradicts canonical owner", func(config map[string]string, _ environment.Descriptor) {
+			config["user.aginctus.environment"] = ""
+		}},
+		{"foreign deployment marker", func(config map[string]string, _ environment.Descriptor) {
+			config["user.aginctus.deployment"] = "another-project"
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			candidate, revision, observations := acceptedAssessmentFixture(t)
+			tc.edit(observations[0].Instance.Config, candidate.Environment)
+			got, err := AssessPinnedAcceptedWorkloads(candidate.Environment, revision, candidate, observations)
+			if err == nil || got.RevisionID != "" || got.Workloads != nil {
+				t.Fatalf("unverified ownership yielded assessment: %+v, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestPinnedAcceptedAssessmentSeparatesEnvironmentsInOneProject(t *testing.T) {
+	owner, ownerRevision, observations := acceptedAssessmentFixture(t)
+	neighbor := owner
+	neighbor.Environment.ID = "7c82e6d1-1212-4123-8123-0123456789ac"
+	neighbor.Environment.Name = "staging"
+	neighborRevision, err := environment.BuildAcceptedRevision(nil, nil, neighbor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both accepted environments select the same workload and instance name on
+	// the same server/project. Only the exact environment UUID separates them.
+	config := observations[0].Instance.Config
+	config["user.aginctus.deployment"] = owner.Environment.Binding.Project
+	config["user.aginctus.environment"] = owner.Environment.ID
+	if got, err := AssessPinnedAcceptedWorkloads(owner.Environment, ownerRevision, owner, observations); err != nil ||
+		len(got.Workloads) != 1 || got.Workloads[0].Status != "converged" {
+		t.Fatalf("canonical owner did not converge: %+v, %v", got, err)
+	}
+	delete(config, "user.aginctus.environment")
+	for _, oldMarker := range []bool{false, true} {
+		if oldMarker {
+			config["user.aginctus.environment"] = neighbor.Environment.ID
+		}
+		got, err := AssessPinnedAcceptedWorkloads(neighbor.Environment, neighborRevision, neighbor, observations)
+		if err == nil || got.RevisionID != "" || got.Workloads != nil {
+			t.Fatalf("neighbor assessed another environment's instance (old marker present: %t): %+v, %v", oldMarker, got, err)
+		}
 	}
 }
