@@ -1,8 +1,9 @@
-# Feasibility only: SDK OCI pulls in a disposable Btrfs-backed daemon.
+# Test-only: SDK OCI feasibility and a separate offline stopped-pair gate.
 {
   self,
   nixpkgs,
   system,
+  stoppedPairOnly ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
@@ -24,7 +25,8 @@ let
   };
 in
 pkgs.testers.runNixOSTest {
-  name = "aginctus-native-oci-spike";
+  name =
+    if stoppedPairOnly then "aginctus-native-gateway-stopped-pair" else "aginctus-native-oci-spike";
   nodes.machine = { ... }: {
     virtualisation = {
       memorySize = 8192;
@@ -38,6 +40,7 @@ pkgs.testers.runNixOSTest {
       pkgs.incus
       pkgs.btrfs-progs
     ];
+    networking.useDHCP = pkgs.lib.mkIf stoppedPairOnly (pkgs.lib.mkForce false);
     networking.nftables.enable = true;
     networking.firewall.interfaces.spike-mgmt = {
       allowedUDPPorts = [
@@ -50,13 +53,26 @@ pkgs.testers.runNixOSTest {
   };
   testScript = ''
     start_all()
-    machine.wait_for_unit("incus.service")
+    machine.wait_for_unit("incus.service", timeout=60)
+  ''
+  + pkgs.lib.optionalString (!stoppedPairOnly) ''
     machine.succeed("incus admin init --auto --storage-backend dir")
-    machine.succeed("incus storage create spike btrfs size=20GiB")
+  ''
+  + ''
+    machine.succeed("incus storage create spike btrfs size=20GiB", timeout=60)
     machine.succeed("printf 'native-oci-vm\\n' >/run/aginctus-native-oci-disposable")
-    with subtest("environment volume and attachment audit"):
-        print(machine.succeed("AGINCTUS_NATIVE_OCI_SPIKE=disposable-vm native-oci-spike -test.v -test.run '^TestNativeGatewayAttachmentAuditVM$' -test.timeout=2m", timeout=120))
-    with subtest("networked OCI lifecycle"):
-        machine.succeed("AGINCTUS_NATIVE_OCI_SPIKE=disposable-vm native-oci-spike -test.v -test.skip '^TestNativeGatewayAttachmentAuditVM$' -test.timeout=25m", timeout=1500)
-  '';
+  ''
+  + (
+    if stoppedPairOnly then
+      ''
+        print(machine.succeed("AGINCTUS_NATIVE_OCI_SPIKE=disposable-vm native-oci-spike -test.v -test.run '^TestNativeGatewayStoppedPairVM$' -test.timeout=2m", timeout=130))
+      ''
+    else
+      ''
+        with subtest("environment volume and attachment audit"):
+            print(machine.succeed("AGINCTUS_NATIVE_OCI_SPIKE=disposable-vm native-oci-spike -test.v -test.run '^TestNativeGatewayAttachmentAuditVM$' -test.timeout=2m", timeout=120))
+        with subtest("networked OCI lifecycle"):
+            machine.succeed("AGINCTUS_NATIVE_OCI_SPIKE=disposable-vm native-oci-spike -test.v -test.run '^TestDaemonOCI$' -test.timeout=25m", timeout=1500)
+      ''
+  );
 }

@@ -207,6 +207,10 @@
           vm-harness-native-oci = import ./tests/nix/vm-harness/native-oci.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-native-gateway-stopped-pair = import ./tests/nix/vm-harness/native-oci.nix {
+            inherit self nixpkgs system;
+            stoppedPairOnly = true;
+          };
           vm-harness-acceptance-project-image = import ./tests/nix/vm-harness/acceptance-project-image.nix {
             inherit self nixpkgs system;
           };

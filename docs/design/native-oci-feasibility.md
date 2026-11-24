@@ -59,6 +59,36 @@ of preexisting daemon image records, service-to-service networking, gateway secr
 interrupted upgrades, or migration/rollback. The existing `gateway-topology`
 scenario continues to test the legacy production path.
 
+### Offline stopped-pair composition gate (#158)
+
+On a [disposable x86_64 Linux KVM worker](../testing/testenv/vm-harness.md), run
+the focused NixOS test independently of the networked spike:
+
+```sh
+timeout --kill-after=15s 12m nix --quiet build --no-update-lock-file --no-link -L \
+  .#vm-harness-native-gateway-stopped-pair
+```
+
+The VM uses fixed environment UUIDs, its local-only Incus daemon, an explicit
+Btrfs pool and two VM-owned bridges with DHCP disabled. It composes topology
+binding, volume ensure, device and instance planning, and stopped creation.
+It verifies the exact environment-owned PostgreSQL volume and both stopped
+guests' image fingerprints and devices. Repeat must forward no volume or
+instance submissions. Revoking the fixture grant after the PostgreSQL
+submission preserves the verified PostgreSQL guest and reports LiteLLM as
+not attempted. A same-project LiteLLM name occupied by another environment is
+refused without changing that guest or creating PostgreSQL.
+
+The test uploads deterministic, already-converted, non-bootable image bytes.
+Their SHA-256 fingerprints are checked against Incus, and synthetic manifest
+and config pins come from fixture-owned data, independently of live alias
+lookups. The real project, aliases and image records must still pass the
+executor's reuse checks. This does not prove upstream OCI resolution or
+acquisition, OCI layer-to-fingerprint conversion, guest networking, service
+readiness, credential delivery, production writer exclusion or cutover. The
+disposable fixture is the only writer; its revocable grant confers no authority
+outside that VM.
+
 ## Image contract needed before production
 
 - Resolve a registry tag to a platform-specific manifest digest before mutation;
