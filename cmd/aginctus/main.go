@@ -30,10 +30,11 @@ func main() {
 			fmt.Fprintln(os.Stderr, "restricted operator project read unavailable")
 			os.Exit(1)
 		}
-		defer closeRead()
-		os.Exit(cli.RunWithReadCapabilities(ctx, os.Args[1:], os.Stdout, os.Stderr,
+		status := cli.RunWithReadCapabilities(ctx, os.Args[1:], os.Stdout, os.Stderr,
 			incus.NewClient(), config.NewLoader(), registry,
-			cli.ReadCapabilities{Environments: reader}))
+			cli.ReadCapabilities{Environments: reader})
+		closeRead()
+		os.Exit(status)
 	}
 	os.Exit(cli.RunWithPlugins(
 		ctx,
