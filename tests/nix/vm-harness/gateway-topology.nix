@@ -174,7 +174,7 @@ pkgs.testers.runNixOSTest {
     for chain in ("output", "forward"):
         machine.succeed(f'nft add rule inet aginctus_full_stack {chain} oifname eth0 meta nftrace set 1')
         machine.succeed(f'nft add rule inet aginctus_full_stack {chain} oifname eth0 counter reject')
-    # Persist only bounded nft trace output, not terminal output. nftrace is
+    # The monitor output stays in the disposable guest. nftrace is
     # set solely on eth0 egress candidates above; tracing reports packet
     # headers/metadata but never captures payloads.
     machine.succeed(
@@ -209,13 +209,17 @@ pkgs.testers.runNixOSTest {
             result[chain] = {"rules": rules, "matches": matches}
         return result
     def assert_no_external_packet_attempts(context):
-        code, output = machine.execute(
-            "printf 'trace-log-bytes='; wc -c </run/aginctus-packet-trace.log; "
-            "dd if=/run/aginctus-packet-trace.log bs=65536 count=1 status=none; "
-            "nft -a list table inet aginctus_full_stack"
+        trace = machine.succeed(
+            "python3 -c 'from pathlib import Path; "
+            "p=Path(\"/run/aginctus-packet-trace.log\").read_bytes(); "
+            "print(\"trace-log-bytes=\" + str(len(p))); "
+            "print(p[:65536].decode(\"utf-8\", \"replace\"), end=\"\")'"
         )
-        print(f"{context}: bounded packet-header trace and protected rules (exit={code})")
-        print(output[:20000])
+        rules = machine.succeed("nft -a list table inet aginctus_full_stack")
+        print(f"{context}: bounded packet-header trace (max=65536 bytes)")
+        print(trace)
+        print(f"{context}: protected reject rules")
+        print(rules)
         observed = packet_guard_counters()
         failures = {
             chain: details for chain, details in observed.items()
