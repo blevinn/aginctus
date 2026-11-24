@@ -130,3 +130,35 @@ func TestExistingInstanceReplacementIsExplicitAndDeterministic(t *testing.T) {
 		t.Fatal("start-only intent misclassified")
 	}
 }
+
+func TestInstanceEnvironmentOwnership(t *testing.T) {
+	const owner = "123e4567-e89b-42d3-a456-426614174000"
+	const foreign = "123e4567-e89b-42d3-a456-426614174001"
+	intent, observed := instanceFixture()
+	intent.EnvironmentID = owner
+	intent.Config[environmentOwnershipKey] = owner
+	observed.Config[environmentOwnershipKey] = owner
+	if _, err := PlanExistingInstance(intent, observed); err != nil {
+		t.Fatal(err)
+	}
+	for _, markers := range []map[string]string{
+		{}, {environmentOwnershipKey: foreign}, {obsoleteEnvironmentOwnershipKey: owner},
+		{environmentOwnershipKey: owner, obsoleteEnvironmentOwnershipKey: foreign},
+	} {
+		delete(observed.Config, environmentOwnershipKey)
+		delete(observed.Config, obsoleteEnvironmentOwnershipKey)
+		maps.Copy(observed.Config, markers)
+		if _, err := PlanExistingInstance(intent, observed); err == nil {
+			t.Fatal("ambiguous or foreign environment accepted")
+		}
+	}
+	intent, observed = instanceFixture()
+	observed.Config[environmentOwnershipKey] = owner
+	if _, err := PlanExistingInstance(intent, observed); err == nil {
+		t.Fatal("legacy intent accepted environment-owned instance")
+	}
+	intent.Config[environmentOwnershipKey] = owner
+	if err := intent.Validate(); err == nil {
+		t.Fatal("unbound intent accepted environment marker")
+	}
+}
