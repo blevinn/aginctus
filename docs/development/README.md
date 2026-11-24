@@ -4,6 +4,8 @@ Aginctus uses Nix to provide a small, reproducible development environment. For 
 
 For repository directory ownership and colocation rules, see the [repository layout contract](repository-layout.md). Run `just check layout` to verify tracked top-level paths.
 
+For go-forward design and review requirements, see the [engineering contract](engineering-contract.md).
+
 ## Compatibility expectations
 
 Aginctus has [no general backward-compatibility or forward-migration commitment

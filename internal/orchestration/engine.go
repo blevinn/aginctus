@@ -34,9 +34,10 @@ type StepResult struct {
 }
 
 type Result struct {
-	// Steps includes only operations whose required postconditions passed.
+	// Steps includes operations that finished the step, including simulation or
+	// steps with no required postconditions. It does not imply runtime readiness.
 	Steps []StepResult
-	// Operations also retains completed driver calls when postflight failed.
+	// Operations also retains completed or simulated driver calls when postflight failed.
 	// This is not a durable journal or proof that canceled writes did not occur.
 	Operations []StepResult
 	Conditions []ConditionResult
