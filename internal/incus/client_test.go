@@ -51,3 +51,45 @@ func TestServerVersionQueryFailure(t *testing.T) {
 		t.Fatalf("ServerVersion() error = %v", err)
 	}
 }
+
+type listenerServer struct {
+	fakeServer
+	etag string
+	writes int
+}
+
+func (s *listenerServer) GetServer() (*api.Server, string, error) {
+	return s.server, s.etag, s.serverErr
+}
+
+func (s *listenerServer) UpdateServer(put api.ServerPut, etag string) error {
+	if etag != s.etag {
+		return errors.New("unexpected revision")
+	}
+	s.writes++
+	s.server.Config = put.Config
+	return nil
+}
+
+func TestHTTPSRemediationUsesObservedConnection(t *testing.T) {
+	for _, existing := range []string{"", "0.0.0.0:8443", "127.0.0.2:8443"} {
+		s := &listenerServer{fakeServer: fakeServer{server: &api.Server{}}, etag: "revision"}
+		s.server.Config = api.ConfigMap{"core.https_address": existing, "core.foo": "preserve"}
+		connections := 0
+		c := NewClientWithConnector(func(context.Context) (Server, error) {
+			connections++
+			return s, nil
+		})
+		err := c.SetHTTPSAddress(context.Background(), "127.0.0.1:8443")
+		if connections != 1 || s.server.Config["core.foo"] != "preserve" {
+			t.Fatal("remediation changed connection or unrelated configuration")
+		}
+		if existing == "" {
+			if err != nil || s.writes != 1 || s.server.Config["core.https_address"] != "127.0.0.1:8443" {
+				t.Fatalf("remediation failed: %v", err)
+			}
+		} else if err == nil || s.writes != 0 {
+			t.Fatal("existing listener overwritten")
+		}
+	}
+}

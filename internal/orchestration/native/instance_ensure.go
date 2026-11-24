@@ -179,7 +179,7 @@ func ensureInstanceWithGuard(ctx context.Context, intent InstanceIntent, dryRun,
 		}
 		scope, _ := incusscope.NewProjectScope(intent.Identity.Project)
 		state, err := EnsureInstanceStateWithClient(ctx, InstanceLifecycleIntent{
-			Scope: scope, Name: intent.Identity.Name, Resource: "workload", Role: "agent-workload", WorkloadID: intent.WorkloadID, State: InstanceRunning,
+			Scope: scope, Name: intent.Identity.Name, Resource: "workload", Role: "agent-workload", WorkloadID: intent.WorkloadID, EnvironmentID: intent.EnvironmentID, State: InstanceRunning,
 		}, client)
 		result.Started = state.Changed
 		if err != nil {
