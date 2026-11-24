@@ -7,14 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	collection "github.com/blevinn/aginctus/internal/observability"
 	"github.com/blevinn/aginctus/internal/observability/presentation"
 	"github.com/blevinn/aginctus/internal/orchestration"
 	contract "github.com/blevinn/aginctus/pkg/observability"
+	checks "github.com/blevinn/aginctus/pkg/orchestration"
 )
 
 type driver struct{ failure error }
@@ -25,14 +28,22 @@ func (d driver) Execute(context.Context, json.RawMessage, orchestration.ExecuteO
 	return d.failure
 }
 
-func execute(t *testing.T, monitor *collection.Monitor, count int, failure error) orchestration.Result {
+func execute(t *testing.T, monitor *collection.Monitor, count int, failure error, postconditions ...orchestration.BoundCheck) orchestration.Result {
 	t.Helper()
 	plan := orchestration.Plan{APIVersion: orchestration.APIVersion, Kind: orchestration.Kind, Metadata: orchestration.Metadata{Name: "SECRET_PLAN"}}
 	for i := range count {
 		plan.Steps = append(plan.Steps, orchestration.Step{ID: fmt.Sprintf("SECRET_STEP_%d", i), Driver: "fixture", Configuration: json.RawMessage(`{"token":"SECRET_CONFIGURATION"}`)})
 	}
-	result, err := orchestration.NewEngine(map[string]orchestration.Driver{"fixture": driver{failure}}).Execute(t.Context(), plan, orchestration.ExecuteOptions{Monitor: monitor})
-	if (err != nil) != (failure != nil) {
+	engine := orchestration.NewEngine(map[string]orchestration.Driver{"fixture": driver{failure}})
+	wantErr := failure
+	if len(postconditions) > 0 {
+		engine = engine.WithConditions(map[string]orchestration.StepConditions{plan.Steps[count-1].ID: {
+			Scope: orchestration.TargetScope{Deployment: "lab", Instance: "one", Target: "target"}, Postconditions: postconditions,
+		}}, orchestration.CheckPolicy{})
+		wantErr = orchestration.ErrConditionNotMet
+	}
+	result, err := engine.Execute(t.Context(), plan, orchestration.ExecuteOptions{Monitor: monitor})
+	if !errors.Is(err, wantErr) {
 		t.Fatalf("unexpected execution result: %v", err)
 	}
 	return result
@@ -64,8 +75,14 @@ func TestSlowPresentationCannotBlockEngineAndAutomaticallyResnapshotsGap(t *test
 			done := make(chan error, 1)
 			go func() { done <- presentation.Follow(t.Context(), monitor, sink) }()
 			<-writer.entered // observer registered and blocked independently of execution
-			result := execute(t, monitor, 300, nil)
-			if !result.Report.Status.Finished || len(result.Operations) != 300 {
+			check := orchestration.BoundCheck{
+				Check: checks.Check{ID: "criterion", Scope: "fixture target", Claim: "fixture criterion", Required: true, Effect: checks.Offline, Timeout: time.Second},
+				Evaluate: func(context.Context) (checks.Finding, error) {
+					return checks.Finding{TargetID: "target", CheckID: "criterion", Outcome: checks.Skipped, ObservedAt: time.Now(), Code: "fixture"}, nil
+				},
+			}
+			result := execute(t, monitor, 300, nil, check)
+			if !result.Report.Status.Finished || result.Report.Dropped == 0 || len(result.Operations) != 300 || len(result.Steps) != 299 {
 				t.Fatal("sink changed execution")
 			}
 			release()
@@ -76,8 +93,10 @@ func TestSlowPresentationCannotBlockEngineAndAutomaticallyResnapshotsGap(t *test
 				t.Fatal("configuration/plan name leaked")
 			}
 			if format == "text" {
-				if !strings.Contains(writer.String(), "action=resnapshot") || !strings.Contains(writer.String(), "finished=true") {
-					t.Fatal(writer.String())
+				if !strings.Contains(writer.String(), "action=resnapshot") || !strings.Contains(writer.String(), "finished=true") ||
+					!strings.Contains(writer.String(), `kind="operation" execution_state="completed" reason="" step="step-300"`) ||
+					!strings.Contains(writer.String(), `kind="postcondition-verification" execution_state="skipped" reason="condition-not-met" step="step-300"`) {
+					t.Fatal("text resnapshot lost driver completion or skipped verification")
 				}
 			} else {
 				decoder := json.NewDecoder(&writer.Buffer)
@@ -100,8 +119,15 @@ func TestSlowPresentationCannotBlockEngineAndAutomaticallyResnapshotsGap(t *test
 						final = *record.Snapshot
 					}
 				}
-				if !gap || !final.Finished || final.Run.State != contract.Completed || final.Watermark != result.Report.Status.Watermark {
+				if !gap || !final.Finished || final.Run.State != contract.Blocked || final.Watermark != result.Report.Status.Watermark || final.Validate() != nil {
 					t.Fatal("gap/final status not rendered")
+				}
+				for kind, want := range map[contract.Kind]contract.State{contract.Operation: contract.Completed, contract.PostconditionVerification: contract.Skipped} {
+					if !slices.ContainsFunc(final.Entries, func(e contract.Event) bool {
+						return e.OperationID == "step-300" && e.Kind == kind && e.State == want
+					}) {
+						t.Fatalf("JSON resnapshot lost %s=%s for step-300", kind, want)
+					}
 				}
 			}
 		})
