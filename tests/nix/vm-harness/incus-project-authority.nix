@@ -158,6 +158,28 @@ pkgs.testers.runNixOSTest {
     status, response = api_get("/1.0/projects/default")
     assert status in [403, 404] and response["type"] == "error", "restricted principal can read the default project"
 
+    # Phase 1 state-service authority feasibility gate: can a genuinely
+    # restricted project principal independently verify the current Incus
+    # trust record for a presented TLS certificate WITHOUT administrator
+    # credentials? A 403/404 is an architectural blocker, not permission to
+    # provision the service with unrestricted Incus credentials.
+    operator_fp = machine.succeed(
+      "openssl x509 -in /home/operator/.config/incus/client.crt" +
+      " -noout -fingerprint -sha256"
+    ).strip().split("=", 1)[1].replace(":", "").lower()
+    assert len(operator_fp) == 64, "operator TLS fingerprint unavailable"
+    status, certificate_record = api_get("/1.0/certificates/" + operator_fp)
+    assert status == 200 and certificate_record["type"] == "sync", (
+      "BLOCKED: restricted project principal cannot read live Incus TLS trust; " +
+      "state-service certificate authorizer needs a different non-admin proof"
+    )
+    trusted = certificate_record["metadata"]
+    assert trusted["fingerprint"].lower() == operator_fp and trusted["type"] == "client", "wrong TLS trust record"
+    assert trusted["restricted"] is True and trusted["projects"] == ["aginctus-authz"], (
+      "restricted project trust permissions are not exact"
+    )
+    print("PROJECT STATE SERVICE AUTH: live restricted certificate read confirmed")
+
     def instances(path, admin=False):
         status, response = api_get(path, admin)
         assert status == 200 and response["type"] == "sync", "instance collection request failed"
