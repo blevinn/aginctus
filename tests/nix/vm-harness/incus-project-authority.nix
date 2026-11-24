@@ -70,6 +70,13 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus project get aginctus-authz restricted | grep -qx true")
     machine.succeed("incus project get aginctus-authz features.networks | grep -qx false")
     machine.succeed("incus project get aginctus-authz restricted.networks.access | grep -qx authz-mgmt")
+    # Only the independent administrator provisions the environment inventory.
+    enrollment = json.dumps({
+      "apiVersion": "aginctus.io/environment-enrollment/v1alpha1",
+      "items": [],
+    }, separators=(",", ":"))
+    machine.succeed("incus project set aginctus-authz user.aginctus.environments=" + shlex.quote(enrollment))
+
 
     # A VM-only loopback HTTPS endpoint. No host networking or public listener.
     machine.succeed("incus config set core.https_address 127.0.0.1:8443")
@@ -142,6 +149,14 @@ pkgs.testers.runNixOSTest {
         response = json.loads(body)
         print("AUTHZ API: " + ("admin " if admin else "operator ") + path + " => HTTP " + status)
         return int(status), response
+
+    # Project-scoped enrollment must be visible through the SAME restricted
+    # identity, but it must not be writable by that identity. Check through
+    # the raw API, not merely CLI flags or a local administrator observation.
+    status, response = api_get("/1.0/projects/aginctus-authz")
+    assert status == 200 and response["metadata"]["config"]["user.aginctus.environments"] == enrollment, "restricted principal cannot read its enrollment manifest"
+    status, response = api_get("/1.0/projects/default")
+    assert status in [403, 404] and response["type"] == "error", "restricted principal can read the default project"
 
     def instances(path, admin=False):
         status, response = api_get(path, admin)
@@ -219,6 +234,15 @@ pkgs.testers.runNixOSTest {
     deny("incus config set scoped:foreign-sentinel user.authz_sentinel=changed --project unrelated", allow_hidden=True)
     deny("incus profile set scoped:foreign-sentinel user.authz_sentinel=changed --project unrelated", allow_hidden=True)
     deny("incus storage volume set scoped:default foreign-sentinel user.authz_sentinel=changed --project unrelated", allow_hidden=True)
+    # A project-restricted client must not rewrite the authoritative
+    # enrollment manifest. If Incus allows this in the pinned policy, this
+    # test MUST fail and we must choose a different enrollment store.
+    status, response = api_get("/1.0/projects/aginctus-authz", patch={
+      "config": {"user.aginctus.environments": "forged"}
+    })
+    assert status in [403, 404] and response["type"] == "error", "restricted client can rewrite enrollment manifest"
+    assert machine.succeed("incus project get aginctus-authz user.aginctus.environments").strip() == enrollment, "denied manifest rewrite changed project inventory"
+
     deny("incus project set scoped:aginctus-authz restricted=false")
     deny("incus project create scoped:unauthorized")
     deny("incus network create scoped:escape-bridge ipv4.address=none ipv6.address=none")

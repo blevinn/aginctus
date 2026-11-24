@@ -66,3 +66,24 @@ ordinary operator principal. In a dedicated disposable NixOS/Incus VM:
 This source does not provide the protected project-owned service's accepted
 revision records. A separate authenticated `RestrictedProjectReadSession`
 and ordinary CLI composition are still required under #695/#696/#704.
+
+## Executable security probe
+
+The opt-in `incus-project-authority` disposable NixOS/Incus VM test
+preprovisions a versioned empty manifest as the guest administrator. It
+requires the restricted TLS operator to read exactly that manifest, to be
+denied the default project, and to receive a server-side denial on a raw
+`PATCH /1.0/projects/aginctus-authz` attempting to replace the manifest.
+It then re-reads the exact manifest as administrator.
+
+Run on an authorized KVM-backed test host:
+
+```sh
+nix build --no-update-lock-file -L --no-link \
+  .#vmTests.x86_64-linux.incus-project-authority
+```
+
+This test has **not been executed in the GitHub editing session**. A failed
+denial proves that Incus project `user.*` configuration is unsuitable for
+operator-independent authoritative enrollment under the tested server policy;
+do not weaken the test or elevate operator credentials to make it pass.
