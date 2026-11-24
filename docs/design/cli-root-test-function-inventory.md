@@ -15,6 +15,7 @@ without an updated owner decision.
 | `commands_output_test.go` | `TestUnexpectedStructuredErrorDoesNotLeakBackendDetails` | CLI composition / machine error serialization | Retain root integration and non-disclosure evidence |
 | `commands_acceptance_preview_test.go` | `TestAcceptancePlanCLIUsesVerifiedStateRead` | State planning CLI composition | Retain read-only and fail-closed root integration evidence |
 | `commands_acceptance_preview_test.go` | `TestAcceptancePlanCLIRejectsAbsentAuthority` | State planning CLI composition | Retain read-only and fail-closed root integration evidence |
+| `environment_read_capabilities_test.go` | `TestPhaseOneReadCapabilityCompositionPreservesFailClosedCLI` | CLI read composition | Retain domain-to-root verified read capability regression; deny missing workload authority |
 | `read_capabilities_test.go` | `TestUnifiedReadCapabilitiesResolveEnvironmentDisplayName` | CLI read composition | Retain verified display-name selection and fail-closed regression evidence |
 | `read_capabilities_test.go` | `TestUnifiedReadCapabilitiesRejectAmbiguousAndStaleEnvironmentNames` | CLI read composition | Retain verified display-name selection and fail-closed regression evidence |
 | `read_capabilities_test.go` | `TestUnifiedReadCapabilitiesShareOneInvocation` | CLI read composition | Retain root cross-family and missing-authority evidence |
@@ -59,6 +60,8 @@ without an updated owner decision.
 | `commands_leaf_help_test.go` | `TestCobraNestedHelpReflectsLeafFlagScope` | CLI composition / global output | Retain; guard root-wide semantics |
 | `commands_logical_workloads_test.go` | `TestInjectedLogicalWorkloadCLIOutput` | Cross-family logical workload read entrypoint | Retain root Run/output and explicit scope evidence |
 | `commands_logical_workloads_test.go` | `TestLogicalWorkloadCLIFailsClosed` | Cross-family logical workload read entrypoint | Retain root Run/output and explicit scope evidence |
+| `commands_environment_reads_test.go` | `TestEnvironmentShowResolvesUniqueNameThroughVerifiedInventory` | Environment CLI composition | Retain authenticated name-selection and fail-closed regression evidence |
+| `commands_environment_reads_test.go` | `TestEnvironmentShowRejectsAmbiguousAndStaleEnrollment` | Environment CLI composition | Retain authenticated name-selection and fail-closed regression evidence |
 | `commands_environment_reads_test.go` | `TestInjectedAuthenticatedEnvironmentCLI` | Cross-family authenticated environment read entrypoint | Retain root Run/output and fail-closed authority evidence |
 | `commands_environment_reads_test.go` | `TestEnvironmentCLIRequiresAuthenticatedBackend` | Cross-family authenticated environment read entrypoint | Retain root Run/output and fail-closed authority evidence |
 | `commands_operator_test.go` | `TestCobraOperatorInvalidInputDoesNotReadConfigOrInspectIncus` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
