@@ -149,13 +149,16 @@ func ServeMountedProjectStateReads(ctx context.Context, c ProjectStateReadServic
 		ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second,
 		IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10,
 	}
-	finished := make(chan struct{})
+	stopped := make(chan struct{})
+	defer close(stopped)
 	go func() {
-		defer close(finished)
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
+		select {
+		case <-ctx.Done():
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = server.Shutdown(shutdownCtx)
+		case <-stopped:
+		}
 	}()
 	err = server.Serve(tls.NewListener(listener, tlsConfig))
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
