@@ -53,7 +53,7 @@ func (h AuthenticatedAcceptedReadHandler) ServeHTTP(w http.ResponseWriter, r *ht
 		return
 	}
 	if r.URL.Path != "/v1/accepted" || r.URL.RawPath != "" ||
-		r.URL.Fragment != "" || r.ContentLength > 0 {
+		r.URL.Fragment != "" || r.ContentLength != 0 || len(r.TransferEncoding) != 0 {
 		deny(http.StatusBadRequest)
 		return
 	}
