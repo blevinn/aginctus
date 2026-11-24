@@ -44,3 +44,34 @@ func TestEnvironmentCLIRequiresAuthenticatedBackend(t *testing.T){
 		if code==0||out.Len()!=0 {t.Fatalf("args=%v code=%d out=%q err=%q",args,code,out.String(),errs.String())}
 	}
 }
+
+func TestEnvironmentShowResolvesUniqueNameThroughVerifiedInventory(t *testing.T) {
+	var out,errs bytes.Buffer
+	code:=RunWithAuthorizedReaders(context.Background(),
+		[]string{"--incus-project","team","environment","show","dev","-o","json"},
+		&out,&errs,nil,nil,nil,testEnrolledReader{},nil)
+	if code!=0||errs.Len()!=0||!strings.Contains(out.String(),readTestEnv)||
+		!strings.Contains(out.String(),`"kind": "Environment"`) {
+		t.Fatalf("show name: code=%d out=%q stderr=%q",code,out.String(),errs.String())
+	}
+}
+
+func TestEnvironmentShowRejectsAmbiguousAndStaleEnrollment(t *testing.T) {
+	env:=api.Environment{ID:readTestEnv,Name:"dev",Binding:api.EnvironmentBinding{ServerID:"srv",Project:"team"}}
+	other:=env
+	other.ID="22222222-2222-4222-8222-222222222222"
+	for _,tc:=range []struct{name string;reader nameSelectionReader}{
+		{"ambiguous",nameSelectionReader{list:[]api.Environment{env,other},detail:env}},
+		{"stale",nameSelectionReader{list:[]api.Environment{env},detail:other}},
+	} {
+		t.Run(tc.name,func(t *testing.T){
+			var out,errs bytes.Buffer
+			code:=RunWithAuthorizedReaders(context.Background(),
+				[]string{"--incus-project","team","environment","show","dev","-o","json"},
+				&out,&errs,nil,nil,nil,tc.reader,nil)
+			if code==0||out.Len()!=0||errs.Len()==0 {
+				t.Fatalf("unsafe selection: code=%d out=%q stderr=%q",code,out.String(),errs.String())
+			}
+		})
+	}
+}
