@@ -2,6 +2,7 @@
 
 These pages describe local host authority and **explicitly selected** Incus state. No read-only audit grants mutation privileges.
 
+- [Restricted TLS project enrollment reads](restricted-project-enrollment-reads.md) — opt-in installed CLI inventory; state-service reads remain gated.
 - [Read-only Incus operator preflight](operator-preflight.md) — selected project and access limitations.
 - [Gateway credential metadata](operator-state-audit.md) and [system/user unit inventory](operator-units-audit.md) — read-only host observations, not project authority or controller handoff.
 - [NixOS and Home Manager coexistence](home-manager.md) — user operator installation versus separate NixOS host firewall authority.
