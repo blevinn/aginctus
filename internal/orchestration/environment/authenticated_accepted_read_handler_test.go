@@ -2,6 +2,7 @@ package environment
 
 import (
 	"context"
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -58,7 +59,7 @@ func TestAuthenticatedAcceptedReadHandlerReturnsOnlyVerifiedPublishedState(t *te
 	if err := json.Unmarshal(empty.Body.Bytes(), &absent); err != nil ||
 		absent.APIVersion != AcceptedReadWireVersion ||
 		absent.EnvironmentID != candidate.Environment.ID ||
-		absent.Revision != nil || absent.Candidate != nil {
+		absent.Revision != nil || !bytes.Equal(absent.Candidate, []byte("null")) {
 		t.Fatalf("invalid absence document: %+v err=%v", absent, err)
 	}
 	revision, err := BuildAcceptedRevision(nil, nil, candidate)
