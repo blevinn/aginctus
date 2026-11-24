@@ -25,6 +25,10 @@ type RestrictedOperatorReadConfig struct {
 	TrustedServerSHA256 string `json:"trustedServerSha256"`
 	ClientCertificatePEM string `json:"clientCertificatePem"`
 	ClientPrivateKeyPEM string `json:"clientPrivateKeyPem"`
+	StateServiceEndpoint string `json:"stateServiceEndpoint,omitempty"`
+	StateServiceCertificatePEM string `json:"stateServiceCertificatePem,omitempty"`
+	StateServiceSHA256 string `json:"stateServiceSha256,omitempty"`
+	ConfiguredCandidateFile string `json:"configuredCandidateFile,omitempty"`
 }
 
 const RestrictedOperatorReadConfigVersion = "aginctus.dev/restricted-operator-read/v1alpha1"
@@ -57,11 +61,18 @@ func ReadRestrictedOperatorReadConfig(path string) (RestrictedOperatorReadConfig
 	}
 	if rejectCandidateDuplicateKeys(raw) != nil { return invalid() }
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(raw, &fields) != nil || candidateKeys(fields,
+	if json.Unmarshal(raw, &fields) != nil { return invalid() }
+	// An all-or-none optional state block avoids quietly dropping one
+	// source and accidentally presenting partial state as complete.
+	keys := []string{
 		"apiVersion", "endpoint", "project", "serverCertificatePem",
-		"trustedServerSha256", "clientCertificatePem", "clientPrivateKeyPem") != nil {
-		return invalid()
+		"trustedServerSha256", "clientCertificatePem", "clientPrivateKeyPem",
 	}
+	if len(fields) == 11 {
+		keys = append(keys, "stateServiceEndpoint", "stateServiceCertificatePem",
+			"stateServiceSha256", "configuredCandidateFile")
+	}
+	if candidateKeys(fields, keys...) != nil { return invalid() }
 	var selected RestrictedOperatorReadConfig
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -69,7 +80,10 @@ func ReadRestrictedOperatorReadConfig(path string) (RestrictedOperatorReadConfig
 		selected.APIVersion != RestrictedOperatorReadConfigVersion ||
 		selected.Endpoint == "" || selected.Project == "" ||
 		selected.ServerCertificatePEM == "" || selected.TrustedServerSHA256 == "" ||
-		selected.ClientCertificatePEM == "" || selected.ClientPrivateKeyPEM == "" {
+		selected.ClientCertificatePEM == "" || selected.ClientPrivateKeyPEM == "" ||
+		(len(fields) == 11 && (selected.StateServiceEndpoint == "" ||
+		selected.StateServiceCertificatePEM == "" || selected.StateServiceSHA256 == "" ||
+		selected.ConfiguredCandidateFile == "")) {
 		return invalid()
 	}
 	return selected, nil
