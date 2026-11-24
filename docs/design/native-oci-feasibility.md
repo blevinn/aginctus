@@ -18,6 +18,11 @@ full fingerprint metadata, profile-free OCI initialization, application readines
 start/stop/removal, project isolation and PostgreSQL custom-volume preservation
 across explicit instance recreation on Btrfs. All credentials are synthetic.
 The VM has no production configuration, credentials, mounts or host Incus connection.
+Its attachment-audit fixture creates and re-observes PostgreSQL storage named
+from an environment UUID on the selected Incus server/project. It exercises
+no-op reuse and refusal of same-project volumes with missing or foreign
+environment markers. New volume creation requires a writer guard; the fixture
+owns its disposable writer, and no production command invokes this path.
 
 `nativeoci.ResolvePublic` reads registry metadata using ORAS and anonymously
 negotiated registry bearer authentication. It requires a unique matching Linux

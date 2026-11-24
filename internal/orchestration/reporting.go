@@ -74,6 +74,12 @@ func (r *Result) operationFinished() {
 	}
 }
 
+func (r *executionReport) verification(state report.State, err error) {
+	event := r.active
+	event.Kind, event.State, event.Reason = report.PostconditionVerification, state, errorReason(err)
+	r.collector.Record(event)
+}
+
 func (r *Result) stepFinished() {
 	if r.reporting != nil {
 		event := r.reporting.active

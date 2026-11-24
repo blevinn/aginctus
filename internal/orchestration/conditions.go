@@ -221,11 +221,33 @@ func conditionContextErr(ctx context.Context) error {
 	return nil
 }
 
-func (e *Engine) runConditions(ctx context.Context, step Step, phase ConditionPhase, result *Result) error {
+func (e *Engine) runConditions(ctx context.Context, step Step, phase ConditionPhase, result *Result) (err error) {
 	conditions := e.conditions[step.ID]
 	checks := conditions.Preconditions
+	remaining := 0 // Required postconditions not yet accepted by this invocation.
 	if phase == PostconditionPhase {
 		checks = conditions.Postconditions
+		if r := result.reporting; r != nil {
+			for _, check := range checks {
+				if check.Check.Required {
+					remaining++
+				}
+			}
+			switch {
+			case r.dryRun:
+				remaining = 0
+				r.verification(report.Simulated, nil)
+			case remaining == 0:
+				r.verification(report.NotRequired, nil)
+			default:
+				r.verification(report.Running, nil)
+				defer func() {
+					if remaining > 0 {
+						r.verification(report.Canceled, err)
+					}
+				}()
+			}
+		}
 	}
 	for _, check := range checks {
 		if phase == PreflightPhase && !check.Preflight {
@@ -238,8 +260,22 @@ func (e *Engine) runConditions(ctx context.Context, step Step, phase ConditionPh
 		if err := conditionContextErr(ctx); err != nil {
 			return fmt.Errorf("step %q condition %q canceled: %w", step.ID, check.Check.ID, errors.Join(err, cause))
 		}
-		if check.Check.Required && finding.Outcome != contract.Passed {
-			return fmt.Errorf("step %q %s condition %q (%s): %w", step.ID, phase, check.Check.ID, finding.Outcome, errors.Join(ErrConditionNotMet, cause))
+		if !check.Check.Required {
+			continue
+		}
+		if finding.Outcome != contract.Passed {
+			blocked := fmt.Errorf("step %q %s condition %q (%s): %w", step.ID, phase, check.Check.ID, finding.Outcome, errors.Join(ErrConditionNotMet, cause))
+			if remaining > 0 {
+				result.reporting.verification(findingState(finding), blocked)
+				remaining = 0
+			}
+			return blocked
+		}
+		if remaining > 0 {
+			remaining--
+			if remaining == 0 {
+				result.reporting.verification(report.Passed, nil)
+			}
 		}
 	}
 	return nil
