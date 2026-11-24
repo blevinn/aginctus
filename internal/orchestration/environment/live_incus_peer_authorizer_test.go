@@ -114,6 +114,7 @@ func TestLiveIncusPeerRevocationBetweenHandlerChecksDeniesPayload(t *testing.T) 
 	// agree on the exact *authenticated* server/project identity. Otherwise
 	// the handler must deny before opening its accepted-state source.
 	candidate.Environment.Binding.ServerID = "sha256:" + authorizer.PinnedServerCertificateSHA256
+	candidate.Environment.Binding.Project = authorizer.Project
 	verifier.binding = candidate.Environment.Binding
 	model.Catalog.Source.(*testEnrollmentSource).descriptors = []Descriptor{candidate.Environment}
 	rev, err := BuildAcceptedRevision(nil, nil, candidate)
