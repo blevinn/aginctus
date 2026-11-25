@@ -17,6 +17,16 @@ gateway images against a local-only Incus daemon. It checks repeated import,
 full fingerprint metadata, profile-free OCI initialization, application readiness,
 start/stop/removal, project isolation and PostgreSQL custom-volume preservation
 across explicit instance recreation on Btrfs. All credentials are synthetic.
+The PostgreSQL case verifies the resolved OCI entrypoint, command, major
+version and data path, then hashes the actual entrypoint file against the
+[reviewed 17 Alpine source](https://github.com/docker-library/postgres/blob/ac9627dcf544a8454f212a12ddeebfcdc0803d3e/17/alpine3.24/docker-entrypoint.sh)
+before staging fixture files through the disposable administrator's file API.
+It checks file ownership and permissions, explicit SCRAM login, a wrong-password
+negative control and no credential bytes in Incus instance configuration. After
+recreation with a different bootstrap file, the original login and data marker
+must survive. This checks upstream file consumption and retention, not an
+approved delivery mechanism, build attestation or password rotation. A changed
+upstream entrypoint requires fresh review before updating the expected digest.
 The VM has no production configuration, credentials, mounts or host Incus connection.
 Its attachment-audit fixture creates and re-observes PostgreSQL storage named
 from an environment UUID on the selected Incus server/project. It exercises
@@ -71,7 +81,9 @@ timeout --kill-after=15s 12m nix --quiet build --no-update-lock-file --no-link -
 
 The VM uses fixed environment UUIDs, its local-only Incus daemon, an explicit
 Btrfs pool and two VM-owned bridges with DHCP disabled. It composes topology
-binding, volume ensure, device and instance planning, and stopped creation.
+binding, read-only stopped-pair preview before volume ensure, device and
+instance planning, and stopped creation. The preview refuses a foreign guest
+even when the database volume has yet to be created.
 It verifies the exact environment-owned PostgreSQL volume and both stopped
 guests' image fingerprints and devices. Repeat must forward no volume or
 instance submissions. Revoking the fixture grant after the PostgreSQL
@@ -101,7 +113,10 @@ timeout --kill-after=15s 12m nix --quiet build --no-update-lock-file --no-link \
   --option substitute false -L .#vm-harness-native-gateway-stop-retention
 ```
 
-Each guest boots only a static, signal-aware synthetic process. The test seeds
+Each guest boots only a static, signal-aware synthetic process. The fixture
+exercises guarded PostgreSQL-role-first startup, a PID 1 handshake before the
+LiteLLM-role submission, and start repeat without new submissions. Its test-only
+delivery verifier never handles credentials. The test seeds
 and syncs fresh marker bytes through the PostgreSQL-role guest's database mount.
 It exercises the dormant stop executor, observing LiteLLM stop before any
 PostgreSQL stop request, both signal handlers, and stopped state. It reads the
@@ -110,6 +125,18 @@ guest. Repeat must submit no changes. A separate case revokes the fixture grant
 between stops, preserves the stopped LiteLLM and running PostgreSQL, then
 resumes without stopping LiteLLM again. A running sibling environment in the
 same project and its volume are checked for drift in both cases.
+
+A companion case replaces one explicitly selected stopped LiteLLM incarnation
+with a different preverified image and checks that PostgreSQL is unchanged.
+It then removes the new stopped LiteLLM guest followed by the stopped PostgreSQL
+guest and reads the original marker from the retained custom volume. The
+library has no production command. Its guard must independently authorize
+discard of the exact root filesystem, including any managed OAuth state, and
+recheck the scope, old and new pins, and writer exclusion at each effect.
+Removal fails closed on snapshots, backups, unverified inventory or nonstandard
+root configuration; missing targets do not permit blind retries. The Incus
+DELETE endpoint has no ETag precondition. PostgreSQL image changes and storage
+migration are outside this operation.
 
 This is marker-byte retention and graceful shutdown evidence for synthetic
 processes. PostgreSQL data integrity and readiness, live gateway behavior,
