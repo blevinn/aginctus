@@ -207,15 +207,25 @@
           vm-harness-native-oci = import ./tests/nix/vm-harness/native-oci.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-native-gateway-stopped-pair = import ./tests/nix/vm-harness/native-oci.nix {
+            inherit self nixpkgs system;
+            scenario = "stopped-pair";
+          };
+          vm-harness-native-gateway-stop-retention = import ./tests/nix/vm-harness/native-oci.nix {
+            inherit self nixpkgs system;
+            scenario = "stop-retention";
+          };
           vm-harness-acceptance-project-image = import ./tests/nix/vm-harness/acceptance-project-image.nix {
             inherit self nixpkgs system;
           };
           vm-harness-acceptance-nft = import ./tests/nix/firewall/firewall-nixos-nft-test.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-acceptance-egress-denial = import ./tests/nix/firewall/firewall-egress-bootstrap-test.nix {
-            inherit self nixpkgs system;
-          };
+          vm-harness-acceptance-egress-denial =
+            import ./tests/nix/firewall/firewall-egress-bootstrap-test.nix
+              {
+                inherit self nixpkgs system;
+              };
           vm-harness-acceptance-firewalld = import ./tests/nix/firewall/firewall-firewalld-test.nix {
             inherit self nixpkgs system;
           };
@@ -225,6 +235,11 @@
           vm-harness-native-instance = import ./tests/nix/vm-harness/native-instance.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-native-accepted-incus-observation =
+            import ./tests/nix/vm-harness/native-accepted-incus-observation.nix
+              {
+                inherit self nixpkgs system;
+              };
           vm-harness-synthetic-gateway = import ./tests/nix/vm-harness/gateway-topology.nix {
             inherit self nixpkgs system;
             synthetic = true;
@@ -237,11 +252,7 @@
           vm-harness-opencode-tool-loopback = import ./tests/nix/vm-harness/opencode-tool-loopback.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-full-stack = import ./tests/nix/vm-harness/gateway-topology.nix {
-            inherit self nixpkgs system;
-            synthetic = true;
-            fullStack = true;
-          };
+          # The Compose full-stack fixture is suspended pending the native port (#1115).
           vm-harness-ownership-recovery = import ./tests/nix/vm-harness/ownership-recovery.nix {
             inherit self nixpkgs system;
           };
@@ -272,9 +283,11 @@
         accepted-state-incus = import ./tests/nix/vm-harness/accepted-state-incus.nix {
           inherit self nixpkgs system;
         };
-        environment-project-state-incus = import ./tests/nix/vm-harness/environment-project-state-incus.nix {
-          inherit self nixpkgs system;
-        };
+        environment-project-state-incus =
+          import ./tests/nix/vm-harness/environment-project-state-incus.nix
+            {
+              inherit self nixpkgs system;
+            };
       });
 
       checks = forAllSystems (

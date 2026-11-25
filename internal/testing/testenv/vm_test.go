@@ -10,8 +10,16 @@ import (
 
 func TestVMScenariosAreFixedAndIndependent(t *testing.T) {
 	all := VMScenarios()
-	if len(all) != 19 {
-		t.Fatalf("expected nineteen public pinned scenarios, got %d", len(all))
+	if len(all) != 18 {
+		t.Fatalf("expected eighteen enabled public scenarios, got %d", len(all))
+	}
+	for _, scenario := range all {
+		if scenario.Name == "full-stack" {
+			t.Fatal("suspended full-stack scenario is discoverable")
+		}
+	}
+	if _, err := VMTestRequest("", "full-stack"); err == nil || !strings.Contains(err.Error(), "#1115") {
+		t.Fatalf("expected full-stack suspension error, got %v", err)
 	}
 	all[0].Name = "injected"
 	found, err := VMScenario("smoke")
