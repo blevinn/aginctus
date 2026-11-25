@@ -80,3 +80,25 @@ No service daemon, protected-volume read-only source, secret provisioning,
 NixOS systemd unit, or actual host/VM state service has been deployed by this
 stack. Existing same-UID local fixtures remain test-only; their normal
 absence/404 semantics are not authenticated production absence.
+
+## Existing mounted-volume read adapter (2026-11-24)
+
+`OpenMountedProjectPublishedSource` can read the existing immutable
+project/environment revision format from an explicitly selected, preexisting
+mountpoint inside a dedicated unprivileged service instance. It verifies
+private ownership, exact server/project binding, the existing revision and
+candidate hashes, the mountpoint's presence in kernel mount information,
+and the restricted Incus binding again after the read. It neither mounts,
+initializes, adopts, creates, publishes nor deletes anything.
+
+**Mountpoint presence is not Incus ownership evidence.** The independent
+host-side `VerifyProjectServiceAttachment` must first establish the actual
+project-owned instance, exclusive custom-volume attachment, and intended
+mount path. A dedicated disposable VM must establish service UID,
+AppArmor, restart/recreation persistence and foreign-volume refusal.
+
+Hermetic tests substitute only the mountpoint probe; production constructors
+always inspect `/proc/self/mountinfo` and refuse uid 0. The same-UID
+filesystem fixture used by tests is not sufficient to pass the production
+mountpoint check. This adapter remains non-deployable until the service
+peer-authority gate and physical instance/volume evidence pass.
