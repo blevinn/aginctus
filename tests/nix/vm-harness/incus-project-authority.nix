@@ -50,9 +50,35 @@ pkgs.testers.runNixOSTest {
       # Deliberately no incus or incus-admin membership: confined TLS only.
       extraGroups = [ ];
     };
+    # Independent second principals. They own their own ephemeral keys and are
+    # never used to authenticate the reader; they only populate the trust store
+    # so the PEER-read projection can be measured with real records.
+    users.users.peer = {
+      uid = 1001;
+      isNormalUser = true;
+      home = "/home/peer";
+      createHome = true;
+      extraGroups = [ ];
+    };
+    users.users.foreignpeer = {
+      uid = 1002;
+      isNormalUser = true;
+      home = "/home/foreignpeer";
+      createHome = true;
+      extraGroups = [ ];
+    };
+    users.users.multipeer = {
+      uid = 1003;
+      isNormalUser = true;
+      home = "/home/multipeer";
+      createHome = true;
+      extraGroups = [ ];
+    };
   };
 
   testScript = ''
+    import base64
+    import hashlib
     import json
     import shlex
     start_all()
@@ -179,6 +205,119 @@ pkgs.testers.runNixOSTest {
       "restricted project trust permissions are not exact"
     )
     print("PROJECT STATE SERVICE AUTH: live restricted certificate read confirmed")
+
+    # The state-service peer decision is made against the PRESENTED PEER's
+    # trust record, not the reader's own record. The self-read above does not
+    # exercise that path, so enroll independent second principals and measure
+    # the peer-read projection with the SAME restricted reader identity, the
+    # SAME HTTP route and the SAME guest-local administrator for enrollment.
+    def certificate_fingerprint(path):
+        return machine.succeed(
+          "openssl x509 -in " + path + " -noout -fingerprint -sha256"
+        ).strip().split("=", 1)[1].replace(":", "").lower()
+
+    # Mirrors internal/orchestration/environment/live_incus_peer_authorizer.go:
+    # a trust record is accepted only with an exact fingerprint match, client
+    # certificate type, restricted flag and EXACTLY one project equal to the
+    # reader's own project. Anything else must fail closed.
+    def peer_read_accepted(status, response, fingerprint):
+        if status != 200 or not isinstance(response, dict) or response.get("type") != "sync":
+            return False
+        trusted = response.get("metadata")
+        if not isinstance(trusted, dict):
+            return False
+        return (
+            trusted.get("fingerprint", "").lower() == fingerprint
+            and trusted.get("type") == "client"
+            and trusted.get("restricted") is True
+            and trusted.get("projects") == ["aginctus-authz"]
+        )
+
+    peer = "runuser -u peer -- env HOME=/home/peer USER=peer LOGNAME=peer"
+    foreignpeer = "runuser -u foreignpeer -- env HOME=/home/foreignpeer USER=foreignpeer LOGNAME=foreignpeer"
+    multipeer = "runuser -u multipeer -- env HOME=/home/multipeer USER=multipeer LOGNAME=multipeer"
+    machine.succeed(peer + " incus remote generate-certificate")
+    machine.succeed("test -f /home/peer/.config/incus/client.crt")
+    machine.succeed(foreignpeer + " incus remote generate-certificate")
+    machine.succeed("test -f /home/foreignpeer/.config/incus/client.crt")
+    machine.succeed(multipeer + " incus remote generate-certificate")
+    machine.succeed("test -f /home/multipeer/.config/incus/client.crt")
+    # The administrator imports only the PUBLIC certificates. Every principal
+    # stays restricted to exactly one project, except the deliberately
+    # multi-project control, which must be rejected by the exactness rule.
+    machine.succeed("incus config trust add-certificate /home/peer/.config/incus/client.crt --restricted --projects aginctus-authz")
+    machine.succeed("incus config trust add-certificate /home/foreignpeer/.config/incus/client.crt --restricted --projects unrelated")
+    machine.succeed("incus config trust add-certificate /home/multipeer/.config/incus/client.crt --restricted --projects aginctus-authz,unrelated")
+    peer_fp = certificate_fingerprint("/home/peer/.config/incus/client.crt")
+    foreign_fp = certificate_fingerprint("/home/foreignpeer/.config/incus/client.crt")
+    multi_fp = certificate_fingerprint("/home/multipeer/.config/incus/client.crt")
+    assert len(peer_fp) == 64 and peer_fp != operator_fp, "peer TLS fingerprint unavailable"
+    assert len(foreign_fp) == 64 and foreign_fp not in [operator_fp, peer_fp], "foreign peer TLS fingerprint unavailable"
+    assert len(multi_fp) == 64 and multi_fp not in [operator_fp, peer_fp, foreign_fp], "multi-project peer TLS fingerprint unavailable"
+
+    # The restricted reader may resolve the PEER's trust record, and the
+    # returned record must satisfy the authorizer's exact acceptance rule.
+    status, peer_response = api_get("/1.0/certificates/" + peer_fp)
+    assert status == 200 and peer_response["type"] == "sync", (
+      "BLOCKED: restricted project principal cannot read a peer TLS trust record; " +
+      "state-service peer authorizer has no non-admin proof"
+    )
+    peer_trusted = peer_response["metadata"]
+    assert peer_trusted["fingerprint"].lower() == peer_fp, "peer TLS trust record fingerprint mismatch"
+    assert peer_trusted["type"] == "client", "peer TLS trust record is not a client certificate"
+    assert peer_trusted["restricted"] is True and peer_trusted["projects"] == ["aginctus-authz"], (
+      "peer TLS trust record project permissions are not exact"
+    )
+    # The authorizer also requires the returned PEM to be the presented peer's
+    # own certificate bytes, not a different or substituted record.
+    peer_pem = peer_trusted["certificate"]
+    assert peer_pem.startswith("-----BEGIN CERTIFICATE-----"), "peer TLS trust record is not PEM encoded"
+    peer_der = base64.b64decode("".join(peer_pem.strip().splitlines()[1:-1]))
+    assert hashlib.sha256(peer_der).hexdigest() == peer_fp, "peer TLS trust record is not the peer's own certificate"
+    assert peer_read_accepted(status, peer_response, peer_fp), "peer-read projection rejected an exact single-project peer record"
+    print("PROJECT STATE SERVICE PEER AUTH: restricted operator read peer trust record => HTTP 200, exact fingerprint, client type, restricted, projects exactly aginctus-authz")
+
+    # A trust record that is not EXACTLY one project equal to the reader's own
+    # project must never be accepted, whether or not Incus discloses it.
+    status, foreign_response = api_get("/1.0/certificates/" + foreign_fp)
+    foreign_trusted = foreign_response.get("metadata") if isinstance(foreign_response, dict) else None
+    foreign_projects = foreign_trusted.get("projects") if isinstance(foreign_trusted, dict) else None
+    print("AUTHZ PROJECT SCOPE: foreign-project peer record => HTTP " + str(status) + ", projects " + repr(foreign_projects))
+    assert not peer_read_accepted(status, foreign_response, foreign_fp), (
+      "a foreign-project trust record was accepted by the peer-read projection"
+    )
+    if status == 200:
+        assert foreign_projects == ["unrelated"], "foreign-project trust record does not carry the foreign project scope"
+    else:
+        assert isinstance(foreign_response, dict) and foreign_response.get("type") == "error", "foreign-project trust record read did not fail closed"
+
+    status, multi_response = api_get("/1.0/certificates/" + multi_fp)
+    multi_trusted = multi_response.get("metadata") if isinstance(multi_response, dict) else None
+    multi_projects = multi_trusted.get("projects") if isinstance(multi_trusted, dict) else None
+    print("AUTHZ PROJECT SCOPE: multi-project peer record => HTTP " + str(status) + ", projects " + repr(multi_projects))
+    assert not peer_read_accepted(status, multi_response, multi_fp), (
+      "a second-project trust record was accepted by the peer-read projection"
+    )
+    if status == 200:
+        assert sorted(multi_projects or []) == ["aginctus-authz", "unrelated"], "multi-project trust record does not carry both projects"
+    else:
+        assert isinstance(multi_response, dict) and multi_response.get("type") == "error", "multi-project trust record read did not fail closed"
+    print("AUTHZ PROJECT SCOPE: foreign-project and second-project trust records are not accepted by the exact peer-read projection")
+
+    # An unknown or mismatched fingerprint must not resolve to any record.
+    status, response = api_get("/1.0/certificates/" + ("0" * 64))
+    assert status in [403, 404] and response["type"] == "error", "unknown TLS fingerprint resolved to a trust record"
+    mismatched_fp = peer_fp[:-1] + ("0" if peer_fp[-1] != "0" else "1")
+    status, response = api_get("/1.0/certificates/" + mismatched_fp)
+    assert status in [403, 404] and response["type"] == "error", "mismatched TLS fingerprint resolved to a trust record"
+    print("AUTHZ PROJECT SCOPE: unknown and mismatched fingerprints resolve to no trust record")
+
+    # Revocation of the PEER's trust entry must fail the peer-read closed.
+    machine.succeed("incus config trust remove " + shlex.quote(peer_fp))
+    status, response = api_get("/1.0/certificates/" + peer_fp)
+    assert status in [403, 404] and response["type"] == "error", "removed peer TLS trust record is still readable"
+    assert not peer_read_accepted(status, response, peer_fp), "removed peer TLS trust record is still accepted by the peer-read projection"
+    print("PROJECT STATE SERVICE PEER REVOCATION: removed peer trust record no longer resolves for the restricted reader")
 
     def instances(path, admin=False):
         status, response = api_get(path, admin)
