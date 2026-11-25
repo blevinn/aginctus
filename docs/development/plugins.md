@@ -455,11 +455,13 @@ same window but do not block later operations on terminal non-passes. Parent
 cancellation stops both required and optional checks, including interval waits.
 Timeouts remain cooperative: trusted callbacks must honor their context.
 
-Condition-bound engines reject dry run before driver preflight: a simulated
-operation must not manufacture postcondition success. Existing unbound engine
-dry-run behavior is preserved. Ongoing observation scheduling, deployment-wide
-postflight, real product adapters and CLI adoption remain follow-up work
-under [#800](https://github.com/blevinn/aginctus/issues/800).
+Legacy condition-bound driver plans reject dry run before driver preflight.
+The [native plan binding](../design/native-incus-reconciliation.md#native-plan-selection-and-existing-engine-binding)
+has a separate observe-only capability and uses the same scheduler. It does
+not run apply callbacks or imply postcondition success in dry run. Existing
+unbound driver dry-run behavior is preserved. Ongoing observation scheduling,
+deployment-wide postflight and CLI adoption remain follow-up work under
+[#800](https://github.com/blevinn/aginctus/issues/800).
 
 Validate engine gates and the scoped fake-host integration:
 
