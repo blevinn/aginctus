@@ -73,7 +73,7 @@ func (s Spec) BindNative(enrolled environment.Descriptor, revision environment.A
 			return nil, err
 		}
 		if data != nil && !expectedVolume.IsZero() && !data.CreatedAt.Equal(expectedVolume) {
-			return nil, errors.New("Herdr state differs from authorized live incarnation")
+			return nil, errors.New("retained Herdr state differs from authorized live incarnation")
 		}
 		return data, statevolume.Verify(v, data)
 	}
