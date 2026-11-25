@@ -35,4 +35,4 @@ nix develop --offline -c go test ./internal/orchestration/... ./cmd/aginctus-pro
 nix develop --offline -c go test -race ./internal/orchestration ./internal/orchestration/environment
 ```
 
-These cover digest changes and strict fields, missing pins, malformed C graphs, bootstrap consent, host-effect exclusion, and revocation/recovery. The joined graph with C's actual SDK adapter still requires disposable Incus evidence.
+These cover digest changes and strict fields, missing pins, malformed C graphs, bootstrap consent, host-effect exclusion, and revocation/recovery. See the [C lifecycle handoff](native-lifecycle-components.md) for the actual adapter and disposable Incus fixture.
