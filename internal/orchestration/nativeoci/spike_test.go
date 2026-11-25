@@ -67,22 +67,11 @@ func TestDaemonOCI(t *testing.T) {
 	// Exercise project-bound, create-or-verify native gateway database storage.
 	// These are synthetic VM-only resources, never visible to the pilot daemon.
 	// Use the managed volume for the database recreation/persistence proof below.
-	gatewayVolume := native.GatewayVolumeIntent{Project: scope.Name, Pool: "spike", Name: "gateway-postgres"}
-	for attempt := range 2 {
-		result, err := native.EnsureLocalGatewayVolume(ctx, gatewayVolume)
-		if err != nil || !result.Verified || result.Created != (attempt == 0) {
-			t.Fatalf("native gateway volume create/reuse: %+v %v", result, err)
-		}
-	}
-	if err := client.CreateStoragePoolVolume("spike", api.StorageVolumesPost{
-		Name: "foreign-gateway-postgres", Type: "custom", ContentType: "filesystem",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := native.EnsureLocalGatewayVolume(ctx, native.GatewayVolumeIntent{
-		Project: scope.Name, Pool: "spike", Name: "foreign-gateway-postgres",
-	}); err == nil {
-		t.Fatal("native gateway volume adopted unmarked foreign volume")
+	descriptor := gatewayVolumeVMEnvironment(scope.Name, status.Environment.CertificateFingerprint, "123e4567-e89b-42d3-a456-426614174000")
+	gatewayVolume, err := gateway.EnsureNativeEnvironmentGatewayVolumeWithClient(ctx, descriptor, descriptor.Binding, "spike", client,
+		func(context.Context) error { return nil }) // This disposable test is the sole writer.
+	if err != nil || !gatewayVolume.Verified || !gatewayVolume.Created {
+		t.Fatalf("native gateway volume: %+v %v", gatewayVolume, err)
 	}
 	if err := server.UseProject("default").CreateNetwork(api.NetworksPost{Name: "spike-mgmt", Type: "bridge", NetworkPut: api.NetworkPut{Config: map[string]string{
 		"ipv4.address": "10.78.0.1/24", "ipv4.nat": "false", "ipv4.routing": "false", "ipv4.dhcp.gateway": "none", "ipv6.address": "none",
@@ -101,6 +90,7 @@ func TestDaemonOCI(t *testing.T) {
 		t.Fatal(err)
 	}
 	pinnedReferences := make(map[string]string)
+	createImages := make(map[string]gateway.NativeGatewayCreateImage)
 	for _, image := range []struct{ name, registry, repository, reference string }{
 		{"postgres", "docker.io", "library/postgres", "17-alpine"},
 		{"litellm", "ghcr.io", "berriai/litellm", "v1.103.0"},
@@ -211,6 +201,7 @@ func TestDaemonOCI(t *testing.T) {
 				t.Fatal("native alias create adopted a preexisting alias")
 			}
 			evidence := native.GatewayImageEvidence{Project: scope.Name, Alias: alias, Identity: identity}
+			createImages[image.name] = gateway.NativeGatewayCreateImage{Expected: identity, Evidence: evidence}
 			if err := native.ObserveLocalGatewayImageReuse(ctx, native.GatewayImageAcquireIntent{
 				Project: scope.Name, Image: identity,
 			}, alias, evidence); err != nil {
@@ -242,7 +233,7 @@ func TestDaemonOCI(t *testing.T) {
 				// reject this NIC on the DHCP-disabled bridge above.
 				planned, err := gateway.PlanNativeGatewayDevices(gateway.NativeGatewayTopology{
 					Deployment: "spike", Project: scope.Name, ManagementNetwork: "spike-mgmt",
-					EgressNetwork: "spike-egress", DatabaseVolume: gatewayVolume.Name,
+					EgressNetwork: "spike-egress", DatabaseVolume: gatewayVolume.Name, EnvironmentID: descriptor.ID,
 					Services: []gateway.NativeGatewayService{
 						{Name: "postgres", ImageReference: pinnedReferences["postgres"],
 							Networks: []gateway.NativeGatewayNetwork{{Name: "spike-mgmt"}}, Volume: gatewayVolume.Name,
@@ -380,6 +371,10 @@ func TestDaemonOCI(t *testing.T) {
 				SecretEnvironment: []string{"AGINCTUS_GATEWAY_POSTGRES_PASSWORD", "AGINCTUS_GATEWAY_MASTER_KEY", "AGINCTUS_GATEWAY_SALT_KEY"}},
 		},
 	}
+	topology, err = gateway.BindNativeGatewayTopology(topology, descriptor, descriptor.Binding)
+	if err != nil {
+		t.Fatal(err)
+	}
 	gatewayDevices, err := gateway.PlanNativeGatewayDevices(topology, "spike", "spike")
 	if err != nil {
 		t.Fatal(err)
@@ -390,11 +385,12 @@ func TestDaemonOCI(t *testing.T) {
 	}
 	fenceChecks := 0
 	fence := func(context.Context) error { fenceChecks++; return nil }
-	created, err := gateway.CreateStoppedGatewayWithClient(ctx, topology, gatewayDevices, gatewayPair, gatewayStoppedVMClient{client}, fence)
+	gatewayImages := gateway.NativeGatewayCreateImages{Postgres: createImages["postgres"], LiteLLM: createImages["litellm"]}
+	created, err := gateway.CreateStoppedGatewayWithClient(ctx, topology, gatewayDevices, gatewayPair, gatewayImages, gatewayStoppedVMClient{client}, fence)
 	if err != nil || len(created.Created) != 2 || len(created.Verified) != 2 || fenceChecks != 2 {
 		t.Fatalf("real Incus stopped native gateway create: %+v %v guards=%d", created, err, fenceChecks)
 	}
-	for _, name := range []string{"postgres-1", "litellm-1"} {
+	for _, name := range []string{gatewayPair.Postgres.Name, gatewayPair.LiteLLM.Name} {
 		got, _, err := client.GetInstance(name)
 		if err != nil || got.Status != "Stopped" || got.Config["user.aginctus.resource"] != "gateway-instance" {
 			t.Fatalf("native gateway instance not owned and stopped: %s %v", name, err)
@@ -403,7 +399,7 @@ func TestDaemonOCI(t *testing.T) {
 			t.Fatal("native create leaked runtime credentials")
 		}
 	}
-	repeat, err := gateway.CreateStoppedGatewayWithClient(ctx, topology, gatewayDevices, gatewayPair, gatewayStoppedVMClient{client}, fence)
+	repeat, err := gateway.CreateStoppedGatewayWithClient(ctx, topology, gatewayDevices, gatewayPair, gatewayImages, gatewayStoppedVMClient{client}, fence)
 	if err != nil || len(repeat.Created) != 0 || len(repeat.Verified) != 2 || fenceChecks != 2 {
 		t.Fatalf("native stopped gateway reuse was not a no-op: %+v %v", repeat, err)
 	}
@@ -411,7 +407,7 @@ func TestDaemonOCI(t *testing.T) {
 	// containers while preserving the existing image and volume inventory.
 	gatewayStatus, err := gateway.InspectNativeGatewayStatusWithReader(ctx, topology, gatewayDevices, gatewayPair, gatewayStopVMClient{client})
 	if err != nil || !gatewayStatus.AllStopped || gatewayStatus.AllRunning || len(gatewayStatus.Services) != 2 ||
-		gatewayStatus.Services[0].Name != "postgres-1" || gatewayStatus.Services[1].Name != "litellm-1" {
+		gatewayStatus.Services[0].Name != gatewayPair.Postgres.Name || gatewayStatus.Services[1].Name != gatewayPair.LiteLLM.Name {
 		t.Fatalf("native gateway real-Incus status failed: %+v %v", gatewayStatus, err)
 	}
 	// Stop is tested as a non-destructive no-op on the new stopped service
@@ -430,13 +426,13 @@ func TestDaemonOCI(t *testing.T) {
 	// Alter the ownership marker through the disposable test administrator
 	// only. The guarded stop must refuse the foreign instance and retain all
 	// resources. No attempt is made to repair/adopt it.
-	foreignInstance, etag, err := client.GetInstance("litellm-1")
+	foreignInstance, etag, err := client.GetInstance(gatewayPair.LiteLLM.Name)
 	if err != nil {
 		t.Fatal(err)
 	}
 	foreignPut := foreignInstance.Writable()
 	foreignPut.Config["user.aginctus.resource"] = "foreign"
-	op, err := client.UpdateInstance("litellm-1", foreignPut, etag)
+	op, err := client.UpdateInstance(gatewayPair.LiteLLM.Name, foreignPut, etag)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -450,7 +446,7 @@ func TestDaemonOCI(t *testing.T) {
 	if _, err := gateway.InspectNativeGatewayStatusWithReader(ctx, topology, gatewayDevices, gatewayPair, gatewayStopVMClient{client}); err == nil {
 		t.Fatal("native status accepted foreign existing gateway ownership")
 	}
-	if _, _, err := client.GetStoragePoolVolume("spike", "custom", "gateway-postgres"); err != nil {
+	if _, _, err := client.GetStoragePoolVolume("spike", "custom", gatewayVolume.Name); err != nil {
 		t.Fatal("failed stop must preserve database volume")
 	}
 	images, err := server.UseProject("default").GetImages()

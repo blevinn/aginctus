@@ -60,6 +60,49 @@ Requires an x86_64-linux KVM worker and sufficient disk space. The Go acceptance
 tests skip without both the explicit opt-in and the guest-only marker. Hermetic
 checks do not run the VM; a skipped Go test is not real-Incus acceptance.
 
+The separate accepted-workload observation gate runs on an x86_64 Linux KVM
+worker:
+
+```sh
+env -u QEMU_OPTS -u QEMU_KERNEL_PARAMS -u SSH_AUTH_SOCK \
+  timeout --kill-after=15s 12m nix --quiet build --no-update-lock-file --no-link -L \
+  .#vm-harness-native-accepted-incus-observation
+```
+
+Use `--rebuild` only when the exact target has already been built. It is rejected
+for an unrealized target; a normal build is the fresh invocation in that case.
+The current local VM exercise used Incus client/server 7.5.1, passed all three
+observer subtests, verified both project inventories unchanged, and completed
+QEMU/VM cleanup. This is exercise-only evidence from this host, not proof of a
+dedicated worker or live provider.
+
+The observer runs as an unprivileged guest user with an ephemeral,
+project-restricted TLS credential and a same-UID immutable revision fixture.
+It checks selected convergence and drift, permits absence only in the verified
+project, and rejects wrong scope and a readable same-project foreign owner.
+Check the guest Go `PASS` and unchanged-inventory message in the build log.
+The fixture does not establish production accepted-state provenance, a writer
+grant, privileged activation, or operator acceptance. The synthetic enrolled
+TLS client identity is confined to the disposable guest and restricted to the
+`team` project; the Unix admin socket is denied to the observer. This checks
+Incus API authorization behavior, not host containment or production credential
+provisioning.
+
+To reproduce the local exercise, ensure Nix flakes, x86_64 Linux KVM
+(`/dev/kvm`), Incus, and enough scratch disk are available. Before running the
+build above, use `git rev-parse HEAD` to record the revision and verify no live
+provider or host daemon is selected; the target starts its own disposable
+Incus guest. Local results are exercise-only and do not establish behavior on a
+dedicated worker or a live provider.
+
+The last recorded hermetic snapshot was eight passing suites. The standalone
+Go race suites and layout check passed on the refreshed PR candidate; the
+standalone VM test skipped without its VM opt-in, as intended. Nix formatting
+passed after formatting the merged flake definitions. After merging `main`,
+rerun `just check ci`, `just check layout`, Nix formatting, the race suites, and
+the VM target on the resulting head. GitHub checks for the refreshed head are
+not yet available.
+
 `aginctus testenv vm` is the new typed operator CLI. In this first increment,
 `list` and `plan` are offline and read-only, and `test` reuses **the existing
 Python batch runner and its evidence files**, selected by fixed scenario name:
@@ -124,7 +167,6 @@ nix develop -c just test-vm-runtime-lifecycle
 nix develop -c just test-vm-gateway-topology
 nix develop -c just test-vm-synthetic-gateway
 nix develop -c just test-vm-synthetic-tool-gateway
-nix --quiet develop --no-update-lock-file -c just test-vm-full-stack
 nix develop -c just test-vm-ownership-recovery
 nix develop -c just vm-debug
 ```

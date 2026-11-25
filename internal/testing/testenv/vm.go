@@ -27,15 +27,25 @@ func VMScenarios() []Scenario {
 	all := catalog.PublicVMScenarios()
 	result := make([]Scenario, 0, len(all))
 	for _, scenario := range all {
-		result = append(result, Scenario{Name: scenario.Name, Target: scenario.Target, Description: scenario.Description})
+		if scenario.Disabled {
+			continue
+		}
+		result = append(result, describeScenario(scenario))
 	}
 	return result
 }
 
+func describeScenario(scenario catalog.Scenario) Scenario {
+	return Scenario{Name: scenario.Name, Target: scenario.Target, Description: scenario.Description}
+}
+
 func VMScenario(name string) (Scenario, error) {
-	for _, scenario := range VMScenarios() {
+	for _, scenario := range catalog.PublicVMScenarios() {
 		if name == scenario.Name {
-			return scenario, nil
+			if scenario.Disabled {
+				return Scenario{}, errors.New(scenario.Description)
+			}
+			return describeScenario(scenario), nil
 		}
 	}
 	return Scenario{}, fmt.Errorf("unknown VM scenario %q", name)

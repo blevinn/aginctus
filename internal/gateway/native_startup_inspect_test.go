@@ -9,7 +9,7 @@ import (
 
 func TestNativeGatewayStartupInspectionMissingRuntime(t *testing.T){
 	top,devices,pair,client:=stoppedClientFixture(t)
-	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil})
+	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client.imagesForCreate,client,func(context.Context)error{return nil})
 	if err!=nil {t.Fatal(err)}
 	inspection,err:=InspectNativeGatewayStartupWithReader(context.Background(),top,devices,pair,client)
 	if err!=nil || inspection.RuntimeKeysPresent || len(inspection.Missing)!=7 ||
@@ -19,7 +19,7 @@ func TestNativeGatewayStartupInspectionMissingRuntime(t *testing.T){
 }
 func TestNativeGatewayStartupInspectionRedacted(t *testing.T){
 	top,devices,pair,client:=stoppedClientFixture(t)
-	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil})
+	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client.imagesForCreate,client,func(context.Context)error{return nil})
 	if err!=nil {t.Fatal(err)}
 	const sensitive="unique-synthetic-credential-hex"
 	for _,req:=range NativeGatewayRuntimeRequirements(){
@@ -34,7 +34,7 @@ func TestNativeGatewayStartupInspectionRedacted(t *testing.T){
 }
 func TestNativeGatewayStartupInspectionRejectsForeignAndRunning(t *testing.T){
 	top,devices,pair,client:=stoppedClientFixture(t)
-	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil})
+	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client.imagesForCreate,client,func(context.Context)error{return nil})
 	if err!=nil {t.Fatal(err)}
 	client.instances["litellm-1"].Status="Running"
 	if _,err:=InspectNativeGatewayStartupWithReader(context.Background(),top,devices,pair,client);err==nil {t.Fatal("running service accepted")}

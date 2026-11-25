@@ -20,10 +20,18 @@ type fakeIncusClient struct {
 	err          error
 	httpsAddress string
 	httpsMissing bool
+	httpsSetCalls int
+	httpsSetAddress string
 }
 
 func (c *fakeIncusClient) ServerVersion(context.Context) (string, error) {
 	return c.version, c.err
+}
+
+func (c *fakeIncusClient) SetHTTPSAddress(_ context.Context, address string) error {
+	c.httpsSetCalls++
+	c.httpsSetAddress = address
+	return nil
 }
 
 func (c *fakeIncusClient) HTTPSAddress(context.Context) (string, error) {
@@ -560,18 +568,11 @@ func TestDoctorDetectsMissingHTTPSListener(t *testing.T) {
 }
 
 func TestDoctorFixConfiguresLoopbackOnly(t *testing.T) {
-	previous := setIncusHTTPSAddress
-	t.Cleanup(func() { setIncusHTTPSAddress = previous })
-	var called string
-	setIncusHTTPSAddress = func(_ context.Context, address string) error {
-		called = address
-		return nil
-	}
 	var stdout, stderr bytes.Buffer
 	client := &fakeIncusClient{version: "7.0.1", httpsMissing: true}
 	code := Run(context.Background(), []string{"doctor", "--fix"}, &stdout, &stderr, client, &fakeConfigLoader{})
-	if code != 0 || called != "127.0.0.1:8443" {
-		t.Fatalf("code=%d, address=%q, stderr=%q", code, called, stderr.String())
+	if code != 0 || client.httpsSetAddress != "127.0.0.1:8443" {
+		t.Fatalf("code=%d, address=%q, stderr=%q", code, client.httpsSetAddress, stderr.String())
 	}
 }
 

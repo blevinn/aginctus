@@ -88,13 +88,11 @@ an explicit gate.
 
 ## Synthetic Herdr/OpenCode full-stack scenario (#558)
 
-`just test-vm-full-stack` selects the fixed `full-stack` registry entry and
-`vm-harness-full-stack` NixOS driver. It is opt-in, excluded from hermetic CI,
-and must run only on the dedicated, unprivileged x86_64 KVM worker described
-above. No suitable worker was used to accept this implementation. A passing
-hostless test or derivation evaluation does **not** establish a working E2E run.
-Existing topology acceptance is separate evidence and need not be rerun just
-to validate this scenario's hermetic changes.
+**Suspended during Compose retirement.** `just test-vm-full-stack` refuses to
+run and the NixOS driver is no longer exported by the flake. The fixture and
+evidence readers are retained for the [native orchestration port](https://github.com/blevinn/aginctus/issues/1115).
+The contract below describes the retained fixture. No end-to-end passing KVM
+run was demonstrated; hostless checks are not runtime acceptance.
 
 The scenario imports the [test-only OCI staging module](#test-only-immutable-oci-staging-interface-532),
 uses its native-platform immutable leaf digests, and checks staged aliases
@@ -213,13 +211,13 @@ Hostless validation, safe in the current multipurpose checkout:
 ```sh
 nix --quiet develop --no-update-lock-file -c python3 -m unittest tests.vm_harness.test_full_stack tests.vm_harness.test_guest_credentials tests.vm_harness.test_tool_sequence tests.vm_harness.test_synthetic_responses tests.vm_harness.test_runner -v
 nix --quiet develop --no-update-lock-file -c go test ./internal/testing/testenv ./tests/oci-stage
-nix --quiet eval --no-update-lock-file .#vm-harness-full-stack.drvPath
 nix --quiet develop --no-update-lock-file -c just check report-json
 ```
 
-Next operator gate, **only on a separately authorized dedicated KVM worker**:
-apply worker CPU/storage quotas, confirm no pilot credentials/routes/Incus
-privilege, then run the fixed command above. Preserve the private runner
+After the native port, validate before restoring the public launch paths,
+**only on a separately authorized dedicated KVM worker**: apply worker
+CPU/storage quotas and confirm no pilot credentials, routes, or Incus
+privileges. Preserve the private runner
 result with revision and lock hash, reviewed staging receipts, phase outcomes,
 and packet-counter observations. Inspect failures without sharing raw driver
 transcripts. The runner has a 15-minute total runtime deadline, including OCI
