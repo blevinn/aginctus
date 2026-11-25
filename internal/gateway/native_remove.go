@@ -170,7 +170,10 @@ func gatewayRootDiscardableConfig(instance *api.Instance) bool {
 	for _, config := range []map[string]string{instance.Config, instance.ExpandedConfig} {
 		for key := range config {
 			switch key {
-			case "user.aginctus.managed", "user.aginctus.resource", "user.aginctus.role", "user.aginctus.deployment", "user.aginctus.environment-id":
+			case "user.aginctus.managed", "user.aginctus.resource", "user.aginctus.role", "user.aginctus.deployment", "user.aginctus.environment-id",
+				// Incus materializes these four settings when creating from OCI.
+				// Removal never interprets them or executes the guest entrypoint.
+				"oci.entrypoint", "oci.cwd", "oci.uid", "oci.gid":
 			default:
 				if !strings.HasPrefix(key, "volatile.") && !strings.HasPrefix(key, "image.") {
 					return false

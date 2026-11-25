@@ -51,6 +51,7 @@ func gatewayRemovalFixture(t *testing.T) (NativeGatewayTopology, NativeGatewayDe
 	start.instances[pair.Postgres.Name].Config["volatile.uuid"] = "123e4567-e89b-42d3-a456-426614174010"
 	start.instances[pair.LiteLLM.Name].CreatedAt = now.Add(time.Second)
 	start.instances[pair.LiteLLM.Name].Config["volatile.uuid"] = "123e4567-e89b-42d3-a456-426614174011"
+	start.instances[pair.LiteLLM.Name].Config["oci.entrypoint"] = "/test-fixture"
 	start.volume.CreatedAt = now.Add(-time.Second)
 	start.volume.UsedBy = []string{"/1.0/instances/" + pair.Postgres.Name + "?project=" + top.Project}
 	start.created = nil
