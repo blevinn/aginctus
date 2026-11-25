@@ -14,13 +14,14 @@ import (
 // accepted revision. WorkloadChanges contains field names, not values.
 type CandidateDiff struct {
 	EnvironmentID      string                       `json:"environmentID"`
-	IncusProject        string                       `json:"incusProject"`
-	PreviousDigest      string                       `json:"previousDigest"`
-	ProposedDigest      string                       `json:"proposedDigest"`
-	DisplayNameChanged  bool                         `json:"displayNameChanged"`
-	GatewayChanged      bool                         `json:"gatewayChanged"`
-	Changed             bool                         `json:"changed"`
-	WorkloadChanges     acceptedstate.DeploymentDiff `json:"workloadChanges"`
+	IncusProject       string                       `json:"incusProject"`
+	PreviousDigest     string                       `json:"previousDigest"`
+	ProposedDigest     string                       `json:"proposedDigest"`
+	DisplayNameChanged bool                         `json:"displayNameChanged"`
+	GatewayChanged     bool                         `json:"gatewayChanged"`
+	HerdrChanged       bool                         `json:"herdrChanged"`
+	Changed            bool                         `json:"changed"`
+	WorkloadChanges    acceptedstate.DeploymentDiff `json:"workloadChanges"`
 }
 
 // CompareCandidates compares two complete, typed declarations for one
@@ -61,14 +62,15 @@ func CompareCandidates(enrolled Descriptor, observed Binding, previous, proposed
 	previousSHA := sha256.Sum256(prior)
 	proposedSHA := sha256.Sum256(next)
 	return CandidateDiff{
-		EnvironmentID: enrolled.ID,
-		IncusProject: enrolled.Binding.Project,
-		PreviousDigest: hex.EncodeToString(previousSHA[:]),
-		ProposedDigest: hex.EncodeToString(proposedSHA[:]),
+		EnvironmentID:      enrolled.ID,
+		IncusProject:       enrolled.Binding.Project,
+		PreviousDigest:     hex.EncodeToString(previousSHA[:]),
+		ProposedDigest:     hex.EncodeToString(proposedSHA[:]),
 		DisplayNameChanged: previous.Environment.Name != proposed.Environment.Name,
 		GatewayChanged:     !sameGatewaySpec(previous.Gateway, proposed.Gateway),
-		Changed: previousSHA != proposedSHA,
-		WorkloadChanges: changes,
+		HerdrChanged:       (previous.Herdr == nil) != (proposed.Herdr == nil) || previous.Herdr != nil && proposed.Herdr != nil && *previous.Herdr != *proposed.Herdr,
+		Changed:            previousSHA != proposedSHA,
+		WorkloadChanges:    changes,
 	}, nil
 }
 
@@ -78,12 +80,12 @@ func CompareCandidates(enrolled Descriptor, observed Binding, previous, proposed
 func candidateDeployment(c Candidate) acceptedstate.DeploymentSpec {
 	return acceptedstate.DeploymentSpec{
 		APIVersion: acceptedstate.DeploymentAPIVersion,
-		Kind: acceptedstate.DeploymentKind,
+		Kind:       acceptedstate.DeploymentKind,
 		Selection: acceptedstate.SelectionManifest{
-			APIVersion: acceptedstate.SelectionAPIVersion,
-			Kind: acceptedstate.SelectionKind,
-			DeploymentID: c.Environment.ID,
-			IncusProject: c.Environment.Binding.Project,
+			APIVersion:        acceptedstate.SelectionAPIVersion,
+			Kind:              acceptedstate.SelectionKind,
+			DeploymentID:      c.Environment.ID,
+			IncusProject:      c.Environment.Binding.Project,
 			SelectedWorkloads: c.SelectedWorkloads,
 		},
 		Workloads: c.Workloads,
