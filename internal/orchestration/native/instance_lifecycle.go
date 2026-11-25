@@ -185,8 +185,7 @@ func EnsureInstanceStateWithClient(
 	if err := ctx.Err(); err != nil {
 		return InstanceLifecycleResult{}, err
 	}
-	info, err := client.GetConnectionInfo()
-	if err != nil || localTransport(info, intent.Scope.Name) != nil {
+	if err := verifyInstanceTransport(ctx, client, intent.Scope.Name); err != nil {
 		return InstanceLifecycleResult{}, &ReconcileError{
 			Stage: "transport", cause: fmt.Errorf("native instance lifecycle requires the local Incus socket and the selected project"),
 		}
