@@ -52,6 +52,16 @@ in
     inherit vendorHash;
     subPackages = [ "./cmd/aginctus-state" ];
   };
+  # Opt-in, nonroot, read-only project-state HTTPS server. Not enabled by
+  # NixOS/Home Manager activation; requires independent project-volume and
+  # restricted TLS authority evidence before production deployment.
+  state-project-read = pkgs.buildGoModule {
+    pname = "aginctus-project-state-read";
+    version = releaseVersion;
+    src = sourceRoot;
+    inherit vendorHash;
+    subPackages = [ "./cmd/aginctus-project-state-read" ];
+  };
   # Test-only project-volume fixture. It accepts only same-UID local candidate
   # revisions and cannot authenticate a project or invoke the Incus daemon.
   state-project-fixture = pkgs.buildGoModule {
