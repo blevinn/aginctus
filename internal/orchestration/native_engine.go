@@ -15,8 +15,8 @@ import (
 type NativeAction = native.Action
 
 const (
-	NativeStart NativeAction = "start"
-	NativeStop  NativeAction = "stop"
+	NativeStart = native.Start
+	NativeStop  = native.Stop
 )
 
 // NativeEffect identifies one action on an exact domain-resolved target.
@@ -217,9 +217,9 @@ func detachedResource(r NativeResource) NativeResource {
 
 func allowedNativeEffect(kind NativeResourceKind, action NativeAction) bool {
 	switch kind {
-	case NativeWorkload:
-		return action == native.Update || action == NativeStart
-	case NativeGatewayImage, NativeGatewayVolume, NativeGatewayInstance:
+	case NativeWorkload, NativeHerdrInstance:
+		return action == native.Create || action == native.Update || action == NativeStart || action == NativeStop || action == native.Delete
+	case NativeHerdrVolume, NativeGatewayImage, NativeGatewayVolume, NativeGatewayInstance:
 		return action == native.Create
 	case NativeGatewayRuntime:
 		return action == native.Update || action == NativeStart || action == NativeStop
