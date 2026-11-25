@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"path/filepath"
 	"slices"
 
 	incus "github.com/lxc/incus/v7/client"
@@ -21,6 +20,27 @@ type InstanceReader interface {
 	GetInstance(string) (*api.Instance, string, error)
 	GetImageAlias(string) (*api.ImageAliasesEntry, string, error)
 	GetImage(string) (*api.Image, string, error)
+}
+
+type instanceImageReader interface {
+	GetImageAlias(string) (*api.ImageAliasesEntry, string, error)
+	GetImage(string) (*api.Image, string, error)
+}
+
+func resolveInstanceImage(intent InstanceIntent, reader instanceImageReader) (string, error) {
+	fingerprint := intent.ImageFingerprint
+	if fingerprint == "" {
+		alias, _, err := reader.GetImageAlias(intent.ImageAlias)
+		if err != nil || alias == nil || alias.Name != intent.ImageAlias || !fingerprintPattern.MatchString(alias.Target) {
+			return "", fmt.Errorf("selected project image alias unverified")
+		}
+		fingerprint = alias.Target
+	}
+	image, _, err := reader.GetImage(fingerprint)
+	if err != nil || image == nil || image.Fingerprint != fingerprint || image.Project != intent.Identity.Project || image.Type != intent.Type {
+		return "", fmt.Errorf("selected project image identity unverified")
+	}
+	return fingerprint, nil
 }
 
 func PlanLocalExistingInstance(ctx context.Context, intent InstanceIntent) (InstancePlan, error) {
@@ -45,8 +65,7 @@ func PlanWithInstanceReader(ctx context.Context, intent InstanceIntent, reader I
 	if err := ctx.Err(); err != nil {
 		return InstancePlan{}, err
 	}
-	connection, err := reader.GetConnectionInfo()
-	if err != nil || connection == nil || connection.Protocol != "incus" || !filepath.IsAbs(connection.SocketPath) || connection.Project != intent.Identity.Project {
+	if err := verifyInstanceTransport(ctx, reader, intent.Identity.Project); err != nil {
 		return InstancePlan{}, observationFailure(ctx, "instance observation requires exact local project transport")
 	}
 	scope, _ := incusscope.NewProjectScope(intent.Identity.Project)
@@ -64,15 +83,11 @@ func PlanWithInstanceReader(ctx context.Context, intent InstanceIntent, reader I
 	if err != nil || instance == nil || etag == "" {
 		return InstancePlan{}, observationFailure(ctx, "selected existing instance unavailable")
 	}
-	alias, _, err := reader.GetImageAlias(intent.ImageAlias)
-	if err != nil || alias == nil || alias.Name != intent.ImageAlias || !fingerprintPattern.MatchString(alias.Target) {
-		return InstancePlan{}, observationFailure(ctx, "selected local image alias unavailable")
-	}
-	image, _, err := reader.GetImage(alias.Target)
-	if err != nil || image == nil || image.Fingerprint != alias.Target || image.Project != scope.Name || image.Type != intent.Type {
+	fingerprint, err := resolveInstanceImage(intent, reader)
+	if err != nil {
 		return InstancePlan{}, observationFailure(ctx, "selected project image identity unverified")
 	}
-	observation := instanceObservation(instance, alias.Target)
+	observation := instanceObservation(instance, fingerprint)
 	plan, err := PlanExistingInstance(intent, observation)
 	if err != nil {
 		return InstancePlan{}, err
@@ -83,12 +98,12 @@ func PlanWithInstanceReader(ctx context.Context, intent InstanceIntent, reader I
 	// Fail closed on changes during observation. This still is not a lock or
 	// authorization for a later write, even when all observations agree.
 	again, afterETag, err := reader.GetInstance(intent.Identity.Name)
-	if err != nil || again == nil || etag != afterETag || !EqualObservation(observation, instanceObservation(again, alias.Target)) || !instance.CreatedAt.Equal(again.CreatedAt) {
+	if err != nil || again == nil || etag != afterETag || !EqualObservation(observation, instanceObservation(again, fingerprint)) || !instance.CreatedAt.Equal(again.CreatedAt) {
 		return InstancePlan{}, observationFailure(ctx, "selected instance changed during observation")
 	}
-	afterAlias, _, err := reader.GetImageAlias(intent.ImageAlias)
-	if err != nil || afterAlias == nil || afterAlias.Name != alias.Name || afterAlias.Target != alias.Target {
-		return InstancePlan{}, observationFailure(ctx, "selected image alias changed during observation")
+	afterFingerprint, err := resolveInstanceImage(intent, reader)
+	if err != nil || afterFingerprint != fingerprint {
+		return InstancePlan{}, observationFailure(ctx, "selected image changed during observation")
 	}
 	if err := checkProject(); err != nil {
 		return InstancePlan{}, err

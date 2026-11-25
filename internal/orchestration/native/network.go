@@ -110,6 +110,7 @@ type NetworkObservation struct {
 	// manages it, so a reconcile must send it back unchanged.
 	Description string
 	Config      map[string]string
+	UsedBy      []string
 }
 
 // NetworkPlan is the read-only outcome of comparing intent with observation.
@@ -211,6 +212,9 @@ func PlanNetworkRemoval(intent NetworkIntent, observed *NetworkObservation) (Net
 		// with explicit adoption authorization.
 		return NetworkRemovalPlan{}, fmt.Errorf("existing network type does not match the management bridge")
 	}
+	if len(observed.UsedBy) != 0 {
+		return NetworkRemovalPlan{}, fmt.Errorf("management bridge is still in use")
+	}
 	plan.Present = true
 	return plan, nil
 }
@@ -254,6 +258,22 @@ func PlanLocalNetwork(ctx context.Context, intent NetworkIntent) (NetworkPlan, e
 	}
 	defer cancel()
 	defer client.Disconnect()
+	return PlanNetworkWithReader(ctx, intent, client)
+}
+
+// NetworkReader provides only local host-scope observation.
+type NetworkReader interface {
+	GetConnectionInfo() (*incus.ConnectionInfo, error)
+	GetNetwork(string) (*api.Network, string, error)
+}
+
+func PlanNetworkWithReader(ctx context.Context, intent NetworkIntent, client NetworkReader) (NetworkPlan, error) {
+	if err := intent.Validate(); err != nil {
+		return NetworkPlan{}, err
+	}
+	if err := requireLocalScope(client, intent); err != nil {
+		return NetworkPlan{}, &ReconcileError{Stage: "transport", cause: err}
+	}
 	observed, etag, err := observeNetwork(ctx, client, intent.Name)
 	if err != nil {
 		return NetworkPlan{}, &ReconcileError{Stage: "observation", cause: err}
@@ -277,6 +297,16 @@ func PlanLocalNetworkRemoval(ctx context.Context, intent NetworkIntent) (Network
 	}
 	defer cancel()
 	defer client.Disconnect()
+	return PlanNetworkRemovalWithReader(ctx, intent, client)
+}
+
+func PlanNetworkRemovalWithReader(ctx context.Context, intent NetworkIntent, client NetworkReader) (NetworkRemovalPlan, error) {
+	if err := intent.Validate(); err != nil {
+		return NetworkRemovalPlan{}, err
+	}
+	if err := requireLocalScope(client, intent); err != nil {
+		return NetworkRemovalPlan{}, &ReconcileError{Stage: "transport", cause: err}
+	}
 	observed, etag, err := observeNetwork(ctx, client, intent.Name)
 	if err != nil {
 		return NetworkRemovalPlan{}, &ReconcileError{Stage: "observation", cause: err}
@@ -435,6 +465,9 @@ func RemoveNetworkWithClient(ctx context.Context, intent NetworkIntent, client N
 		result.Verified = true
 		return result, nil
 	}
+	if len(current.UsedBy) != 0 {
+		return result, &ReconcileError{Stage: "mutation-boundary", cause: fmt.Errorf("management bridge is still in use")}
+	}
 	if err := ctx.Err(); err != nil {
 		return result, &ReconcileError{Stage: "cancellation", cause: err}
 	}
@@ -455,7 +488,7 @@ func RemoveNetworkWithClient(ctx context.Context, intent NetworkIntent, client N
 
 // requireLocalScope refuses any client that is not the local Incus socket
 // bound to the host-shared project of the intent.
-func requireLocalScope(client NetworkClient, intent NetworkIntent) error {
+func requireLocalScope(client NetworkReader, intent NetworkIntent) error {
 	info, err := client.GetConnectionInfo()
 	if err != nil {
 		return fmt.Errorf("native network reconciliation requires the local Incus socket")
@@ -465,7 +498,7 @@ func requireLocalScope(client NetworkClient, intent NetworkIntent) error {
 
 // observeNetwork reads one bridge. Absence is proven by an explicit
 // not-found status; any other lookup failure is not an empty observation.
-func observeNetwork(ctx context.Context, client NetworkClient, name string) (*NetworkObservation, string, error) {
+func observeNetwork(ctx context.Context, client NetworkReader, name string) (*NetworkObservation, string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, "", err
 	}
@@ -482,12 +515,13 @@ func observeNetwork(ctx context.Context, client NetworkClient, name string) (*Ne
 		Project:     network.Project,
 		Description: network.Description,
 		Config:      maps.Clone(network.Config),
+		UsedBy:      slices.Sorted(slices.Values(network.UsedBy)),
 	}, etag, nil
 }
 
 // recheckNetwork proves the observation still holds. It is a read-only
 // snapshot comparison, not a lock.
-func recheckNetwork(ctx context.Context, client NetworkClient, name string, observed *NetworkObservation, etag string) error {
+func recheckNetwork(ctx context.Context, client NetworkReader, name string, observed *NetworkObservation, etag string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -512,7 +546,7 @@ func sameObservation(a, b *NetworkObservation) bool {
 	if a.Description != b.Description {
 		return false
 	}
-	return maps.Equal(a.Config, b.Config)
+	return maps.Equal(a.Config, b.Config) && slices.Equal(a.UsedBy, b.UsedBy)
 }
 
 // verifyNetwork proves that every managed key converged and that the
@@ -520,6 +554,9 @@ func sameObservation(a, b *NetworkObservation) bool {
 func verifyNetwork(intent NetworkIntent, observed *NetworkObservation) error {
 	if observed == nil {
 		return fmt.Errorf("network is absent after reconciliation")
+	}
+	if observed.Name != intent.Name || observed.Type != intent.Type || (observed.Project != "" && observed.Project != intent.Scope.Project()) {
+		return fmt.Errorf("network identity changed during reconciliation")
 	}
 	for key, want := range intent.desiredConfig() {
 		if !keySatisfied(key, want, observed.Config[key]) {
