@@ -113,12 +113,25 @@ func observePinnedGatewayInstances(ctx context.Context, top NativeGatewayTopolog
 // Each expected registry/repository@manifest must match the topology pin.
 // Newly created services must be STOPPED. Retained services are left unchanged.
 func CreateStoppedGatewayWithClient(ctx context.Context, top NativeGatewayTopology, devices NativeGatewayDevices, pair NativeGatewayInstancePair, images NativeGatewayCreateImages, client NativeGatewayStoppedCreateClient, guard func(context.Context) error) (NativeGatewayStoppedResult, error) {
+	if guard == nil {
+		return NativeGatewayStoppedResult{Project: top.Project}, &NativeGatewayStoppedError{Stage: "authority", Service: "gateway"}
+	}
+	return createStoppedGateway(ctx, top, devices, pair, images, client, func(ctx context.Context, _ string) error { return guard(ctx) })
+}
+
+func createStoppedGateway(ctx context.Context, top NativeGatewayTopology, devices NativeGatewayDevices, pair NativeGatewayInstancePair, images NativeGatewayCreateImages, client NativeGatewayStoppedCreateClient, guard func(context.Context, string) error) (NativeGatewayStoppedResult, error) {
+	return createStoppedGatewayEffects(ctx, top, devices, pair, images, client, func(name string, submit func(context.Context) error) error {
+		if err := guard(ctx, name); err != nil {
+			return err
+		}
+		return submit(ctx)
+	})
+}
+
+func createStoppedGatewayEffects(ctx context.Context, top NativeGatewayTopology, devices NativeGatewayDevices, pair NativeGatewayInstancePair, images NativeGatewayCreateImages, client NativeGatewayStoppedCreateClient, effect func(string, func(context.Context) error) error) (NativeGatewayStoppedResult, error) {
 	result := NativeGatewayStoppedResult{Project: top.Project}
 	fail := func(stage, service string, attempted bool, cause error) (NativeGatewayStoppedResult, error) {
 		return result, &NativeGatewayStoppedError{Stage: stage, Service: service, Attempted: attempted, Uncertain: attempted, cause: cause}
-	}
-	if guard == nil {
-		return fail("authority", "gateway", false, fmt.Errorf("native gateway creation requires an authority guard"))
 	}
 	// Rebuild the pair rather than trusting caller-supplied names or attachments.
 	original, err := PlanNativeGatewayInstances(top, devices, pair.Postgres.ImageAlias, pair.LiteLLM.ImageAlias)
@@ -199,22 +212,25 @@ func CreateStoppedGatewayWithClient(ctx context.Context, top NativeGatewayTopolo
 		if err := ctx.Err(); err != nil {
 			return fail("cancellation", spec.Name, false, err)
 		}
-		if err := guard(ctx); err != nil {
-			return fail("authority", spec.Name, false, err)
-		}
-		if err := ctx.Err(); err != nil {
-			return fail("cancellation", spec.Name, false, err)
-		}
-		op, err := client.CreateInstance(request)
-		if err != nil {
-			return fail("create", spec.Name, true, err)
-		}
-		result.Created = append(result.Created, spec.Name)
-		if op == nil {
-			return fail("operation", spec.Name, true, fmt.Errorf("instance operation missing"))
-		}
-		if err := op.WaitContext(ctx); err != nil {
-			return fail("operation", spec.Name, true, err)
+		stage, attempted := "authority", false
+		if err := effect(spec.Name, func(ctx context.Context) error {
+			if err := ctx.Err(); err != nil {
+				stage = "cancellation"
+				return err
+			}
+			stage, attempted = "create", true
+			op, err := client.CreateInstance(request)
+			if err != nil {
+				return err
+			}
+			result.Created = append(result.Created, spec.Name)
+			stage = "operation"
+			if op == nil {
+				return fmt.Errorf("instance operation missing")
+			}
+			return op.WaitContext(ctx)
+		}); err != nil {
+			return fail(stage, spec.Name, attempted, err)
 		}
 		inst, _, err := client.GetInstance(spec.Name)
 		if err != nil || !matchesNativeGatewayInstance(inst, spec, fingerprint) || inst.Status != "Stopped" {

@@ -12,6 +12,8 @@ import (
 	"github.com/blevinn/aginctus/internal/filestate"
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
 	"github.com/blevinn/aginctus/internal/orchestration/native"
+	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
+	check "github.com/blevinn/aginctus/pkg/orchestration"
 )
 
 func TestLocalNativeJournalAbruptExit(t *testing.T) {
@@ -80,22 +82,22 @@ func TestLocalNativeGatewaySelectionRejectsForeignTargets(t *testing.T) {
 	volume := NativeResource{ID: GatewayVolumeStage, Kind: NativeGatewayVolume, DependsOn: []string{GatewayImageStage}}
 	instances := NativeResource{ID: GatewayInstanceStage, Kind: NativeGatewayInstance, DependsOn: []string{GatewayVolumeStage}}
 	runtime := NativeResource{ID: GatewayRuntimeStage, Kind: NativeGatewayRuntime, DependsOn: []string{GatewayInstanceStage}}
-	if err := verifyLocalNativeSelection(c, []NativeResource{images, volume, instances, runtime}); err != nil {
+	if err := verifyLocalNativeSelection(c, []NativeResource{images, volume, instances, runtime}, false); err != nil {
 		t.Fatal(err)
 	}
-	if localEffectSelected(c, runtime, NativeEffect{NativeStop, GatewayPostgresTarget}) ||
-		localEffectSelected(c, runtime, NativeEffect{NativeStart, "foreign"}) ||
-		localEffectSelected(c, volume, NativeEffect{native.Create, GatewayPostgresTarget}) ||
-		!localEffectSelected(c, runtime, NativeEffect{NativeStart, GatewayPostgresTarget}) ||
-		!localEffectSelected(c, volume, NativeEffect{native.Create, GatewayDatabaseTarget}) {
+	if localEffectSelected(c, runtime, NativeEffect{NativeStop, GatewayPostgresTarget}, false) ||
+		localEffectSelected(c, runtime, NativeEffect{NativeStart, "foreign"}, false) ||
+		localEffectSelected(c, volume, NativeEffect{native.Create, GatewayPostgresTarget}, false) ||
+		!localEffectSelected(c, runtime, NativeEffect{NativeStart, GatewayPostgresTarget}, false) ||
+		!localEffectSelected(c, volume, NativeEffect{native.Create, GatewayDatabaseTarget}, false) {
 		t.Fatal("gateway operation was not constrained to accepted runtime state and specific targets")
 	}
 	instances.DependsOn = nil
-	if verifyLocalNativeSelection(c, []NativeResource{images, volume, instances, runtime}) == nil {
+	if verifyLocalNativeSelection(c, []NativeResource{images, volume, instances, runtime}, false) == nil {
 		t.Fatal("accepted an omitted required edge")
 	}
 	c.Gateway = nil
-	if verifyLocalNativeSelection(c, []NativeResource{images}) == nil {
+	if verifyLocalNativeSelection(c, []NativeResource{images}, false) == nil {
 		t.Fatal("gateway absent but selected")
 	}
 }
@@ -103,6 +105,10 @@ func TestLocalNativeGatewaySelectionRejectsForeignTargets(t *testing.T) {
 func TestLocalNativeAuthorityAndRecovery(t *testing.T) {
 	ctx := t.Context()
 	plan, c := nativePlanFixture(t)
+	c.Workloads[0].Native = &acceptedstate.WorkloadNativeSpec{Runtime: "opencode", StoragePool: "root", ManagementNetwork: "management"}
+	plan.Revision, _ = environment.BuildAcceptedRevision(nil, nil, c)
+	plan.Resources[0].DependsOn = []string{managementNetworkStage}
+	plan.Resources = append([]NativeResource{{ID: managementNetworkStage, Kind: NativeManagementNetwork}}, plan.Resources...)
 	root := filepath.Join(t.TempDir(), "store")
 	store, err := environment.InitializeLocalProjectStateStore(root, c.Environment.Binding)
 	if err != nil {
@@ -134,11 +140,22 @@ func TestLocalNativeAuthorityAndRecovery(t *testing.T) {
 			}
 			return c.Environment.Binding, nil
 		},
-		Bind: func(candidate environment.Candidate, p NativePlan) (map[string]NativeResourceBinding, error) {
+		BindLifecycle: func(candidate environment.Candidate, p NativePlan, bootstrap bool) (NativePlan, map[string]NativeResourceBinding, error) {
 			if p.Revision.ValidateAgainst(candidate) != nil {
 				t.Fatal("binding received unpinned candidate")
 			}
-			return map[string]NativeResourceBinding{"agent": {
+			if bootstrap || *candidate.Workloads[0].Native != *c.Workloads[0].Native {
+				t.Fatal("composer did not receive exact accepted native intent")
+			}
+			bridge := NativeResourceBinding{
+				Validate: func() error { return nil },
+				Preview: func(context.Context) (NativePreview, error) {
+					return NativePreview{Actions: []NativeEffect{{native.Unchanged, managementNetworkStage}}}, nil
+				},
+				Apply:      func(context.Context, RunNativeEffect) error { t.Fatal("fixture ran a host Apply"); return nil },
+				Conditions: StepConditions{Postconditions: []BoundCheck{nativeCheck(p, "bridge-converged", managementNetworkStage, false, func() check.Outcome { return check.Passed })}},
+			}
+			return p, map[string]NativeResourceBinding{managementNetworkStage: bridge, "agent": {
 				Validate: func() error { return nil },
 				Preview: func(context.Context) (NativePreview, error) {
 					previews++

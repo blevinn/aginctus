@@ -31,6 +31,7 @@ type Candidate struct {
 	SelectedWorkloads []string                     `json:"selectedWorkloads"`
 	Workloads         []acceptedstate.WorkloadSpec `json:"workloads"`
 	Gateway           *GatewaySpec                 `json:"gateway,omitempty"`
+	Herdr             *HerdrSpec                   `json:"herdr,omitempty"`
 }
 
 func (c Candidate) Validate() error {
@@ -45,12 +46,12 @@ func (c Candidate) Validate() error {
 	// This is validation reuse, NOT translation into an accepted revision.
 	spec := acceptedstate.DeploymentSpec{
 		APIVersion: acceptedstate.DeploymentAPIVersion,
-		Kind: acceptedstate.DeploymentKind,
+		Kind:       acceptedstate.DeploymentKind,
 		Selection: acceptedstate.SelectionManifest{
-			APIVersion: acceptedstate.SelectionAPIVersion,
-			Kind: acceptedstate.SelectionKind,
-			DeploymentID: c.Environment.ID,
-			IncusProject: c.Environment.Binding.Project,
+			APIVersion:        acceptedstate.SelectionAPIVersion,
+			Kind:              acceptedstate.SelectionKind,
+			DeploymentID:      c.Environment.ID,
+			IncusProject:      c.Environment.Binding.Project,
 			SelectedWorkloads: c.SelectedWorkloads,
 		},
 		Workloads: c.Workloads,
@@ -59,7 +60,19 @@ func (c Candidate) Validate() error {
 		return err
 	}
 	if c.Gateway != nil {
-		return c.Gateway.validate(c.Environment.Binding)
+		if err := c.Gateway.validate(c.Environment.Binding); err != nil {
+			return err
+		}
+	}
+	if c.Herdr != nil {
+		if err := c.Herdr.validate(c.Environment); err != nil {
+			return err
+		}
+		for _, w := range c.Workloads {
+			if w.InstanceName == c.Herdr.InstanceName {
+				return errors.New("Herdr instance overlaps an accepted workload")
+			}
+		}
 	}
 	return nil
 }
@@ -100,6 +113,13 @@ func ParseCandidate(data []byte) (Candidate, error) {
 			return Candidate{}, err
 		}
 	}
+	if raw, present := keys["herdr"]; present {
+		rootKeys = append(rootKeys, "herdr")
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) != nil || candidateKeys(fields, "instanceName", "imageFingerprint", "storagePool", "managementNetwork", "allowStateBootstrap") != nil {
+			return Candidate{}, errors.New("invalid Herdr candidate fields")
+		}
+	}
 	if err := candidateKeys(keys, rootKeys...); err != nil {
 		return Candidate{}, err
 	}
@@ -126,7 +146,7 @@ func ParseCandidate(data []byte) (Candidate, error) {
 		if err := json.Unmarshal(entry, &fields); err != nil || fields == nil {
 			return Candidate{}, errors.New("workload entry must be an object")
 		}
-		if err := candidateKeys(fields, "id", "instanceName", "instanceType", "imageFingerprint", "profiles", "ensureRunning"); err != nil {
+		if err := acceptedstate.ValidateWorkloadFields(fields); err != nil {
 			return Candidate{}, err
 		}
 	}

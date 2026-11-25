@@ -7,17 +7,18 @@ import (
 
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
 	"github.com/blevinn/aginctus/internal/orchestration/native"
-	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
 )
 
 const (
-	GatewayImageStage     = "gateway-image"
-	GatewayVolumeStage    = "gateway-volume"
-	GatewayInstanceStage  = "gateway-instance"
-	GatewayRuntimeStage   = "gateway-runtime"
-	GatewayPostgresTarget = "postgres"
-	GatewayLiteLLMTarget  = "litellm"
-	GatewayDatabaseTarget = "database"
+	GatewayImageStage          = "gateway-image"
+	GatewayVolumeStage         = "gateway-volume"
+	GatewayInstanceStage       = "gateway-instance"
+	GatewayRuntimeStage        = "gateway-runtime"
+	GatewayPostgresTarget      = "postgres"
+	GatewayLiteLLMTarget       = "litellm"
+	GatewayDatabaseTarget      = "database"
+	GatewayPostgresAliasTarget = "postgres-alias"
+	GatewayLiteLLMAliasTarget  = "litellm-alias"
 )
 
 type LocalNativePermission string
@@ -32,22 +33,28 @@ const (
 // policy callback. A candidate, accepted revision or requested action does not
 // prove a grant. Authorizers must verify current actor and scope on every call.
 type LocalNativeAuthorityRequest struct {
-	Environment environment.Descriptor
-	Permission  LocalNativePermission
-	Plan        NativePlan
-	Resource    NativeResource
-	Effect      NativeEffect
+	Environment    environment.Descriptor
+	Permission     LocalNativePermission
+	Plan           NativePlan
+	Resource       NativeResource
+	Effect         NativeEffect
+	BootstrapHerdr bool
 }
 
 type LocalNativeExecution struct {
 	Store       *environment.LocalProjectStateStore
 	Environment environment.Descriptor
 	Authorize   func(context.Context, LocalNativeAuthorityRequest) (environment.Binding, error)
-	// Bind statically composes domain adapters from the verified candidate, not
+	// Bind statically composes gateway adapters from the verified candidate, not
 	// ambient config or scope supplied by the plan. It must only assemble
 	// closures; domain observations and writes belong in the engine phases.
-	Bind        func(environment.Candidate, NativePlan) (map[string]NativeResourceBinding, error)
-	CheckPolicy CheckPolicy
+	Bind func(environment.Candidate, NativePlan) (map[string]NativeResourceBinding, error)
+	// BindLifecycle builds C's reconcile-only fragment from the accepted body.
+	// It returns the graph it actually built for an exact comparison before any
+	// observation. BootstrapHerdr is a separate, explicit invocation choice.
+	BindLifecycle  func(environment.Candidate, NativePlan, bool) (NativePlan, map[string]NativeResourceBinding, error)
+	BootstrapHerdr bool
+	CheckPolicy    CheckPolicy
 }
 
 // ExecuteLocalNative is the same-UID fixture join to Stack A. Only the trusted
@@ -58,7 +65,7 @@ func (f LocalNativeExecution) ExecuteLocalNative(ctx context.Context, engine *En
 	if err := conditionContextErr(ctx); err != nil {
 		return Result{}, err
 	}
-	if engine == nil || f.Store == nil || f.Bind == nil || f.Authorize == nil || f.Environment.Validate() != nil {
+	if engine == nil || f.Store == nil || f.Authorize == nil || f.Environment.Validate() != nil {
 		return Result{}, errors.New("local native execution requires explicit fixture store, selection and authority")
 	}
 	ordered, err := plan.ordered()
@@ -74,7 +81,7 @@ func (f LocalNativeExecution) ExecuteLocalNative(ctx context.Context, engine *En
 		if err := conditionContextErr(ctx); err != nil {
 			return err
 		}
-		request := LocalNativeAuthorityRequest{Environment: f.Environment, Permission: permission, Plan: detachLocalPlan(plan), Resource: detachedResource(r), Effect: effect}
+		request := LocalNativeAuthorityRequest{Environment: f.Environment, Permission: permission, Plan: detachLocalPlan(plan), Resource: detachedResource(r), Effect: effect, BootstrapHerdr: f.BootstrapHerdr}
 		binding, err := f.Authorize(ctx, request)
 		if err != nil || f.Environment.VerifyBinding(binding) != nil {
 			return errors.New("local native operation denied")
@@ -128,7 +135,7 @@ func (f LocalNativeExecution) ExecuteLocalNative(ctx context.Context, engine *En
 			return Result{}, err
 		}
 	}
-	if err := verifyLocalNativeSelection(candidate, plan.Resources); err != nil {
+	if err := verifyLocalNativeSelection(candidate, plan.Resources, f.BootstrapHerdr); err != nil {
 		return Result{}, err
 	}
 	// Give the trusted composer a detached copy; its projections do not become
@@ -137,16 +144,12 @@ func (f LocalNativeExecution) ExecuteLocalNative(ctx context.Context, engine *En
 	if err != nil {
 		return Result{}, err
 	}
-	detached, err := environment.ParseCandidate(data)
-	if err != nil {
-		return Result{}, err
-	}
-	resources, err := f.Bind(detached, detachLocalPlan(plan))
+	resources, err := f.bindLocalDomains(data, plan)
 	if err != nil {
 		return Result{}, err
 	}
 	beforeEffect := func(ctx context.Context, rev environment.AcceptedRevision, r NativeResource, effect NativeEffect) error {
-		if rev != plan.Revision || !localEffectSelected(candidate, r, effect) {
+		if rev != plan.Revision || !localEffectSelected(candidate, r, effect, f.BootstrapHerdr) {
 			return errors.New("effect is outside accepted native intent")
 		}
 		if err := authorize(ctx, LocalNativeSubmit, r, effect); err != nil {
@@ -172,7 +175,7 @@ func (f LocalNativeExecution) ExecuteLocalNative(ctx context.Context, engine *En
 					return NativePreview{}, err
 				}
 				for _, effect := range evidence.Actions {
-					if !localTargetSelected(r, effect.Target) || effect.Action != native.Unchanged && !localEffectSelected(candidate, r, effect) {
+					if !localTargetSelected(r, effect.Target) || effect.Action != native.Unchanged && !localEffectSelected(candidate, r, effect, f.BootstrapHerdr) {
 						return NativePreview{}, errors.New("preview evidence is outside accepted native intent")
 					}
 				}
@@ -247,15 +250,16 @@ func sameLocalPlan(a, b NativePlan) bool {
 		})
 }
 
-func verifyLocalNativeSelection(c environment.Candidate, resources []NativeResource) error {
+func verifyLocalNativeSelection(c environment.Candidate, resources []NativeResource, bootstrapHerdr bool) error {
+	if err := verifyLocalLifecycleSelection(c, resources, bootstrapHerdr); err != nil {
+		return err
+	}
 	for _, r := range resources {
+		if isLocalLifecycle(r.Kind) {
+			continue
+		}
 		var id, prerequisite string
 		switch r.Kind {
-		case NativeWorkload:
-			if !slices.Contains(c.SelectedWorkloads, r.ID) {
-				return errors.New("native workload is not selected in accepted intent")
-			}
-			continue
 		case NativeGatewayImage:
 			id = GatewayImageStage
 		case NativeGatewayVolume:
@@ -272,14 +276,12 @@ func verifyLocalNativeSelection(c environment.Candidate, resources []NativeResou
 	return nil
 }
 
-func localEffectSelected(c environment.Candidate, r NativeResource, e NativeEffect) bool {
+func localEffectSelected(c environment.Candidate, r NativeResource, e NativeEffect, bootstrapHerdr bool) bool {
 	if !allowedNativeEffect(r.Kind, e.Action) || !localTargetSelected(r, e.Target) {
 		return false
 	}
-	if r.Kind == NativeWorkload {
-		return slices.ContainsFunc(c.Workloads, func(w acceptedstate.WorkloadSpec) bool {
-			return w.ID == r.ID && (e.Action != NativeStart || w.EnsureRunning)
-		})
+	if isLocalLifecycle(r.Kind) {
+		return localLifecycleEffectSelected(c, r, e, bootstrapHerdr)
 	}
 	if c.Gateway == nil {
 		return false
@@ -296,11 +298,14 @@ func localEffectSelected(c environment.Candidate, r NativeResource, e NativeEffe
 
 func localTargetSelected(r NativeResource, target string) bool {
 	switch r.Kind {
-	case NativeWorkload:
+	case NativeWorkload, NativeManagementNetwork, NativeHerdrVolume, NativeHerdrInstance:
 		return r.ID == target
 	case NativeGatewayVolume:
 		return target == GatewayDatabaseTarget
-	case NativeGatewayImage, NativeGatewayInstance, NativeGatewayRuntime:
+	case NativeGatewayImage:
+		return target == GatewayPostgresTarget || target == GatewayLiteLLMTarget ||
+			target == GatewayPostgresAliasTarget || target == GatewayLiteLLMAliasTarget
+	case NativeGatewayInstance, NativeGatewayRuntime:
 		return target == GatewayPostgresTarget || target == GatewayLiteLLMTarget
 	}
 	return false

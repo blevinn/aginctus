@@ -38,10 +38,7 @@ func (b NativeGatewayRuntimeBinding) Validate(descriptor environment.Descriptor,
 		pair.Postgres.Project != b.Resources.Project || pair.LiteLLM.Project != b.Resources.Project ||
 		pair.Postgres.Name != b.Resources.PostgresInstance ||
 		pair.LiteLLM.Name != b.Resources.LiteLLMInstance ||
-		b.AcceptedEnvironmentRevision.ValidateIdentity() != nil ||
-		b.AcceptedEnvironmentRevision.EnvironmentID != descriptor.ID ||
-		b.AcceptedEnvironmentRevision.ServerID != selected.ServerID ||
-		b.AcceptedEnvironmentRevision.Project != selected.Project ||
+		!gatewayRevisionMatches(b.AcceptedEnvironmentRevision, descriptor, selected) ||
 		!nativeDeviceName.MatchString(b.RootPool) || !nativeDeviceName.MatchString(b.DatabasePool) ||
 		pair.Postgres.Devices["root"]["pool"] != b.RootPool || pair.LiteLLM.Devices["root"]["pool"] != b.RootPool ||
 		pair.Postgres.Devices["database"]["pool"] != b.DatabasePool ||

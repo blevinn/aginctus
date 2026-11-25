@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -18,8 +19,12 @@ import (
 	"github.com/lxc/incus/v7/shared/api"
 
 	"github.com/blevinn/aginctus/internal/gateway"
+	"github.com/blevinn/aginctus/internal/orchestration"
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
 	"github.com/blevinn/aginctus/internal/orchestration/native"
+	"github.com/blevinn/aginctus/internal/orchestration/nativeoci"
+	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
+	check "github.com/blevinn/aginctus/pkg/orchestration"
 )
 
 const stoppedPairPool = "spike"
@@ -174,6 +179,94 @@ func TestNativeGatewayStoppedPairVM(t *testing.T) {
 			}
 		})
 	}
+	t.Run("accepted-stage-join", func(t *testing.T) {
+		desc := environment.Descriptor{ID: "123e4567-e89b-42d3-a456-426614174013", Name: "accepted-gateway-fixture", Binding: binding}
+		imageSpec := func(i gateway.NativeGatewayCreateImage) environment.GatewayImageSpec {
+			return environment.GatewayImageSpec{Registry: i.Expected.Registry, Repository: i.Expected.Repository, Architecture: "amd64", ManifestDigest: i.Expected.ManifestDigest, ConfigDigest: i.Expected.ConfigDigest, IncusFingerprint: i.Expected.IncusFingerprint, Alias: i.Evidence.Alias}
+		}
+		c := environment.Candidate{APIVersion: environment.CandidateAPIVersion, Kind: environment.CandidateKind, Environment: desc,
+			SelectedWorkloads: []string{}, Workloads: []acceptedstate.WorkloadSpec{}, Gateway: &environment.GatewaySpec{
+				ManagementNetwork: "ag-pair-mgmt", EgressNetwork: "ag-pair-egress", EgressIPv4: "10.94.0.13/24", RootPool: stoppedPairPool, DatabasePool: stoppedPairPool,
+				Postgres: imageSpec(images.Postgres), LiteLLM: imageSpec(images.LiteLLM), CredentialVersion: "fixture-v1", EnsureRunning: true,
+			}}
+		store, err := environment.InitializeLocalProjectStateStore(filepath.Join(t.TempDir(), "accepted"), binding)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = store.CommitLocalCandidate(ctx, desc, binding, nil, c); err != nil {
+			t.Fatal(err)
+		}
+		rev, _, err := store.ReadLocalAccepted(ctx, desc)
+		if err != nil || rev == nil {
+			t.Fatalf("fixture accepted revision unavailable: %v", err)
+		}
+		plan := orchestration.NativePlan{APIVersion: orchestration.NativeAPIVersion, Kind: orchestration.NativePlanKind, Revision: *rev, Resources: []orchestration.NativeResource{
+			{ID: orchestration.GatewayImageStage, Kind: orchestration.NativeGatewayImage},
+			{ID: orchestration.GatewayVolumeStage, Kind: orchestration.NativeGatewayVolume, DependsOn: []string{orchestration.GatewayImageStage}},
+			{ID: orchestration.GatewayInstanceStage, Kind: orchestration.NativeGatewayInstance, DependsOn: []string{orchestration.GatewayVolumeStage}},
+		}}
+		client := &joinedGatewayVMClient{stoppedPairSDK: stoppedPairSDK{InstanceServer: sdk}}
+		exec := orchestration.LocalNativeExecution{Store: store, Environment: desc,
+			CheckPolicy: orchestration.CheckPolicy{Mode: orchestration.ReadOnlyChecks, Authorize: func(_ context.Context, sc orchestration.TargetScope, ck check.Check) error {
+				if sc.Deployment != desc.ID || ck.Effect != check.ReadOnly || !slices.Equal(ck.Access, []check.Access{check.IncusAccess}) {
+					return errors.New("unexpected check capability")
+				}
+				return nil
+			}},
+			Authorize: func(_ context.Context, r orchestration.LocalNativeAuthorityRequest) (environment.Binding, error) {
+				if r.Plan.Revision != *rev {
+					return environment.Binding{}, errors.New("unexpected fixture revision")
+				}
+				if r.Permission == orchestration.LocalNativeSubmit && (r.Effect.Action != native.Create || !(r.Resource.ID == orchestration.GatewayVolumeStage && r.Effect.Target == "database" || r.Resource.ID == orchestration.GatewayInstanceStage && (r.Effect.Target == "postgres" || r.Effect.Target == "litellm"))) {
+					return environment.Binding{}, errors.New("unexpected fixture effect")
+				}
+				return binding, nil
+			},
+			Bind: func(c environment.Candidate, plan orchestration.NativePlan) (map[string]orchestration.NativeResourceBinding, error) {
+				return gateway.BindAcceptedGateway(c, plan, gateway.AcceptedGatewayDependencies{Client: client,
+					Resolve: func(context.Context, nativeoci.Source) (nativeoci.ResolvedImage, error) {
+						return nativeoci.ResolvedImage{}, errors.New("offline fixture has no registry")
+					},
+					ExistingImageEvidence: func(_ context.Context, pin environment.AcceptedRevision, role string) (native.GatewayImageEvidence, error) {
+						if pin == *rev {
+							switch role {
+							case "postgres":
+								return images.Postgres.Evidence, nil
+							case "litellm":
+								return images.LiteLLM.Evidence, nil
+							}
+						}
+						return native.GatewayImageEvidence{}, errors.New("fixture image provenance unavailable")
+					},
+				})
+			},
+		}
+		engine := orchestration.NewEngine(nil)
+		preview, err := exec.ExecuteLocalNative(ctx, engine, plan, orchestration.ExecuteOptions{DryRun: true})
+		if err != nil || len(preview.Native.Previews) != 3 || !preview.Native.Previews[2].Deferred || client.volumeWrites != 0 || len(client.instanceWrites) != 0 {
+			t.Fatalf("fixture preview: %+v %v", preview.Native, err)
+		}
+		result, err := exec.ExecuteLocalNative(ctx, engine, plan, orchestration.ExecuteOptions{})
+		if err != nil || len(result.Native.Effects) != 3 || len(result.Conditions) != 3 || result.Native.LocalOperationID == "" {
+			t.Fatalf("fixture join: %+v %v", result.Native, err)
+		}
+		id, err := gateway.NativeGatewayIdentity(desc, binding)
+		if err != nil {
+			t.Fatal(err)
+		}
+		readStoppedPairGuest(t, sdk, id.PostgresInstance, desc.ID, images.Postgres.Expected.IncusFingerprint)
+		readStoppedPairGuest(t, sdk, id.LiteLLMInstance, desc.ID, images.LiteLLM.Expected.IncusFingerprint)
+		repeat, err := exec.ExecuteLocalNative(ctx, engine, plan, orchestration.ExecuteOptions{})
+		if err != nil || len(repeat.Native.Effects) != 0 || client.volumeWrites != 1 || !slices.Equal(client.instanceWrites, []string{id.PostgresInstance, id.LiteLLMInstance}) {
+			t.Fatalf("fixture repeat wrote or failed: %+v %v", repeat.Native, err)
+		}
+	})
+}
+
+type joinedGatewayVMClient struct{ stoppedPairSDK }
+
+func (*joinedGatewayVMClient) CreateImage(api.ImagesPost) (native.GatewayImageAcquireOperation, error) {
+	return nil, errors.New("offline fixture does not acquire images")
 }
 
 func createGatewayFixtureBridges(t *testing.T, admin incus.InstanceServer) {

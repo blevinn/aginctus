@@ -152,6 +152,9 @@ func CompareDeployments(active, candidate DeploymentSpec) (DeploymentDiff, error
 		if w.EnsureRunning != was.EnsureRunning {
 			fields = append(fields, "ensureRunning")
 		}
+		if (w.Native == nil) != (was.Native == nil) || w.Native != nil && was.Native != nil && *w.Native != *was.Native {
+			fields = append(fields, "native")
+		}
 		if len(fields) > 0 {
 			result.Modified = append(result.Modified, WorkloadChange{w.ID, fields})
 		}
