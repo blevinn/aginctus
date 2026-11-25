@@ -17,6 +17,7 @@ import (
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
 	"github.com/blevinn/aginctus/internal/orchestration/native"
+	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
 )
 
 func TestNativeGatewayStopRetentionVM(t *testing.T) {
@@ -56,13 +57,56 @@ func TestNativeGatewayStopRetentionVM(t *testing.T) {
 		if err != nil || !slices.Equal(created.Created, want) || !slices.Equal(created.Verified, want) {
 			t.Fatalf("create stopped fixture: %+v: %v (%v)", created, err, errors.Unwrap(err))
 		}
-		for _, name := range want {
-			waitStoppedPairOp(t, ctx, func() (incus.Operation, error) {
-				return sdk.UpdateInstanceState(name, api.InstanceStatePut{Action: "start"}, "")
-			})
-			if err := execOCI(ctx, sdk, name, []string{"/stop-fixture", "started"}); err != nil {
-				t.Fatalf("fixture PID 1 handshake %s: %v", name, err)
+		identity, err := gateway.NativeGatewayIdentity(desc, binding)
+		if err != nil {
+			t.Fatal(err)
+		}
+		revision, err := environment.BuildAcceptedRevision(nil, nil, environment.Candidate{
+			APIVersion: environment.CandidateAPIVersion, Kind: environment.CandidateKind, Environment: desc,
+			SelectedWorkloads: []string{}, Workloads: []acceptedstate.WorkloadSpec{},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		runtime := gateway.NativeGatewayRuntimeBinding{Resources: identity, AcceptedEnvironmentRevision: revision,
+			CredentialVersion: "fixture-v1", Images: images, RootPool: stoppedPairPool, DatabasePool: stoppedPairPool}
+		// These processes contain no credentials. The fixture-only verifier
+		// models revocation, and readiness means only a PID 1 handshake.
+		verifier := fixtureGatewayDelivery(func(ctx context.Context, b gateway.NativeGatewayRuntimeBinding) error {
+			if b != runtime {
+				return errors.New("fixture runtime binding changed")
 			}
+			return ctx.Err()
+		})
+		pgReady := false
+		ready := fixtureGatewayReadiness(func(ctx context.Context, id gateway.NativeGatewayResourceIdentity, role string) error {
+			if id != identity {
+				return errors.New("fixture readiness target changed")
+			}
+			if role == "postgres" {
+				if err := execOCI(ctx, sdk, id.PostgresInstance, []string{"/stop-fixture", "started"}); err != nil {
+					return err
+				}
+				pgReady = true
+				return nil
+			}
+			return execOCI(ctx, sdk, id.LiteLLMInstance, []string{"/stop-fixture", "started"})
+		})
+		client := &stopRetentionSDK{InstanceServer: sdk, beforeSubmit: func(name string, put api.InstanceStatePut, etag string) {
+			if put.Action != "start" || put.Force || etag == "" || (name == pair.LiteLLM.Name && !pgReady) {
+				t.Fatal("unauthorized or out-of-order fixture start")
+			}
+		}}
+		start := func() (gateway.NativeEnvironmentGatewayStartResult, error) {
+			return gateway.StartNativeEnvironmentGatewayWithClient(ctx, desc, binding, top, devices, pair, runtime, client, context.Context.Err, verifier, ready)
+		}
+		got, err := start()
+		if err != nil || !slices.Equal(got.Started, want) || !slices.Equal(got.Ready, want) || !slices.Equal(client.submissions, want) {
+			t.Fatalf("guarded fixture startup: %+v: %v", got, err)
+		}
+		got, err = start()
+		if err != nil || len(got.Started) != 0 || !slices.Equal(got.Ready, want) || !slices.Equal(client.submissions, want) {
+			t.Fatalf("repeat fixture startup submitted a write: %+v: %v", got, err)
 		}
 		return top, devices, pair
 	}
@@ -79,6 +123,18 @@ func TestNativeGatewayStopRetentionVM(t *testing.T) {
 			verifyStopRetention(t, ctx, sdk, top, devices, pair, siblingTop, sibling, tc.revoke)
 		})
 	}
+}
+
+type fixtureGatewayDelivery func(context.Context, gateway.NativeGatewayRuntimeBinding) error
+
+func (f fixtureGatewayDelivery) VerifyGatewayDelivery(ctx context.Context, b gateway.NativeGatewayRuntimeBinding) error {
+	return f(ctx, b)
+}
+
+type fixtureGatewayReadiness func(context.Context, gateway.NativeGatewayResourceIdentity, string) error
+
+func (f fixtureGatewayReadiness) VerifyGatewayServiceReady(ctx context.Context, id gateway.NativeGatewayResourceIdentity, role string) error {
+	return f(ctx, id, role)
 }
 
 func verifyStopRetention(t *testing.T, ctx context.Context, sdk incus.InstanceServer, top gateway.NativeGatewayTopology, devices gateway.NativeGatewayDevices, pair gateway.NativeGatewayInstancePair, siblingTop gateway.NativeGatewayTopology, sibling gateway.NativeGatewayInstancePair, revoke bool) {
