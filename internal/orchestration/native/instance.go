@@ -28,6 +28,7 @@ type InstanceIdentity struct {
 type InstanceIntent struct {
 	Identity      InstanceIdentity
 	WorkloadID    string
+	EnvironmentID string
 	Type          string
 	ImageAlias    string
 	EnsureRunning bool
@@ -49,6 +50,9 @@ func (intent InstanceIntent) Validate() error {
 	}
 	if intent.Profiles == nil {
 		return fmt.Errorf("instance profiles must be explicit")
+	}
+	if !environmentOwnerMatches(intent.Config, intent.EnvironmentID) {
+		return fmt.Errorf("instance intent environment ownership unverified")
 	}
 	for key, value := range intent.ownership() {
 		if intent.Config[key] != value {
@@ -74,10 +78,28 @@ func localName(name string) bool {
 }
 
 func (intent InstanceIntent) ownership() map[string]string {
-	return map[string]string{
+	markers := map[string]string{
 		"user.aginctus.managed": "true", "user.aginctus.resource": "workload",
 		"user.aginctus.role": "agent-workload", "user.aginctus.workload": intent.WorkloadID,
 	}
+	if intent.EnvironmentID != "" {
+		markers[environmentOwnershipKey] = intent.EnvironmentID
+	}
+	return markers
+}
+
+// environmentOwnerMatches never treats an obsolete marker as ownership proof.
+// Legacy intents may only address resources without either environment marker.
+func environmentOwnerMatches(config map[string]string, id string) bool {
+	canonical, present := config[environmentOwnershipKey]
+	_, obsolete := config[obsoleteEnvironmentOwnershipKey]
+	if obsolete {
+		return false
+	}
+	if id == "" {
+		return !present
+	}
+	return nativeEnvironmentUUID.MatchString(id) && present && canonical == id
 }
 
 // InstanceObservation has no SDK types and carries no execution capability.
@@ -111,6 +133,9 @@ func PlanExistingInstance(intent InstanceIntent, observed InstanceObservation) (
 	}
 	if intent.Identity != observed.Identity {
 		return InstancePlan{}, fmt.Errorf("observed instance identity mismatch")
+	}
+	if !environmentOwnerMatches(observed.Config, intent.EnvironmentID) {
+		return InstancePlan{}, fmt.Errorf("existing workload environment ownership unverified")
 	}
 	for key, want := range intent.ownership() {
 		if observed.Config[key] != want {

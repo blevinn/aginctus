@@ -4,6 +4,7 @@ package nativeoci_test
 
 import (
 	"context"
+	"maps"
 	"os"
 	"strings"
 	"testing"
@@ -14,10 +15,17 @@ import (
 
 	"github.com/blevinn/aginctus/internal/gateway"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/orchestration/environment"
 	"github.com/blevinn/aginctus/internal/orchestration/native"
 )
 
-func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
+func gatewayVolumeVMEnvironment(project, fingerprint, id string) environment.Descriptor {
+	return environment.Descriptor{ID: id, Name: "disposable-gateway",
+		Binding: environment.Binding{Project: project, ServerID: "sha256:" + fingerprint}}
+}
+
+func openGatewayFixtureVM(t *testing.T, project string) (context.Context, incusclient.InstanceServer, environment.Binding) {
+	t.Helper()
 	if os.Getenv("AGINCTUS_NATIVE_OCI_SPIKE") != "disposable-vm" {
 		t.Skip("requires explicit native OCI disposable-VM opt-in")
 	}
@@ -26,17 +34,17 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 		t.Fatal("disposable VM marker absent")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+	t.Cleanup(cancel)
 	admin, err := incusclient.ConnectIncusUnixWithContext(ctx, "/var/lib/incus/unix.socket", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer admin.Disconnect()
+	t.Cleanup(admin.Disconnect)
 	server, _, err := admin.GetServer()
-	if err != nil || server.Config["core.https_address"] != "" {
-		t.Fatal("test requires local-only Incus daemon")
+	if err != nil || server == nil || server.Environment.ServerClustered || server.Config["core.https_address"] != "" {
+		t.Fatal("test requires a standalone, local-only Incus daemon")
 	}
-	scope, err := incusscope.NewProjectScope("aginctus-native-gateway-audit")
+	scope, err := incusscope.NewProjectScope(project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,6 +52,11 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 	if err != nil || !result.Verified {
 		t.Fatalf("isolated project: %+v %v", result, err)
 	}
+	return ctx, admin, environment.Binding{Project: scope.Name, ServerID: "sha256:" + server.Environment.CertificateFingerprint}
+}
+
+func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
+	ctx, admin, binding := openGatewayFixtureVM(t, "aginctus-native-gateway-audit")
 	for _, n := range []struct {
 		name     string
 		resource string
@@ -65,20 +78,18 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 			t.Fatalf("create disposable bridge: %v", err)
 		}
 	}
-	err = admin.UseProject(scope.Name).CreateStoragePoolVolume("spike", api.StorageVolumesPost{
-		Name: "gateway-postgres", Type: "custom", ContentType: "filesystem",
-		StorageVolumePut: api.StorageVolumePut{Config: map[string]string{
-			"user.aginctus.managed":    "true",
-			"user.aginctus.resource":   "gateway-postgres-volume",
-			"user.aginctus.deployment": scope.Name,
-			"security.shifted":         "true",
-		}},
-	})
-	if err != nil {
-		t.Fatal(err)
+	client := admin.UseProject(binding.Project)
+	descriptor := environment.Descriptor{ID: "123e4567-e89b-42d3-a456-426614174000", Name: "disposable-gateway", Binding: binding}
+	guardCalls := 0
+	guard := func(context.Context) error { guardCalls++; return nil } // This VM fixture is the sole writer.
+	for attempt := range 2 {
+		got, err := gateway.EnsureNativeEnvironmentGatewayVolumeWithClient(ctx, descriptor, descriptor.Binding, "spike", client, guard)
+		if err != nil || !got.Verified || got.Created != (attempt == 0) || guardCalls != 1 {
+			t.Fatalf("environment volume create/reuse: %+v %v (guards=%d)", got, err, guardCalls)
+		}
 	}
 	top := gateway.NativeGatewayTopology{
-		Deployment: "gateway", Project: scope.Name,
+		Deployment: "gateway", Project: binding.Project,
 		ManagementNetwork: "ag-aud-mgmt", EgressNetwork: "ag-aud-egress",
 		DatabaseVolume: "gateway-postgres",
 		Services: []gateway.NativeGatewayService{
@@ -96,12 +107,64 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 				}},
 		},
 	}
+	unboundTopology := top
+	top, err := gateway.BindNativeGatewayTopology(unboundTopology, descriptor, descriptor.Binding)
+	if err != nil {
+		t.Fatal(err)
+	}
 	devices, err := gateway.PlanNativeGatewayDevices(top, "spike", "spike")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := gateway.ObserveLocalNativeGatewayAttachments(ctx, top, devices); err != nil {
 		t.Fatalf("real Incus native gateway attachment preflight: %v", err)
+	}
+	before, beforeETag, err := client.GetStoragePoolVolume("spike", "custom", top.DatabaseVolume)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, collision := range []struct{ id, owner string }{
+		{"123e4567-e89b-42d3-a456-426614174001", ""},
+		{"123e4567-e89b-42d3-a456-426614174002", descriptor.ID},
+	} {
+		sibling := environment.Descriptor{ID: collision.id, Name: descriptor.Name, Binding: binding}
+		identity, err := gateway.NativeGatewayIdentity(sibling, sibling.Binding)
+		if err != nil {
+			t.Fatal(err)
+		}
+		config := maps.Clone(before.Config)
+		delete(config, "user.aginctus.environment-id")
+		if collision.owner != "" {
+			config["user.aginctus.environment-id"] = collision.owner
+		}
+		if err := client.CreateStoragePoolVolume("spike", api.StorageVolumesPost{
+			Name: identity.DatabaseVolume, Type: "custom", ContentType: "filesystem",
+			StorageVolumePut: api.StorageVolumePut{Config: config},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := gateway.EnsureNativeEnvironmentGatewayVolumeWithClient(ctx, sibling, sibling.Binding, "spike", client, guard); err == nil || got.Verified || got.Created || guardCalls != 1 {
+			t.Fatalf("ownership collision accepted or attempted: %+v %v (guards=%d)", got, err, guardCalls)
+		}
+		siblingTopology, err := gateway.BindNativeGatewayTopology(unboundTopology, sibling, sibling.Binding)
+		if err != nil {
+			t.Fatal(err)
+		}
+		siblingDevices, err := gateway.PlanNativeGatewayDevices(siblingTopology, "spike", "spike")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := gateway.ObserveLocalNativeGatewayAttachments(ctx, siblingTopology, siblingDevices); err == nil {
+			t.Fatal("attachment audit accepted a volume with missing or foreign ownership")
+		}
+		retained, _, err := client.GetStoragePoolVolume("spike", "custom", identity.DatabaseVolume)
+		if err != nil || !maps.Equal(retained.Config, config) {
+			t.Fatalf("collision changed: %v", err)
+		}
+	}
+	after, afterETag, err := client.GetStoragePoolVolume("spike", "custom", top.DatabaseVolume)
+	if err != nil || beforeETag != afterETag || !maps.Equal(before.Config, after.Config) {
+		t.Fatalf("selected environment volume changed while reconciling siblings: %v", err)
 	}
 	// The same selected project must reject an unowned or missing bridge;
 	// no mutation is attempted by the audit.

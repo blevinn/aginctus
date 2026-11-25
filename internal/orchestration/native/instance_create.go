@@ -221,6 +221,9 @@ func verifyCreatedInstance(ctx context.Context, client InstanceCreateClient, int
 	if instance.Description != intent.Description || instance.Config["volatile.base_image"] != fingerprint {
 		return fmt.Errorf("created instance configuration or image unverified")
 	}
+	if !environmentOwnerMatches(instance.Config, intent.EnvironmentID) {
+		return fmt.Errorf("created instance environment ownership unverified")
+	}
 	for key, value := range intent.Config {
 		if instance.Config[key] != value {
 			return fmt.Errorf("created instance ownership or configuration unverified")

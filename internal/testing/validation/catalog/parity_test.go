@@ -83,6 +83,11 @@ func TestVMScenarioParity(t *testing.T) {
 		pythonTargets[match[1]] = match[2]
 	}
 	networked := quotedItems(manifestBody(t, runner, "NETWORKED_SCENARIOS = {", "\n}"))
+	disabledPattern := regexp.MustCompile(`(?m)^\s*"([a-z0-9-]+)":`)
+	pythonDisabled := make(map[string]bool)
+	for _, match := range disabledPattern.FindAllStringSubmatch(manifestBody(t, runner, "DISABLED_SCENARIOS = {", "\n}"), -1) {
+		pythonDisabled[match[1]] = true
+	}
 	evidenceScenarios := quotedItems(manifestBody(t, evidence, "SCENARIOS = (", "\n)"))
 	var catalogNetworked, public []string
 	seen := make(map[string]bool)
@@ -96,9 +101,10 @@ func TestVMScenarioParity(t *testing.T) {
 		}
 		flakeTarget := scenario.Target
 		flakeTarget = strings.TrimPrefix(flakeTarget, "vmTests.x86_64-linux.")
-		if !strings.Contains(flake, flakeTarget+" =") {
-			t.Fatalf("flake target %q missing", scenario.Target)
+		if scenario.Disabled != pythonDisabled[scenario.Name] || strings.Contains(flake, flakeTarget+" =") == scenario.Disabled {
+			t.Fatalf("disabled status disagrees across Go, Python, or flake for %q", scenario.Name)
 		}
+		delete(pythonDisabled, scenario.Name)
 		if scenario.Networked {
 			catalogNetworked = append(catalogNetworked, scenario.Name)
 		}
@@ -122,6 +128,9 @@ func TestVMScenarioParity(t *testing.T) {
 	}
 	if len(pythonTargets) > 0 {
 		t.Fatalf("unclassified Python VM scenarios: %v", pythonTargets)
+	}
+	if len(pythonDisabled) > 0 {
+		t.Fatalf("unclassified disabled Python VM scenarios: %v", pythonDisabled)
 	}
 	slices.Sort(catalogNetworked)
 	slices.Sort(networked)
