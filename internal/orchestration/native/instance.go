@@ -29,21 +29,32 @@ type InstanceIntent struct {
 	Identity      InstanceIdentity
 	WorkloadID    string
 	EnvironmentID string
+	HerdrClient   bool
 	Type          string
 	ImageAlias    string
-	EnsureRunning bool
-	Description   string
-	Config        map[string]string
-	Devices       map[string]map[string]string
-	Profiles      []string
+	// ImageFingerprint is required for accepted execution. Alias-only intent is
+	// retained for the older local paths; a pin never resolves through an alias.
+	ImageFingerprint string
+	EnsureRunning    bool
+	Description      string
+	Config           map[string]string
+	Devices          map[string]map[string]string
+	Profiles         []string
 }
 
 func (intent InstanceIntent) Validate() error {
 	if _, err := incusscope.NewProjectScope(intent.Identity.Project); err != nil {
 		return fmt.Errorf("instance project must be explicit and non-default")
 	}
-	if !localName(intent.Identity.Name) || !localName(intent.WorkloadID) || !localName(intent.ImageAlias) {
-		return fmt.Errorf("instance identity and image alias must be explicit local names")
+	if !localName(intent.Identity.Name) || (!intent.HerdrClient && !localName(intent.WorkloadID)) {
+		return fmt.Errorf("instance identity must be explicit local names")
+	}
+	if intent.ImageFingerprint == "" && !localName(intent.ImageAlias) ||
+		intent.ImageFingerprint != "" && (!fingerprintPattern.MatchString(intent.ImageFingerprint) || intent.ImageAlias != "") {
+		return fmt.Errorf("instance requires exactly one valid image selector")
+	}
+	if intent.HerdrClient && (intent.EnvironmentID == "" || intent.WorkloadID != "" || intent.Type != "container" || intent.ImageFingerprint == "") {
+		return fmt.Errorf("missing pinned environment container identity for Herdr")
 	}
 	if intent.Type != "container" && intent.Type != "virtual-machine" {
 		return fmt.Errorf("unsupported instance type")
@@ -78,14 +89,16 @@ func localName(name string) bool {
 }
 
 func (intent InstanceIntent) ownership() map[string]string {
-	markers := map[string]string{
-		"user.aginctus.managed": "true", "user.aginctus.resource": "workload",
-		"user.aginctus.role": "agent-workload", "user.aginctus.workload": intent.WorkloadID,
+	return intent.lifecycle(InstanceRunning).markers()
+}
+
+func (intent InstanceIntent) lifecycle(state InstanceState) InstanceLifecycleIntent {
+	scope, _ := incusscope.NewProjectScope(intent.Identity.Project)
+	life := InstanceLifecycleIntent{Scope: scope, Name: intent.Identity.Name, Resource: "workload", Role: "agent-workload", WorkloadID: intent.WorkloadID, EnvironmentID: intent.EnvironmentID, State: state}
+	if intent.HerdrClient {
+		life.Resource, life.Role = "infrastructure", "herdr-client"
 	}
-	if intent.EnvironmentID != "" {
-		markers[environmentOwnershipKey] = intent.EnvironmentID
-	}
-	return markers
+	return life
 }
 
 // environmentOwnerMatches never treats an obsolete marker as ownership proof.
@@ -163,7 +176,8 @@ func PlanExistingInstance(intent InstanceIntent, observed InstanceObservation) (
 	if intent.Type != observed.Type {
 		change("type", true)
 	}
-	if observed.Config["volatile.base_image"] != observed.ImageFingerprint {
+	if observed.Config["volatile.base_image"] != observed.ImageFingerprint ||
+		intent.ImageFingerprint != "" && observed.ImageFingerprint != intent.ImageFingerprint {
 		change("image", true)
 	}
 	if !slices.Equal(intent.Profiles, observed.Profiles) {

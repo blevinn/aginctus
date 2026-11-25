@@ -188,7 +188,7 @@ func TestInstanceObservationSDKUsesOnlyScopedLocalReads(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(requests) != 7 {
+	if len(requests) != 8 {
 		t.Fatalf("unexpected read sequence: %v", requests)
 	}
 }

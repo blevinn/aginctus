@@ -241,6 +241,12 @@
               {
                 inherit self nixpkgs system;
               };
+          vm-harness-native-joined-lifecycle =
+            import ./tests/nix/vm-harness/native-accepted-incus-observation.nix
+              {
+                inherit self nixpkgs system;
+                joinedLifecycle = true;
+              };
           vm-harness-synthetic-gateway = import ./tests/nix/vm-harness/gateway-topology.nix {
             inherit self nixpkgs system;
             synthetic = true;

@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 
+	incusscope "github.com/blevinn/aginctus/internal/incus"
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 )
@@ -13,12 +15,15 @@ import (
 const Project = "default"
 
 var safeName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+var environmentID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 // Volume describes an Aginctus-owned filesystem volume.
 type Volume struct {
-	Pool     string
-	Instance string
-	Class    string
+	Pool          string
+	Instance      string
+	Class         string
+	Project       string // empty only for the legacy default-project path
+	EnvironmentID string
 }
 
 func (v Volume) Name() string { return v.Instance + "-state-" + v.Class }
@@ -30,16 +35,25 @@ func (v Volume) Validate() error {
 	if v.Class != "system" && v.Class != "user" {
 		return fmt.Errorf("unknown state class %q", v.Class)
 	}
+	if v.Project != "" || v.EnvironmentID != "" {
+		if _, err := incusscope.NewProjectScope(v.Project); err != nil || !environmentID.MatchString(v.EnvironmentID) || v.Class != "system" {
+			return fmt.Errorf("scoped Herdr state requires a project and canonical environment identity")
+		}
+	}
 	return nil
 }
 
 func (v Volume) markers() map[string]string {
-	return map[string]string{
+	markers := map[string]string{
 		"user.aginctus.managed":     "true",
 		"user.aginctus.resource":    "state-volume",
 		"user.aginctus.instance":    v.Instance,
 		"user.aginctus.state-class": v.Class,
 	}
+	if v.EnvironmentID != "" {
+		markers["user.aginctus.environment-id"] = v.EnvironmentID
+	}
+	return markers
 }
 
 // Backend abstracts Incus volume calls for deterministic lifecycle tests.
@@ -63,6 +77,26 @@ func Verify(v Volume, existing *api.StorageVolume) error {
 	for key, want := range v.markers() {
 		if existing.Config[key] != want {
 			return fmt.Errorf("state volume %q ownership conflict (%s)", v.Name(), key)
+		}
+	}
+	_, obsolete := existing.Config["user.aginctus.environment"]
+	_, canonical := existing.Config["user.aginctus.environment-id"]
+	if obsolete || v.Project == "" && canonical {
+		return fmt.Errorf("conflicting state-volume environment ownership")
+	}
+	if v.Project != "" {
+		if existing.Project != v.Project || existing.CreatedAt.IsZero() {
+			return fmt.Errorf("state-volume project or incarnation unverified")
+		}
+		for _, use := range existing.UsedBy {
+			u, err := url.Parse(use)
+			if err != nil || u.IsAbs() || u.Host != "" || u.Path != "/1.0/instances/"+v.Instance || u.Fragment != "" {
+				return fmt.Errorf("state volume has an unexpected attachment")
+			}
+			q, err := url.ParseQuery(u.RawQuery)
+			if err != nil || len(q) != 1 || len(q["project"]) != 1 || q.Get("project") != v.Project {
+				return fmt.Errorf("state volume has an unverified attachment project")
+			}
 		}
 	}
 	return nil

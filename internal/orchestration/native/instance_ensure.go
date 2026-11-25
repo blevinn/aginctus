@@ -46,8 +46,7 @@ func PlanInstanceWithReader(ctx context.Context, intent InstanceIntent, reader I
 	if err := ctx.Err(); err != nil {
 		return InstancePlan{}, err
 	}
-	info, err := reader.GetConnectionInfo()
-	if err != nil || localTransport(info, intent.Identity.Project) != nil {
+	if err := verifyInstanceTransport(ctx, reader, intent.Identity.Project); err != nil {
 		return InstancePlan{}, fmt.Errorf("instance planning requires local selected-project transport")
 	}
 	instance, _, err := reader.GetInstance(intent.Identity.Name)
@@ -67,15 +66,11 @@ func PlanInstanceWithReader(ctx context.Context, intent InstanceIntent, reader I
 		if err != nil || project == nil || scope.AssessProject(project.Name, project.Config) != incusscope.ProjectCompatible {
 			return InstancePlan{}, fmt.Errorf("selected project policy unverified")
 		}
-		alias, _, err := reader.GetImageAlias(intent.ImageAlias)
-		if err != nil || alias == nil || alias.Name != intent.ImageAlias || !fingerprintPattern.MatchString(alias.Target) || fingerprint != "" && fingerprint != alias.Target {
-			return InstancePlan{}, fmt.Errorf("selected project image alias unverified")
-		}
-		fingerprint = alias.Target
-		image, _, err := reader.GetImage(fingerprint)
-		if err != nil || image == nil || image.Project != scope.Name || image.Fingerprint != fingerprint || image.Type != intent.Type {
+		current, err := resolveInstanceImage(intent, reader)
+		if err != nil || fingerprint != "" && fingerprint != current {
 			return InstancePlan{}, fmt.Errorf("selected project image unverified")
 		}
+		fingerprint = current
 		if _, _, err := reader.GetInstance(intent.Identity.Name); !api.StatusErrorCheck(err, http.StatusNotFound) {
 			return InstancePlan{}, fmt.Errorf("instance absence changed during planning")
 		}
@@ -177,10 +172,7 @@ func ensureInstanceWithGuard(ctx context.Context, intent InstanceIntent, dryRun,
 		if err := guard(ctx); err != nil {
 			return result, &ReconcileError{Stage: "authority", Mutated: result.Created || result.Updated, cause: err}
 		}
-		scope, _ := incusscope.NewProjectScope(intent.Identity.Project)
-		state, err := EnsureInstanceStateWithClient(ctx, InstanceLifecycleIntent{
-			Scope: scope, Name: intent.Identity.Name, Resource: "workload", Role: "agent-workload", WorkloadID: intent.WorkloadID, EnvironmentID: intent.EnvironmentID, State: InstanceRunning,
-		}, client)
+		state, err := EnsureInstanceStateWithClient(ctx, intent.lifecycle(InstanceRunning), client)
 		result.Started = state.Changed
 		if err != nil {
 			return result, err

@@ -15,8 +15,8 @@ import (
 type NativeAction = native.Action
 
 const (
-	NativeStart NativeAction = "start"
-	NativeStop  NativeAction = "stop"
+	NativeStart = native.Start
+	NativeStop  = native.Stop
 )
 
 // NativeEffect identifies one action on an exact domain-resolved target.
