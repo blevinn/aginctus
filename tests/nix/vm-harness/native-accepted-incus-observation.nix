@@ -3,6 +3,7 @@
   self,
   nixpkgs,
   system,
+  joinedLifecycle ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
@@ -15,11 +16,17 @@ let
     buildPhase = ''
       runHook preBuild
       go test -c -o accepted-observation-tests ./internal/orchestration/native
+      ${pkgs.lib.optionalString joinedLifecycle ''
+        go test -c -o joined-lifecycle-tests ./internal/nativelifecycle
+      ''}
       runHook postBuild
     '';
     installPhase = ''
       mkdir -p "$out/bin"
       cp accepted-observation-tests "$out/bin/"
+      ${pkgs.lib.optionalString joinedLifecycle ''
+        cp joined-lifecycle-tests "$out/bin/"
+      ''}
     '';
   };
   # Same offline NixOS fixture image as native-instance; nothing is started.
@@ -35,7 +42,11 @@ let
   };
 in
 pkgs.testers.runNixOSTest {
-  name = "aginctus-native-accepted-incus-observation";
+  name =
+    if joinedLifecycle then
+      "aginctus-native-joined-lifecycle"
+    else
+      "aginctus-native-accepted-incus-observation";
   nodes.machine = { ... }: {
     system.stateVersion = "26.05";
     networking.nftables.enable = true;
@@ -70,6 +81,15 @@ pkgs.testers.runNixOSTest {
     print(machine.succeed("incus version"))
     for project in ["team", "unrelated"]:
         machine.succeed(f"incus project create {project} -c restricted=true -c features.images=true")
+    ${pkgs.lib.optionalString joinedLifecycle ''
+      machine.succeed("incus network create fixture-mgmt --project default ipv4.address=10.79.37.1/24"
+                      " ipv4.dhcp.gateway=none ipv4.nat=false ipv4.routing=false ipv6.address=none"
+                      " user.aginctus.managed=true user.aginctus.resource=management-network")
+      machine.succeed("incus project set team features.storage.volumes=true features.profiles=true features.networks=false"
+                      " user.aginctus.managed=true user.aginctus.resource=deployment-project user.aginctus.deployment=team"
+                      " restricted.devices.nic=managed restricted.devices.disk=managed"
+                      " restricted.networks.access=fixture-mgmt restricted.storage-pools.access=default")
+    ''}
     machine.succeed("incus image import ${image.config.system.build.metadata}/tarball/* ${image.config.system.build.tarball}/tarball/* --alias fixture --project team", timeout=120)
     fingerprint = machine.succeed("incus image list --project team --format json | jq -er '.[0].fingerprint'").strip()
 
@@ -118,5 +138,26 @@ pkgs.testers.runNixOSTest {
     for project, instances in before.items():
         assert snapshot(project) == instances, f"observation changed {project} instances"
     print("INCUS OBSERVATION: both projects unchanged, including unselected and foreign fixtures")
+  ''
+  + pkgs.lib.optionalString joinedLifecycle ''
+    machine.succeed("incus network list --project default --format=json | jq -e '.[] | select(.name == \"fixture-mgmt\")' >/run/aginctus-joined-bridge.json")
+    machine.succeed("touch /run/aginctus-joined-lifecycle-disposable")
+    output = machine.succeed(
+        operator + " AGINCTUS_JOINED_LIFECYCLE_VM=disposable-vm"
+        + " AGINCTUS_OBSERVATION_SERVER_PIN=" + shlex.quote(pin)
+        + " AGINCTUS_OBSERVATION_IMAGE=" + shlex.quote(fingerprint)
+        + " joined-lifecycle-tests -test.v -test.run '^TestLocalNativeJoinedWorkloadHerdrVM$' -test.timeout=200s",
+        timeout=210,
+    )
+    print(output)
+    assert "--- PASS: TestLocalNativeJoinedWorkloadHerdrVM " in output, "joined Go test did not run"
+    selected = snapshot("team")
+    assert {i["name"] for i in selected if i["status"] == "Running"} == {"joined-agent", "joined-herdr"}
+    assert [i for i in selected if i["name"] not in ("joined-agent", "joined-herdr")] == before["team"]
+    assert snapshot("unrelated") == before["unrelated"]
+    machine.succeed("incus config device get joined-herdr state_system source --project team | grep -qx joined-herdr-state-system")
+    machine.succeed("incus network list --project default --format=json | jq -e '.[] | select(.name == \"fixture-mgmt\") | .config' > /run/aginctus-joined-bridge-config-after.json"
+                    " && jq .config /run/aginctus-joined-bridge.json | diff - /run/aginctus-joined-bridge-config-after.json")
+    print("JOINED LIFECYCLE: restricted SDK effects and retained volume verified; host bridge policy and unselected instances unchanged")
   '';
 }

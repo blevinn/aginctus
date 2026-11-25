@@ -52,6 +52,8 @@ type projectFixture struct {
 	backups      []string
 	failWait     bool
 	allowDefault bool
+	serverName   string
+	clustered    bool
 }
 
 func (p *projectFixture) GetConnectionInfo() (*incus.ConnectionInfo, error) {
@@ -59,7 +61,7 @@ func (p *projectFixture) GetConnectionInfo() (*incus.ConnectionInfo, error) {
 	return &i, nil
 }
 func (p *projectFixture) GetServer() (*api.Server, string, error) {
-	return &api.Server{ServerUntrusted: api.ServerUntrusted{Auth: "trusted"}}, "server", nil
+	return &api.Server{ServerUntrusted: api.ServerUntrusted{Auth: "trusted"}, Environment: api.ServerEnvironment{ServerName: p.serverName, ServerClustered: p.clustered}}, "server", nil
 }
 func (p *projectFixture) GetProject(name string) (*api.Project, string, error) {
 	if name == "default" && !p.allowDefault {
