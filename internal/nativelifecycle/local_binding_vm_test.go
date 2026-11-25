@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +20,7 @@ import (
 	"github.com/blevinn/aginctus/internal/orchestration/native"
 	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
 	check "github.com/blevinn/aginctus/pkg/orchestration"
+	incus "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 )
 
@@ -140,5 +145,87 @@ func TestLocalNativeJoinedWorkloadHerdrVM(t *testing.T) {
 	again, _, err := client.GetStoragePoolVolume(pool, "custom", "joined-herdr-state-system")
 	if err != nil || again == nil || !again.CreatedAt.Equal(volume.CreatedAt) {
 		t.Fatalf("Herdr state incarnation changed: %v", err)
+	}
+	const sentinel = "joined retained state\n"
+	if err := client.CreateInstanceFile("joined-herdr", "/var/lib/aginctus/state/system/fixture-sentinel", incus.InstanceFileArgs{Content: strings.NewReader(sentinel), UID: 0, GID: 0, Mode: 0600, Type: "file"}); err != nil {
+		t.Fatalf("write fixture sentinel through the Herdr guest mount: %v", err)
+	}
+	plan.Resources = []orchestration.NativeResource{
+		{ID: "agent", Kind: orchestration.NativeWorkload},
+		{ID: herdrclient.NativeVolumeID, Kind: orchestration.NativeHerdrVolume},
+		{ID: herdrclient.NativeInstanceID, Kind: orchestration.NativeHerdrInstance, DependsOn: []string{herdrclient.NativeVolumeID}},
+	}
+	instanceNames := map[string]string{"agent": "joined-agent", herdrclient.NativeInstanceID: "joined-herdr"}
+	live := make(map[string]time.Time, len(instanceNames))
+	for id, name := range instanceNames {
+		i, _, err := client.GetInstance(name)
+		if err != nil || i == nil || i.Status != "Running" || i.Name != name || i.Project != project || i.Config["user.aginctus.environment-id"] != enrolled.ID || i.CreatedAt.IsZero() {
+			t.Fatalf("cannot grant teardown on an unverified instance %s: %v", id, err)
+		}
+		live[id] = i.CreatedAt
+	}
+	exec.BindLifecycleTeardown = composer.BindTeardown
+	selection := orchestration.LocalLifecycleTeardown{Instances: maps.Clone(live), HerdrState: volume.CreatedAt}
+	var operation native.ProjectInstanceOperation
+	var action native.Action
+	exec.AuthorizeTeardown = func(ctx context.Context, req orchestration.LocalLifecycleTeardownRequest) (environment.Binding, error) {
+		if req.Plan.Revision != revision || req.Selection.Operation != operation || !maps.EqualFunc(req.Selection.Instances, live, time.Time.Equal) || !req.Selection.HerdrState.Equal(volume.CreatedAt) {
+			return environment.Binding{}, errors.New("fixture teardown scope denied")
+		}
+		if req.Permission == orchestration.LocalNativeSubmit {
+			name, ok := instanceNames[req.Effect.Target]
+			if !ok || req.Resource.ID != req.Effect.Target || req.Effect.Action != action {
+				return environment.Binding{}, errors.New("fixture teardown effect denied")
+			}
+			i, _, err := client.GetInstance(name)
+			if err != nil || i == nil || !i.CreatedAt.Equal(live[req.Effect.Target]) || i.Project != project || i.Name != name {
+				return environment.Binding{}, errors.New("fixture teardown incarnation no longer authorized")
+			}
+		}
+		return enrolled.Binding, verifyProject(ctx)
+	}
+	for _, op := range []native.ProjectInstanceOperation{native.StopInstance, native.RemoveInstance} {
+		operation, selection.Operation = op, op
+		action = native.Stop
+		if op == native.RemoveInstance {
+			action = native.Delete
+		}
+		result, err := exec.ExecuteLocalTeardown(ctx, engine, plan, selection, orchestration.ExecuteOptions{})
+		if err != nil || result.Native == nil || len(result.Native.Effects) != 2 || len(result.Conditions) != 3 {
+			t.Fatalf("restricted teardown %s: %+v %v", op, result, err)
+		}
+		journal, err := store.ReadLocalNativeOperation(ctx, enrolled, result.Native.LocalOperationID)
+		if err != nil || journal.Status != environment.LocalNativeCompleted || len(journal.Effects) != 2 {
+			t.Fatalf("teardown journal: %+v %v", journal, err)
+		}
+		for _, e := range journal.Effects {
+			if e.Action != string(action) || e.Outcome != environment.LocalNativeApplied {
+				t.Fatalf("unexpected teardown effect: %+v", e)
+			}
+		}
+		for id, name := range instanceNames {
+			i, _, err := client.GetInstance(name)
+			if op == native.StopInstance && (err != nil || i == nil || i.Status != "Stopped" || !i.CreatedAt.Equal(live[id])) ||
+				op == native.RemoveInstance && (i != nil || !api.StatusErrorCheck(err, http.StatusNotFound)) {
+				t.Fatalf("instance %s did not reach expected state for %s: %v", id, op, err)
+			}
+		}
+	}
+	retained, _, err := client.GetStoragePoolVolume(pool, "custom", volume.Name)
+	if err != nil || retained == nil || !retained.CreatedAt.Equal(volume.CreatedAt) || len(retained.UsedBy) != 0 {
+		t.Fatalf("Herdr volume or detachment unverified: %v", err)
+	}
+	sftp, err := client.GetStoragePoolVolumeFileSFTP(pool, "custom", volume.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sftp.Close()
+	file, err := sftp.Open("/fixture-sentinel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if data, err := io.ReadAll(io.LimitReader(file, 128)); err != nil || string(data) != sentinel {
+		t.Fatalf("Herdr guest data was not retained: %v", err)
 	}
 }

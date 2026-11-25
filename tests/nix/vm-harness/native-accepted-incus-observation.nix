@@ -151,13 +151,11 @@ pkgs.testers.runNixOSTest {
     )
     print(output)
     assert "--- PASS: TestLocalNativeJoinedWorkloadHerdrVM " in output, "joined Go test did not run"
-    selected = snapshot("team")
-    assert {i["name"] for i in selected if i["status"] == "Running"} == {"joined-agent", "joined-herdr"}
-    assert [i for i in selected if i["name"] not in ("joined-agent", "joined-herdr")] == before["team"]
+    assert snapshot("team") == before["team"]
     assert snapshot("unrelated") == before["unrelated"]
-    machine.succeed("incus config device get joined-herdr state_system source --project team | grep -qx joined-herdr-state-system")
+    machine.succeed("incus storage volume show default joined-herdr-state-system --project team")
     machine.succeed("incus network list --project default --format=json | jq -e '.[] | select(.name == \"fixture-mgmt\") | .config' > /run/aginctus-joined-bridge-config-after.json"
                     " && jq .config /run/aginctus-joined-bridge.json | diff - /run/aginctus-joined-bridge-config-after.json")
-    print("JOINED LIFECYCLE: restricted SDK effects and retained volume verified; host bridge policy and unselected instances unchanged")
+    print("JOINED LIFECYCLE: restricted SDK create/start/stop/removal and retained Herdr guest data verified; host bridge policy and unselected instances unchanged")
   '';
 }
