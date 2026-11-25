@@ -24,7 +24,8 @@ func gatewayVolumeVMEnvironment(project, fingerprint, id string) environment.Des
 		Binding: environment.Binding{Project: project, ServerID: "sha256:" + fingerprint}}
 }
 
-func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
+func openGatewayFixtureVM(t *testing.T, project string) (context.Context, incusclient.InstanceServer, environment.Binding) {
+	t.Helper()
 	if os.Getenv("AGINCTUS_NATIVE_OCI_SPIKE") != "disposable-vm" {
 		t.Skip("requires explicit native OCI disposable-VM opt-in")
 	}
@@ -33,17 +34,17 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 		t.Fatal("disposable VM marker absent")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
+	t.Cleanup(cancel)
 	admin, err := incusclient.ConnectIncusUnixWithContext(ctx, "/var/lib/incus/unix.socket", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer admin.Disconnect()
+	t.Cleanup(admin.Disconnect)
 	server, _, err := admin.GetServer()
-	if err != nil || server.Config["core.https_address"] != "" {
-		t.Fatal("test requires local-only Incus daemon")
+	if err != nil || server == nil || server.Environment.ServerClustered || server.Config["core.https_address"] != "" {
+		t.Fatal("test requires a standalone, local-only Incus daemon")
 	}
-	scope, err := incusscope.NewProjectScope("aginctus-native-gateway-audit")
+	scope, err := incusscope.NewProjectScope(project)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,6 +52,11 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 	if err != nil || !result.Verified {
 		t.Fatalf("isolated project: %+v %v", result, err)
 	}
+	return ctx, admin, environment.Binding{Project: scope.Name, ServerID: "sha256:" + server.Environment.CertificateFingerprint}
+}
+
+func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
+	ctx, admin, binding := openGatewayFixtureVM(t, "aginctus-native-gateway-audit")
 	for _, n := range []struct {
 		name     string
 		resource string
@@ -72,8 +78,8 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 			t.Fatalf("create disposable bridge: %v", err)
 		}
 	}
-	client := admin.UseProject(scope.Name)
-	descriptor := gatewayVolumeVMEnvironment(scope.Name, server.Environment.CertificateFingerprint, "123e4567-e89b-42d3-a456-426614174000")
+	client := admin.UseProject(binding.Project)
+	descriptor := environment.Descriptor{ID: "123e4567-e89b-42d3-a456-426614174000", Name: "disposable-gateway", Binding: binding}
 	guardCalls := 0
 	guard := func(context.Context) error { guardCalls++; return nil } // This VM fixture is the sole writer.
 	for attempt := range 2 {
@@ -83,7 +89,7 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 		}
 	}
 	top := gateway.NativeGatewayTopology{
-		Deployment: "gateway", Project: scope.Name,
+		Deployment: "gateway", Project: binding.Project,
 		ManagementNetwork: "ag-aud-mgmt", EgressNetwork: "ag-aud-egress",
 		DatabaseVolume: "gateway-postgres",
 		Services: []gateway.NativeGatewayService{
@@ -102,7 +108,7 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 		},
 	}
 	unboundTopology := top
-	top, err = gateway.BindNativeGatewayTopology(unboundTopology, descriptor, descriptor.Binding)
+	top, err := gateway.BindNativeGatewayTopology(unboundTopology, descriptor, descriptor.Binding)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +127,7 @@ func TestNativeGatewayAttachmentAuditVM(t *testing.T) {
 		{"123e4567-e89b-42d3-a456-426614174001", ""},
 		{"123e4567-e89b-42d3-a456-426614174002", descriptor.ID},
 	} {
-		sibling := gatewayVolumeVMEnvironment(scope.Name, server.Environment.CertificateFingerprint, collision.id)
+		sibling := environment.Descriptor{ID: collision.id, Name: descriptor.Name, Binding: binding}
 		identity, err := gateway.NativeGatewayIdentity(sibling, sibling.Binding)
 		if err != nil {
 			t.Fatal(err)
