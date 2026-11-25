@@ -72,7 +72,7 @@ class NixOwnershipTests(unittest.TestCase):
         for output in (
             "aginctusTestenvRecovery", "aginctusTestenvWorker",
             "herdr-socket-integration", "vm-harness-smoke",
-            "vm-harness-full-stack", "accepted-state-incus",
+            "accepted-state-incus",
             "testenv-incus-vm-image",
         ):
             with self.subTest(output=output):

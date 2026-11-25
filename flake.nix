@@ -237,11 +237,7 @@
           vm-harness-opencode-tool-loopback = import ./tests/nix/vm-harness/opencode-tool-loopback.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-full-stack = import ./tests/nix/vm-harness/gateway-topology.nix {
-            inherit self nixpkgs system;
-            synthetic = true;
-            fullStack = true;
-          };
+          # The Compose full-stack fixture is suspended pending the native port (#1115).
           vm-harness-ownership-recovery = import ./tests/nix/vm-harness/ownership-recovery.nix {
             inherit self nixpkgs system;
           };
