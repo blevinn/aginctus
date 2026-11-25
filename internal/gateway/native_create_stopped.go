@@ -87,6 +87,21 @@ type NativeGatewayCreateImages struct {
 	LiteLLM  NativeGatewayCreateImage
 }
 
+func observePinnedGatewayInstances(ctx context.Context, top NativeGatewayTopology, pair NativeGatewayInstancePair, images NativeGatewayCreateImages, reader NativeGatewayInstanceReader) ([]NativeGatewayInstanceObservation, error) {
+	pins := [2]NativeGatewayCreateImage{images.Postgres, images.LiteLLM}
+	return observeNativeGatewayInstances(ctx, pair, reader, func(i int, spec NativeGatewayInstanceSpec) (string, error) {
+		pin := pins[i]
+		if len(top.Services) != len(pins) || top.Services[i].ImageReference != pin.Expected.Registry+"/"+pin.Expected.Repository+"@"+pin.Expected.ManifestDigest {
+			return "", fmt.Errorf("expected OCI image does not match pinned topology")
+		}
+		want := native.GatewayImageAcquireIntent{Project: spec.Project, Image: pin.Expected}
+		if err := native.ObserveGatewayImageReuseWithClient(ctx, want, spec.ImageAlias, pin.Evidence, reader); err != nil {
+			return "", fmt.Errorf("native gateway image identity unverified")
+		}
+		return pin.Expected.IncusFingerprint, nil
+	})
+}
+
 // CreateStoppedGatewayWithClient intentionally has no local-connection
 // wrapper or CLI activation. The caller must separately enforce accepted-state
 // authority and hold exclusive writer fencing across observation and submission
@@ -98,12 +113,16 @@ type NativeGatewayCreateImages struct {
 // Each expected registry/repository@manifest must match the topology pin.
 // Newly created services must be STOPPED. Retained services are left unchanged.
 func CreateStoppedGatewayWithClient(ctx context.Context, top NativeGatewayTopology, devices NativeGatewayDevices, pair NativeGatewayInstancePair, images NativeGatewayCreateImages, client NativeGatewayStoppedCreateClient, guard func(context.Context) error) (NativeGatewayStoppedResult, error) {
+	if guard == nil {
+		return NativeGatewayStoppedResult{Project: top.Project}, &NativeGatewayStoppedError{Stage: "authority", Service: "gateway"}
+	}
+	return createStoppedGateway(ctx, top, devices, pair, images, client, func(ctx context.Context, _ string) error { return guard(ctx) })
+}
+
+func createStoppedGateway(ctx context.Context, top NativeGatewayTopology, devices NativeGatewayDevices, pair NativeGatewayInstancePair, images NativeGatewayCreateImages, client NativeGatewayStoppedCreateClient, guard func(context.Context, string) error) (NativeGatewayStoppedResult, error) {
 	result := NativeGatewayStoppedResult{Project: top.Project}
 	fail := func(stage, service string, attempted bool, cause error) (NativeGatewayStoppedResult, error) {
 		return result, &NativeGatewayStoppedError{Stage: stage, Service: service, Attempted: attempted, Uncertain: attempted, cause: cause}
-	}
-	if guard == nil {
-		return fail("authority", "gateway", false, fmt.Errorf("native gateway creation requires an authority guard"))
 	}
 	// Rebuild the pair rather than trusting caller-supplied names or attachments.
 	original, err := PlanNativeGatewayInstances(top, devices, pair.Postgres.ImageAlias, pair.LiteLLM.ImageAlias)
@@ -122,14 +141,7 @@ func CreateStoppedGatewayWithClient(ctx context.Context, top NativeGatewayTopolo
 		}
 	}
 	observe := func() ([]NativeGatewayInstanceObservation, error) {
-		return observeNativeGatewayInstances(ctx, pair, client, func(i int, spec NativeGatewayInstanceSpec) (string, error) {
-			pin := pins[i]
-			want := native.GatewayImageAcquireIntent{Project: spec.Project, Image: pin.Expected}
-			if err := native.ObserveGatewayImageReuseWithClient(ctx, want, spec.ImageAlias, pin.Evidence, client); err != nil {
-				return "", fmt.Errorf("native gateway image %s: %w", spec.Name, err)
-			}
-			return pin.Expected.IncusFingerprint, nil
-		})
+		return observePinnedGatewayInstances(ctx, top, pair, images, client)
 	}
 	if err := ObserveNativeGatewayAttachmentsWithReader(ctx, top, devices, client); err != nil {
 		return fail("attachments", "gateway", false, err)
@@ -191,7 +203,7 @@ func CreateStoppedGatewayWithClient(ctx context.Context, top NativeGatewayTopolo
 		if err := ctx.Err(); err != nil {
 			return fail("cancellation", spec.Name, false, err)
 		}
-		if err := guard(ctx); err != nil {
+		if err := guard(ctx, spec.Name); err != nil {
 			return fail("authority", spec.Name, false, err)
 		}
 		if err := ctx.Err(); err != nil {
