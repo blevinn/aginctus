@@ -64,9 +64,12 @@ The separate accepted-workload observation gate runs on an x86_64 Linux KVM
 worker:
 
 ```sh
-timeout --kill-after=15s 12m nix --quiet build --rebuild --no-update-lock-file --no-link -L \
+timeout --kill-after=15s 12m nix --quiet build --no-update-lock-file --no-link -L \
   .#vm-harness-native-accepted-incus-observation
 ```
+
+Add `--rebuild` if the target already exists in the Nix store and you want a
+fresh VM execution.
 
 The observer runs as an unprivileged guest user with an ephemeral,
 project-restricted TLS credential and a same-UID immutable revision fixture.

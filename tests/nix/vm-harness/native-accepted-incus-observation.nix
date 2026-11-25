@@ -67,7 +67,7 @@ pkgs.testers.runNixOSTest {
     start_all()
     machine.wait_for_unit("incus.service", timeout=60)
     machine.succeed("incus admin init --auto --storage-backend dir")
-    machine.succeed("incus version")
+    print(machine.succeed("incus version"))
     for project in ["team", "unrelated"]:
         machine.succeed(f"incus project create {project} -c restricted=true -c features.images=true")
     machine.succeed("incus image import ${image.config.system.build.metadata}/tarball/* ${image.config.system.build.tarball}/tarball/* --alias fixture --project team", timeout=120)
@@ -90,7 +90,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus init missing-1 --empty --project unrelated --storage default")
 
     operator = "runuser -u operator -- env HOME=/home/operator USER=operator LOGNAME=operator"
-    machine.succeed("incus config set core.https_address 127.0.0.1:8443")
+    machine.succeed("incus config set core.https_address=127.0.0.1:8443")
     machine.succeed(operator + " incus remote generate-certificate")
     machine.succeed("test $(stat -c '%a' /home/operator/.config/incus/client.key) = 600")
     machine.succeed("incus config trust add-certificate /home/operator/.config/incus/client.crt --restricted --projects team")
