@@ -87,6 +87,21 @@ type NativeGatewayCreateImages struct {
 	LiteLLM  NativeGatewayCreateImage
 }
 
+func observePinnedGatewayInstances(ctx context.Context, top NativeGatewayTopology, pair NativeGatewayInstancePair, images NativeGatewayCreateImages, reader NativeGatewayInstanceReader) ([]NativeGatewayInstanceObservation, error) {
+	pins := [2]NativeGatewayCreateImage{images.Postgres, images.LiteLLM}
+	return observeNativeGatewayInstances(ctx, pair, reader, func(i int, spec NativeGatewayInstanceSpec) (string, error) {
+		pin := pins[i]
+		if len(top.Services) != len(pins) || top.Services[i].ImageReference != pin.Expected.Registry+"/"+pin.Expected.Repository+"@"+pin.Expected.ManifestDigest {
+			return "", fmt.Errorf("expected OCI image does not match pinned topology")
+		}
+		want := native.GatewayImageAcquireIntent{Project: spec.Project, Image: pin.Expected}
+		if err := native.ObserveGatewayImageReuseWithClient(ctx, want, spec.ImageAlias, pin.Evidence, reader); err != nil {
+			return "", fmt.Errorf("native gateway image identity unverified")
+		}
+		return pin.Expected.IncusFingerprint, nil
+	})
+}
+
 // CreateStoppedGatewayWithClient intentionally has no local-connection
 // wrapper or CLI activation. The caller must separately enforce accepted-state
 // authority and hold exclusive writer fencing across observation and submission
@@ -122,14 +137,7 @@ func CreateStoppedGatewayWithClient(ctx context.Context, top NativeGatewayTopolo
 		}
 	}
 	observe := func() ([]NativeGatewayInstanceObservation, error) {
-		return observeNativeGatewayInstances(ctx, pair, client, func(i int, spec NativeGatewayInstanceSpec) (string, error) {
-			pin := pins[i]
-			want := native.GatewayImageAcquireIntent{Project: spec.Project, Image: pin.Expected}
-			if err := native.ObserveGatewayImageReuseWithClient(ctx, want, spec.ImageAlias, pin.Evidence, client); err != nil {
-				return "", fmt.Errorf("native gateway image %s: %w", spec.Name, err)
-			}
-			return pin.Expected.IncusFingerprint, nil
-		})
+		return observePinnedGatewayInstances(ctx, top, pair, images, client)
 	}
 	if err := ObserveNativeGatewayAttachmentsWithReader(ctx, top, devices, client); err != nil {
 		return fail("attachments", "gateway", false, err)

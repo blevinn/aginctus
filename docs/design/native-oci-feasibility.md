@@ -71,7 +71,9 @@ timeout --kill-after=15s 12m nix --quiet build --no-update-lock-file --no-link -
 
 The VM uses fixed environment UUIDs, its local-only Incus daemon, an explicit
 Btrfs pool and two VM-owned bridges with DHCP disabled. It composes topology
-binding, volume ensure, device and instance planning, and stopped creation.
+binding, read-only stopped-pair preview before volume ensure, device and
+instance planning, and stopped creation. The preview refuses a foreign guest
+even when the database volume has yet to be created.
 It verifies the exact environment-owned PostgreSQL volume and both stopped
 guests' image fingerprints and devices. Repeat must forward no volume or
 instance submissions. Revoking the fixture grant after the PostgreSQL
@@ -101,7 +103,10 @@ timeout --kill-after=15s 12m nix --quiet build --no-update-lock-file --no-link \
   --option substitute false -L .#vm-harness-native-gateway-stop-retention
 ```
 
-Each guest boots only a static, signal-aware synthetic process. The test seeds
+Each guest boots only a static, signal-aware synthetic process. The fixture
+exercises guarded PostgreSQL-role-first startup, a PID 1 handshake before the
+LiteLLM-role submission, and start repeat without new submissions. Its test-only
+delivery verifier never handles credentials. The test seeds
 and syncs fresh marker bytes through the PostgreSQL-role guest's database mount.
 It exercises the dormant stop executor, observing LiteLLM stop before any
 PostgreSQL stop request, both signal handlers, and stopped state. It reads the
