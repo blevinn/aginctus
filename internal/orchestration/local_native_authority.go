@@ -10,13 +10,15 @@ import (
 )
 
 const (
-	GatewayImageStage     = "gateway-image"
-	GatewayVolumeStage    = "gateway-volume"
-	GatewayInstanceStage  = "gateway-instance"
-	GatewayRuntimeStage   = "gateway-runtime"
-	GatewayPostgresTarget = "postgres"
-	GatewayLiteLLMTarget  = "litellm"
-	GatewayDatabaseTarget = "database"
+	GatewayImageStage          = "gateway-image"
+	GatewayVolumeStage         = "gateway-volume"
+	GatewayInstanceStage       = "gateway-instance"
+	GatewayRuntimeStage        = "gateway-runtime"
+	GatewayPostgresTarget      = "postgres"
+	GatewayLiteLLMTarget       = "litellm"
+	GatewayDatabaseTarget      = "database"
+	GatewayPostgresAliasTarget = "postgres-alias"
+	GatewayLiteLLMAliasTarget  = "litellm-alias"
 )
 
 type LocalNativePermission string
@@ -300,7 +302,10 @@ func localTargetSelected(r NativeResource, target string) bool {
 		return r.ID == target
 	case NativeGatewayVolume:
 		return target == GatewayDatabaseTarget
-	case NativeGatewayImage, NativeGatewayInstance, NativeGatewayRuntime:
+	case NativeGatewayImage:
+		return target == GatewayPostgresTarget || target == GatewayLiteLLMTarget ||
+			target == GatewayPostgresAliasTarget || target == GatewayLiteLLMAliasTarget
+	case NativeGatewayInstance, NativeGatewayRuntime:
 		return target == GatewayPostgresTarget || target == GatewayLiteLLMTarget
 	}
 	return false
