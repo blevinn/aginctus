@@ -23,11 +23,14 @@ const (
 type NativeResourceKind string
 
 const (
-	NativeWorkload        NativeResourceKind = "workload"
-	NativeGatewayImage    NativeResourceKind = "gateway-image"
-	NativeGatewayVolume   NativeResourceKind = "gateway-volume"
-	NativeGatewayInstance NativeResourceKind = "gateway-instance"
-	NativeGatewayRuntime  NativeResourceKind = "gateway-runtime"
+	NativeWorkload          NativeResourceKind = "workload"
+	NativeManagementNetwork NativeResourceKind = "management-network"
+	NativeHerdrVolume       NativeResourceKind = "herdr-volume"
+	NativeHerdrInstance     NativeResourceKind = "herdr-instance"
+	NativeGatewayImage      NativeResourceKind = "gateway-image"
+	NativeGatewayVolume     NativeResourceKind = "gateway-volume"
+	NativeGatewayInstance   NativeResourceKind = "gateway-instance"
+	NativeGatewayRuntime    NativeResourceKind = "gateway-runtime"
 )
 
 // NativeResource selects one typed operation target. ID is a logical selection
@@ -152,7 +155,7 @@ func (p NativePlan) ordered() ([]NativeResource, error) {
 		}
 		known[r.ID] = true
 		switch r.Kind {
-		case NativeWorkload, NativeGatewayImage, NativeGatewayVolume, NativeGatewayInstance, NativeGatewayRuntime:
+		case NativeWorkload, NativeManagementNetwork, NativeHerdrVolume, NativeHerdrInstance, NativeGatewayImage, NativeGatewayVolume, NativeGatewayInstance, NativeGatewayRuntime:
 		default:
 			return nil, fmt.Errorf("resource %q has unsupported native kind", r.ID)
 		}

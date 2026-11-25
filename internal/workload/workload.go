@@ -7,10 +7,10 @@ import (
 
 	"github.com/blevinn/aginctus/internal/config"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
-	"github.com/blevinn/aginctus/internal/orchestration/managementnetwork"
 	"github.com/blevinn/aginctus/internal/orchestration"
 	applydriver "github.com/blevinn/aginctus/internal/orchestration/drivers/apply"
 	nativedriver "github.com/blevinn/aginctus/internal/orchestration/drivers/native"
+	"github.com/blevinn/aginctus/internal/orchestration/managementnetwork"
 )
 
 type Spec struct {
@@ -76,6 +76,10 @@ func FromConfig(effective *config.Config, id string) (Spec, error) {
 }
 
 func (s Spec) Validate() error {
+	return s.validate(true)
+}
+
+func (s Spec) validate(requireAlias bool) error {
 	switch {
 	case s.ID == "":
 		return fmt.Errorf("workload id must not be empty")
@@ -83,7 +87,7 @@ func (s Spec) Validate() error {
 		return fmt.Errorf("workload instance name must not be empty")
 	case s.Runtime == "":
 		return fmt.Errorf("workload runtime must not be empty")
-	case s.ImageAlias == "":
+	case requireAlias && s.ImageAlias == "":
 		return fmt.Errorf("workload image alias must not be empty")
 	case s.StoragePool == "":
 		return fmt.Errorf("workload storage pool must not be empty")

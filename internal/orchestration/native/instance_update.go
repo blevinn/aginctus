@@ -77,8 +77,7 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 	if err := ctx.Err(); err != nil {
 		return fail("cancellation", false, false, err)
 	}
-	info, err := client.GetConnectionInfo()
-	if err != nil || localTransport(info, intent.Identity.Project) != nil {
+	if err := verifyInstanceTransport(ctx, client, intent.Identity.Project); err != nil {
 		return fail("transport", false, false, fmt.Errorf("update requires the local socket bound to the selected project"))
 	}
 	scope, _ := incusscope.NewProjectScope(intent.Identity.Project)
@@ -117,16 +116,11 @@ func UpdateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 		if instance.Status != "Running" && instance.Status != "Stopped" {
 			return nil, "", "", fmt.Errorf("existing workload lifecycle unverified")
 		}
-		alias, _, err := client.GetImageAlias(intent.ImageAlias)
-		if err != nil || alias == nil || alias.Name != intent.ImageAlias || !fingerprintPattern.MatchString(alias.Target) {
-			return nil, "", "", fmt.Errorf("selected image alias unverified")
-		}
-		image, _, err := client.GetImage(alias.Target)
-		if err != nil || image == nil || image.Fingerprint != alias.Target || image.Project != scope.Name || image.Type != intent.Type ||
-			instance.Config["volatile.base_image"] != alias.Target {
+		fingerprint, err := resolveInstanceImage(intent, client)
+		if err != nil || instance.Config["volatile.base_image"] != fingerprint {
 			return nil, "", "", fmt.Errorf("existing workload image identity unverified")
 		}
-		return instance, etag, alias.Target, nil
+		return instance, etag, fingerprint, nil
 	}
 	before, etag, _, err := read()
 	if err != nil {

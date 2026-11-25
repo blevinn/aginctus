@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"path/filepath"
 	"slices"
 	"time"
 
@@ -19,9 +18,10 @@ import (
 // Created is true once Incus accepted the operation, even if later verification
 // fails; callers must inspect the instance and must not infer cleanup.
 type InstanceCreateResult struct {
-	Identity InstanceIdentity `json:"identity"`
-	Created  bool             `json:"created"`
-	Verified bool             `json:"verified"`
+	Identity    InstanceIdentity `json:"identity"`
+	Created     bool             `json:"created"`
+	Verified    bool             `json:"verified"`
+	incarnation time.Time
 }
 
 // InstanceCreateError identifies a failure stage without exposing daemon
@@ -112,8 +112,7 @@ func CreateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 	if err := ctx.Err(); err != nil {
 		return fail("cancellation", false, false, err)
 	}
-	connection, err := client.GetConnectionInfo()
-	if err != nil || connection == nil || connection.Protocol != "incus" || !filepath.IsAbs(connection.SocketPath) || connection.Project != intent.Identity.Project {
+	if err := verifyInstanceTransport(ctx, client, intent.Identity.Project); err != nil {
 		return fail("transport", false, false, fmt.Errorf("local selected-project transport unavailable"))
 	}
 	scope, _ := incusscope.NewProjectScope(intent.Identity.Project)
@@ -125,19 +124,15 @@ func CreateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 		return ctx.Err()
 	}
 	checkImage := func() (string, error) {
-		alias, _, err := client.GetImageAlias(intent.ImageAlias)
-		if err != nil || alias == nil || alias.Name != intent.ImageAlias || !fingerprintPattern.MatchString(alias.Target) {
-			return "", fmt.Errorf("selected project image alias unverified")
+		fingerprint, err := resolveInstanceImage(intent, client)
+		if err != nil {
+			return "", err
 		}
-		image, _, err := client.GetImage(alias.Target)
-		if err != nil || image == nil || image.Fingerprint != alias.Target || image.Project != scope.Name || image.Type != intent.Type {
-			return "", fmt.Errorf("selected project image identity unverified")
-		}
-		return alias.Target, ctx.Err()
+		return fingerprint, ctx.Err()
 	}
 	checkAbsent := func() error {
 		instance, _, err := client.GetInstance(intent.Identity.Name)
-		if api.StatusErrorCheck(err, http.StatusNotFound) {
+		if instance == nil && api.StatusErrorCheck(err, http.StatusNotFound) {
 			return ctx.Err()
 		}
 		if err != nil || instance == nil {
@@ -195,7 +190,7 @@ func CreateInstanceWithClient(ctx context.Context, intent InstanceIntent, client
 	if err := checkProject(); err != nil {
 		return fail("verification", true, true, err)
 	}
-	if err := verifyCreatedInstance(ctx, client, intent, fingerprint); err != nil {
+	if err := verifyCreatedInstance(ctx, client, intent, fingerprint, &result.incarnation); err != nil {
 		return fail("verification", true, true, err)
 	}
 	result.Verified = true
@@ -210,7 +205,7 @@ func cloneDevices(input map[string]map[string]string) map[string]map[string]stri
 	return output
 }
 
-func verifyCreatedInstance(ctx context.Context, client InstanceCreateClient, intent InstanceIntent, fingerprint string) error {
+func verifyCreatedInstance(ctx context.Context, client InstanceCreateClient, intent InstanceIntent, fingerprint string, incarnation *time.Time) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -220,6 +215,9 @@ func verifyCreatedInstance(ctx context.Context, client InstanceCreateClient, int
 	}
 	if instance.Description != intent.Description || instance.Config["volatile.base_image"] != fingerprint {
 		return fmt.Errorf("created instance configuration or image unverified")
+	}
+	if intent.ImageFingerprint != "" && (instance.Status != "Stopped" || instance.Ephemeral || instance.CreatedAt.IsZero()) {
+		return fmt.Errorf("created instance stopped incarnation unverified")
 	}
 	if !environmentOwnerMatches(instance.Config, intent.EnvironmentID) {
 		return fmt.Errorf("created instance environment ownership unverified")
@@ -239,5 +237,6 @@ func verifyCreatedInstance(ctx context.Context, client InstanceCreateClient, int
 	if !slices.Equal(instance.Profiles, intent.Profiles) {
 		return fmt.Errorf("created instance profiles unverified")
 	}
+	*incarnation = instance.CreatedAt
 	return nil
 }
