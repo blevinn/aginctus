@@ -103,11 +103,11 @@ func cloneBoundChecks(checks []BoundCheck) []BoundCheck {
 	return checks
 }
 
-func (e *Engine) validateConditions(plan Plan, options ExecuteOptions) error {
+func (e *Engine) validateConditions(plan Plan, options ExecuteOptions, native bool) error {
 	if e.conditions == nil {
 		return nil
 	}
-	if options.DryRun {
+	if options.DryRun && !native {
 		return fmt.Errorf("condition-gated execution does not support dry-run")
 	}
 	if e.checkPolicy.Mode != OfflineChecks && e.checkPolicy.Mode != ReadOnlyChecks && e.checkPolicy.Mode != ActiveChecks {
@@ -144,6 +144,14 @@ func (e *Engine) validateConditions(plan Plan, options ExecuteOptions) error {
 					return fmt.Errorf("step %q has duplicate, unbound or misplaced conditions", step.ID)
 				}
 				ids[check.Check.ID] = true
+				if options.DryRun {
+					if !check.Preflight {
+						continue
+					}
+					if check.Check.Effect == contract.ActiveProbe {
+						return fmt.Errorf("step %q condition %q: active preflight is prohibited in dry-run", step.ID, check.Check.ID)
+					}
+				}
 				if err := e.checkAllowed(check.Check); err != nil {
 					return fmt.Errorf("step %q condition %q: %w", step.ID, check.Check.ID, err)
 				}
@@ -178,11 +186,14 @@ func (e *Engine) checkAllowed(check contract.Check) error {
 
 // authorizeConditions checks the complete selection before any evaluator or
 // operation, then runCheck repeats authorization at each actual probe boundary.
-func (e *Engine) authorizeConditions(ctx context.Context, plan Plan) error {
+func (e *Engine) authorizeConditions(ctx context.Context, plan Plan, preflightOnly bool) error {
 	for _, step := range plan.Steps {
 		conditions := e.conditions[step.ID]
 		for _, checks := range [][]BoundCheck{conditions.Preconditions, conditions.Postconditions} {
 			for _, check := range checks {
+				if preflightOnly && !check.Preflight {
+					continue
+				}
 				authorizeCtx, cancel := context.WithTimeout(ctx, check.Check.Timeout)
 				err := e.authorizeCheck(authorizeCtx, conditions.Scope, check.Check)
 				cancel()
