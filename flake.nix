@@ -123,6 +123,7 @@
           # Separate operator-only CLI; never registered by aginctus/MCP.
           testenv-cli = goPackages.testenv-cli;
           state-service = goPackages.state-service;
+          state-project-read = goPackages.state-project-read;
           state-project-fixture = goPackages.state-project-fixture;
           state-local = goPackages.state-local;
           aginctus = aginctusCli;
