@@ -99,10 +99,7 @@ func StartNativeEnvironmentGatewayWithClient(
 		if err := ctx.Err(); err != nil {
 			return false
 		}
-		server, _, err := client.GetServer()
-		if err != nil || server == nil || server.Environment.ServerClustered ||
-			server.Environment.Project != selected.Project || "sha256:"+server.Environment.CertificateFingerprint != selected.ServerID ||
-			!gatewayServerFingerprint.MatchString(server.Environment.CertificateFingerprint) {
+		if !gatewayServerMatches(client, selected) {
 			return false
 		}
 		if err := ObserveNativeGatewayAttachmentsWithReader(ctx, top, devices, client); err != nil {
