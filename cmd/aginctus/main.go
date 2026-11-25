@@ -25,14 +25,17 @@ func main() {
 	// The default CLI remains unchanged and fails closed for all
 	// environment/state/workload commands without authenticated readers.
 	if path, selected := os.LookupEnv("AGINCTUS_RESTRICTED_READ_CONFIG"); selected {
-		reader, closeRead, err := environment.ProductionEnrollmentReads(ctx, path)
+		readers, closeRead, err := environment.OpenProductionOperatorReads(ctx, path)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "restricted operator project read unavailable")
 			os.Exit(1)
 		}
 		status := cli.RunWithReadCapabilities(ctx, os.Args[1:], os.Stdout, os.Stderr,
 			incus.NewClient(), config.NewLoader(), registry,
-			cli.ReadCapabilities{Environments: reader})
+			cli.ReadCapabilities{
+				Environments: readers.Environments, Configured: readers.Configured,
+				Accepted: readers.Accepted, Diff: readers.Diff,
+			})
 		closeRead()
 		os.Exit(status)
 	}
