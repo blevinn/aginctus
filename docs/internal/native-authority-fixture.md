@@ -34,11 +34,14 @@ Optional `Candidate.Herdr` (`herdr`) pins `instanceName`, `imageFingerprint`, `s
 
 D compares C's returned revision, stage IDs, kinds, internal edges and exact binding coverage before observations. It rejects unpinned workloads, mismatched bridge names among selected attachments, missing bridge/retained-volume edges, orphaned Herdr stages and active lifecycle checks. It never invokes an Apply closure for the management-network stage. Only the final plan retains cross-stack edges; the lead composes them and the authorizer sees that exact plan. The composer is trusted code: graph equality cannot attest to opaque callback contents. Derive all C typed inputs from the supplied candidate as shown above, and pass C's actual result instead of copying the expected graph over it.
 
+The canonical UUID-derived gateway guest names are reserved across all candidates, including candidates without gateway intent and environments sharing the project. Workload and Herdr declarations using these names fail validation. This prevents both domains from independently planning a create for the same absent Incus instance. A conflicting existing name requires explicit resolution; the fixture does not rename, adopt or delete instances. The mixed hermetic test runs both composers under one revision, checks full-plan denial and both cross-domain edges, and recovers from a lost workload create result without repeating completed gateway effects or rewriting the failed journal.
+
 Fixture validation:
 
 ```sh
 nix develop --offline -c go test ./internal/orchestration/... ./cmd/aginctus-project-state-fixture
 nix develop --offline -c go test -race ./internal/orchestration ./internal/orchestration/environment
+nix develop --offline -c go test -race ./internal/nativelifecycle ./internal/gateway
 ```
 
 These cover digest changes and strict fields, missing pins, malformed C graphs, bootstrap consent, host-effect exclusion, and revocation/recovery. See the [C lifecycle handoff](native-lifecycle-components.md) for the actual adapter and disposable Incus fixture.

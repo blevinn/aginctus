@@ -64,9 +64,19 @@ func (c Candidate) Validate() error {
 			return err
 		}
 	}
+	// The Incus project can contain multiple environments. Reserve these names
+	// even before any gateway exists, including names for other environments.
+	for _, w := range c.Workloads {
+		if isGatewayInstanceName(w.InstanceName) {
+			return errors.New("accepted workload instance overlaps the gateway instance namespace")
+		}
+	}
 	if c.Herdr != nil {
 		if err := c.Herdr.validate(c.Environment); err != nil {
 			return err
+		}
+		if isGatewayInstanceName(c.Herdr.InstanceName) {
+			return errors.New("accepted Herdr instance overlaps the gateway instance namespace")
 		}
 		for _, w := range c.Workloads {
 			if w.InstanceName == c.Herdr.InstanceName {

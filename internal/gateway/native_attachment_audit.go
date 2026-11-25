@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"strings"
 
 	incusclient "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/orchestration/environment"
 )
 
 // NativeGatewayAttachmentReader is read-only. The management and egress
@@ -138,7 +138,7 @@ func observeNativeGatewayAttachments(ctx context.Context, top NativeGatewayTopol
 	}
 	postgresName := "postgres-1"
 	if top.EnvironmentID != "" {
-		postgresName = "ag-" + strings.ReplaceAll(top.EnvironmentID, "-", "") + "-pg"
+		postgresName, _, _ = environment.GatewayResourceNames(top.EnvironmentID)
 	}
 	if err := verifyGatewayVolume(v, scope.Name, top.EnvironmentID, top.DatabaseVolume, postgresName); err != nil {
 		return false, err
