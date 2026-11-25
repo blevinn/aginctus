@@ -74,6 +74,26 @@ func (r *Result) operationFinished() {
 	}
 }
 
+// Native effect evidence distinguishes a denial or failed observation from an
+// uncertain submission; legacy drivers do not expose this boundary.
+func (r *Result) nativeOperationFailed(ctx context.Context, firstEffect int, err error) {
+	if r.reporting == nil || r.Native == nil {
+		return
+	}
+	for _, effect := range r.Native.Effects[firstEffect:] {
+		if effect.Outcome == NativeEffectUncertain {
+			return // finish records the uncertain operation and run.
+		}
+	}
+	event := r.reporting.active
+	event.Kind, event.State, event.Reason = report.Operation, report.Failed, errorReason(err)
+	if conditionContextErr(ctx) != nil {
+		event.State = report.Canceled
+	}
+	r.reporting.collector.Record(event)
+	r.reporting.operation = false
+}
+
 func (r *executionReport) verification(state report.State, err error) {
 	event := r.active
 	event.Kind, event.State, event.Reason = report.PostconditionVerification, state, errorReason(err)
