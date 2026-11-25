@@ -32,6 +32,8 @@ type ConfiguredAcceptedDiff struct {
 	ProposedDigest     string                    `json:"proposedDigest"`
 	Changed            bool                      `json:"changed"`
 	DisplayNameChanged bool                      `json:"displayNameChanged"`
+	GatewayChanged     bool                      `json:"gatewayChanged,omitempty"`
+	HerdrChanged       bool                      `json:"herdrChanged,omitempty"`
 	NewlySelected      []string                  `json:"newlySelected"`
 	Unselected         []string                  `json:"unselected"`
 	Modified           []AcceptedWorkloadChange  `json:"modified"`

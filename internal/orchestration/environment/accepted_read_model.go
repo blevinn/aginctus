@@ -131,6 +131,8 @@ func (r AcceptedReadModel) DiffConfiguredAgainstAccepted(
 		// There is no accepted baseline. Selected candidate workloads are
 		// suggestions for a future explicit promotion, not resource actions.
 		out.Changed = true
+		out.GatewayChanged = proposed.Gateway != nil
+		out.HerdrChanged = proposed.Herdr != nil
 		out.NewlySelected = append(out.NewlySelected, proposed.SelectedWorkloads...)
 		return out, nil
 	}
@@ -140,6 +142,8 @@ func (r AcceptedReadModel) DiffConfiguredAgainstAccepted(
 	}
 	out.Changed = diff.Changed
 	out.DisplayNameChanged = diff.DisplayNameChanged
+	out.GatewayChanged = diff.GatewayChanged
+	out.HerdrChanged = diff.HerdrChanged
 	out.NewlySelected = append(out.NewlySelected, diff.WorkloadChanges.NewlySelected...)
 	out.Unselected = append(out.Unselected, diff.WorkloadChanges.Unselected...)
 	for _, modified := range diff.WorkloadChanges.Modified {

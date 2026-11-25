@@ -33,12 +33,21 @@ const (
 // Profiles are pinned by name, not evidence that a profile is safe or owned.
 // This type is NOT a native reconcile write authorization.
 type WorkloadSpec struct {
-	ID               string   `json:"id"`
-	InstanceName     string   `json:"instanceName"`
-	InstanceType     string   `json:"instanceType"`
-	ImageFingerprint string   `json:"imageFingerprint"`
-	Profiles         []string `json:"profiles"`
-	EnsureRunning    bool     `json:"ensureRunning"`
+	ID               string              `json:"id"`
+	InstanceName     string              `json:"instanceName"`
+	InstanceType     string              `json:"instanceType"`
+	ImageFingerprint string              `json:"imageFingerprint"`
+	Profiles         []string            `json:"profiles"`
+	EnsureRunning    bool                `json:"ensureRunning"`
+	Native           *WorkloadNativeSpec `json:"native,omitempty"`
+}
+
+// WorkloadNativeSpec pins the additional runtime marker and attachments used
+// by native lifecycle. Pool and network names only reference existing resources.
+type WorkloadNativeSpec struct {
+	Runtime           string `json:"runtime"`
+	StoragePool       string `json:"storagePool"`
+	ManagementNetwork string `json:"managementNetwork"`
 }
 
 func (s DeploymentSpec) Validate() error {
@@ -71,6 +80,10 @@ func (s DeploymentSpec) Validate() error {
 		}
 		if len(item.ImageFingerprint) != 64 || !fingerprintHex(item.ImageFingerprint) {
 			return errors.New("workload image must be pinned by lowercase SHA256 fingerprint")
+		}
+		if item.Native != nil && (!localID.MatchString(item.Native.Runtime) ||
+			!localID.MatchString(item.Native.StoragePool) || !localID.MatchString(item.Native.ManagementNetwork)) {
+			return errors.New("native workload runtime, storage pool and management network must be explicit names")
 		}
 		if item.Profiles == nil || len(item.Profiles) > 32 {
 			return errors.New("workload profiles must be explicit and bounded")
@@ -154,7 +167,7 @@ func ParseDeploymentSpec(data []byte) (DeploymentSpec, error) {
 		if err := json.Unmarshal(raw, &fields); err != nil || fields == nil {
 			return DeploymentSpec{}, errors.New("workload entry must be an object")
 		}
-		if err := strictKeySet(fields, "id", "instanceName", "instanceType", "imageFingerprint", "profiles", "ensureRunning"); err != nil {
+		if err := ValidateWorkloadFields(fields); err != nil {
 			return DeploymentSpec{}, err
 		}
 	}
@@ -171,6 +184,21 @@ func ParseDeploymentSpec(data []byte) (DeploymentSpec, error) {
 		return DeploymentSpec{}, err
 	}
 	return spec, nil
+}
+
+// ValidateWorkloadFields is the shared strict wire shape for an accepted
+// workload in either a deployment fragment or an environment candidate.
+// Callers must reject duplicate keys before extracting the fields.
+func ValidateWorkloadFields(fields map[string]json.RawMessage) error {
+	keys := []string{"id", "instanceName", "instanceType", "imageFingerprint", "profiles", "ensureRunning"}
+	if raw, ok := fields["native"]; ok {
+		keys = append(keys, "native")
+		var native map[string]json.RawMessage
+		if json.Unmarshal(raw, &native) != nil || strictKeySet(native, "runtime", "storagePool", "managementNetwork") != nil {
+			return errors.New("invalid native workload fields")
+		}
+	}
+	return strictKeySet(fields, keys...)
 }
 
 func strictKeySet(fields map[string]json.RawMessage, allowed ...string) error {
