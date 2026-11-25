@@ -39,19 +39,36 @@ func VerifyProjectTransport(ctx context.Context, reader environment.RestrictedIn
 		return errors.New("independently pinned Incus binding required")
 	}
 	info, err := reader.GetConnectionInfo()
-	if err != nil || info == nil || info.Target != "" {
+	if err != nil || info == nil {
 		return errors.New("unqualified project connection required")
 	}
-	v := environment.RestrictedIncusProjectVerifier{Observer: reader, PinnedServerCertificateSHA256: trustedPin}
+	observer := &standaloneProjectObserver{RestrictedIncusProjectObserver: reader, initialTarget: info.Target}
+	v := environment.RestrictedIncusProjectVerifier{Observer: observer, PinnedServerCertificateSHA256: trustedPin}
 	actual, err := v.VerifyProject(ctx, binding.Project)
 	if err != nil || actual != binding || ctx.Err() != nil {
 		return observationFailure(ctx, "restricted Incus mutation scope unverified")
 	}
 	after, err := reader.GetConnectionInfo()
-	if err != nil || after == nil || after.Target != "" || after.URL != info.URL || after.Project != binding.Project || after.Certificate != info.Certificate || after.SocketPath != "" || after.Protocol != "incus" {
+	if err != nil || after == nil || after.Target != observer.serverName || after.URL != info.URL || after.Project != binding.Project || after.Certificate != info.Certificate || after.SocketPath != "" || after.Protocol != "incus" {
 		return observationFailure(ctx, "project transport changed during verification")
 	}
 	return nil
+}
+
+type standaloneProjectObserver struct {
+	environment.RestrictedIncusProjectObserver
+	initialTarget, serverName string
+}
+
+func (o *standaloneProjectObserver) GetServer() (*api.Server, string, error) {
+	// The SDK reports the server's advertised name as Target even without
+	// UseTarget. Allow that value only on a verified standalone server.
+	server, etag, err := o.RestrictedIncusProjectObserver.GetServer()
+	if err != nil || server == nil || server.Environment.ServerClustered || (o.initialTarget != "" && o.initialTarget != server.Environment.ServerName) {
+		return nil, "", errors.New("standalone Incus project connection required")
+	}
+	o.serverName = server.Environment.ServerName
+	return server, etag, nil
 }
 
 type instanceConnection interface {

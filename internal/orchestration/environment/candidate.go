@@ -70,7 +70,7 @@ func (c Candidate) Validate() error {
 		}
 		for _, w := range c.Workloads {
 			if w.InstanceName == c.Herdr.InstanceName {
-				return errors.New("Herdr instance overlaps an accepted workload")
+				return errors.New("accepted Herdr instance overlaps a workload")
 			}
 		}
 	}
