@@ -36,15 +36,45 @@ foreign or inconsistent. It cannot rely on a cached project label.
 
 The opt-in `incus-project-authority` disposable VM now includes a **positive
 probe** of `GET /1.0/certificates/{fingerprint}` with the actual restricted TLS
-operator identity. **This test is NOT RUN here.** If Incus denies the trust
-lookup, the proposed authorizer is **not deployable** under the selected
-least-privilege service identity. That is a material architecture finding,
-not a test to weaken by adding a host-admin socket or certificate.
+operator identity. **Measured on the pinned Incus 7.5.1 of this flake**: a
+restricted, non-admin operator (no `incus` or `incus-admin` membership, no
+admin socket, no unrestricted certificate) resolved its **own** trust record
+with HTTP 200 and an exact record — matching fingerprint, `type=client`,
+`restricted=true`, `projects=["aginctus-authz"]` — and, with the same identity
+and the same route, resolved a **second** restricted peer's trust record with
+HTTP 200 and the same exact single-project shape. The returned PEM was the
+peer's own certificate, so the authorizer's byte-equality check holds too.
 
-The approved replacement would need an independent, non-admin, live
-certificate/project authorization proof with revocation semantics. Until one
-is demonstrated, do not enable any project-state service listener or treat
-the optional installed CLI state configuration as operationally complete.
+**Scope limit.** The self-read and the peer-read are both exercised, but only
+inside one disposable NixOS guest running one real Incus daemon. This is
+**exercise-only evidence on a non-dedicated host**. It is **not**
+dedicated-worker isolation, **not** live-provider evidence and **not**
+operator acceptance of any deployment.
+
+**Upstream dependency.** On Incus 7.5.1 the grant for
+`GET /1.0/certificates/{fingerprint}` is a server-level `CanView` on
+`ObjectTypeCertificate` (`cmd/incusd/certificates.go`,
+`internal/server/auth/driver_tls.go`), so a restricted client resolves
+**any** trust record, including one restricted to a foreign project and one
+restricted to two projects; upstream does not scope trust-record reads by
+project. The probe therefore confirms the read path, while the *authority*
+stays with the authorizer's own exactness rule: a foreign-project or
+second-project record is **not** accepted by the peer-read projection, an
+unknown or mismatched fingerprint resolves to no record (HTTP 404), and after
+`incus config trust remove` of the peer the read fails closed (HTTP 404).
+Re-verify all of this on every Incus upgrade: the read grant is an upstream
+implementation detail, not an Aginctus-owned contract.
+
+If Incus denies the trust lookup, the proposed authorizer is **not
+deployable** under the selected least-privilege service identity. That is a
+material architecture finding, not a test to weaken by adding a host-admin
+socket or certificate.
+
+An independent, non-admin, live certificate/project authorization proof with
+revocation semantics, exercised on a dedicated worker and accepted by an
+operator, is still outstanding. Until one is demonstrated, do not enable any
+project-state service listener or treat the optional installed CLI state
+configuration as operationally complete.
 
 No service daemon, protected-volume read-only source, secret provisioning,
 NixOS systemd unit, or actual host/VM state service has been deployed by this
