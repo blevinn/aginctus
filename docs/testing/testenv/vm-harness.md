@@ -167,7 +167,6 @@ nix develop -c just test-vm-runtime-lifecycle
 nix develop -c just test-vm-gateway-topology
 nix develop -c just test-vm-synthetic-gateway
 nix develop -c just test-vm-synthetic-tool-gateway
-nix --quiet develop --no-update-lock-file -c just test-vm-full-stack
 nix develop -c just test-vm-ownership-recovery
 nix develop -c just vm-debug
 ```
