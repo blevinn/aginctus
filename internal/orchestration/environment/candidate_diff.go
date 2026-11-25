@@ -18,6 +18,7 @@ type CandidateDiff struct {
 	PreviousDigest      string                       `json:"previousDigest"`
 	ProposedDigest      string                       `json:"proposedDigest"`
 	DisplayNameChanged  bool                         `json:"displayNameChanged"`
+	GatewayChanged      bool                         `json:"gatewayChanged"`
 	Changed             bool                         `json:"changed"`
 	WorkloadChanges     acceptedstate.DeploymentDiff `json:"workloadChanges"`
 }
@@ -65,6 +66,7 @@ func CompareCandidates(enrolled Descriptor, observed Binding, previous, proposed
 		PreviousDigest: hex.EncodeToString(previousSHA[:]),
 		ProposedDigest: hex.EncodeToString(proposedSHA[:]),
 		DisplayNameChanged: previous.Environment.Name != proposed.Environment.Name,
+		GatewayChanged:     !sameGatewaySpec(previous.Gateway, proposed.Gateway),
 		Changed: previousSHA != proposedSHA,
 		WorkloadChanges: changes,
 	}, nil

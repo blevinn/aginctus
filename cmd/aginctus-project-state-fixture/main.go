@@ -27,6 +27,7 @@ type options struct {
 	expected      string
 	confirm       bool
 	socket        string
+	operation     string
 }
 
 type acceptedStatus struct {
@@ -42,10 +43,12 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return err
 	}
 	if len(args) == 0 {
-		return errors.New("explicit init, status, audit, accept or serve required")
+		return errors.New("explicit init, status, audit, accept, operations, operation or serve required")
 	}
 	action := args[0]
-	if action != "init" && action != "status" && action != "audit" && action != "accept" && action != "serve" {
+	switch action {
+	case "init", "status", "audit", "accept", "operations", "operation", "serve":
+	default:
 		return errors.New("unsupported project-state fixture action")
 	}
 	fs := flag.NewFlagSet(action, flag.ContinueOnError)
@@ -59,6 +62,9 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	fs.StringVar(&o.expected, "expected-revision", "", "exact published accepted revision ID or none")
 	fs.BoolVar(&o.confirm, "confirm", false, "explicit same-UID fixture acceptance; does not deploy")
 	fs.StringVar(&o.socket, "socket", "", "absolute Unix socket path under a private precreated directory")
+	if action == "operation" {
+		fs.StringVar(&o.operation, "operation-id", "", "explicit historical fixture operation ID")
+	}
 	if err := fs.Parse(args[1:]); err != nil {
 		return errors.New("invalid fixture command flags")
 	}
@@ -105,6 +111,25 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	desc := environment.Descriptor{ID: o.environmentID, Name: "fixture-read", Binding: binding}
 	if err := desc.Validate(); err != nil {
 		return errors.New("invalid environment selection")
+	}
+	if action == "operations" || action == "operation" {
+		if o.candidate != "" || o.expected != "" || o.confirm {
+			return errors.New("operation recovery is read-only and accepts no promotion flags")
+		}
+		if action == "operations" {
+			ids, err := store.ListLocalNativeOperationIDs(ctx, desc)
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(stdout).Encode(struct {
+				OperationIDs []string `json:"operationIds"`
+			}{ids})
+		}
+		result, err := store.ReadLocalNativeOperation(ctx, desc, o.operation)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(stdout).Encode(result)
 	}
 	if action == "audit" {
 		if o.candidate != "" || o.expected != "" || o.confirm {
