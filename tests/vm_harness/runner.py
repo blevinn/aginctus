@@ -243,6 +243,10 @@ def main(argv: list[str] | None = None) -> int:
             # OCI provisioning needs worker network access, unavailable in a
             # Nix build sandbox. Run only the immutable allowlisted driver.
             with tempfile.TemporaryDirectory(prefix="aginctus-vm-") as state:
+                # native-oci's guest test permits 25 minutes for networked
+                # image acquisition and lifecycle work; leave startup margin
+                # outside that guest-side timeout.
+                runtime_timeout = 1800 if args.scenario == "native-oci" else 900
                 try:
                     result = subprocess.run(
                         [str(driver), "--output_directory", state, "--no-interactive"],
@@ -251,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
                         text=True,
                         capture_output=True,
                         check=False,
-                        timeout=900,
+                        timeout=runtime_timeout,
                     )
                 except subprocess.TimeoutExpired:
                     result = subprocess.CompletedProcess(
