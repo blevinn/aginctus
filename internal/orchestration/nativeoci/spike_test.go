@@ -112,6 +112,10 @@ func TestDaemonOCI(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			var pgFiles postgresFileFixture
+			if image.name == "postgres" {
+				pgFiles = newPostgresFileFixture(t, resolved.Config)
+			}
 
 			// The create-only gateway acquisition must obtain immutable OCI
 			// identity directly through the SDK. Layer-only matches are not
@@ -219,7 +223,10 @@ func TestDaemonOCI(t *testing.T) {
 				"user.aginctus.resource": "workload", "user.aginctus.role": "agent-workload", "user.aginctus.workload": image.name,
 			}
 			if image.name == "postgres" {
-				config["environment.POSTGRES_PASSWORD"] = "disposable-synthetic-password"
+				config["environment.POSTGRES_USER"] = "litellm"
+				config["environment.POSTGRES_DB"] = "litellm"
+				config["environment.POSTGRES_PASSWORD_FILE"] = postgresFixturePasswordPath
+				config["environment.POSTGRES_INITDB_ARGS"] = "--auth-host=scram-sha-256"
 			}
 			devices := map[string]map[string]string{
 				"root": {"type": "disk", "path": "/", "pool": "spike"},
@@ -259,6 +266,9 @@ func TestDaemonOCI(t *testing.T) {
 			if err != nil || observed.Config["volatile.base_image"] != fingerprint || observed.Config["volatile.container.oci"] != "true" {
 				t.Fatal("OCI instance initialization or fingerprint mismatch")
 			}
+			if image.name == "postgres" {
+				pgFiles.stage(t, client, name, false)
+			}
 			wait(client.UpdateInstanceState(name, api.InstanceStatePut{Action: "start", Timeout: 60}, ""))
 			state, _, err := client.GetInstanceState(name)
 			if err != nil || state.StatusCode != api.Running {
@@ -293,7 +303,7 @@ func TestDaemonOCI(t *testing.T) {
 			}
 			probe := []string{"python", "-c", "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5).status == 200"}
 			if image.name == "postgres" {
-				probe = []string{"pg_isready", "-U", "postgres"}
+				probe = postgresFixtureQuery(postgresFixturePassPath, "SELECT 1")
 			}
 			readyCtx, readyCancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer readyCancel()
@@ -308,9 +318,7 @@ func TestDaemonOCI(t *testing.T) {
 				}
 			}
 			if image.name == "postgres" {
-				if err := execOCI(ctx, client, name, []string{"psql", "-U", "postgres", "-c", "CREATE TABLE aginctus_spike AS SELECT 42 AS value"}); err != nil {
-					t.Fatal(err)
-				}
+				pgFiles.verify(t, ctx, client, name, "CREATE TABLE aginctus_spike AS SELECT 42 AS value")
 			}
 			wait(client.UpdateInstanceState(name, api.InstanceStatePut{Action: "stop", Timeout: 60}, ""))
 			wait(client.DeleteInstance(name))
@@ -319,18 +327,24 @@ func TestDaemonOCI(t *testing.T) {
 					t.Fatal("instance removal lost custom volume")
 				}
 				wait(client.CreateInstance(instance))
+				// A changed initialization file must not rotate a role in an
+				// existing database. The old password and marker must still work.
+				pgFiles.stage(t, client, name, true)
 				wait(client.UpdateInstanceState(name, api.InstanceStatePut{Action: "start", Timeout: 60}, ""))
+				retainedCtx, cancelRetained := context.WithTimeout(ctx, 2*time.Minute)
+				defer cancelRetained()
 				for {
-					err := execOCI(readyCtx, client, name, []string{"psql", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-c", "DO $$ BEGIN IF (SELECT value FROM aginctus_spike) IS DISTINCT FROM 42 THEN RAISE EXCEPTION 'data mismatch'; END IF; END $$"})
+					err := execOCI(retainedCtx, client, name, postgresFixtureQuery(postgresFixturePassPath, "DO $$ BEGIN IF (SELECT value FROM aginctus_spike) IS DISTINCT FROM 42 THEN RAISE EXCEPTION 'data mismatch'; END IF; END $$"))
 					if err == nil {
 						break
 					}
 					select {
-					case <-readyCtx.Done():
+					case <-retainedCtx.Done():
 						t.Fatal("database contents not recovered after recreation")
 					case <-time.After(time.Second):
 					}
 				}
+				pgFiles.verify(t, ctx, client, name, "SELECT 1")
 				wait(client.UpdateInstanceState(name, api.InstanceStatePut{Action: "stop", Timeout: 60}, ""))
 				wait(client.DeleteInstance(name))
 			}
@@ -456,23 +470,35 @@ func TestDaemonOCI(t *testing.T) {
 }
 
 func execOCI(ctx context.Context, client incus.InstanceServer, name string, command []string) error {
-	done := make(chan bool)
-	op, err := client.ExecInstance(name, api.InstanceExecPost{Command: command, WaitForWS: true}, &incus.InstanceExecArgs{Stdout: io.Discard, Stderr: io.Discard, DataDone: done})
+	code, err := execOCIStatus(ctx, client, name, command)
 	if err != nil {
 		return err
 	}
+	if code != 0 {
+		return fmt.Errorf("synthetic application probe failed")
+	}
+	return nil
+}
+
+func execOCIStatus(ctx context.Context, client incus.InstanceServer, name string, command []string) (float64, error) {
+	done := make(chan bool)
+	op, err := client.ExecInstance(name, api.InstanceExecPost{Command: command, WaitForWS: true}, &incus.InstanceExecArgs{Stdout: io.Discard, Stderr: io.Discard, DataDone: done})
+	if err != nil {
+		return 0, err
+	}
 	if err := op.WaitContext(ctx); err != nil {
-		return err
+		return 0, err
 	}
 	select {
 	case <-done:
 	case <-ctx.Done():
-		return ctx.Err()
+		return 0, ctx.Err()
 	}
-	if code, ok := op.Get().Metadata["return"].(float64); !ok || code != 0 {
-		return fmt.Errorf("synthetic application probe failed")
+	code, ok := op.Get().Metadata["return"].(float64)
+	if !ok {
+		return 0, fmt.Errorf("synthetic application exit status unavailable")
 	}
-	return nil
+	return code, nil
 }
 
 // gatewayStoppedVMClient adapts the real project-scoped Incus SDK to the

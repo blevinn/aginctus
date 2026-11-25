@@ -102,7 +102,6 @@ always inspect `/proc/self/mountinfo` and refuse uid 0. The same-UID
 filesystem fixture used by tests is not sufficient to pass the production
 mountpoint check. This adapter remains non-deployable until the service
 peer-authority gate and physical instance/volume evidence pass.
-
 ## Opt-in read-only daemon (2026-11-24)
 
 `cmd/aginctus-project-state-read` packages an explicit, nonroot, GET-only

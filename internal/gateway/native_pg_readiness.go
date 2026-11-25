@@ -41,11 +41,25 @@ type GatewayPostgresProbeClient interface {
 // pg_isready alone is insufficient; psql -w SELECT 1 fails closed if password
 // auth fails. This probe does not establish the credential-file's provenance.
 func VerifyNativeGatewayPostgresReadyWithClient(ctx context.Context, descriptor environment.Descriptor, observed environment.Binding, client GatewayPostgresProbeClient) error {
-	identity,err:=NativeGatewayIdentity(descriptor,observed)
-	if err!=nil{return fmt.Errorf("gateway PostgreSQL readiness requires verified environment binding")}
-	project:=identity.Project
-	environmentID:=identity.EnvironmentID
-	instanceName:=identity.PostgresInstance
+	return verifyNativeGatewayGuestReady(ctx, descriptor, observed, client, "postgres", []string{
+		"env", "-i", "PATH=/usr/local/bin:/usr/bin:/bin", "PGPASSFILE=/run/aginctus/gateway/postgres.pgpass",
+		// libpq 17: a successful query against trust authentication is not readiness.
+		// Pass it explicitly so a libpq too old to support it fails closed.
+		"psql", "-X", "-w", "-d", "host=127.0.0.1 port=5432 user=litellm dbname=litellm require_auth=scram-sha-256 connect_timeout=3", "-tAc", "SELECT 1",
+	})
+}
+
+func verifyNativeGatewayGuestReady(ctx context.Context, descriptor environment.Descriptor, observed environment.Binding, client GatewayPostgresProbeClient, role string, command []string) error {
+	identity, err := NativeGatewayIdentity(descriptor, observed)
+	if err != nil {
+		return fmt.Errorf("gateway readiness requires verified environment binding")
+	}
+	project := identity.Project
+	environmentID := identity.EnvironmentID
+	instanceName := identity.PostgresInstance
+	if role == "litellm" {
+		instanceName = identity.LiteLLMInstance
+	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	if err := ctx.Err(); err != nil {
@@ -53,7 +67,7 @@ func VerifyNativeGatewayPostgresReadyWithClient(ctx context.Context, descriptor 
 	}
 	info, err := client.GetConnectionInfo()
 	if err != nil || info == nil || info.Protocol != "incus" || !filepath.IsAbs(info.SocketPath) || info.Project != project {
-		return fmt.Errorf("gateway PostgreSQL readiness selected-project transport unverified")
+		return fmt.Errorf("gateway readiness selected-project transport unverified")
 	}
 	observe := func() (*api.Instance, error) {
 		if err := ctx.Err(); err != nil {
@@ -63,10 +77,10 @@ func VerifyNativeGatewayPostgresReadyWithClient(ctx context.Context, descriptor 
 		if err != nil || inst == nil || inst.Name != instanceName || inst.Project != project ||
 			inst.Status != "Running" || string(inst.Type) != "container" || inst.Config["user.aginctus.managed"] != "true" ||
 			inst.Config["user.aginctus.resource"] != "gateway-instance" ||
-			inst.Config["user.aginctus.role"] != "postgres" ||
+			inst.Config["user.aginctus.role"] != role ||
 			inst.Config["user.aginctus.deployment"] != project ||
 			inst.Config["user.aginctus.environment-id"] != environmentID {
-			return nil, fmt.Errorf("gateway PostgreSQL readiness owned running guest unverified")
+			return nil, fmt.Errorf("gateway readiness owned running guest unverified")
 		}
 		return inst, nil
 	}
@@ -76,32 +90,31 @@ func VerifyNativeGatewayPostgresReadyWithClient(ctx context.Context, descriptor 
 	}
 	done := make(chan bool)
 	request := api.InstanceExecPost{
-		Command: []string{"env", "PGPASSFILE=/run/aginctus/gateway/postgres.pgpass",
-			"psql", "-h", "127.0.0.1", "-U", "litellm", "-d", "litellm", "-w", "-tAc", "SELECT 1"},
+		Command:   command,
 		WaitForWS: true,
 	}
 	op, err := client.ExecGuest(instanceName, request, &incusclient.InstanceExecArgs{
 		Stdout: io.Discard, Stderr: io.Discard, DataDone: done,
 	})
 	if err != nil || op == nil {
-		return fmt.Errorf("gateway PostgreSQL authentication probe submission failed")
+		return fmt.Errorf("gateway authentication probe submission failed")
 	}
 	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("gateway PostgreSQL authentication probe incomplete")
+		return fmt.Errorf("gateway authentication probe incomplete")
 	}
 	select {
 	case <-done:
 	case <-ctx.Done():
-		return fmt.Errorf("gateway PostgreSQL authentication probe output incomplete")
+		return fmt.Errorf("gateway authentication probe output incomplete")
 	}
 	meta := op.Get()
 	code, ok := meta.Metadata["return"].(float64)
 	if !ok || code != 0 {
-		return fmt.Errorf("gateway PostgreSQL authenticated query failed")
+		return fmt.Errorf("gateway authenticated readiness unverified")
 	}
 	after, err := observe()
 	if err != nil || !after.CreatedAt.Equal(before.CreatedAt) || after.Config["volatile.base_image"] != before.Config["volatile.base_image"] {
-		return fmt.Errorf("gateway PostgreSQL readiness identity changed during probe")
+		return fmt.Errorf("gateway readiness identity changed during probe")
 	}
 	return ctx.Err()
 }

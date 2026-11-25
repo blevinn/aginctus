@@ -17,6 +17,7 @@ import (
 	"github.com/blevinn/aginctus/internal/gateway"
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
 	"github.com/blevinn/aginctus/internal/orchestration/native"
+	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
 )
 
 func TestNativeGatewayStopRetentionVM(t *testing.T) {
@@ -56,13 +57,56 @@ func TestNativeGatewayStopRetentionVM(t *testing.T) {
 		if err != nil || !slices.Equal(created.Created, want) || !slices.Equal(created.Verified, want) {
 			t.Fatalf("create stopped fixture: %+v: %v (%v)", created, err, errors.Unwrap(err))
 		}
-		for _, name := range want {
-			waitStoppedPairOp(t, ctx, func() (incus.Operation, error) {
-				return sdk.UpdateInstanceState(name, api.InstanceStatePut{Action: "start"}, "")
-			})
-			if err := execOCI(ctx, sdk, name, []string{"/stop-fixture", "started"}); err != nil {
-				t.Fatalf("fixture PID 1 handshake %s: %v", name, err)
+		identity, err := gateway.NativeGatewayIdentity(desc, binding)
+		if err != nil {
+			t.Fatal(err)
+		}
+		revision, err := environment.BuildAcceptedRevision(nil, nil, environment.Candidate{
+			APIVersion: environment.CandidateAPIVersion, Kind: environment.CandidateKind, Environment: desc,
+			SelectedWorkloads: []string{}, Workloads: []acceptedstate.WorkloadSpec{},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		runtime := gateway.NativeGatewayRuntimeBinding{Resources: identity, AcceptedEnvironmentRevision: revision,
+			CredentialVersion: "fixture-v1", Images: images, RootPool: stoppedPairPool, DatabasePool: stoppedPairPool}
+		// These processes contain no credentials. The fixture-only verifier
+		// models revocation, and readiness means only a PID 1 handshake.
+		verifier := fixtureGatewayDelivery(func(ctx context.Context, b gateway.NativeGatewayRuntimeBinding) error {
+			if b != runtime {
+				return errors.New("fixture runtime binding changed")
 			}
+			return ctx.Err()
+		})
+		pgReady := false
+		ready := fixtureGatewayReadiness(func(ctx context.Context, id gateway.NativeGatewayResourceIdentity, role string) error {
+			if id != identity {
+				return errors.New("fixture readiness target changed")
+			}
+			if role == "postgres" {
+				if err := execOCI(ctx, sdk, id.PostgresInstance, []string{"/stop-fixture", "started"}); err != nil {
+					return err
+				}
+				pgReady = true
+				return nil
+			}
+			return execOCI(ctx, sdk, id.LiteLLMInstance, []string{"/stop-fixture", "started"})
+		})
+		client := &stopRetentionSDK{InstanceServer: sdk, beforeSubmit: func(name string, put api.InstanceStatePut, etag string) {
+			if put.Action != "start" || put.Force || etag == "" || (name == pair.LiteLLM.Name && !pgReady) {
+				t.Fatal("unauthorized or out-of-order fixture start")
+			}
+		}}
+		start := func() (gateway.NativeEnvironmentGatewayStartResult, error) {
+			return gateway.StartNativeEnvironmentGatewayWithClient(ctx, desc, binding, top, devices, pair, runtime, client, context.Context.Err, verifier, ready)
+		}
+		got, err := start()
+		if err != nil || !slices.Equal(got.Started, want) || !slices.Equal(got.Ready, want) || !slices.Equal(client.submissions, want) {
+			t.Fatalf("guarded fixture startup: %+v: %v", got, err)
+		}
+		got, err = start()
+		if err != nil || len(got.Started) != 0 || !slices.Equal(got.Ready, want) || !slices.Equal(client.submissions, want) {
+			t.Fatalf("repeat fixture startup submitted a write: %+v: %v", got, err)
 		}
 		return top, devices, pair
 	}
@@ -79,6 +123,107 @@ func TestNativeGatewayStopRetentionVM(t *testing.T) {
 			verifyStopRetention(t, ctx, sdk, top, devices, pair, siblingTop, sibling, tc.revoke)
 		})
 	}
+	t.Run("stopped-replacement-and-removal", func(t *testing.T) {
+		top, devices, pair := bootPair(t, "123e4567-e89b-42d3-a456-426614174023", "10.94.0.23/24")
+		pg, llm := pair.Postgres.Name, pair.LiteLLM.Name
+		const marker = "fixture retained across replacement and removal\n"
+		if err := execOCI(ctx, sdk, pg, []string{"/stop-fixture", "seed", devices.Postgres["database"]["path"] + "/replacement-marker", marker}); err != nil {
+			t.Fatal("could not write disposable database marker")
+		}
+		stop := &stopRetentionSDK{InstanceServer: sdk, beforeSubmit: func(string, api.InstanceStatePut, string) {}}
+		if _, err := gateway.StopNativeGatewayWithClient(ctx, top, devices, pair, stop, context.Context.Err); err != nil {
+			t.Fatal(err)
+		}
+		oldPG, pgETag := readStoppedPairGuest(t, sdk, pg, top.EnvironmentID, images.Postgres.Expected.IncusFingerprint)
+		oldLLM, _ := readStoppedPairGuest(t, sdk, llm, top.EnvironmentID, images.LiteLLM.Expected.IncusFingerprint)
+		desc := environment.Descriptor{ID: top.EnvironmentID, Name: "removal-fixture", Binding: binding}
+		candidate := environment.Candidate{APIVersion: environment.CandidateAPIVersion, Kind: environment.CandidateKind, Environment: desc,
+			SelectedWorkloads: []string{}, Workloads: []acceptedstate.WorkloadSpec{}}
+		old, err := environment.BuildAcceptedRevision(nil, nil, candidate)
+		if err != nil {
+			t.Fatal(err)
+		}
+		successor := candidate
+		successor.Environment.Name = "recreation-fixture"
+		next, err := environment.BuildAcceptedRevision(&old, &candidate, successor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		replacement := importGatewayFixtureImage(t, ctx, sdk, binding.Project, "litellm-next", executable)
+		client := &gatewayRemovalVMClient{stoppedPairSDK: stoppedPairSDK{InstanceServer: sdk}}
+		target := gateway.NativeGatewayRemoval{Revision: old, Instance: llm, InstanceCreatedAt: oldLLM.CreatedAt, InstanceUUID: oldLLM.Config["volatile.uuid"]}
+		var effects []native.Action
+		got, err := gateway.RecreateNativeEnvironmentGatewayLiteLLMWithClient(ctx, desc, binding, top, devices, pair, images, target, next, replacement, client,
+			func(ctx context.Context, from, to environment.AcceptedRevision, action native.Action, name string) error {
+				if from != old || to != next || name != llm {
+					return errors.New("unexpected fixture replacement authorization")
+				}
+				effects = append(effects, action)
+				return ctx.Err()
+			})
+		if err != nil || !got.Removal.Absent || !got.Removal.DatabaseVolumeRetained ||
+			!slices.Equal(got.Creation.Created, []string{llm}) || !slices.Equal(effects, []native.Action{native.Delete, native.Create}) {
+			t.Fatalf("guarded stopped replacement: %+v: %v", got, err)
+		}
+		currentPG, currentETag := readStoppedPairGuest(t, sdk, pg, top.EnvironmentID, images.Postgres.Expected.IncusFingerprint)
+		if pgETag != currentETag || !reflect.DeepEqual(currentPG, oldPG) {
+			t.Fatal("LiteLLM replacement changed retained PostgreSQL guest")
+		}
+		newLLM, _ := readStoppedPairGuest(t, sdk, llm, top.EnvironmentID, replacement.Expected.IncusFingerprint)
+		if newLLM.Config["volatile.uuid"] == "" || newLLM.Config["volatile.uuid"] == oldLLM.Config["volatile.uuid"] {
+			t.Fatal("replacement did not establish a new guest incarnation")
+		}
+		newTop := top
+		newTop.Services = slices.Clone(top.Services)
+		newTop.Services[1].ImageReference = replacement.Expected.Registry + "/" + replacement.Expected.Repository + "@" + replacement.Expected.ManifestDigest
+		newPair, err := gateway.PlanNativeGatewayInstances(newTop, devices, pair.Postgres.ImageAlias, replacement.Evidence.Alias)
+		if err != nil {
+			t.Fatal(err)
+		}
+		newImages := images
+		newImages.LiteLLM = replacement
+		for _, guest := range []*api.Instance{newLLM, oldPG} {
+			target := gateway.NativeGatewayRemoval{Revision: next, Instance: guest.Name, InstanceCreatedAt: guest.CreatedAt, InstanceUUID: guest.Config["volatile.uuid"]}
+			out, err := gateway.RemoveNativeEnvironmentGatewayServiceWithClient(ctx, desc, binding, newTop, devices, newPair, newImages, target, client,
+				func(ctx context.Context, got gateway.NativeGatewayRemoval) error {
+					if got != target {
+						return errors.New("unexpected fixture removal authorization")
+					}
+					return ctx.Err()
+				})
+			if err != nil || !out.Absent || !out.DatabaseVolumeRetained {
+				t.Fatalf("explicit removal: %+v: %v", out, err)
+			}
+			assertStoppedPairGuestAbsent(t, sdk, guest.Name)
+		}
+		if !slices.Equal(client.deletions, []string{llm, llm, pg}) || !slices.Equal(client.instanceWrites, []string{llm}) {
+			t.Fatal("unexpected disposable destructive submissions")
+		}
+		body, _, err := sdk.GetStorageVolumeFile(stoppedPairPool, "custom", top.DatabaseVolume, "/replacement-marker")
+		assertFixtureBytes(t, "retained database marker after both removals", marker, body, err)
+	})
+}
+
+type gatewayRemovalVMClient struct {
+	stoppedPairSDK
+	deletions []string
+}
+
+func (c *gatewayRemovalVMClient) DeleteInstance(name string) (native.InstanceOperation, error) {
+	c.deletions = append(c.deletions, name)
+	return c.InstanceServer.DeleteInstance(name)
+}
+
+type fixtureGatewayDelivery func(context.Context, gateway.NativeGatewayRuntimeBinding) error
+
+func (f fixtureGatewayDelivery) VerifyGatewayDelivery(ctx context.Context, b gateway.NativeGatewayRuntimeBinding) error {
+	return f(ctx, b)
+}
+
+type fixtureGatewayReadiness func(context.Context, gateway.NativeGatewayResourceIdentity, string) error
+
+func (f fixtureGatewayReadiness) VerifyGatewayServiceReady(ctx context.Context, id gateway.NativeGatewayResourceIdentity, role string) error {
+	return f(ctx, id, role)
 }
 
 func verifyStopRetention(t *testing.T, ctx context.Context, sdk incus.InstanceServer, top gateway.NativeGatewayTopology, devices gateway.NativeGatewayDevices, pair gateway.NativeGatewayInstancePair, siblingTop gateway.NativeGatewayTopology, sibling gateway.NativeGatewayInstancePair, revoke bool) {
