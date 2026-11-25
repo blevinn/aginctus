@@ -89,6 +89,33 @@ readiness, credential delivery, production writer exclusion or cutover. The
 disposable fixture is the only writer; its revocable grant confers no authority
 outside that VM.
 
+### Offline reverse-order stop and retention gate (#158)
+
+On the same type of disposable KVM worker, build the separate gate with
+substitution disabled so a missing test result must be built locally. If the
+result already exists locally, add `--rebuild` to force fresh execution and
+inspect the guest test and QEMU teardown logs.
+
+```sh
+timeout --kill-after=15s 12m nix --quiet build --no-update-lock-file --no-link \
+  --option substitute false -L .#vm-harness-native-gateway-stop-retention
+```
+
+Each guest boots only a static, signal-aware synthetic process. The test seeds
+and syncs fresh marker bytes through the PostgreSQL-role guest's database mount.
+It exercises the dormant stop executor, observing LiteLLM stop before any
+PostgreSQL stop request, both signal handlers, and stopped state. It reads the
+exact marker directly from the retained custom volume without restarting either
+guest. Repeat must submit no changes. A separate case revokes the fixture grant
+between stops, preserves the stopped LiteLLM and running PostgreSQL, then
+resumes without stopping LiteLLM again. A running sibling environment in the
+same project and its volume are checked for drift in both cases.
+
+This is marker-byte retention and graceful shutdown evidence for synthetic
+processes. PostgreSQL data integrity and readiness, live gateway behavior,
+credential delivery, production writer exclusion, and upgrade/recreation or
+cutover are unverified by this gate.
+
 ## Image contract needed before production
 
 - Resolve a registry tag to a platform-specific manifest digest before mutation;

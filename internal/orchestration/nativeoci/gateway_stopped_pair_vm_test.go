@@ -26,25 +26,11 @@ const stoppedPairPool = "spike"
 
 func TestNativeGatewayStoppedPairVM(t *testing.T) {
 	ctx, admin, binding := openGatewayFixtureVM(t, "aginctus-native-stopped-pair")
-	for _, bridge := range []struct{ name, resource, address, routed string }{
-		{"ag-pair-mgmt", "management-network", "10.93.0.1/24", "false"},
-		{"ag-pair-egress", "gateway-egress-network", "10.94.0.1/24", "true"},
-	} {
-		err := admin.UseProject("default").CreateNetwork(api.NetworksPost{
-			Name: bridge.name, Type: "bridge", NetworkPut: api.NetworkPut{Config: map[string]string{
-				"ipv4.address": bridge.address, "ipv4.dhcp": "false", "ipv6.address": "none",
-				"ipv4.nat": bridge.routed, "ipv4.routing": bridge.routed,
-				"user.aginctus.managed": "true", "user.aginctus.resource": bridge.resource,
-			}},
-		})
-		if err != nil {
-			t.Fatalf("fixture bridge %s: %v", bridge.name, err)
-		}
-	}
+	createGatewayFixtureBridges(t, admin)
 	sdk := admin.UseProject(binding.Project)
 	images := gateway.NativeGatewayCreateImages{
-		Postgres: importStoppedPairFixtureImage(t, ctx, sdk, binding.Project, "postgres"),
-		LiteLLM:  importStoppedPairFixtureImage(t, ctx, sdk, binding.Project, "litellm"),
+		Postgres: importGatewayFixtureImage(t, ctx, sdk, binding.Project, "postgres", nil),
+		LiteLLM:  importGatewayFixtureImage(t, ctx, sdk, binding.Project, "litellm", nil),
 	}
 	for _, tc := range []struct{ name, id, egress string }{
 		{"create-and-repeat", "123e4567-e89b-42d3-a456-426614174010", "10.94.0.10/24"},
@@ -178,6 +164,25 @@ func TestNativeGatewayStoppedPairVM(t *testing.T) {
 	}
 }
 
+func createGatewayFixtureBridges(t *testing.T, admin incus.InstanceServer) {
+	t.Helper()
+	for _, bridge := range []struct{ name, resource, address, routed string }{
+		{"ag-pair-mgmt", "management-network", "10.93.0.1/24", "false"},
+		{"ag-pair-egress", "gateway-egress-network", "10.94.0.1/24", "true"},
+	} {
+		err := admin.UseProject("default").CreateNetwork(api.NetworksPost{
+			Name: bridge.name, Type: "bridge", NetworkPut: api.NetworkPut{Config: map[string]string{
+				"ipv4.address": bridge.address, "ipv4.dhcp": "false", "ipv6.address": "none",
+				"ipv4.nat": bridge.routed, "ipv4.routing": bridge.routed,
+				"user.aginctus.managed": "true", "user.aginctus.resource": bridge.resource,
+			}},
+		})
+		if err != nil {
+			t.Fatalf("fixture bridge %s: %v", bridge.name, err)
+		}
+	}
+}
+
 func stoppedPairCandidate(project string, images gateway.NativeGatewayCreateImages, egressAddress string) gateway.NativeGatewayTopology {
 	pin := func(i native.GatewayOCIIdentity) string {
 		return i.Registry + "/" + i.Repository + "@" + i.ManifestDigest
@@ -220,21 +225,31 @@ func assertStoppedPairGuestAbsent(t *testing.T, sdk incus.InstanceServer, name s
 // This is an offline, already-converted fixture, not OCI acquisition evidence.
 // Hash the fixture declaration, runtime config and exact import bytes before
 // consulting Incus. Never infer expected or evidence identity from a live alias.
-func importStoppedPairFixtureImage(t *testing.T, ctx context.Context, sdk incus.InstanceServer, project, service string) gateway.NativeGatewayCreateImage {
+func importGatewayFixtureImage(t *testing.T, ctx context.Context, sdk incus.InstanceServer, project, service string, executable []byte) gateway.NativeGatewayCreateImage {
 	t.Helper()
-	config := fmt.Sprintf(`{"ociVersion":"1.0.2","process":{"args":["/not-a-runnable-service",%q],"cwd":"/","user":{"uid":0,"gid":0}},"root":{"path":"rootfs"}}`, service)
-	metadata := "architecture: x86_64\ncreation_date: 1700000000\nproperties:\n  type: oci\n  description: stopped-pair fixture " + service + "\n"
+	args := fmt.Sprintf(`"/not-a-runnable-service",%q`, service)
+	fixture := "stopped-pair"
+	if len(executable) > 0 {
+		args = `"/stop-fixture"`
+		fixture = "stop-retention"
+	}
+	config := fmt.Sprintf(`{"ociVersion":"1.0.2","process":{"args":[%s],"cwd":"/","user":{"uid":0,"gid":0}},"root":{"path":"rootfs"}}`, args)
+	metadata := "architecture: x86_64\ncreation_date: 1700000000\nproperties:\n  type: oci\n  description: " + fixture + " fixture " + service + "\n"
 	var image bytes.Buffer
 	tarball := tar.NewWriter(&image)
-	for _, file := range []struct{ name, body string }{
-		{"metadata.yaml", metadata}, {"config.json", config}, {"rootfs/fixture-service", service},
-	} {
-		if err := tarball.WriteHeader(&tar.Header{Name: file.name, Mode: 0o644, Size: int64(len(file.body))}); err != nil {
+	write := func(name string, mode int64, body []byte) {
+		if err := tarball.WriteHeader(&tar.Header{Name: name, Mode: mode, Size: int64(len(body))}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := tarball.Write([]byte(file.body)); err != nil {
+		if _, err := tarball.Write(body); err != nil {
 			t.Fatal(err)
 		}
+	}
+	write("metadata.yaml", 0o644, []byte(metadata))
+	write("config.json", 0o644, []byte(config))
+	write("rootfs/fixture-service", 0o644, []byte(service))
+	if len(executable) > 0 {
+		write("rootfs/stop-fixture", 0o755, executable)
 	}
 	if err := tarball.Close(); err != nil {
 		t.Fatal(err)
@@ -244,14 +259,14 @@ func importStoppedPairFixtureImage(t *testing.T, ctx context.Context, sdk incus.
 		ConfigDigest:     fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(config))),
 		IncusFingerprint: fmt.Sprintf("%x", sha256.Sum256(image.Bytes())),
 	}
-	identity.ManifestDigest = fmt.Sprintf("sha256:%x", sha256.Sum256([]byte("stopped-pair-v1/"+service+"/"+identity.ConfigDigest+"/"+identity.IncusFingerprint)))
+	identity.ManifestDigest = fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(fixture+"-v1/"+service+"/"+identity.ConfigDigest+"/"+identity.IncusFingerprint)))
 	op := waitStoppedPairOp(t, ctx, func() (incus.Operation, error) {
 		return sdk.CreateImage(api.ImagesPost{}, &incus.ImageCreateArgs{MetaFile: bytes.NewReader(image.Bytes()), Type: "container"})
 	})
 	if op.Get().Metadata["fingerprint"] != identity.IncusFingerprint {
 		t.Fatalf("imported %s fixture fingerprint differs from exact input bytes", service)
 	}
-	alias := service + "-stopped-pair-fixture"
+	alias := service + "-" + fixture + "-fixture"
 	if err := sdk.CreateImageAlias(api.ImageAliasesPost{ImageAliasesEntry: api.ImageAliasesEntry{
 		Name: alias, ImageAliasesEntryPut: api.ImageAliasesEntryPut{Target: identity.IncusFingerprint},
 	}}); err != nil {
