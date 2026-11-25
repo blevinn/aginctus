@@ -54,11 +54,10 @@ methods even though the CLI receives only `client.EnvironmentReader`.
 Never pass that SDK handle to candidate parsers, untrusted RPC handlers,
 agents or generic tools. No administrator Unix socket or fallback is used.
 
-**Not yet operational:** configured state, accepted state, diffs and logical
-workloads still need a production authenticated state-service transport
-and authoritative candidate/observation readers. Those commands remain
-unavailable; a missing reader must never produce empty success. This change
-does not authorize acceptance, project mutation, reconciliation or adoption.
+**Not yet operational:** logical workload observations still need
+authoritative observation readers. A missing reader must never produce empty
+success. The optional state reads below do not authorize acceptance, project
+mutation, reconciliation or adoption.
 
 ## Optional pinned project-state reads
 

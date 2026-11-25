@@ -24,7 +24,7 @@ func(f envGatewayReadyFunc)VerifyGatewayServiceReady(ctx context.Context,id Nati
 func environmentStartFixture(t *testing.T)(NativeGatewayTopology,NativeGatewayDevices,NativeGatewayInstancePair,*environmentStartClient,NativeGatewayRuntimeBinding){
 	t.Helper()
 	top,devices,pair,client:=environmentGatewayCreateFixture(t)
-	if _,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil});err!=nil{t.Fatal(err)}
+	if _,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client.imagesForCreate,client,func(context.Context)error{return nil});err!=nil{t.Fatal(err)}
 	desc:=gatewayTestEnvironment(top.EnvironmentID,top.Project)
 	id,err:=NativeGatewayIdentity(desc,desc.Binding)
 	if err!=nil{t.Fatal(err)}

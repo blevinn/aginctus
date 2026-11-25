@@ -55,6 +55,9 @@ NETWORKED_SCENARIOS = {
     "native-oci",
     "full-stack",
 }
+DISABLED_SCENARIOS = {
+    "full-stack": "disabled pending the native orchestration port (#1115)",
+}
 # Explicit allowlist: do not propagate secrets, Incus remotes, Nix build hooks,
 # QEMU arguments, inherited integration flags or SSH agents to test processes.
 PASSTHROUGH = ("PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TERM")
@@ -204,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("scenario", choices=tuple(SCENARIOS))
     args = parser.parse_args(argv)
 
+    if reason := DISABLED_SCENARIOS.get(args.scenario):
+        parser.error(f"{args.scenario}: {reason}")
     if args.mode == "debug" and not sys.stdin.isatty():
         parser.error("debug requires an interactive terminal")
     env = clean_environment(dict(os.environ))
