@@ -19,6 +19,51 @@ const (
 	peerID = "22222222-2222-4222-8222-222222222222"
 )
 
+func TestFixtureCLIRecoversScopedNativeJournal(t *testing.T) {
+	ctx := t.Context()
+	c := fixtureCandidate(testID)
+	root := filepath.Join(t.TempDir(), "project-state")
+	store, err := environment.InitializeLocalProjectStateStore(root, c.Environment.Binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := store.CommitLocalCandidate(ctx, c.Environment, c.Environment.Binding, nil, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin, err := store.PinLocalRevision(ctx, c.Environment, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pin.Close()
+	j, err := pin.NewLocalNativeJournal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.BeginEffect(ctx, "worker", "worker", "start"); err != nil {
+		t.Fatal(err)
+	}
+	call := func(action, id string, flags ...string) (string, error) {
+		var out bytes.Buffer
+		args := []string{action, "--state-dir", root, "--server-id", c.Environment.Binding.ServerID,
+			"--project", c.Environment.Binding.Project, "--environment", id}
+		err := run(ctx, append(args, flags...), &out)
+		return out.String(), err
+	}
+	if out, err := call("operations", testID); err != nil || !strings.Contains(out, j.ID()) {
+		t.Fatalf("list: %q %v", out, err)
+	}
+	if out, err := call("operation", testID, "--operation-id", j.ID()); err != nil || !strings.Contains(out, `"outcome":"uncertain"`) {
+		t.Fatalf("inspect: %q %v", out, err)
+	}
+	if _, err := call("operation", peerID, "--operation-id", j.ID()); err == nil {
+		t.Fatal("read another environment's operation")
+	}
+	if _, err := call("operation", testID, "--operation-id", j.ID(), "--confirm"); err == nil {
+		t.Fatal("recovery accepted a write flag")
+	}
+}
+
 func fixtureCandidate(id string) environment.Candidate {
 	return environment.Candidate{
 		APIVersion: environment.CandidateAPIVersion, Kind: environment.CandidateKind,
