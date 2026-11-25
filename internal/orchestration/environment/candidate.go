@@ -30,6 +30,7 @@ type Candidate struct {
 	Environment       Descriptor                   `json:"environment"`
 	SelectedWorkloads []string                     `json:"selectedWorkloads"`
 	Workloads         []acceptedstate.WorkloadSpec `json:"workloads"`
+	Gateway           *GatewaySpec                 `json:"gateway,omitempty"`
 }
 
 func (c Candidate) Validate() error {
@@ -54,7 +55,13 @@ func (c Candidate) Validate() error {
 		},
 		Workloads: c.Workloads,
 	}
-	return spec.Validate()
+	if err := spec.Validate(); err != nil {
+		return err
+	}
+	if c.Gateway != nil {
+		return c.Gateway.validate(c.Environment.Binding)
+	}
+	return nil
 }
 
 // Canonical returns deterministic candidate bytes. These are not accepted
@@ -86,7 +93,14 @@ func ParseCandidate(data []byte) (Candidate, error) {
 	if err := json.Unmarshal(data, &keys); err != nil || keys == nil {
 		return Candidate{}, errors.New("environment candidate must be a JSON object")
 	}
-	if err := candidateKeys(keys, "apiVersion", "kind", "environment", "selectedWorkloads", "workloads"); err != nil {
+	rootKeys := []string{"apiVersion", "kind", "environment", "selectedWorkloads", "workloads"}
+	if raw, present := keys["gateway"]; present {
+		rootKeys = append(rootKeys, "gateway")
+		if err := gatewayCandidateKeys(raw); err != nil {
+			return Candidate{}, err
+		}
+	}
+	if err := candidateKeys(keys, rootKeys...); err != nil {
 		return Candidate{}, err
 	}
 	var descriptor map[string]json.RawMessage
