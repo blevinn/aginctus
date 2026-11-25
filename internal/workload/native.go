@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	incusscope "github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/orchestration"
@@ -50,7 +51,7 @@ func (s Spec) nativeIntent(scope incusscope.ProjectScope, fingerprint string) (n
 // BindNative resolves this explicitly selected workload from the accepted body.
 // The caller verifies the extra typed attachment/runtime intent (absent from
 // today's candidate schema) independently; it must not come from ambient config.
-func (s Spec) BindNative(accepted environment.Candidate, revision environment.AcceptedRevision, op native.ProjectInstanceOperation, trustedPin string, client native.ProjectInstanceClient, verifyUse func(context.Context) error) (orchestration.NativeResourceBinding, error) {
+func (s Spec) BindNative(accepted environment.Candidate, revision environment.AcceptedRevision, op native.ProjectInstanceOperation, trustedPin string, client native.ProjectInstanceClient, expectedIncarnation time.Time, verifyUse func(context.Context) error) (orchestration.NativeResourceBinding, error) {
 	if revision.ValidateAgainst(accepted) != nil || verifyUse == nil {
 		return orchestration.NativeResourceBinding{}, fmt.Errorf("pinned accepted workload and verified attachment binding required")
 	}
@@ -72,7 +73,7 @@ func (s Spec) BindNative(accepted environment.Candidate, revision environment.Ac
 		if err != nil {
 			return orchestration.NativeResourceBinding{}, err
 		}
-		return orchestration.BindNativeProjectInstance(s.ID, revision.ID, stage, verifyUse, verifyUse), nil
+		return orchestration.BindNativeProjectInstance(s.ID, revision.ID, stage, expectedIncarnation, verifyUse, verifyUse), nil
 	}
 	return orchestration.NativeResourceBinding{}, fmt.Errorf("workload is not selected in the accepted revision")
 }

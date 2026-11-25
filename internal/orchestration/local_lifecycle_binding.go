@@ -104,7 +104,7 @@ func localDomainPlan(plan NativePlan, lifecycle bool) NativePlan {
 	return plan
 }
 
-func (f LocalNativeExecution) bindLocalDomains(data []byte, plan NativePlan) (map[string]NativeResourceBinding, error) {
+func (f LocalNativeExecution) bindLocalDomains(data []byte, plan NativePlan, teardown *LocalLifecycleTeardown) (map[string]NativeResourceBinding, error) {
 	bindings := map[string]NativeResourceBinding{}
 	for _, lifecycle := range []bool{true, false} {
 		fragment := localDomainPlan(plan, lifecycle)
@@ -117,7 +117,7 @@ func (f LocalNativeExecution) bindLocalDomains(data []byte, plan NativePlan) (ma
 		}
 		var supplied map[string]NativeResourceBinding
 		if lifecycle {
-			if f.BindLifecycle == nil {
+			if teardown == nil && f.BindLifecycle == nil {
 				return nil, errors.New("pinned lifecycle composer required")
 			}
 			fragment.Resources, err = fragment.ordered()
@@ -125,7 +125,11 @@ func (f LocalNativeExecution) bindLocalDomains(data []byte, plan NativePlan) (ma
 				return nil, err
 			}
 			var built NativePlan
-			built, supplied, err = f.BindLifecycle(candidate, detachLocalPlan(fragment), f.BootstrapHerdr)
+			if teardown == nil {
+				built, supplied, err = f.BindLifecycle(candidate, detachLocalPlan(fragment), f.BootstrapHerdr)
+			} else {
+				built, supplied, err = f.BindLifecycleTeardown(candidate, detachLocalPlan(fragment), teardown.detached())
+			}
 			if err == nil {
 				built.Resources, err = built.ordered()
 			}

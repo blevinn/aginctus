@@ -29,7 +29,7 @@ type NativeClient interface {
 // independently authorize this exact image, pool, bridge, name and operation.
 // CreateState explicitly permits initial bootstrap when both objects are absent.
 // No existing instance may be given an empty replacement identity disk.
-func (s Spec) BindNative(enrolled environment.Descriptor, revision environment.AcceptedRevision, op native.ProjectInstanceOperation, imageFingerprint, trustedPin string, createState bool, client NativeClient, verifyUse func(context.Context) error) (volume, instance orchestration.NativeResourceBinding, err error) {
+func (s Spec) BindNative(enrolled environment.Descriptor, revision environment.AcceptedRevision, op native.ProjectInstanceOperation, imageFingerprint, trustedPin string, createState bool, client NativeClient, expectedInstance, expectedVolume time.Time, verifyUse func(context.Context) error) (volume, instance orchestration.NativeResourceBinding, err error) {
 	if enrolled.Validate() != nil || revision.ValidateIdentity() != nil || revision.EnvironmentID != enrolled.ID || revision.ServerID != enrolled.Binding.ServerID || revision.Project != enrolled.Binding.Project ||
 		client == nil || verifyUse == nil || s.ManagementNetwork == "" || createState && op != native.ReconcileInstance {
 		return volume, instance, errors.New("invalid pinned Herdr lifecycle binding")
@@ -64,10 +64,16 @@ func (s Spec) BindNative(enrolled environment.Descriptor, revision environment.A
 		}
 		data, err := backend.Get(ctx, v.Pool, v.Name())
 		if _, missing := err.(statevolume.NotFound); missing {
+			if !expectedVolume.IsZero() {
+				return nil, errors.New("authorized Herdr state volume is absent")
+			}
 			return nil, nil
 		}
 		if err != nil {
 			return nil, err
+		}
+		if data != nil && !expectedVolume.IsZero() && !data.CreatedAt.Equal(expectedVolume) {
+			return nil, errors.New("Herdr state differs from authorized live incarnation")
 		}
 		return data, statevolume.Verify(v, data)
 	}
@@ -148,7 +154,7 @@ func (s Spec) BindNative(enrolled environment.Descriptor, revision environment.A
 			orchestration.NativeObservationCheck(NativeVolumeID, "state-volume-verified", "Herdr identity volume verified", revision.ID, verifyVolume),
 		}},
 	}
-	instance = orchestration.BindNativeProjectInstance(NativeInstanceID, revision.ID, stage, verifyUse, func(ctx context.Context) error {
+	instance = orchestration.BindNativeProjectInstance(NativeInstanceID, revision.ID, stage, expectedInstance, verifyUse, func(ctx context.Context) error {
 		if err := verifyUse(ctx); err != nil {
 			return err
 		}

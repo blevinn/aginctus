@@ -30,12 +30,22 @@ standalone Incus SDK connection plus trusted TLS pin. Set
 `LocalNativeExecution.BindLifecycle` to `composer.BindLifecycle`. This method
 derives workload runtime/pool/bridge and the Herdr spec from the accepted body
 along with the pinned identities, fingerprints, profiles, and running intent.
-The graph selects logical stages only. The fixture accepts reconcile operations
-with explicit empty profiles; separately scoped stop and remove are not exposed
-through this join. `Build` returns the actual graph for D's exact comparison.
+The graph selects logical stages only. Reconcile requires explicit empty
+profiles. `Build` returns the actual graph for D's exact comparison.
 `VerifyPlan`, `BeforeEffect`, the read-check policy, live exclusion and durable
 outcome handling belong to the authority/composition layer. Bindings with
 observation state are invocation-local; build them anew for another run.
+
+The fixture also supports `LocalNativeExecution.ExecuteLocalTeardown` through
+`LocalComposer.BindTeardown`. Select either graceful stop or removal for the
+whole invocation. Supply exact logical stage IDs and independently verified
+live instance incarnations, plus the retained volume incarnation for Herdr.
+The accepted candidate supplies the actual instance and volume intent. A
+dedicated `AuthorizeTeardown` policy checks the operation, full selection and
+each exact effect, including the recheck after durable journaling. Removal
+requires a separate invocation against already stopped instances. No bridge,
+gateway, extra instance or volume mutation can enter the teardown graph.
+This path is internal to the same-UID fixture; production authority is separate.
 
 Creation uses a project-local immutable image fingerprint and an explicit empty
 profile list. Profile/attachment/image replacement drift blocks reconciliation;
@@ -52,8 +62,10 @@ volume create effect. Labels cannot prove that a missing volume has no history.
 Incus start/stop and delete are not conditional on an instance ETag server-side
 in the pinned SDK/server implementation. Fresh observations and the cooperating
 writer fence are mandatory; they do not exclude unrelated administrators.
-The disposable C/D fixture exercises create, start, dry-run, and idempotence
-with a retained Herdr custom-volume incarnation on real Incus. The bridge
+The disposable C/D fixture exercises create, start, dry-run, idempotence,
+graceful stop, and removal on real Incus. It writes a sentinel through the
+Herdr guest mount and reads the same bytes from the detached volume after
+removal, with the same custom-volume incarnation. The bridge
 evidence is a read-only snapshot exported by the guest fixture administrator;
 the execution principal only gets restricted TLS. The guest image is a minimal
 container image. This does not exercise SSH/Herdr application readiness, VM

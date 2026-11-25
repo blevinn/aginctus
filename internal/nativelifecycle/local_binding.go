@@ -27,6 +27,19 @@ type LocalComposer struct {
 // Build's graph unchanged so the authority can compare the actual edges with
 // the authorized graph. No SDK reads occur during this projection.
 func (c LocalComposer) BindLifecycle(accepted environment.Candidate, requested orchestration.NativePlan, bootstrapHerdr bool) (orchestration.NativePlan, map[string]orchestration.NativeResourceBinding, error) {
+	return c.bindLocalLifecycle(accepted, requested, bootstrapHerdr, orchestration.LocalLifecycleTeardown{})
+}
+
+// BindTeardown projects the same accepted identities and binds independent
+// live incarnation pins to each instance and the retained Herdr disk.
+func (c LocalComposer) BindTeardown(accepted environment.Candidate, requested orchestration.NativePlan, selection orchestration.LocalLifecycleTeardown) (orchestration.NativePlan, map[string]orchestration.NativeResourceBinding, error) {
+	if selection.Operation != native.StopInstance && selection.Operation != native.RemoveInstance {
+		return orchestration.NativePlan{}, nil, errors.New("explicit stop or removal required")
+	}
+	return c.bindLocalLifecycle(accepted, requested, false, selection)
+}
+
+func (c LocalComposer) bindLocalLifecycle(accepted environment.Candidate, requested orchestration.NativePlan, bootstrapHerdr bool, teardown orchestration.LocalLifecycleTeardown) (orchestration.NativePlan, map[string]orchestration.NativeResourceBinding, error) {
 	if err := requested.Validate(); err != nil {
 		return orchestration.NativePlan{}, nil, err
 	}
@@ -38,6 +51,11 @@ func (c LocalComposer) BindLifecycle(accepted environment.Candidate, requested o
 		byID[w.ID] = w
 	}
 	selection := Selection{Bridge: &c.Bridge}
+	op := native.ReconcileInstance
+	if teardown.Operation != "" {
+		op = teardown.Operation
+		selection.Bridge = nil
+	}
 	for _, r := range requested.Resources {
 		switch r.Kind {
 		case orchestration.NativeManagementNetwork, orchestration.NativeHerdrVolume:
@@ -47,6 +65,9 @@ func (c LocalComposer) BindLifecycle(accepted environment.Candidate, requested o
 			if !ok || w.Native == nil || len(w.Profiles) != 0 {
 				return orchestration.NativePlan{}, nil, errors.New("selected workload requires pinned native intent and empty profiles")
 			}
+			if teardown.Operation != "" && teardown.Instances[r.ID].IsZero() {
+				return orchestration.NativePlan{}, nil, errors.New("selected workload lacks an authorized live incarnation")
+			}
 			isolation := w.InstanceType
 			if isolation == "virtual-machine" {
 				isolation = "vm"
@@ -54,16 +75,19 @@ func (c LocalComposer) BindLifecycle(accepted environment.Candidate, requested o
 			selection.Workloads = append(selection.Workloads, Workload{
 				Spec: workload.Spec{ID: w.ID, Name: w.InstanceName, Isolation: isolation,
 					Runtime: w.Native.Runtime, StoragePool: w.Native.StoragePool, ManagementNetwork: w.Native.ManagementNetwork},
-				Operation: native.ReconcileInstance,
+				Operation: op,
 			})
 		case orchestration.NativeHerdrInstance:
 			h := accepted.Herdr
 			if h == nil || bootstrapHerdr && !h.AllowStateBootstrap {
 				return orchestration.NativePlan{}, nil, errors.New("selected Herdr stage or bootstrap lacks pinned intent")
 			}
+			if teardown.Operation != "" && (teardown.Instances[r.ID].IsZero() || teardown.HerdrState.IsZero()) {
+				return orchestration.NativePlan{}, nil, errors.New("selected Herdr instance or retained state lacks an authorized live incarnation")
+			}
 			selection.Herdr = &Herdr{
 				Spec:      herdrclient.Spec{Name: h.InstanceName, StoragePool: h.StoragePool, ManagementNetwork: h.ManagementNetwork},
-				Operation: native.ReconcileInstance, ImageFingerprint: h.ImageFingerprint, CreateState: bootstrapHerdr,
+				Operation: op, ImageFingerprint: h.ImageFingerprint, CreateState: bootstrapHerdr,
 			}
 		default:
 			return orchestration.NativePlan{}, nil, errors.New("unsupported stage in local lifecycle fragment")
@@ -72,5 +96,5 @@ func (c LocalComposer) BindLifecycle(accepted environment.Candidate, requested o
 	if bootstrapHerdr && selection.Herdr == nil {
 		return orchestration.NativePlan{}, nil, errors.New("Herdr bootstrap requires the selected Herdr instance")
 	}
-	return Build(c.Environment, requested.Revision, accepted, selection, c.TrustedServerPin, c.Client, c.VerifyAttachments)
+	return build(c.Environment, requested.Revision, accepted, selection, c.TrustedServerPin, c.Client, c.VerifyAttachments, teardown)
 }

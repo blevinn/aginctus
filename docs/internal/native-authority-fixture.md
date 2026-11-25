@@ -29,10 +29,17 @@ Optional `Candidate.Herdr` (`herdr`) pins `instanceName`, `imageFingerprint`, `s
 | `workload.Spec.ID`, `Name`, and `Isolation` | Accepted workload selected by stage ID; map `virtual-machine` to `vm`, `container` to `container`. |
 | `workload.Spec.Runtime`, `StoragePool`, and `ManagementNetwork` | The same workload's `.Native` fields. C reads the fingerprint, profiles, and running intent from the accepted workload. Leave the legacy `ImageAlias` and `Network` fields unset. |
 | `Herdr.Spec.Name`, `StoragePool`, and `ManagementNetwork`; `Herdr.ImageFingerprint` | `Candidate.Herdr`. Leave legacy alias and network config unset. |
-| `Workload.Operation` and `Herdr.Operation` | `native.ReconcileInstance`. D does not expose C's separate start, stop, or remove operations. |
+| `Workload.Operation` and `Herdr.Operation` | `native.ReconcileInstance` for ordinary `ExecuteLocalNative`; use the dedicated fixture teardown entry point below for stop or remove. |
 | `Bridge.Spec`, host reader, verifier, restricted project SDK session and TLS pin | Independent capabilities. `Bridge.Spec.Name` must equal the common accepted management-network reference; none of the host policy or credentials are sourced from the candidate. Verify exact pool/network/instance references independently and again at use. |
 
 D compares C's returned revision, stage IDs, kinds, internal edges and exact binding coverage before observations. It rejects unpinned workloads, mismatched bridge names among selected attachments, missing bridge/retained-volume edges, orphaned Herdr stages and active lifecycle checks. It never invokes an Apply closure for the management-network stage. Only the final plan retains cross-stack edges; the lead composes them and the authorizer sees that exact plan. The composer is trusted code: graph equality cannot attest to opaque callback contents. Derive all C typed inputs from the supplied candidate as shown above, and pass C's actual result instead of copying the expected graph over it.
+
+`ExecuteLocalTeardown` binds a separate `AuthorizeTeardown` policy and C's
+`BindTeardown` on top of the existing authorizer, revision checking, writer
+exclusion and journal. The nonserialized request carries one operation and the
+independently verified live incarnations corresponding to the exact accepted
+instance selection. Herdr also requires its pinned retained volume. The
+journal records logical effect outcomes; recovery never replays them.
 
 The canonical UUID-derived gateway guest names are reserved across all candidates, including candidates without gateway intent and environments sharing the project. Workload and Herdr declarations using these names fail validation. This prevents both domains from independently planning a create for the same absent Incus instance. A conflicting existing name requires explicit resolution; the fixture does not rename, adopt or delete instances. The mixed hermetic test runs both composers under one revision, checks full-plan denial and both cross-domain edges, and recovers from a lost workload create result without repeating completed gateway effects or rewriting the failed journal.
 
