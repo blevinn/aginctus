@@ -179,6 +179,8 @@ let
     (change { gateway.egressIPv4 = "10.42.40.255/24"; })
     (change { gateway.egressIPv4 = "10.42.40.0/24"; })
     (change { gateway.egressIPv4 = "127.0.0.2/24"; })
+    (change { gateway.egressIPv4 = "0.1.0.1/16"; })
+    (change { gateway.egressIPv4 = "240.1.0.1/16"; })
   ];
   noEgress = change {
     gateway = {

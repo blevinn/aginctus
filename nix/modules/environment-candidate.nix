@@ -151,9 +151,11 @@ let
     in
     parsed != null
     && lib.all (n: n <= 255) numbers
+    && first > 0
     && first != 127
     && !(first == 169 && second == 254)
     && !(first >= 224 && first <= 239)
+    && first < 240
     && host != 0
     && host != blockSize - 1;
   validGateway =
