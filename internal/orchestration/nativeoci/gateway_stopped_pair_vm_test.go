@@ -64,10 +64,6 @@ func TestNativeGatewayStoppedPairVM(t *testing.T) {
 					t.Fatalf("volume create/reuse: %+v: %v", v, err)
 				}
 			}
-			ensureVolume(true)
-			if checks != 1 || client.volumeWrites != 1 {
-				t.Fatalf("volume guard checks=%d submissions=%d", checks, client.volumeWrites)
-			}
 			devices, err := gateway.PlanNativeGatewayDevices(top, stoppedPairPool, stoppedPairPool)
 			if err != nil {
 				t.Fatal(err)
@@ -78,6 +74,16 @@ func TestNativeGatewayStoppedPairVM(t *testing.T) {
 			}
 			if pair.Postgres.Name != pgName || pair.LiteLLM.Name != llmName {
 				t.Fatalf("unexpected planned guest names: %s, %s", pair.Postgres.Name, pair.LiteLLM.Name)
+			}
+			preview, err := gateway.PreviewNativeEnvironmentGatewayStoppedWithReader(ctx, descriptor, binding, top, devices, pair, images, client)
+			if err != nil || !preview.CreateDatabaseVolume || len(preview.Instances.Steps) != 2 || len(client.instanceWrites) != 0 || client.volumeWrites != 0 {
+				t.Fatalf("initial stopped preview: %+v: %v", preview, err)
+			}
+			if tc.name != "foreign-collision" {
+				ensureVolume(true)
+				if checks != 1 || client.volumeWrites != 1 {
+					t.Fatalf("volume guard checks=%d submissions=%d", checks, client.volumeWrites)
+				}
 			}
 			create := func() (gateway.NativeGatewayStoppedResult, error) {
 				return gateway.CreateStoppedGatewayWithClient(ctx, top, devices, pair, images, client, guard)
@@ -147,6 +153,12 @@ func TestNativeGatewayStoppedPairVM(t *testing.T) {
 					})
 				})
 				before, etag := readStoppedPairGuest(t, sdk, llmName, foreignID, fingerprint)
+				if _, err := gateway.PreviewNativeEnvironmentGatewayStoppedWithReader(ctx, descriptor, binding, top, devices, pair, images, client); err == nil || client.volumeWrites != 0 {
+					t.Fatal("preview failed to block foreign collision before volume creation")
+				}
+				// Seed a volume solely to exercise the low-level stopped primitive's
+				// independent refusal of the same collision after attachments exist.
+				ensureVolume(true)
 				volume, volumeETag := readVolume()
 				got, err := create()
 				var stoppedErr *gateway.NativeGatewayStoppedError
