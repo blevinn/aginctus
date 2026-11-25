@@ -47,6 +47,7 @@ type Scenario struct {
 	Surface     Surface
 	Networked   bool
 	Evidence    bool
+	Disabled    bool
 	Authority Authority
 	RequiresExplicitSelection bool
 	EvidenceContract string
@@ -79,7 +80,7 @@ var scenarios = []Scenario{
 	{Name: "native-oci", Target: "vm-harness-native-oci", Description: "Experimental native OCI feasibility spike", Tier: Disposable, Surface: Internal, Networked: true, Authority: InternalExperiment, RequiresExplicitSelection: true, EvidenceContract: "none"},
 	{Name: "synthetic-gateway", Target: "vm-harness-synthetic-gateway", Description: "Real guest LiteLLM/Postgres with scoped-key synthetic Responses upstream (no agent tool proof)", Tier: Disposable, Surface: Operator, Networked: true, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
 	{Name: "synthetic-tool-gateway", Target: "vm-harness-synthetic-tool-gateway", Description: "Four fake-result Responses tool turns through real LiteLLM (no tool execution)", Tier: Disposable, Surface: Operator, Networked: true, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
-	{Name: "full-stack", Target: "vm-harness-full-stack", Description: "Real Herdr/OpenCode read/edit/bash through a scoped synthetic gateway (dedicated KVM worker only; no live provider)", Tier: Disposable, Surface: Operator, Networked: true, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
+	{Name: "full-stack", Target: "vm-harness-full-stack", Description: "Compose full-stack VM suspended pending the native orchestration port (#1115)", Tier: Disposable, Surface: Operator, Networked: true, Evidence: true, Disabled: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
 	{Name: "opencode-tool-loopback", Target: "vm-harness-opencode-tool-loopback", Description: "Guest-isolated pinned OpenCode executing scripted read/edit/Go test tools (no Herdr/gateway)", Tier: Disposable, Surface: Operator, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
 	{Name: "acceptance-project-authority", Target: "vmTests.x86_64-linux.incus-project-authority", Description: "Gate C real restricted TLS project authority and foreign-resource denial", Tier: Disposable, Surface: Operator, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
 	{Name: "acceptance-environment-state", Target: "vmTests.x86_64-linux.environment-project-state-incus", Description: "Gate E two accepted environment revisions in a guest-local project volume and read-only service", Tier: Disposable, Surface: Operator, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
@@ -94,7 +95,7 @@ func HermeticSuites() []Suite {
 }
 
 // VMScenarios returns all pinned scenarios, including internal experiments.
-// Only PublicVMScenarios may be used for CLI discovery.
+// For CLI discovery, filter PublicVMScenarios to enabled scenarios.
 func VMScenarios() []Scenario {
 	return append([]Scenario(nil), scenarios...)
 }

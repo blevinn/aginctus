@@ -22,13 +22,14 @@ func environmentGatewayCreateFixture(t *testing.T)(NativeGatewayTopology,NativeG
 	attachment.volume.Config["user.aginctus.environment-id"]=top.EnvironmentID
 	return top,devices,pair,&fakeGatewayStoppedClient{
 		fakeGatewayInstanceReader:reader,fakeGatewayAttachmentReader:attachment,
+		imagesForCreate:stoppedImageFixture(pair),
 	}
 }
 
 func TestEnvironmentOwnedGatewayStoppedCreationAndObservation(t *testing.T){
 	top,devices,pair,client:=environmentGatewayCreateFixture(t)
 	if err:=ObserveNativeGatewayAttachmentsWithReader(context.Background(),top,devices,client);err!=nil{t.Fatal(err)}
-	result,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil})
+	result,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client.imagesForCreate,client,func(context.Context)error{return nil})
 	if err!=nil || len(result.Created)!=2 ||
 		result.Created[0]!=pair.Postgres.Name || result.Created[1]!=pair.LiteLLM.Name{
 		t.Fatalf("environment gateway creation failed: %+v %v",result,err)
@@ -41,7 +42,7 @@ func TestEnvironmentOwnedGatewayStoppedCreationAndObservation(t *testing.T){
 	observed,err:=ObserveNativeGatewayInstancesWithReader(context.Background(),pair,client)
 	if err!=nil || len(observed)!=2 || observed[0].Status!=NativeGatewayCompatible ||
 		observed[1].Status!=NativeGatewayCompatible {t.Fatalf("environment observations: %+v %v",observed,err)}
-	repeat,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil})
+	repeat,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client.imagesForCreate,client,func(context.Context)error{return nil})
 	if err!=nil || len(repeat.Created)!=0 {t.Fatalf("repeat adopted or rewrote gateway: %+v %v",repeat,err)}
 }
 
@@ -52,13 +53,13 @@ func TestEnvironmentGatewayRejectsSameProjectCrossEnvironmentResources(t *testin
 		t.Fatal("another environment's project-scoped volume accepted")
 	}
 	client.volume.Config["user.aginctus.environment-id"]=top.EnvironmentID
-	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil})
+	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client.imagesForCreate,client,func(context.Context)error{return nil})
 	if err!=nil{t.Fatal(err)}
 	client.instances[pair.Postgres.Name].Config["user.aginctus.environment-id"]="123e4567-e89b-42d3-a456-426614174001"
 	if _,err:=ObserveNativeGatewayInstancesWithReader(context.Background(),pair,client);err==nil{
 		t.Fatal("another environment's project-scoped instance accepted")
 	}
-	if _,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil});err==nil{
+	if _,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client.imagesForCreate,client,func(context.Context)error{return nil});err==nil{
 		t.Fatal("foreign project-sharing instance adopted")
 	}
 }
@@ -78,7 +79,7 @@ func TestEnvironmentGatewayRejectsLegacyInstanceAndVolumeNames(t *testing.T){
 
 func TestEnvironmentGatewayReadOnlyStatusAndRuntimePreflight(t *testing.T){
 	top,devices,pair,client:=environmentGatewayCreateFixture(t)
-	if _,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil});err!=nil{
+	if _,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client.imagesForCreate,client,func(context.Context)error{return nil});err!=nil{
 		t.Fatal(err)
 	}
 	status,err:=InspectNativeGatewayStatusWithReader(context.Background(),top,devices,pair,client)

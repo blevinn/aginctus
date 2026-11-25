@@ -6,7 +6,7 @@ import (
 )
 func TestNativeGatewayStatusReadOnly(t *testing.T){
 	top,devices,pair,client:=stoppedClientFixture(t)
-	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil})
+	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client.imagesForCreate,client,func(context.Context)error{return nil})
 	if err!=nil {t.Fatal(err)}
 	status,err:=InspectNativeGatewayStatusWithReader(context.Background(),top,devices,pair,client)
 	if err!=nil || !status.AllStopped || status.AllRunning || len(status.Services)!=2 {
@@ -23,7 +23,7 @@ func TestNativeGatewayStatusReadOnly(t *testing.T){
 }
 func TestNativeGatewayStatusRejectsForeignAndUnknown(t *testing.T){
 	top,devices,pair,client:=stoppedClientFixture(t)
-	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client,func(context.Context)error{return nil})
+	_,err:=CreateStoppedGatewayWithClient(context.Background(),top,devices,pair,client.imagesForCreate,client,func(context.Context)error{return nil})
 	if err!=nil {t.Fatal(err)}
 	client.instances["postgres-1"].Status="Error"
 	if _,err:=InspectNativeGatewayStatusWithReader(context.Background(),top,devices,pair,client);err==nil {
