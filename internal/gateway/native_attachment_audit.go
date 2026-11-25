@@ -121,23 +121,41 @@ func ObserveNativeGatewayAttachmentsWithReader(ctx context.Context, top NativeGa
 		return err
 	}
 	v, _, err := r.GetStoragePoolVolume(data, "custom", top.DatabaseVolume)
-	if err != nil || v == nil || v.Name != top.DatabaseVolume ||
+	if err != nil {
+		return fmt.Errorf("native gateway PostgreSQL storage observation unavailable")
+	}
+	postgresName := "postgres-1"
+	if top.EnvironmentID != "" {
+		postgresName = "ag-" + strings.ReplaceAll(top.EnvironmentID, "-", "") + "-pg"
+	}
+	if err := verifyGatewayVolume(v, scope.Name, top.EnvironmentID, top.DatabaseVolume, postgresName); err != nil {
+		return err
+	}
+	return ctx.Err()
+}
+
+// Both create/reuse and attachment preflight must agree on the volume owner
+// and the only permitted consumer. Legacy topology is audited but not created.
+func verifyGatewayVolume(v *api.StorageVolume, project, environmentID, name, postgresName string) error {
+	if v == nil || v.Name != name ||
 		v.Type != "custom" || v.ContentType != "filesystem" ||
-		v.Config["user.aginctus.managed"] != "true" ||
-		v.Config["user.aginctus.resource"] != "gateway-postgres-volume" ||
-		v.Config["user.aginctus.deployment"] != scope.Name ||
-		!gatewayOwnerMatches(v.Config,top.EnvironmentID) ||
-		v.Config["security.shifted"] != "true" {
+		(environmentID != "" && v.Project != project) {
 		return fmt.Errorf("native gateway PostgreSQL storage ownership unverified")
 	}
-	postgresName:="postgres-1"
-	if top.EnvironmentID!="" {postgresName="ag-"+strings.ReplaceAll(top.EnvironmentID,"-","")+"-pg"}
+	for key, value := range gatewayVolumeMarkers(project, environmentID) {
+		if v.Config[key] != value {
+			return fmt.Errorf("native gateway PostgreSQL storage ownership unverified")
+		}
+	}
 	for _, ref := range v.UsedBy {
 		u, err := url.Parse(ref)
-		if err != nil || u.Path != "/1.0/instances/"+postgresName ||
-			u.Query().Get("project") != scope.Name || len(u.Query()) != 1 {
+		if err != nil || u.Scheme != "" || u.Host != "" || u.Fragment != "" || u.Path != "/1.0/instances/"+postgresName {
+			return fmt.Errorf("native gateway PostgreSQL volume has foreign attachment")
+		}
+		query, err := url.ParseQuery(u.RawQuery)
+		if err != nil || len(query) != 1 || len(query["project"]) != 1 || query.Get("project") != project {
 			return fmt.Errorf("native gateway PostgreSQL volume has foreign attachment")
 		}
 	}
-	return ctx.Err()
+	return nil
 }

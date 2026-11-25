@@ -83,7 +83,7 @@ func (intent InstanceLifecycleIntent) markers() map[string]string {
 		markers["user.aginctus.workload"] = intent.WorkloadID
 	}
 	if intent.EnvironmentID != "" {
-		markers["user.aginctus.environment-id"] = intent.EnvironmentID
+		markers[environmentOwnershipKey] = intent.EnvironmentID
 	}
 	return markers
 }
@@ -205,6 +205,9 @@ func EnsureInstanceStateWithClient(
 		(observed.Config["user.aginctus.deployment"] != "" && observed.Config["user.aginctus.deployment"] != intent.Scope.Name) {
 		return InstanceLifecycleResult{}, &ReconcileError{Stage: "ownership", cause: fmt.Errorf("instance identity or lifecycle unverified")}
 	}
+	if !environmentOwnerMatches(observed.Config, intent.EnvironmentID) {
+		return InstanceLifecycleResult{}, &ReconcileError{Stage: "ownership", cause: fmt.Errorf("instance environment ownership unverified")}
+	}
 	for key, want := range intent.markers() {
 		if observed.Config[key] != want {
 			return InstanceLifecycleResult{}, &ReconcileError{
@@ -250,6 +253,9 @@ func EnsureInstanceStateWithClient(
 		return result, &ReconcileError{
 			Stage: "verification", Mutated: true, Uncertain: true, cause: fmt.Errorf("instance did not reach the required state"),
 		}
+	}
+	if !environmentOwnerMatches(after.Config, intent.EnvironmentID) {
+		return result, &ReconcileError{Stage: "verification", Mutated: true, Uncertain: true, cause: fmt.Errorf("instance environment ownership changed")}
 	}
 	for key, want := range intent.markers() {
 		if after.Config[key] != want {

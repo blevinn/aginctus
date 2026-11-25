@@ -59,7 +59,7 @@ func nativeAttachmentAuditFixture(t *testing.T) (NativeGatewayTopology, NativeGa
 				"ipv4.nat": "true", "ipv4.routing": "true",
 			}}},
 		},
-		volume: &api.StorageVolume{Name: "gateway-postgres", Type: "custom", ContentType: "filesystem",
+		volume: &api.StorageVolume{Name: "gateway-postgres", Project: top.Project, Type: "custom", ContentType: "filesystem",
 			StorageVolumePut: api.StorageVolumePut{Config: map[string]string{
 				"user.aginctus.managed": "true", "user.aginctus.resource": "gateway-postgres-volume",
 				"user.aginctus.deployment": top.Project, "security.shifted": "true",

@@ -16,6 +16,16 @@ from tests.vm_harness import evidence, runner
 
 
 class RunnerTests(unittest.TestCase):
+    def test_full_stack_refuses_test_and_debug_before_launch(self):
+        for mode in ("test", "debug"):
+            with (self.subTest(mode=mode), patch.object(runner.subprocess, "run") as run,
+                  contextlib.redirect_stderr(io.StringIO()) as stderr,
+                  self.assertRaises(SystemExit) as exit_status):
+                runner.main([mode, "full-stack"])
+            self.assertEqual(exit_status.exception.code, 2)
+            self.assertIn("#1115", stderr.getvalue())
+            run.assert_not_called()
+
     def test_full_stack_imports_only_fixed_artifact_even_on_runtime_failure(self):
         for code in (0, 42, "timeout"):
             with self.subTest(code=code), tempfile.TemporaryDirectory() as temporary:
@@ -40,6 +50,7 @@ class RunnerTests(unittest.TestCase):
                     return subprocess.CompletedProcess(command, code, "SECRET_CANARY", "SECRET_CANARY")
 
                 with (patch.object(runner, "ROOT", root),
+                      patch.object(runner, "DISABLED_SCENARIOS", {}),
                       patch.object(runner, "driver_from_build", return_value=Path("/nix/store/driver")),
                       patch.object(runner.subprocess, "run", side_effect=run),
                       contextlib.redirect_stdout(io.StringIO()),
@@ -71,6 +82,7 @@ class RunnerTests(unittest.TestCase):
                     return subprocess.CompletedProcess(command, 0, "PASS: all gates", "")
 
                 with (patch.object(runner, "ROOT", root),
+                      patch.object(runner, "DISABLED_SCENARIOS", {}),
                       patch.object(runner, "driver_from_build", return_value=Path("/nix/store/driver")),
                       patch.object(runner.subprocess, "run", side_effect=run),
                       contextlib.redirect_stdout(io.StringIO()),
