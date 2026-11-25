@@ -61,12 +61,12 @@ func verifyLocalLifecycleSelection(c environment.Candidate, resources []NativeRe
 			}
 		case NativeHerdrVolume:
 			if c.Herdr == nil || r.ID != herdrVolumeStage || !slices.Contains(r.DependsOn, managementNetworkStage) || !selectNetwork(c.Herdr.ManagementNetwork) {
-				return errors.New("Herdr state requires accepted intent and the pinned bridge prerequisite")
+				return errors.New("missing accepted intent or pinned bridge prerequisite for Herdr state")
 			}
 			volume = true
 		case NativeHerdrInstance:
 			if c.Herdr == nil || r.ID != herdrInstanceStage || !slices.Contains(r.DependsOn, herdrVolumeStage) {
-				return errors.New("Herdr instance requires accepted intent and the retained state prerequisite")
+				return errors.New("missing accepted intent or retained state prerequisite for the Herdr instance")
 			}
 			herdr = true
 		}
