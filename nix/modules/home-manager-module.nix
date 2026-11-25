@@ -175,7 +175,7 @@ in
     }
     ++ lib.optional (cfg.environmentCandidate != null) {
       assertion = environmentCandidateValid;
-      message = "programs.aginctus.environmentCandidate needs a non-default project, <=256 unique workloads/instances and <=32 unique profiles per workload";
+      message = "programs.aginctus.environmentCandidate requires a non-default project, bounded unique workload/profile selections, noncolliding instance names and valid gateway references";
     }
     ++ [
       {
