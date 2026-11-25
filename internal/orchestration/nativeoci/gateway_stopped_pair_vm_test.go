@@ -217,7 +217,9 @@ func TestNativeGatewayStoppedPairVM(t *testing.T) {
 				if r.Plan.Revision != *rev {
 					return environment.Binding{}, errors.New("unexpected fixture revision")
 				}
-				if r.Permission == orchestration.LocalNativeSubmit && (r.Effect.Action != native.Create || !(r.Resource.ID == orchestration.GatewayVolumeStage && r.Effect.Target == "database" || r.Resource.ID == orchestration.GatewayInstanceStage && (r.Effect.Target == "postgres" || r.Effect.Target == "litellm"))) {
+				volume := r.Resource.ID == orchestration.GatewayVolumeStage && r.Effect.Target == orchestration.GatewayDatabaseTarget
+				guest := r.Resource.ID == orchestration.GatewayInstanceStage && (r.Effect.Target == orchestration.GatewayPostgresTarget || r.Effect.Target == orchestration.GatewayLiteLLMTarget)
+				if r.Permission == orchestration.LocalNativeSubmit && (r.Effect.Action != native.Create || !volume && !guest) {
 					return environment.Binding{}, errors.New("unexpected fixture effect")
 				}
 				return binding, nil
