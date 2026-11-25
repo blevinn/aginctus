@@ -51,9 +51,7 @@ ETag-bound observation. Device/profile/type/image drift is not repaired by this
 operation; lifecycle transitions remain separate.
 Explicit empty config values clear the key, matching Incus normalization; omitted
 keys remain unmanaged. Description is always explicit, including an empty string.
-No actor authorization or execution capability is carried by observations or plans. Generic versioned
-resource schema work in #155 remains outstanding, as do independent resource
-intents and multi-resource execution.
+No actor authorization or execution capability is carried by observations or plans.
 `native.EnsureLocalInstance` composes create-if-absent, scalar update and optional
 start for one explicit instance intent. Its dry-run uses the same typed planner
 without submitting operations. False `EnsureRunning` preserves lifecycle state;
@@ -77,6 +75,66 @@ unpack the image or require a daemon HTTPS listener. This is demonstrated in
 the disposable spike, not yet activated for production gateway lifecycle.
 
 For each selected resource: observe actual state, compare Aginctus-controlled fields, produce structured create/update/replace/delete/no-op actions, preflight the entire selected plan for ownership and safety, then apply in dependency order. Do not silently replace on immutable-field drift. Make storage retention and destructive actions explicit. Dry-run shares planning logic with execution and must not mutate.
+
+### Native plan selection and existing engine binding
+
+`aginctus.dev/native-plan/v1alpha1`, kind `NativeResourcePlan`, is the engine's
+JSON selection envelope. Its fields are `apiVersion`, `kind`, `revision` (the
+existing environment accepted revision), and `resources`. Each resource has a
+logical `id`, a closed `kind` and optional `dependsOn` logical IDs. For example,
+an accepted workload uses `{"id":"agent","kind":"workload"}`. This schema does
+not serialize domain inputs again: instance fields, immutable image pins, pool
+and attachment policy, and versioned credential references remain in their
+own typed contracts. Changing the meaning or shape of the selection envelope
+requires versioned evolution. Legacy `Orchestration` plans are unchanged.
+
+The engine defines the supported effect set:
+
+| Resource kind | Supported effects |
+| --- | --- |
+| `workload` | Update or start an existing workload, subject to the actual accepted intent and domain policy |
+| `gateway-image` | Create from pinned identity |
+| `gateway-volume` | Create without replacement or deletion |
+| `gateway-instance` | Create stopped |
+| `gateway-runtime` | Update approved runtime configuration, start, or stop |
+
+Resource omission never removes anything. There are no generic project,
+network, device, adoption, deletion or replacement operations in this
+envelope. Host-shared networking and project provisioning retain separate
+authority. Devices are prerequisites verified by the domain, not an implicit
+grant to attach or change them. A known replacement requirement blocks this
+path; it is never converted into a create.
+
+Trusted composition binds selected IDs to existing domain reconcilers. The
+engine validates the full graph and bindings before readings or writes, with a
+lexical tie-break between eligible resources. Selection verification must check
+the exact graph and domain intent against authoritative pinned input. The
+engine does not infer membership, required edges or authority from the JSON.
+All feasible global previews and preflight checks run before writes. A
+dependency-produced prerequisite can defer a preview; it must be verified at
+the resource's own boundary. Every incoming dependency must have a required
+postcondition that passes before the dependent runs. Checks correlate evidence
+with the same accepted revision; adapters supply resource incarnation where
+applicable and independently authorize their reads.
+
+Apply re-observes each stage, restricts action and target to its fresh preview,
+and calls the independent writer check for **each** submission, not once for a
+composite primitive. Compound stages identify exact logical effect targets (for
+example, Postgres and LiteLLM separately). Domains still verify ownership and
+preconditions and supply ETags.
+Dry-run only validates and observes. It runs preflight-marked offline/read-only
+checks, rejects active preflight, skips apply and condition postflight, and
+produces no mutation outcomes. Its deferred previews are not readiness claims.
+Results retain completed operations, read-only previews, check findings, and
+blocked/applied/uncertain effects even if later verification fails. Applied
+effects are not evidence of application readiness or durable convergence.
+There is no automatic retry or rollback of writes.
+
+The hermetic engine tests compose the existing native workload assessment and
+Incus lifecycle reconciler against injected transport and authority fixtures.
+This engine entry point does not turn those fixtures into a production
+capability. Product composition requires the authenticated writer boundary,
+the gateway/domain adapters, and disposable Incus evidence for the joined path.
 
 ## Risks and proofs
 
