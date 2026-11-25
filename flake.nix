@@ -221,9 +221,11 @@
           vm-harness-acceptance-nft = import ./tests/nix/firewall/firewall-nixos-nft-test.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-acceptance-egress-denial = import ./tests/nix/firewall/firewall-egress-bootstrap-test.nix {
-            inherit self nixpkgs system;
-          };
+          vm-harness-acceptance-egress-denial =
+            import ./tests/nix/firewall/firewall-egress-bootstrap-test.nix
+              {
+                inherit self nixpkgs system;
+              };
           vm-harness-acceptance-firewalld = import ./tests/nix/firewall/firewall-firewalld-test.nix {
             inherit self nixpkgs system;
           };
@@ -233,9 +235,11 @@
           vm-harness-native-instance = import ./tests/nix/vm-harness/native-instance.nix {
             inherit self nixpkgs system;
           };
-          vm-harness-native-accepted-incus-observation = import ./tests/nix/vm-harness/native-accepted-incus-observation.nix {
-            inherit self nixpkgs system;
-          };
+          vm-harness-native-accepted-incus-observation =
+            import ./tests/nix/vm-harness/native-accepted-incus-observation.nix
+              {
+                inherit self nixpkgs system;
+              };
           vm-harness-synthetic-gateway = import ./tests/nix/vm-harness/gateway-topology.nix {
             inherit self nixpkgs system;
             synthetic = true;
@@ -283,9 +287,11 @@
         accepted-state-incus = import ./tests/nix/vm-harness/accepted-state-incus.nix {
           inherit self nixpkgs system;
         };
-        environment-project-state-incus = import ./tests/nix/vm-harness/environment-project-state-incus.nix {
-          inherit self nixpkgs system;
-        };
+        environment-project-state-incus =
+          import ./tests/nix/vm-harness/environment-project-state-incus.nix
+            {
+              inherit self nixpkgs system;
+            };
       });
 
       checks = forAllSystems (
