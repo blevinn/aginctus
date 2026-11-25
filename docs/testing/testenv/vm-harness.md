@@ -60,6 +60,22 @@ Requires an x86_64-linux KVM worker and sufficient disk space. The Go acceptance
 tests skip without both the explicit opt-in and the guest-only marker. Hermetic
 checks do not run the VM; a skipped Go test is not real-Incus acceptance.
 
+The separate accepted-workload observation gate runs on an x86_64 Linux KVM
+worker:
+
+```sh
+timeout --kill-after=15s 12m nix --quiet build --rebuild --no-update-lock-file --no-link -L \
+  .#vm-harness-native-accepted-incus-observation
+```
+
+The observer runs as an unprivileged guest user with an ephemeral,
+project-restricted TLS credential and a same-UID immutable revision fixture.
+It checks selected convergence and drift, permits absence only in the verified
+project, and rejects wrong scope and a readable same-project foreign owner.
+Check the guest Go `PASS` and unchanged-inventory message in the build log.
+The fixture does not establish production accepted-state provenance, a writer
+grant, privileged activation, or operator acceptance.
+
 `aginctus testenv vm` is the new typed operator CLI. In this first increment,
 `list` and `plan` are offline and read-only, and `test` reuses **the existing
 Python batch runner and its evidence files**, selected by fixed scenario name:

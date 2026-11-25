@@ -229,6 +229,9 @@
           vm-harness-native-instance = import ./tests/nix/vm-harness/native-instance.nix {
             inherit self nixpkgs system;
           };
+          vm-harness-native-accepted-incus-observation = import ./tests/nix/vm-harness/native-accepted-incus-observation.nix {
+            inherit self nixpkgs system;
+          };
           vm-harness-synthetic-gateway = import ./tests/nix/vm-harness/gateway-topology.nix {
             inherit self nixpkgs system;
             synthetic = true;
