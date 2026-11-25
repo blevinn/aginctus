@@ -256,6 +256,13 @@ func (s *LocalProjectStateStore) CommitLocalCandidate(
 	ctx context.Context, enrolled Descriptor, observed Binding,
 	expected *AcceptedRevision, candidate Candidate,
 )(AcceptedRevision,error){
+	return s.commitLocalCandidate(ctx, enrolled, observed, expected, candidate, nil)
+}
+
+func (s *LocalProjectStateStore) commitLocalCandidate(
+	ctx context.Context, enrolled Descriptor, observed Binding,
+	expected *AcceptedRevision, candidate Candidate, beforePublish func() error,
+)(AcceptedRevision,error){
 	if ctx==nil{return AcceptedRevision{},errors.New("local project commit requires context")}
 	if err:=ctx.Err();err!=nil{return AcceptedRevision{},err}
 	if _,err:=SelectCandidate(candidate,enrolled,observed);err!=nil{return AcceptedRevision{},err}
@@ -284,10 +291,21 @@ func (s *LocalProjectStateStore) CommitLocalCandidate(
 	immutable,err:=json.Marshal(localEnvironmentRecord{Revision:next,Candidate:body})
 	if err!=nil{return AcceptedRevision{},err}
 	if err:=ctx.Err();err!=nil{return AcceptedRevision{},err}
+	if beforePublish != nil {
+		if err := beforePublish(); err != nil { return AcceptedRevision{}, err }
+	}
+	if err := verifyLocalLock(lock, path); err != nil { return AcceptedRevision{},err }
 	if err:=createImmutableLocalRecord(revisions,next.ID+".json",immutable);err!=nil{return AcceptedRevision{},err}
 	pointer,err:=json.Marshal(next)
 	if err!=nil{return AcceptedRevision{},err}
 	if err:=ctx.Err();err!=nil{return AcceptedRevision{},err}
+	if beforePublish != nil {
+		if err := beforePublish(); err != nil { return AcceptedRevision{}, err }
+	}
+	if err := verifyLocalLock(lock, path); err != nil { return AcceptedRevision{},err }
+	latest, _, err := s.readNamespace(ctx,enrolled)
+	if err != nil { return AcceptedRevision{},err }
+	if (latest==nil)!=(current==nil) || latest!=nil && *latest!=*current { return AcceptedRevision{},ErrAcceptedConflict }
 	if err:=publishLocalProjectPointer(path,pointer);err!=nil {
 		// Rename can have completed before a directory sync failure.
 		return AcceptedRevision{},fmt.Errorf("local accepted pointer outcome uncertain; re-read before retry: %w",err)

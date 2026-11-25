@@ -57,6 +57,7 @@ type NativeEffectResult struct {
 
 type NativeResult struct {
 	Revision environment.AcceptedRevision `json:"revision"`
+	LocalOperationID string `json:"localOperationId,omitempty"`
 	Previews []NativePreviewResult        `json:"previews"`
 	Effects  []NativeEffectResult         `json:"effects"`
 }

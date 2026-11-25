@@ -30,6 +30,8 @@ type Candidate struct {
 	Environment       Descriptor                   `json:"environment"`
 	SelectedWorkloads []string                     `json:"selectedWorkloads"`
 	Workloads         []acceptedstate.WorkloadSpec `json:"workloads"`
+	Gateway           *GatewaySpec                 `json:"gateway,omitempty"`
+	Herdr             *HerdrSpec                   `json:"herdr,omitempty"`
 }
 
 func (c Candidate) Validate() error {
@@ -44,17 +46,35 @@ func (c Candidate) Validate() error {
 	// This is validation reuse, NOT translation into an accepted revision.
 	spec := acceptedstate.DeploymentSpec{
 		APIVersion: acceptedstate.DeploymentAPIVersion,
-		Kind: acceptedstate.DeploymentKind,
+		Kind:       acceptedstate.DeploymentKind,
 		Selection: acceptedstate.SelectionManifest{
-			APIVersion: acceptedstate.SelectionAPIVersion,
-			Kind: acceptedstate.SelectionKind,
-			DeploymentID: c.Environment.ID,
-			IncusProject: c.Environment.Binding.Project,
+			APIVersion:        acceptedstate.SelectionAPIVersion,
+			Kind:              acceptedstate.SelectionKind,
+			DeploymentID:      c.Environment.ID,
+			IncusProject:      c.Environment.Binding.Project,
 			SelectedWorkloads: c.SelectedWorkloads,
 		},
 		Workloads: c.Workloads,
 	}
-	return spec.Validate()
+	if err := spec.Validate(); err != nil {
+		return err
+	}
+	if c.Gateway != nil {
+		if err := c.Gateway.validate(c.Environment.Binding); err != nil {
+			return err
+		}
+	}
+	if c.Herdr != nil {
+		if err := c.Herdr.validate(c.Environment); err != nil {
+			return err
+		}
+		for _, w := range c.Workloads {
+			if w.InstanceName == c.Herdr.InstanceName {
+				return errors.New("Herdr instance overlaps an accepted workload")
+			}
+		}
+	}
+	return nil
 }
 
 // Canonical returns deterministic candidate bytes. These are not accepted
@@ -86,7 +106,21 @@ func ParseCandidate(data []byte) (Candidate, error) {
 	if err := json.Unmarshal(data, &keys); err != nil || keys == nil {
 		return Candidate{}, errors.New("environment candidate must be a JSON object")
 	}
-	if err := candidateKeys(keys, "apiVersion", "kind", "environment", "selectedWorkloads", "workloads"); err != nil {
+	rootKeys := []string{"apiVersion", "kind", "environment", "selectedWorkloads", "workloads"}
+	if raw, present := keys["gateway"]; present {
+		rootKeys = append(rootKeys, "gateway")
+		if err := gatewayCandidateKeys(raw); err != nil {
+			return Candidate{}, err
+		}
+	}
+	if raw, present := keys["herdr"]; present {
+		rootKeys = append(rootKeys, "herdr")
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) != nil || candidateKeys(fields, "instanceName", "imageFingerprint", "storagePool", "managementNetwork", "allowStateBootstrap") != nil {
+			return Candidate{}, errors.New("invalid Herdr candidate fields")
+		}
+	}
+	if err := candidateKeys(keys, rootKeys...); err != nil {
 		return Candidate{}, err
 	}
 	var descriptor map[string]json.RawMessage
@@ -112,7 +146,7 @@ func ParseCandidate(data []byte) (Candidate, error) {
 		if err := json.Unmarshal(entry, &fields); err != nil || fields == nil {
 			return Candidate{}, errors.New("workload entry must be an object")
 		}
-		if err := candidateKeys(fields, "id", "instanceName", "instanceType", "imageFingerprint", "profiles", "ensureRunning"); err != nil {
+		if err := acceptedstate.ValidateWorkloadFields(fields); err != nil {
 			return Candidate{}, err
 		}
 	}
