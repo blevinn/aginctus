@@ -48,11 +48,22 @@ type PinnedEnvironmentWorkload struct {
 func (s *LocalProjectStateStore) PinLocalAccepted(
 	ctx context.Context, enrolled Descriptor, expected AcceptedRevision, workloadID string,
 )(*LocalEnvironmentPin,error){
+	if workloadID == "" { return nil, ErrAcceptedConflict }
+	return s.pinLocalRevision(ctx, enrolled, expected, workloadID)
+}
+
+// PinLocalRevision excludes cooperating fixture CAS and native fixture writers
+// for the whole selected environment. It grants no project or SDK authority.
+func (s *LocalProjectStateStore) PinLocalRevision(ctx context.Context, enrolled Descriptor, expected AcceptedRevision) (*LocalEnvironmentPin, error) {
+	return s.pinLocalRevision(ctx, enrolled, expected, "")
+}
+
+func (s *LocalProjectStateStore) pinLocalRevision(ctx context.Context, enrolled Descriptor, expected AcceptedRevision, workloadID string) (*LocalEnvironmentPin, error) {
 	if ctx==nil{return nil,errors.New("local environment pin requires context")}
 	if err:=ctx.Err();err!=nil{return nil,err}
 	if !idPattern.MatchString(enrolled.ID) || expected.ValidateIdentity()!=nil ||
 		expected.EnvironmentID!=enrolled.ID || expected.ServerID!=enrolled.Binding.ServerID ||
-		expected.Project!=enrolled.Binding.Project || workloadID=="" {
+		expected.Project!=enrolled.Binding.Project {
 		return nil,ErrAcceptedConflict
 	}
 	path,err:=s.namespace(enrolled)
@@ -74,13 +85,24 @@ func (s *LocalProjectStateStore) PinLocalAccepted(
 func (p *LocalEnvironmentPin) check(ctx context.Context) error {
 	if ctx==nil{return errors.New("local accepted pin requires context")}
 	if err:=ctx.Err();err!=nil{return err}
+	path, err := p.store.namespace(p.enrolled)
+	if err != nil { return err }
+	if err := verifyLocalLock(p.lock, path); err != nil { return err }
 	actual,candidate,err:=p.store.ReadLocalAccepted(ctx,p.enrolled)
 	if err!=nil{return err}
 	if actual==nil || candidate==nil || *actual!=p.revision ||
-		!slices.Contains(candidate.SelectedWorkloads,p.workloadID){
+		(p.workloadID != "" && !slices.Contains(candidate.SelectedWorkloads,p.workloadID)){
 		return ErrAcceptedConflict
 	}
 	return ctx.Err()
+}
+
+func verifyLocalLock(lock *os.File, path string) error {
+	held, err := lock.Stat()
+	if err != nil { return ErrAcceptedConflict }
+	named, err := os.Lstat(filepath.Join(path, "active.json.flock"))
+	if err != nil || !os.SameFile(held, named) { return ErrAcceptedConflict }
+	return nil
 }
 
 // Check re-reads the active pointer while the fixture exclusion lock is held.
@@ -102,12 +124,10 @@ func (p *LocalEnvironmentPin) SnapshotCandidate(ctx context.Context)(Candidate,e
 	defer p.mu.Unlock()
 	if p.closed{return Candidate{},ErrAcceptedConflict}
 	if err:=p.check(ctx);err!=nil{return Candidate{},err}
-	_,candidate,err:=p.store.ReadLocalAccepted(ctx,p.enrolled)
+	actual,candidate,err:=p.store.ReadLocalAccepted(ctx,p.enrolled)
 	if err!=nil{return Candidate{},err}
-	if candidate==nil{return Candidate{},ErrAcceptedConflict}
-	data,err:=candidate.Canonical()
-	if err!=nil{return Candidate{},err}
-	return ParseCandidate(data)
+	if candidate==nil || actual==nil || *actual!=p.revision{return Candidate{},ErrAcceptedConflict}
+	return *candidate,nil
 }
 
 func (p *LocalEnvironmentPin) Close()error{
