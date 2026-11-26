@@ -217,14 +217,6 @@ func (r *IncusAcceptanceReport) set(id, status string) {
 	}
 }
 
-func (r IncusAcceptanceReport) passed(id string) bool {
-	for _, check := range r.Results {
-		if check.ID == id {
-			return check.Status == "pass"
-		}
-	}
-	return false
-}
 
 type incusRootVolumeInventory interface {
 	RootVolumePresent(context.Context, string, string) (bool, error)
@@ -270,16 +262,19 @@ func runIncusAcceptance(ctx context.Context, b *IncusVMBackend, cfg IncusAccepta
 	}
 	baseline := cloneAcceptanceInstance(foreign)
 	result.set("project_policy", "pass")
+	observedVolumes := make(map[string]bool)
 	defer func() {
 		// Cleanup has its own budget even on cancellation, and only sealed handles.
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		clean := true
-		volumes := len(result.Handles) == 2
+		volumes := len(result.Handles) > 0
+		observed := volumes
 		for _, ref := range result.Handles {
 			if err := b.Destroy(cleanupCtx, ref); err != nil {
 				clean = false
 			}
+			observed = observed && observedVolumes[ref.Instance]
 			present, err := inventory.RootVolumePresent(cleanupCtx, "testenv", ref.Instance)
 			if err != nil || present {
 				volumes = false
@@ -291,7 +286,7 @@ func runIncusAcceptance(ctx context.Context, b *IncusVMBackend, cfg IncusAccepta
 			result.set("instance_cleanup", "fail")
 		}
 		// Only claim absence after the volume was positively observed while alive.
-		if volumes && result.passed("ephemeral_lifecycle") && result.passed("retained_lifecycle") {
+		if volumes && observed {
 			result.set("root_volumes", "pass")
 		}
 		after, err := b.client.Get(cleanupCtx, cfg.ForeignInstance)
@@ -302,7 +297,7 @@ func runIncusAcceptance(ctx context.Context, b *IncusVMBackend, cfg IncusAccepta
 			result.FailureStage = "foreign_preserved"
 			retErr = errors.New("foreign sentinel changed or unverifiable")
 		}
-		if !clean || !volumes {
+		if !clean || (len(result.Handles) > 0 && !volumes) {
 			result.FailureStage = "cleanup"
 			retErr = errors.New("acceptance cleanup incomplete or unverified")
 		}
@@ -350,6 +345,7 @@ func runIncusAcceptance(ctx context.Context, b *IncusVMBackend, cfg IncusAccepta
 		if err != nil || !present {
 			return result, errors.New("acceptance live root volume unverified")
 		}
+		observedVolumes[ref.Instance] = true
 		// Probe only the immutable admitted image, before arbitrary guest work.
 		// This verifies guest instructions under nested KVM, not inner NixOS
 		// boot, networking, or isolation. The ordinary lifecycle trial remains
