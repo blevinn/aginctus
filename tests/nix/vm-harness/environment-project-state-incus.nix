@@ -292,6 +292,20 @@ pkgs.testers.runNixOSTest {
     assert not second["result"]["native"]["effects"], "repeat reconciliation submitted writes"
     journal = f"${mount}/environments/{descriptors[0]['id']}/native-operations/{first['operationId']}.json"
     machine.succeed(owner + f" cat {journal} | jq -e '.status == \"completed\"'")
+    inspect = f"operations --workload worker --revision {revisions[0]['id']}"
+    machine.fail(state_command(0, "promoter", inspect))
+    inspection_grant = {"peerSha256": fingerprint("member"), **binding,
+                        "environmentId": descriptors[0]["id"], "revisionId": revisions[0]["id"],
+                        "workloadId": "worker", "operation": "inspect"}
+    machine.succeed(f"jq --argjson grant {shlex.quote(compact(inspection_grant))} '.grants += [$grant]'"
+                    f" {private}/execution.json >{private}/inspection.json")
+    machine.succeed(f"incus file push {private}/inspection.json environment-state-service/etc/aginctus/execution.json"
+                    " --project ${project} --uid 0 --gid 0 --mode 0644")
+    listing = json.loads(machine.succeed(state_command(0, "member", inspect)))["operations"]
+    assert any(item["id"] == first["operationId"] and not item["unresolved"] for item in listing)
+    details = json.loads(machine.succeed(state_command(0, "member", inspect + f" {first['operationId']}")))["operations"]
+    assert [effect["action"] for effect in details[0]["effects"]] == ["create", "start"]
+    machine.fail(state_command(0, "member", reconcile))
     incarnation = machine.succeed("incus list selected-worker --project ${project} --format json | jq -er '.[0].created_at'").strip()
     machine.fail(state_command(0, "promoter", reconcile + " --operation stop --instance-created-at 2000-01-01T00:00:00Z"))
     stopped = json.loads(machine.succeed(state_command(0, "promoter", reconcile + f" --operation stop --instance-created-at {incarnation}"), timeout=90))

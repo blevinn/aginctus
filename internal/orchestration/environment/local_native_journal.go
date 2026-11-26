@@ -245,7 +245,7 @@ func (s *LocalProjectStateStore) ReadLocalNativeOperation(ctx context.Context, e
 	}
 	if op.Execution != nil && (!op.Execution.valid(enrolled.Binding) ||
 		op.Execution.RevisionID != op.Revision.ID || op.Execution.EnvironmentID != enrolled.ID ||
-		op.Execution.Operation == "recover" || !slices.Contains(candidate.SelectedWorkloads, op.Execution.WorkloadID)) {
+		!op.Execution.writer() || !slices.Contains(candidate.SelectedWorkloads, op.Execution.WorkloadID)) {
 		return LocalNativeOperation{}, errors.New("invalid journal execution scope")
 	}
 	for i, effect := range op.Effects {

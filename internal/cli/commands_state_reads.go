@@ -59,6 +59,7 @@ func registerStateReads(root *cobra.Command, out io.Writer, configured client.Co
 	registerAcceptancePreview(state, out, service, format, project, environmentID)
 	registerNativeIntentPlan(state, out, format, project, environmentID, readInstalledAcceptedSnapshot)
 	registerNativeWorkloadReconcile(state, out, format, project, environmentID)
+	registerNativeOperationInspection(state, out, format, project, environmentID)
 	registerStatePromotion(state, out, format, project, environmentID)
 	state.AddCommand(&cobra.Command{
 		Use: "diff", Short: "Compare accepted state to configured candidate (read only)", Args: cobra.NoArgs,

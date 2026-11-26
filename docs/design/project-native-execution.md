@@ -14,6 +14,15 @@ is `aginctus.dev/project-execution-policy/v1alpha1`. Each `grants` entry has
 start on the exact selected workload. Stop and removal each require a distinct
 grant. Promotion policy does not grant execution.
 
+The separate `inspect` operation grant is read-only and matches the exact
+revision and workload. With the same pinned operator configuration and explicit
+project/environment selectors, run `state operations --workload ID --revision
+REVISION -o json` for summaries or add an exact operation ID for effect records.
+This also works for historical published revisions when explicitly granted.
+The report omits writer certificate fingerprints; `unresolved` is a journal
+classification, not live observation. An inspection grant cannot reconcile or
+resolve an operation.
+
 The state service takes the accepted-pointer lock for the environment and a
 conservative project-wide writer lock: accepted instances in different
 environments can collide by name. The coordinator checks Incus trust, current

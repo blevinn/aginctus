@@ -29,7 +29,7 @@ func (g projectExecutionGrant) valid(binding Binding) bool {
 		return false
 	}
 	switch g.Operation {
-	case "reconcile", "stop", "remove", "recover":
+	case "reconcile", "stop", "remove", "recover", "inspect":
 		return true
 	default:
 		return false
@@ -50,6 +50,10 @@ func (g projectExecutionGrant) permits(e LocalNativeEffectRecord) bool {
 	default:
 		return false
 	}
+}
+
+func (g projectExecutionGrant) writer() bool {
+	return g.Operation == "reconcile" || g.Operation == "stop" || g.Operation == "remove"
 }
 
 func readProjectExecutionPolicy(path string, binding Binding) (map[projectExecutionGrant]struct{}, error) {
