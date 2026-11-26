@@ -20,11 +20,11 @@ type ProjectExecutionSession struct {
 	unavailable bool
 }
 
-func OpenProjectExecution(ctx context.Context, configPath, project, environmentID, revisionID, workloadID, operation string) (*ProjectExecutionSession, Candidate, func(), error) {
+func OpenProjectExecution(ctx context.Context, config RestrictedOperatorReadConfig, project, environmentID, revisionID, workloadID, operation string) (*ProjectExecutionSession, Candidate, func(), error) {
 	if !validAcceptedHash(revisionID) || !idPattern.MatchString(environmentID) || !journalIdentifier.MatchString(workloadID) {
 		return nil, Candidate{}, nil, errProjectExecutionDenied
 	}
-	reads, closeReads, err := OpenProductionOperatorReads(ctx, configPath)
+	reads, closeReads, err := openProductionOperatorReads(ctx, config)
 	if err != nil {
 		return nil, Candidate{}, nil, err
 	}
