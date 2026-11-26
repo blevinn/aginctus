@@ -16,8 +16,19 @@ import (
 
 func main() {
 	if len(os.Args) >= 3 && os.Args[1] == "serve" && os.Args[2] == "project-state" {
+		if len(os.Args) == 4 && os.Args[3] == "bootstrap" {
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			status, err := environment.BootstrapMountedProjectState(ctx)
+			cancel()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			fmt.Fprintln(os.Stdout, status)
+			return
+		}
 		if len(os.Args) != 3 {
-			fmt.Fprintln(os.Stderr, "usage: aginctus serve project-state")
+			fmt.Fprintln(os.Stderr, "usage: aginctus serve project-state [bootstrap]")
 			os.Exit(2)
 		}
 		os.Exit(runProjectStateService())
