@@ -6,7 +6,6 @@ a fresh-build attestation, host cleanup proof, or authorization token.
 
 import re
 
-
 REQUIRED_LIFECYCLE = (
     "project_policy",
     "ephemeral_lifecycle",
