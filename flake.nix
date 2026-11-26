@@ -176,6 +176,11 @@
               {
                 inherit self nixpkgs system;
               };
+          testenv-native-instance-vm-image =
+            (import ./internal/testing/testenv/nix/incus-vm-image.nix {
+              inherit self nixpkgs system;
+              nativeInstance = true;
+            }).image;
           testenv-incus-vm-image =
             (import ./internal/testing/testenv/nix/incus-vm-image.nix {
               inherit self nixpkgs system;
