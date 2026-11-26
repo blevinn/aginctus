@@ -2,6 +2,26 @@
 
 This is the operational companion to the [dedicated worker trust/installation contract](testenv-worker.md). **Prerequisite:** review the entire dedicated host boundary, runtime signing credential, systemd/Incus authority and instance-ownership policy there before taking any action. The worker has its own daemon and must have no pilot host secrets, pilot network routes or host Incus socket. This document does not grant mutating access to coding agents and does not claim real-host validation absent separately observed evidence.
 
+## Independent recovery fixture (experimental)
+
+On a separately approved, sandboxed x86_64 KVM builder with the disposable
+worker prerequisites, a fixed testenv build provisions its own worker and
+disk, installs the existing recovery timer, and exercises SIGKILL and reboot
+as distinct retained-VM interruption trials:
+
+```sh
+nix build --no-link --no-update-lock-file .#testenv-independent-recovery
+```
+
+The driver observes a live retained instance and its root volume before
+interrupting the acceptance helper. It never invokes the sweep directly
+or advances the worker clock. It checks timer journal evidence, instance
+and volume absence, a changed boot ID for the reboot trial, and foreign
+sentinel preservation. A successful fixture exports a scoped recovery
+receipt, not physical reclamation or independent host teardown evidence.
+The build is intentionally opt-in; actual KVM execution remains required.
+Do not run it on the pilot or infer fresh execution from a cached output.
+
 ## Opt-in real-worker lifecycle helper
 
 `testenv-worker-acceptance` packages the fixed
