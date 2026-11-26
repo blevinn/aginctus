@@ -19,8 +19,8 @@ type acceptanceFake struct {
 	lingeringVolume   bool
 	badProbe          bool
 	badNestedProbe    bool
-	payloadBytes     []byte
-	badPayload       bool
+	payloadBytes      []byte
+	badPayload        bool
 	badScenario       bool
 	scenarioStarted   bool
 	createUncertain   bool
