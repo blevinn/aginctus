@@ -112,3 +112,17 @@ revocation and foreign-project negative tests. Merely filling these fields
 does not establish those properties. Logical workload status/observations
 remain independently gated and are not inferred from candidate instance
 names or labels. No automatic state service is started by this CLI.
+
+## Preview accepted workload dependencies
+
+With the independently authenticated service available, use the same restricted
+read configuration to preview explicitly selected native workloads:
+
+```sh
+AGINCTUS_RESTRICTED_READ_CONFIG=/absolute/private/operator-read.json \
+  aginctus --incus-project aginctus --environment "$ENVIRONMENT_UUID" state plan-native --workload agent -o json
+```
+
+Set `ENVIRONMENT_UUID` to the enrolled immutable UUID. See the
+[CLI reference](../../reference/cli.md#read-only-inspection-and-planning) for
+selection rules and what this snapshot preview reports.

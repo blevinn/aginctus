@@ -29,6 +29,7 @@ without dropping their integration evidence.
 | `environment_read_capabilities_test.go` | CLI project-scoped domain read composition | Retain root positive and fail-closed cross-family output evidence |
 | `read_capabilities_test.go` | Unified read-only CLI dependency injection | Retain cross-family root invocation and fail-closed evidence |
 | `commands_state_reads_test.go` | State read-only invocation and missing-authority contract | Retain root Run and structured output integration evidence |
+| `commands_native_intent_plan_test.go` | Authenticated snapshot planning and installed CLI invocation | Retain scope, deterministic output and no-configuration denial evidence |
 | `commands_acceptance_preview_test.go` | Read-only lifecycle plan and missing-authority contract | Retain root typed output and fail-closed integration evidence |
 | `commands_gateway_assets_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
 | `commands_gateway_core_test.go` | Cross-family entrypoint + domain/store contracts | Retain root Run/output/legacy compatibility; direct Register tests colocated |
