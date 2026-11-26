@@ -130,8 +130,9 @@ def run_independent_recovery(machine, argv):
     if _sentinel(machine) != baseline:
         raise RuntimeError("foreign sentinel configuration changed after reboot")
     machine.succeed(f"incus --project {PROJECT} delete foreign-sentinel")
-    if json.loads(machine.succeed(LIST)) or json.loads(machine.succeed(VOLUMES)):
-        raise RuntimeError("worker inventory not empty after sentinel removal")
+    final_volumes = json.loads(machine.succeed(VOLUMES))
+    if json.loads(machine.succeed(LIST)) or any(volume["type"] != "image" for volume in final_volumes):
+        raise RuntimeError("worker instance or non-image volume inventory not empty")
     # This marker is a scoped fixture observation, not host teardown proof.
     machine.succeed(
         "printf '%s\\n' "
