@@ -3,7 +3,6 @@ package gateway
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
 )
@@ -29,13 +28,13 @@ func NativeGatewayIdentity(descriptor environment.Descriptor, observed environme
 	if err := descriptor.VerifyBinding(observed); err != nil {
 		return NativeGatewayResourceIdentity{}, fmt.Errorf("gateway environment binding unverified: %w", err)
 	}
-	base := "ag-" + strings.ReplaceAll(descriptor.ID, "-", "")
+	postgres, liteLLM, database := environment.GatewayResourceNames(descriptor.ID)
 	return NativeGatewayResourceIdentity{
 		Project:          descriptor.Binding.Project,
 		EnvironmentID:    descriptor.ID,
-		PostgresInstance: base + "-pg",
-		LiteLLMInstance:  base + "-llm",
-		DatabaseVolume:   base + "-pgdata",
+		PostgresInstance: postgres,
+		LiteLLMInstance:  liteLLM,
+		DatabaseVolume:   database,
 	}, nil
 }
 

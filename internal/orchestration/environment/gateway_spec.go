@@ -38,6 +38,37 @@ type GatewayImageSpec struct {
 	Alias            string `json:"alias"`
 }
 
+const (
+	gatewayNamePrefix     = "ag-"
+	gatewayPostgresSuffix = "-pg"
+	gatewayLiteLLMSuffix  = "-llm"
+)
+
+// GatewayResourceNames is the physical naming rule for a validated environment
+// ID. These names neither establish ownership nor grant authority.
+func GatewayResourceNames(id string) (postgres, liteLLM, database string) {
+	base := gatewayNamePrefix + strings.ReplaceAll(id, "-", "")
+	return base + gatewayPostgresSuffix, base + gatewayLiteLLMSuffix, base + "-pgdata"
+}
+
+func isGatewayInstanceName(name string) bool {
+	compact, ok := strings.CutPrefix(name, gatewayNamePrefix)
+	if !ok {
+		return false
+	}
+	if trimmed, pg := strings.CutSuffix(compact, gatewayPostgresSuffix); pg {
+		compact = trimmed
+	} else if trimmed, llm := strings.CutSuffix(compact, gatewayLiteLLMSuffix); llm {
+		compact = trimmed
+	} else {
+		return false
+	}
+	if len(compact) != 32 {
+		return false
+	}
+	return idPattern.MatchString(compact[:8] + "-" + compact[8:12] + "-" + compact[12:16] + "-" + compact[16:20] + "-" + compact[20:])
+}
+
 func (i GatewayImageSpec) Source() nativeoci.Source {
 	return nativeoci.Source{Registry: i.Registry, Repository: i.Repository, Reference: i.ManifestDigest,
 		Platform: ocispec.Platform{OS: "linux", Architecture: i.Architecture, Variant: i.Variant}}

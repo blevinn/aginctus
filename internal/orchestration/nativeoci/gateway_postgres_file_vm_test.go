@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	incus "github.com/lxc/incus/v7/client"
 	"github.com/lxc/incus/v7/shared/api"
@@ -22,6 +23,7 @@ const (
 	postgresFixturePasswordPath  = "/var/lib/postgresql/.aginctus-bootstrap"
 	postgresFixturePassPath      = "/var/lib/postgresql/.aginctus-pgpass"
 	postgresFixtureWrongPassPath = "/var/lib/postgresql/.aginctus-wrong-pgpass"
+	postgresFixtureMarkerQuery   = "DO $$ BEGIN IF (SELECT value FROM aginctus_spike) IS DISTINCT FROM 42 THEN RAISE EXCEPTION 'data mismatch'; END IF; END $$"
 	// Docker Official Images source ac9627dcf544a8454f212a12ddeebfcdc0803d3e,
 	// 17/alpine3.24/docker-entrypoint.sh. Check bytes in the manifest-pinned
 	// converted guest before delivering even a disposable credential.
@@ -111,6 +113,41 @@ func (f postgresFileFixture) verify(t *testing.T, ctx context.Context, sdk incus
 	// A lost exec transport must not look like an auth denial.
 	if err := execOCI(ctx, sdk, name, postgresFixtureQuery(postgresFixturePassPath, "SELECT 1")); err != nil {
 		t.Fatal("PostgreSQL authentication control query failed")
+	}
+	f.verifyMetadata(t, sdk, name)
+}
+
+func (f postgresFileFixture) rotate(t *testing.T, ctx context.Context, sdk incus.InstanceServer, name string) {
+	t.Helper()
+	// Authenticate with the original passfile. psql encrypts the replacement
+	// for the ALTER ROLE command client-side. Keep both the replacement and
+	// the verifier out of diagnostics: no tty, history or SQL statement logs.
+	cmd := postgresFixtureQuery(postgresFixturePassPath, `\password litellm`)
+	cmd = slices.Insert(cmd, 4, "PGOPTIONS=-c log_statement=none -c log_min_error_statement=panic -c password_encryption=scram-sha-256")
+	input := io.NopCloser(strings.NewReader(f.wrong + "\n" + f.wrong + "\n"))
+	if code, err := execOCIStatusWithInput(ctx, sdk, name, cmd, input); err != nil || code != 0 {
+		t.Fatal("authenticated PostgreSQL role password change failed")
+	}
+}
+
+func (f postgresFileFixture) verifyRotated(t *testing.T, ctx context.Context, sdk incus.InstanceServer, name string) {
+	t.Helper()
+	// Incus Running may precede PostgreSQL listening after a restart. Wait
+	// for the replacement to authenticate before testing the old password.
+	probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	for execOCI(probeCtx, sdk, name, postgresFixtureQuery(postgresFixtureWrongPassPath, "SELECT 1")) != nil {
+		select {
+		case <-probeCtx.Done():
+			t.Fatal("rotated PostgreSQL login did not become available")
+		case <-time.After(time.Second):
+		}
+	}
+	if code, err := execOCIStatus(probeCtx, sdk, name, postgresFixtureQuery(postgresFixturePassPath, "SELECT 1")); err != nil || code != 2 {
+		t.Fatal("expected a PostgreSQL connection failure for the old password")
+	}
+	if err := execOCI(probeCtx, sdk, name, postgresFixtureQuery(postgresFixtureWrongPassPath, postgresFixtureMarkerQuery)); err != nil {
+		t.Fatal("rotated PostgreSQL login failed to verify retained data")
 	}
 	f.verifyMetadata(t, sdk, name)
 }

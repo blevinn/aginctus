@@ -334,7 +334,7 @@ func TestDaemonOCI(t *testing.T) {
 				retainedCtx, cancelRetained := context.WithTimeout(ctx, 2*time.Minute)
 				defer cancelRetained()
 				for {
-					err := execOCI(retainedCtx, client, name, postgresFixtureQuery(postgresFixturePassPath, "DO $$ BEGIN IF (SELECT value FROM aginctus_spike) IS DISTINCT FROM 42 THEN RAISE EXCEPTION 'data mismatch'; END IF; END $$"))
+					err := execOCI(retainedCtx, client, name, postgresFixtureQuery(postgresFixturePassPath, postgresFixtureMarkerQuery))
 					if err == nil {
 						break
 					}
@@ -345,6 +345,12 @@ func TestDaemonOCI(t *testing.T) {
 					}
 				}
 				pgFiles.verify(t, ctx, client, name, "SELECT 1")
+				pgFiles.rotate(t, ctx, client, name)
+				pgFiles.verifyRotated(t, ctx, client, name)
+				wait(client.UpdateInstanceState(name, api.InstanceStatePut{Action: "stop", Timeout: 60}, ""))
+				wait(client.UpdateInstanceState(name, api.InstanceStatePut{Action: "start", Timeout: 60}, ""))
+				pgFiles.verifyRotated(t, ctx, client, name)
+				t.Log("PostgreSQL role rotated over SCRAM; data retained and old password rejected before and after restart")
 				wait(client.UpdateInstanceState(name, api.InstanceStatePut{Action: "stop", Timeout: 60}, ""))
 				wait(client.DeleteInstance(name))
 			}
@@ -481,8 +487,12 @@ func execOCI(ctx context.Context, client incus.InstanceServer, name string, comm
 }
 
 func execOCIStatus(ctx context.Context, client incus.InstanceServer, name string, command []string) (float64, error) {
+	return execOCIStatusWithInput(ctx, client, name, command, nil)
+}
+
+func execOCIStatusWithInput(ctx context.Context, client incus.InstanceServer, name string, command []string, stdin io.ReadCloser) (float64, error) {
 	done := make(chan bool)
-	op, err := client.ExecInstance(name, api.InstanceExecPost{Command: command, WaitForWS: true}, &incus.InstanceExecArgs{Stdout: io.Discard, Stderr: io.Discard, DataDone: done})
+	op, err := client.ExecInstance(name, api.InstanceExecPost{Command: command, WaitForWS: true}, &incus.InstanceExecArgs{Stdin: stdin, Stdout: io.Discard, Stderr: io.Discard, DataDone: done})
 	if err != nil {
 		return 0, err
 	}

@@ -8,7 +8,13 @@ This is an offline, same-UID implementation of the state and execution contracts
 - Gateway stage IDs are `gateway-image` → `gateway-volume` → `gateway-instance` → `gateway-runtime`. Select the prerequisite prefix in the plan; each prerequisite needs A's required postcondition. Pair stages target `postgres` or `litellm`, the volume targets `database`, and workload effects target their accepted workload ID. Gateway starts require affirmative running intent; stops require explicit stopped intent. Keep B's pair preflight and order (including PostgreSQL readiness before starting LiteLLM, and LiteLLM before PostgreSQL on stop). Resolve these logical IDs only through bindings derived from the pinned candidate, never through arbitrary SDK arguments.
 - The journal syncs an `uncertain` record before submission, then records `applied` only after a successful operation return. `open` means the invocation's return was not recorded; `completed` means the engine returned successfully, not that resources are still ready. Use the fixture CLI `operations` to discover IDs after an interruption and `operation --operation-id …` to read exact historical evidence. Both require an explicit `--state-dir`, `--server-id`, `--project`, and `--environment`. Recovery re-observes; these commands never replay effects.
 
-The composition of B/C adapters, disposable Incus proof, trusted remote writer/actor topology and production write activation remain separate. See [#696](https://github.com/blevinn/aginctus/issues/696) and [#704](https://github.com/blevinn/aginctus/issues/704).
+The same-UID fixture does not establish a trusted remote writer/actor topology or approve production writes. See [#696](https://github.com/blevinn/aginctus/issues/696) and [#704](https://github.com/blevinn/aginctus/issues/704).
+
+## B gateway join
+
+Bind `LocalNativeExecution.Bind` to `gateway.BindAcceptedGateway` with a trusted selected-project SDK, the immutable OCI metadata resolver, and independently verified prior image acquisition evidence. The SDK is checked against the accepted server/project. The fixture authority must independently approve the existing networks and pools. For missing images, the image stage previews and authorizes the pull and alias separately (`postgres`, `postgres-alias`, `litellm`, `litellm-alias`). Unknown provenance, orphan imports, daemon-wide fingerprint collisions and stale or foreign aliases fail closed. Same-invocation acquisition evidence is ephemeral; a later invocation requires independently verified evidence, not just the accepted image intent or observed alias.
+
+The volume and guest stages detect known collisions during global preview even when image or volume prerequisites are absent. The stopped pair is the last implemented stage. Selecting `gateway-runtime` fails before effects, even when the candidate requests running. A successful fixture apply proves observed infrastructure and stopped guests, not authentication or readiness. The offline stopped-pair VM exercises real Incus reuse, volume and guest creation. The hermetic join exercises image acquisition and alias creation via the real domain primitives with injected SDK effects.
 
 ## C lifecycle join
 
@@ -28,11 +34,14 @@ Optional `Candidate.Herdr` (`herdr`) pins `instanceName`, `imageFingerprint`, `s
 
 D compares C's returned revision, stage IDs, kinds, internal edges and exact binding coverage before observations. It rejects unpinned workloads, mismatched bridge names among selected attachments, missing bridge/retained-volume edges, orphaned Herdr stages and active lifecycle checks. It never invokes an Apply closure for the management-network stage. Only the final plan retains cross-stack edges; the lead composes them and the authorizer sees that exact plan. The composer is trusted code: graph equality cannot attest to opaque callback contents. Derive all C typed inputs from the supplied candidate as shown above, and pass C's actual result instead of copying the expected graph over it.
 
+The canonical UUID-derived gateway guest names are reserved across all candidates, including candidates without gateway intent and environments sharing the project. Workload and Herdr declarations using these names fail validation. This prevents both domains from independently planning a create for the same absent Incus instance. A conflicting existing name requires explicit resolution; the fixture does not rename, adopt or delete instances. The mixed hermetic test runs both composers under one revision, checks full-plan denial and both cross-domain edges, and recovers from a lost workload create result without repeating completed gateway effects or rewriting the failed journal.
+
 Fixture validation:
 
 ```sh
 nix develop --offline -c go test ./internal/orchestration/... ./cmd/aginctus-project-state-fixture
 nix develop --offline -c go test -race ./internal/orchestration ./internal/orchestration/environment
+nix develop --offline -c go test -race ./internal/nativelifecycle ./internal/gateway
 ```
 
 These cover digest changes and strict fields, missing pins, malformed C graphs, bootstrap consent, host-effect exclusion, and revocation/recovery. See the [C lifecycle handoff](native-lifecycle-components.md) for the actual adapter and disposable Incus fixture.

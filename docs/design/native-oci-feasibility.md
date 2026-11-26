@@ -24,8 +24,11 @@ before staging fixture files through the disposable administrator's file API.
 It checks file ownership and permissions, explicit SCRAM login, a wrong-password
 negative control and no credential bytes in Incus instance configuration. After
 recreation with a different bootstrap file, the original login and data marker
-must survive. This checks upstream file consumption and retention, not an
-approved delivery mechanism, build attestation or password rotation. A changed
+must survive. The fixture then changes the role password over an authenticated
+SCRAM connection using `psql \password`, with the replacement supplied only on
+stdin. It requires the new login to read the existing marker and the old login
+to fail, both before and after a guest restart. The fixture does not approve a
+production delivery or rotation mechanism or attest the image build. A changed
 upstream entrypoint requires fresh review before updating the expected digest.
 The VM has no production configuration, credentials, mounts or host Incus connection.
 Its attachment-audit fixture creates and re-observes PostgreSQL storage named

@@ -2,11 +2,12 @@ package gateway
 
 import (
 	"encoding/binary"
-	"strings"
 	"fmt"
 	"net/netip"
 	"reflect"
 	"regexp"
+
+	"github.com/blevinn/aginctus/internal/orchestration/environment"
 )
 
 // Native image acquisition must resolve public tags to platform-specific
@@ -72,9 +73,11 @@ func (p NativeGatewayTopology) ValidateExecutionShape() error {
 // unbound legacy topology. Bound environments must have the exact UUID-derived
 // database name; arbitrary volumes and partial owner identifiers fail closed.
 func gatewayTopologyVolumeMatches(p NativeGatewayTopology) bool {
-	if p.EnvironmentID=="" {return p.DatabaseVolume=="gateway-postgres"}
-	return gatewayEnvironmentIDPattern.MatchString(p.EnvironmentID) &&
-		p.DatabaseVolume=="ag-"+strings.ReplaceAll(p.EnvironmentID,"-","")+"-pgdata"
+	if p.EnvironmentID == "" {
+		return p.DatabaseVolume == "gateway-postgres"
+	}
+	_, _, database := environment.GatewayResourceNames(p.EnvironmentID)
+	return gatewayEnvironmentIDPattern.MatchString(p.EnvironmentID) && p.DatabaseVolume == database
 }
 
 func lastIPv4Address(prefix netip.Prefix) netip.Addr {

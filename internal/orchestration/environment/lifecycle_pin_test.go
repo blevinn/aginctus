@@ -66,3 +66,29 @@ func TestAcceptedLifecyclePins(t *testing.T) {
 		t.Fatal("allowed overlapping Herdr/workload physical name")
 	}
 }
+
+func TestCandidateReservesPhysicalGatewayGuestNames(t *testing.T) {
+	for _, id := range []string{candidateFixture().Environment.ID, "c03124df-64c1-49c9-ad0a-32b61547f657"} {
+		pg, llm, _ := GatewayResourceNames(id)
+		for _, name := range []string{pg, llm} {
+			for _, domain := range []string{"workload", "Herdr"} {
+				t.Run(domain+"/"+name, func(t *testing.T) {
+					c := candidateFixture()
+					if domain == "workload" {
+						c.Workloads[0].InstanceName = name
+					} else {
+						c.Herdr = &HerdrSpec{InstanceName: name, ImageFingerprint: strings.Repeat("a", 64), StoragePool: "state-pool", ManagementNetwork: "bridge"}
+					}
+					if _, err := BuildAcceptedRevision(nil, nil, c); err == nil || !strings.Contains(err.Error(), "overlaps the gateway instance namespace") {
+						t.Fatalf("reserved name passed candidate validation: %v", err)
+					}
+				})
+			}
+		}
+	}
+	c := candidateFixture()
+	c.Workloads[0].InstanceName = "ag-report-pg"
+	if err := c.Validate(); err != nil {
+		t.Fatalf("ordinary name outside the canonical gateway namespace: %v", err)
+	}
+}
