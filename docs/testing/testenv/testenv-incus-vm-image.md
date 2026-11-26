@@ -56,6 +56,28 @@ lifecycle trial without the optional gate, leaving the nested KVM result
 unverified. A failed probe fails the requested trial and still triggers
 owned cleanup. Never run this procedure on the pilot.
 
+## Experimental automatic worker fixture
+
+A fixed, opt-in NixOS test-driver fixture provisions a fresh worker VM and
+its separate 72 GiB test disk, initializes only its guest-local Incus
+daemon, imports the store-pinned image, and runs the existing signed worker
+lifecycle acceptance. It is a candidate for eliminating the manually
+prepared worker from that acceptance gate, not the general developer
+launcher. Use only a reviewed immutable source revision and authorized KVM
+builder with the Nix build sandbox enabled; never run a mutable test-driver
+console under a pilot identity.
+
+```sh
+nix build --no-link --no-update-lock-file .#testenv-disposable-worker-fixture
+```
+
+The fixture uses nested Incus VMs, but does not require a third VM layer
+for the optional nested guest-instruction probe. NixOS test-driver
+transport and store access are part of this trusted fixture; neither
+fixture construction nor a successful run proves agent-facing isolation,
+physical quota enforcement or independent worker-reboot recovery.
+A real KVM run is required to verify this fixture.
+
 ## Future disposable-worker import gate
 
 **Operator-only; do not execute against the pilot daemon.** Provision a
