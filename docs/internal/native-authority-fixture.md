@@ -52,4 +52,4 @@ nix develop --offline -c go test -race ./internal/nativelifecycle ./internal/gat
 ```
 
 These cover digest changes and strict fields, missing pins, malformed C graphs, bootstrap consent, host-effect exclusion, and revocation/recovery. See the [C lifecycle handoff](native-lifecycle-components.md) for the actual adapter and disposable Incus fixture.
-These cover digest changes and strict fields, missing pins, malformed C graphs, bootstrap consent, host-effect exclusion, and revocation/recovery. See the [C lifecycle handoff](native-lifecycle-components.md) for the actual adapter and disposable Incus fixture. The joined graph with C's actual SDK adapter still requires disposable Incus evidence.
+The joined graph with C's actual SDK adapter still requires disposable Incus evidence.
