@@ -62,16 +62,21 @@ func TestLocalNativeJournalAbruptExit(t *testing.T) {
 		t.Fatalf("cannot discover abruptly interrupted operation: %v %v", ids, err)
 	}
 	op, err := store.ReadLocalNativeOperation(ctx, c.Environment, ids[0])
-	if err != nil || op.Revision != plan.Revision || len(op.Effects) != 2 ||
+	if err != nil || op.Status != environment.LocalNativeOpen || op.Revision != plan.Revision || len(op.Effects) != 2 ||
 		op.Effects[0].Outcome != environment.LocalNativeApplied || op.Effects[1].Outcome != environment.LocalNativeUncertain {
 		t.Fatalf("crash recovery lost applied or uncertain stages: %+v %v", op, err)
 	}
-	pin, err := store.PinLocalRevision(ctx, c.Environment, plan.Revision)
+	reopened, err := environment.OpenLocalProjectStateStore(root, c.Environment.Binding)
 	if err != nil {
-		t.Fatalf("dead process still excludes cooperating writers: %v", err)
-	}
-	if err := pin.Close(); err != nil {
 		t.Fatal(err)
+	}
+	if pin, err := reopened.PinLocalRevision(ctx, c.Environment, plan.Revision); pin != nil || !errors.Is(err, environment.ErrLocalNativeUnresolved) {
+		t.Fatalf("process exit granted a competing writer: %v", err)
+	}
+	changed := c
+	changed.Environment.Name = "new-name"
+	if _, err := reopened.CommitLocalCandidate(ctx, c.Environment, c.Environment.Binding, &plan.Revision, changed); !errors.Is(err, environment.ErrLocalNativeUnresolved) {
+		t.Fatalf("CAS ignored unresolved operation after restart: %v", err)
 	}
 }
 
@@ -210,8 +215,8 @@ func TestLocalNativeAuthorityAndRecovery(t *testing.T) {
 		result.Native.Effects[0].Outcome != NativeEffectApplied || result.Native.Effects[1].Outcome != NativeEffectUncertain {
 		t.Fatalf("partial outcome: %+v, %v writes=%d submitChecks=%d", result.Native, err, writes, submitChecks)
 	}
-	if _, err := store.CommitLocalCandidate(ctx, c.Environment, c.Environment.Binding, &plan.Revision, changed); err != nil {
-		t.Fatal(err)
+	if _, err := store.CommitLocalCandidate(ctx, c.Environment, c.Environment.Binding, &plan.Revision, changed); !errors.Is(err, environment.ErrLocalNativeUnresolved) {
+		t.Fatalf("CAS ignored unresolved effect: %v", err)
 	}
 	reopened, err := environment.OpenLocalProjectStateStore(root, c.Environment.Binding)
 	if err != nil {
@@ -223,7 +228,7 @@ func TestLocalNativeAuthorityAndRecovery(t *testing.T) {
 	}) {
 		t.Fatalf("recovery: %+v %v", op, err)
 	}
-	if _, err := authority.ExecuteLocalNative(ctx, engine, plan, ExecuteOptions{}); !errors.Is(err, environment.ErrAcceptedConflict) {
-		t.Fatalf("stale execution: %v", err)
+	if _, err := authority.ExecuteLocalNative(ctx, engine, plan, ExecuteOptions{}); !errors.Is(err, environment.ErrLocalNativeUnresolved) || writes != 1 {
+		t.Fatalf("unresolved execution: %v", err)
 	}
 }

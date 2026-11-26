@@ -277,6 +277,20 @@ func TestMixedNativeBindingDenialAndRecovery(t *testing.T) {
 			}
 			volume := g.volume
 			f.project.failWait = false
+			if _, err := exec.ExecuteLocalNative(ctx, engine, plan, orchestration.ExecuteOptions{}); !errors.Is(err, environment.ErrLocalNativeUnresolved) || !slices.Equal(f.project.submissions, want) {
+				t.Fatalf("competing writer resumed before terminal verification: %v", err)
+			}
+			// The injected SDK's create is synchronous and already returned its
+			// lost-wait error; the fixture has no daemon job that can still run.
+			if err := store.ResolveLocalNativeOperation(ctx, desc, rev, firstID, func(_ context.Context, request environment.LocalNativeRecoveryRequest) (environment.Binding, error) {
+				if request.Environment != desc || request.CurrentRevision != rev || request.Operation.ID != firstID ||
+					!slices.Equal(request.Operation.Effects, journal.Effects) || !slices.Equal(f.project.submissions, want) {
+					return environment.Binding{}, errors.New("fixture terminal evidence unverified")
+				}
+				return desc.Binding, nil
+			}); err != nil {
+				t.Fatal(err)
+			}
 			recovered, err := exec.ExecuteLocalNative(ctx, engine, plan, orchestration.ExecuteOptions{})
 			if err != nil || recovered.Native == nil || recovered.Native.Revision != rev || recovered.Native.LocalOperationID == firstID || len(recovered.Native.Effects) != 1 || len(recovered.Conditions) != 5 || !slices.Equal(f.project.submissions, append(want, "start:agent-1")) || g.volume != volume || f.project.instances["agent-1"].Status != "Running" {
 				t.Fatalf("recovery did not resume from observation: %+v, %v; writes=%v", recovered, err, f.project.submissions)
