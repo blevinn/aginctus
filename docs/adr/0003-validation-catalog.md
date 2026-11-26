@@ -34,7 +34,8 @@ stay stable. The catalog additionally declares fixed developer-CI authority,
 hermetic JSON v1 evidence contract and a 3600-second maximum per-suite deadline.
 The Go runner enforces this deadline (including cancellation as an execution
 error, not a test assertion failure). VM metadata declares explicit operator
-selection and the original disposable-VM evidence contract; it does not
+selection (also usable by authorized coding agents for local batch tests)
+and the original disposable-VM evidence contract; it does not
 acquire a VM executor, authorize persistent workers, or grant new privileges.
 These are compatibility policy descriptors, not permission tokens.
 
@@ -42,8 +43,11 @@ These are compatibility policy descriptors, not permission tokens.
 
 - Hermetic: explicit developer/CI invocation with live and Incus opt-ins
   scrubbed from each child environment.
-- Batch NixOS VM: explicit operator on disposable worker, not agent-safe
-  persistent VM admission or arbitrary host shell.
+- Batch NixOS VM: explicit scenario selection by an operator or trusted coding
+  agent on an authorized development host, with no independent worker admission
+  required (see [AGENTS.md](../../AGENTS.md)). This does not authorize persistent
+  worker operations, grant arbitrary host shell access, or make the driver a
+  sandbox for untrusted callers.
 - Persistent testenv: existing internal/testing/testenv backend plus dedicated-worker
   identity, admission, ownership and independent recovery.
 - Pilot/live provider: separately authorized, never implicit in catalog
