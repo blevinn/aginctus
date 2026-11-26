@@ -13,11 +13,11 @@ import (
 
 type payloadTransportFake struct {
 	*fakeIncusVMClient
-	data []byte
-	writes int
+	data      []byte
+	writes    int
 	uncertain bool
-	corrupt bool
-	drift bool
+	corrupt   bool
+	drift     bool
 }
 
 func (c *payloadTransportFake) payloadPresent(_ context.Context, name string) (bool, error) {
