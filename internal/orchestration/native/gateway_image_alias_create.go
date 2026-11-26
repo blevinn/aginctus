@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	incus "github.com/lxc/incus/v7/client"
@@ -21,14 +22,14 @@ type GatewayAliasCreateIntent struct {
 	Alias       string
 	Image       GatewayOCIIdentity
 	Acquisition GatewayImageAcquireResult
+	AliasMarker string
 }
 
+var gatewayAliasMarker = regexp.MustCompile(`^aginctus-acquired:[0-9a-f]{32}$`)
+
 func (in GatewayAliasCreateIntent) Validate() error {
-	if !localName(in.Alias) {
-		return fmt.Errorf("gateway alias must be an explicit safe name")
-	}
-	if err := (GatewayImageAcquireIntent{Project: in.Project, Image: in.Image}).Validate(); err != nil {
-		return fmt.Errorf("gateway alias requires complete immutable image identity")
+	if err := (GatewayImageEvidence{Project: in.Project, Identity: in.Image, Alias: in.Alias, AliasMarker: in.AliasMarker}).Validate(); err != nil {
+		return err
 	}
 	if !in.Acquisition.Attempted || !in.Acquisition.Verified ||
 		in.Acquisition.Project != in.Project || in.Acquisition.Fingerprint != in.Image.IncusFingerprint ||
@@ -153,7 +154,7 @@ func CreateGatewayImageAliasWithClient(ctx context.Context, in GatewayAliasCreat
 		return fail("cancellation", false, err)
 	}
 	req := api.ImageAliasesPost{ImageAliasesEntry: api.ImageAliasesEntry{
-		Name: in.Alias, ImageAliasesEntryPut: api.ImageAliasesEntryPut{Target: in.Image.IncusFingerprint},
+		Name: in.Alias, ImageAliasesEntryPut: api.ImageAliasesEntryPut{Target: in.Image.IncusFingerprint, Description: in.AliasMarker},
 	}}
 	if err := client.CreateImageAlias(req); err != nil {
 		return fail("create", true, err)
@@ -166,7 +167,7 @@ func CreateGatewayImageAliasWithClient(ctx context.Context, in GatewayAliasCreat
 		return fail("verification", true, fmt.Errorf("selected project policy unverified"))
 	}
 	alias, _, err := client.GetImageAlias(in.Alias)
-	if err != nil || alias == nil || alias.Name != in.Alias || alias.Target != in.Image.IncusFingerprint {
+	if err != nil || alias == nil || alias.Name != in.Alias || alias.Target != in.Image.IncusFingerprint || alias.Description != in.AliasMarker {
 		return fail("verification", true, fmt.Errorf("created alias identity unverified"))
 	}
 	image, _, err := client.GetImage(in.Image.IncusFingerprint)

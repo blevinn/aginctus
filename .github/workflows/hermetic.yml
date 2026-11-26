@@ -296,6 +296,7 @@ jobs:
             .#checks.x86_64-linux.nixos-module \
             .#checks.x86_64-linux.home-manager-module \
             .#checks.x86_64-linux.operator-settings-parity \
+            .#checks.x86_64-linux.environment-candidate-parity \
             .#checks.x86_64-linux.gateway-config-parity \
             .#checks.x86_64-linux.opencode-workload-socket-alignment \
             .#checks.x86_64-linux.testenv-incus-vm-image-config \

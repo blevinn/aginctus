@@ -13,6 +13,16 @@ type GatewayImageEvidence struct {
 	Project  string
 	Alias    string
 	Identity GatewayOCIIdentity
+	// AliasMarker corroborates the observed alias incarnation for persisted
+	// evidence. A marker is public metadata, never evidence on its own.
+	AliasMarker string `json:"aliasMarker,omitempty"`
+}
+
+func (e GatewayImageEvidence) Validate() error {
+	if !localName(e.Alias) || (e.AliasMarker != "" && !gatewayAliasMarker.MatchString(e.AliasMarker)) {
+		return fmt.Errorf("invalid gateway image alias identity")
+	}
+	return (GatewayImageAcquireIntent{Project: e.Project, Image: e.Identity}).Validate()
 }
 
 // AssessGatewayImageReuse is read-only and fail-closed. Incus fingerprints
@@ -27,7 +37,8 @@ func AssessGatewayImageReuse(want GatewayImageAcquireIntent, aliasName string, e
 		evidence.Identity != want.Image {
 		return fmt.Errorf("gateway image reuse: accepted identity evidence missing or mismatched")
 	}
-	if alias == nil || alias.Name != aliasName || alias.Target != want.Image.IncusFingerprint {
+	if alias == nil || alias.Name != aliasName || alias.Target != want.Image.IncusFingerprint ||
+		(evidence.AliasMarker != "" && alias.Description != evidence.AliasMarker) {
 		return fmt.Errorf("gateway image reuse: alias identity unverified")
 	}
 	if image == nil || image.Project != want.Project || image.Type != "container" ||
