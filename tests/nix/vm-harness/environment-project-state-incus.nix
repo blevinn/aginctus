@@ -230,7 +230,7 @@ pkgs.testers.runNixOSTest {
     def digests():
         paths = ["${mount}/authority.json"]
         for i, r in enumerate(revisions):
-            root = "${mount}/environments/" + descriptors[i]["id"]
+            root = f"${mount}/environments/{descriptors[i]['id']}"
             paths.extend([root + "/active.json", root + "/revisions/" + r["id"] + ".json"])
         return machine.succeed(owner + " sha256sum " + " ".join(paths))
 
