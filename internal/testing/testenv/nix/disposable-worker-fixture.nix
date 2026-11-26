@@ -6,6 +6,7 @@
   nixpkgs,
   system,
   nativeInstance ? false,
+  independentRecovery ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
@@ -19,13 +20,18 @@ let
   worker = self.packages.${system}.testenv-cli;
   product = self.packages.${system}.aginctus;
 in
+assert !(nativeInstance && independentRecovery);
 pkgs.testers.runNixOSTest {
   name =
-    if nativeInstance then
+    if independentRecovery then
+      "aginctus-testenv-independent-recovery"
+    else if nativeInstance then
       "aginctus-testenv-managed-native-instance"
     else
       "aginctus-testenv-disposable-worker";
-  nodes.machine = { ... }: {
+  nodes.machine = { lib, ... }: {
+    imports = lib.optional independentRecovery self.nixosModules.aginctusTestenvRecovery;
+    services.aginctusTestenvRecovery.enable = lib.mkIf independentRecovery true;
     virtualisation = {
       cores = 4;
       memorySize = 8192;
@@ -52,13 +58,16 @@ pkgs.testers.runNixOSTest {
     networking.nftables.enable = true;
     system.stateVersion = "26.05";
   };
-  testScript = ''
+  testScript = (if independentRecovery then builtins.readFile ./independent_recovery_trial.py else "") + ''
     import json
     import re
     import shlex
 
     start_all()
     machine.wait_for_unit("incus.service")
+    ${pkgs.lib.optionalString independentRecovery ''
+      machine.succeed("systemctl stop aginctus-testenv-recovery.timer aginctus-testenv-recovery.service")
+    ''}
     # Fail before provisioning if nested KVM or the dedicated test disk is
     # absent. The disk is declared above, not selected by a caller or
     # discovered from host storage.
@@ -114,6 +123,9 @@ pkgs.testers.runNixOSTest {
     ${pkgs.lib.optionalString nativeInstance ''
       argv += ["--scenario", "native-instance"]
     ''}
+  '' + (if independentRecovery then ''
+    run_independent_recovery(machine, argv)
+  '' else ''
     machine.succeed(shlex.join(argv), timeout=${toString trialTimeout})
     reports = machine.succeed("find /var/lib/aginctus-testenv-acceptance -mindepth 2 -maxdepth 2 -name result.json").splitlines()
     assert len(reports) == 1
@@ -134,5 +146,5 @@ pkgs.testers.runNixOSTest {
     volumes = json.loads(machine.succeed("incus --project aginctus-testenv storage volume list testenv --format json"))
     assert not any(volume["name"].startswith("testenv-vm-") for volume in volumes)
     machine.succeed("incus --project aginctus-testenv delete foreign-sentinel")
-  '';
+  '');
 }
