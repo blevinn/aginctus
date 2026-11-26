@@ -60,11 +60,11 @@ func RunTrustedIncusExpirySweep(ctx context.Context, cfg TrustedIncusSweepOption
 	if now.IsZero() {
 		return empty, errors.New("trusted reconciliation clock required")
 	}
-	if cfg.SocketPath == "" || !filepath.IsAbs(cfg.SocketPath) || filepath.Clean(cfg.SocketPath) != cfg.SocketPath {
+	if cfg.SocketPath != "/var/lib/incus/unix.socket" {
 		return empty, errors.New("invalid trusted worker socket configuration")
 	}
-	if _, err := IncusProjectPolicy(cfg.StoragePool); err != nil {
-		return empty, err
+	if cfg.StoragePool != "testenv" {
+		return empty, errors.New("invalid trusted worker pool configuration")
 	}
 	if err := ctx.Err(); err != nil {
 		return empty, err
@@ -81,6 +81,9 @@ func RunTrustedIncusExpirySweep(ctx context.Context, cfg TrustedIncusSweepOption
 	client, err := ConnectTrustedIncusVMClient(ctx, cfg.SocketPath)
 	if err != nil {
 		return empty, safeIncusError("trusted worker Incus daemon unavailable", err)
+	}
+	if _, ok := client.(incusRootVolumeInventory); !ok {
+		return empty, ErrUnsupportedAction
 	}
 	backend, err := NewIncusVMBackend(client, cfg.StoragePool, key)
 	if err != nil {
