@@ -14,6 +14,7 @@ type ProductionOperatorReadSet struct {
 	Environments client.EnvironmentReader
 	Configured client.ConfiguredStateReader
 	Accepted client.AcceptedStateReader
+	AcceptedSnapshot *AcceptedReadModel
 	Diff client.ConfiguredAcceptedDiffReader
 }
 
@@ -54,6 +55,7 @@ func OpenProductionOperatorReads(
 		model := AcceptedReadModel{Catalog: catalog, Source: published}
 		out.Configured = VerifiedConfiguredReadModel{Catalog: catalog, Configured: configured}
 		out.Accepted = model
+		out.AcceptedSnapshot = &model
 		out.Diff = VerifiedConfiguredDiffReader{Model: model, Configured: configured}
 	}
 	if err := ctx.Err(); err != nil {
