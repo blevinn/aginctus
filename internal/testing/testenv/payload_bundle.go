@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	maxPayloadHeaderBytes = 64 * 1024
-	maxPayloadSegments    = 32
+	maxPayloadHeaderBytes  = 64 * 1024
+	maxPayloadSegments     = 32
 	MaxPayloadBundleBytes = 1024 * 1024 * 1024
 )
 
