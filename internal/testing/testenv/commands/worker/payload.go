@@ -25,5 +25,16 @@ func newPayload() *cobra.Command {
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(receipt)
 		},
 	})
+	root.AddCommand(&cobra.Command{
+		Use: "verify-bundle",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			receipt, err := testenv.VerifyPayloadBundle(cmd.InOrStdin())
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(receipt)
+		},
+	})
 	return root
 }
