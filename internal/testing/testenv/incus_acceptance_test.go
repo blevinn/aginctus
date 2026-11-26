@@ -359,7 +359,7 @@ func TestIncusAcceptanceRunsFixedNativeScenarioAndCleans(t *testing.T) {
 			t.Fatalf("scenario or cleanup missing: %+v %v", r, err)
 		}
 		if fail {
-			if err == nil || checkStatus(r, "native_instance_scenario") != "fail" || r.Status != "fail" {
+			if err == nil || checkStatus(r, "native_instance_scenario") != "fail" || r.Status != "fail" || r.FailureStage != "native_instance_scenario" || checkStatus(r, "root_volumes") != "pass" {
 				t.Fatalf("failed scenario accepted: %+v %v", r, err)
 			}
 		} else if err != nil || checkStatus(r, "native_instance_scenario") != "pass" || r.Scenario != nativeInstanceScenario || r.Status != "pass" {
