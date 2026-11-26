@@ -171,6 +171,12 @@
           # explicitly selected; not a run-nixos-vm QEMU batch launcher.
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          testenv-managed-native-instance =
+            import ./internal/testing/testenv/nix/disposable-worker-fixture.nix
+              {
+                inherit self nixpkgs system;
+                nativeInstance = true;
+              };
           testenv-disposable-worker-fixture =
             import ./internal/testing/testenv/nix/disposable-worker-fixture.nix
               {
