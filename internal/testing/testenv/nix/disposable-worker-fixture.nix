@@ -20,7 +20,11 @@ let
   product = self.packages.${system}.aginctus;
 in
 pkgs.testers.runNixOSTest {
-  name = if nativeInstance then "aginctus-testenv-managed-native-instance" else "aginctus-testenv-disposable-worker";
+  name =
+    if nativeInstance then
+      "aginctus-testenv-managed-native-instance"
+    else
+      "aginctus-testenv-disposable-worker";
   nodes.machine = { ... }: {
     virtualisation = {
       cores = 4;
