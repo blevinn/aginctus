@@ -50,6 +50,10 @@ type AttachmentVerifier func(ctx context.Context, env environment.Descriptor, in
 // Build projects only the explicit selection; omitted resources have no effect.
 // No client is dialed and no implicit state promotion or host effect is added.
 func Build(enrolled environment.Descriptor, revision environment.AcceptedRevision, accepted environment.Candidate, selection Selection, trustedPin string, client native.ProjectInstanceClient, verifyAttachments AttachmentVerifier) (orchestration.NativePlan, map[string]orchestration.NativeResourceBinding, error) {
+	return build(enrolled, revision, accepted, selection, trustedPin, client, verifyAttachments, orchestration.LocalLifecycleTeardown{})
+}
+
+func build(enrolled environment.Descriptor, revision environment.AcceptedRevision, accepted environment.Candidate, selection Selection, trustedPin string, client native.ProjectInstanceClient, verifyAttachments AttachmentVerifier, teardown orchestration.LocalLifecycleTeardown) (orchestration.NativePlan, map[string]orchestration.NativeResourceBinding, error) {
 	if enrolled.Validate() != nil || !accepted.Environment.SameEnvironment(enrolled) || revision.ValidateAgainst(accepted) != nil || client == nil || verifyAttachments == nil {
 		return orchestration.NativePlan{}, nil, errors.New("pinned native selection and independent attachment verifier required")
 	}
@@ -113,7 +117,7 @@ func Build(enrolled environment.Descriptor, revision environment.AcceptedRevisio
 		if err != nil {
 			return orchestration.NativePlan{}, nil, err
 		}
-		binding, err := w.Spec.BindNative(accepted, revision, w.Operation, trustedPin, client, verifyUse(w.Operation, w.Spec.Name, w.Spec.StoragePool, w.Spec.ManagementNetwork))
+		binding, err := w.Spec.BindNative(accepted, revision, w.Operation, trustedPin, client, teardown.Instances[w.Spec.ID], verifyUse(w.Operation, w.Spec.Name, w.Spec.StoragePool, w.Spec.ManagementNetwork))
 		if err != nil {
 			return orchestration.NativePlan{}, nil, err
 		}
@@ -132,7 +136,7 @@ func Build(enrolled environment.Descriptor, revision environment.AcceptedRevisio
 		if err != nil {
 			return orchestration.NativePlan{}, nil, err
 		}
-		volume, instance, err := h.Spec.BindNative(enrolled, revision, h.Operation, h.ImageFingerprint, trustedPin, h.CreateState, herdrSDK, verifyUse(h.Operation, h.Spec.Name, h.Spec.StoragePool, h.Spec.ManagementNetwork))
+		volume, instance, err := h.Spec.BindNative(enrolled, revision, h.Operation, h.ImageFingerprint, trustedPin, h.CreateState, herdrSDK, teardown.Instances[herdrclient.NativeInstanceID], teardown.HerdrState, verifyUse(h.Operation, h.Spec.Name, h.Spec.StoragePool, h.Spec.ManagementNetwork))
 		if err != nil {
 			return orchestration.NativePlan{}, nil, err
 		}

@@ -52,9 +52,11 @@ type LocalNativeExecution struct {
 	// BindLifecycle builds C's reconcile-only fragment from the accepted body.
 	// It returns the graph it actually built for an exact comparison before any
 	// observation. BootstrapHerdr is a separate, explicit invocation choice.
-	BindLifecycle  func(environment.Candidate, NativePlan, bool) (NativePlan, map[string]NativeResourceBinding, error)
-	BootstrapHerdr bool
-	CheckPolicy    CheckPolicy
+	BindLifecycle         func(environment.Candidate, NativePlan, bool) (NativePlan, map[string]NativeResourceBinding, error)
+	BootstrapHerdr        bool
+	CheckPolicy           CheckPolicy
+	AuthorizeTeardown     func(context.Context, LocalLifecycleTeardownRequest) (environment.Binding, error)
+	BindLifecycleTeardown func(environment.Candidate, NativePlan, LocalLifecycleTeardown) (NativePlan, map[string]NativeResourceBinding, error)
 }
 
 // ExecuteLocalNative is the same-UID fixture join to Stack A. Only the trusted
@@ -62,6 +64,10 @@ type LocalNativeExecution struct {
 // for the installed CLI, HTTP requests, or production SDK writes. Cooperative
 // file locking cannot fence an independent Incus actor or an untrusted UID.
 func (f LocalNativeExecution) ExecuteLocalNative(ctx context.Context, engine *Engine, plan NativePlan, opts ExecuteOptions) (result Result, err error) {
+	return f.executeLocalNative(ctx, engine, plan, opts, nil)
+}
+
+func (f LocalNativeExecution) executeLocalNative(ctx context.Context, engine *Engine, plan NativePlan, opts ExecuteOptions, teardown *LocalLifecycleTeardown) (result Result, err error) {
 	if err := conditionContextErr(ctx); err != nil {
 		return Result{}, err
 	}
@@ -73,6 +79,11 @@ func (f LocalNativeExecution) ExecuteLocalNative(ctx context.Context, engine *En
 		return Result{}, err
 	}
 	plan.Resources = ordered
+	if teardown != nil {
+		if err := teardown.validate(plan); err != nil {
+			return Result{}, err
+		}
+	}
 	if plan.Revision.EnvironmentID != f.Environment.ID || plan.Revision.Project != f.Environment.Binding.Project ||
 		plan.Revision.ServerID != f.Environment.Binding.ServerID {
 		return Result{}, environment.ErrAcceptedConflict
@@ -85,6 +96,16 @@ func (f LocalNativeExecution) ExecuteLocalNative(ctx context.Context, engine *En
 		binding, err := f.Authorize(ctx, request)
 		if err != nil || f.Environment.VerifyBinding(binding) != nil {
 			return errors.New("local native operation denied")
+		}
+		if teardown != nil {
+			if err := conditionContextErr(ctx); err != nil {
+				return err
+			}
+			request.Plan, request.Resource = detachLocalPlan(plan), detachedResource(r)
+			binding, err = f.AuthorizeTeardown(ctx, LocalLifecycleTeardownRequest{request, teardown.detached()})
+			if err != nil || f.Environment.VerifyBinding(binding) != nil {
+				return errors.New("local teardown operation denied")
+			}
 		}
 		return conditionContextErr(ctx)
 	}
@@ -135,7 +156,12 @@ func (f LocalNativeExecution) ExecuteLocalNative(ctx context.Context, engine *En
 			return Result{}, err
 		}
 	}
-	if err := verifyLocalNativeSelection(candidate, plan.Resources, f.BootstrapHerdr); err != nil {
+	if teardown != nil {
+		err = teardown.validateAccepted(candidate, plan)
+	} else {
+		err = verifyLocalNativeSelection(candidate, plan.Resources, f.BootstrapHerdr)
+	}
+	if err != nil {
 		return Result{}, err
 	}
 	// Give the trusted composer a detached copy; its projections do not become
@@ -144,12 +170,18 @@ func (f LocalNativeExecution) ExecuteLocalNative(ctx context.Context, engine *En
 	if err != nil {
 		return Result{}, err
 	}
-	resources, err := f.bindLocalDomains(data, plan)
+	resources, err := f.bindLocalDomains(data, plan, teardown)
 	if err != nil {
 		return Result{}, err
 	}
+	permitsEffect := func(r NativeResource, effect NativeEffect) bool {
+		if teardown != nil {
+			return teardown.permits(r, effect)
+		}
+		return localEffectSelected(candidate, r, effect, f.BootstrapHerdr)
+	}
 	beforeEffect := func(ctx context.Context, rev environment.AcceptedRevision, r NativeResource, effect NativeEffect) error {
-		if rev != plan.Revision || !localEffectSelected(candidate, r, effect, f.BootstrapHerdr) {
+		if rev != plan.Revision || !permitsEffect(r, effect) {
 			return errors.New("effect is outside accepted native intent")
 		}
 		if err := authorize(ctx, LocalNativeSubmit, r, effect); err != nil {
@@ -175,7 +207,7 @@ func (f LocalNativeExecution) ExecuteLocalNative(ctx context.Context, engine *En
 					return NativePreview{}, err
 				}
 				for _, effect := range evidence.Actions {
-					if !localTargetSelected(r, effect.Target) || effect.Action != native.Unchanged && !localEffectSelected(candidate, r, effect, f.BootstrapHerdr) {
+					if !localTargetSelected(r, effect.Target) || effect.Action != native.Unchanged && !permitsEffect(r, effect) {
 						return NativePreview{}, errors.New("preview evidence is outside accepted native intent")
 					}
 				}

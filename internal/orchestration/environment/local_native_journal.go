@@ -182,7 +182,7 @@ func (r LocalNativeEffectRecord) valid() bool {
 		return false
 	}
 	switch r.Action {
-	case "create", "update", "start", "stop":
+	case "create", "update", "start", "stop", "delete":
 		return true
 	}
 	return false

@@ -26,7 +26,7 @@ func NativeObservationCheck(target, id, claim, revision string, observe func(con
 
 // BindNativeProjectInstance wires one invocation-local domain stage. verifyUse
 // checks independently supplied dependencies at submission, after authority.
-func BindNativeProjectInstance(id, revision string, stage native.ProjectInstanceStage, preflightUse, verifyUse func(context.Context) error) NativeResourceBinding {
+func BindNativeProjectInstance(id, revision string, stage native.ProjectInstanceStage, expectedIncarnation time.Time, preflightUse, verifyUse func(context.Context) error) NativeResourceBinding {
 	var previewIncarnation, appliedIncarnation time.Time
 	var applied bool
 	return NativeResourceBinding{
@@ -40,6 +40,9 @@ func BindNativeProjectInstance(id, revision string, stage native.ProjectInstance
 			actions, incarnation, err := stage.Observe(ctx)
 			if err != nil {
 				return NativePreview{}, err
+			}
+			if !expectedIncarnation.IsZero() && !incarnation.Equal(expectedIncarnation) {
+				return NativePreview{}, errors.New("instance differs from authorized live incarnation")
 			}
 			if err := preflightUse(ctx); err != nil {
 				return NativePreview{}, err
