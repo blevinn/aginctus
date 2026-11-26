@@ -19,6 +19,8 @@ type acceptanceFake struct {
 	lingeringVolume   bool
 	badProbe          bool
 	badNestedProbe    bool
+	payloadBytes     []byte
+	badPayload       bool
 	badScenario       bool
 	scenarioStarted   bool
 	createUncertain   bool
@@ -68,6 +70,22 @@ func (c *acceptanceFake) ExecGuest(_ context.Context, _ string, argv []string) (
 		return VMExecResult{}, errors.New("unexpected command")
 	}
 	return VMExecResult{Stdout: "synthetic-private-guest-version\n"}, nil
+}
+
+func (c *acceptanceFake) payloadPresent(context.Context, string) (bool, error) {
+	return c.payloadBytes != nil, nil
+}
+
+func (c *acceptanceFake) writePayload(_ context.Context, _ string, data []byte) error {
+	c.payloadBytes = append([]byte(nil), data...)
+	return nil
+}
+
+func (c *acceptanceFake) readPayload(context.Context, string) ([]byte, error) {
+	if c.badPayload {
+		return []byte("corrupt"), nil
+	}
+	return append([]byte(nil), c.payloadBytes...), nil
 }
 
 func (c *acceptanceFake) Stop(ctx context.Context, name string) error {
@@ -156,7 +174,7 @@ func TestIncusAcceptanceUsesSignedBackendAndActualScopedExpiry(t *testing.T) {
 			t.Fatalf("missing actual check %s: %+v", id, r)
 		}
 	}
-	for _, id := range []string{"crash_reboot", "nested_kvm_guest_execution", "native_instance_scenario", "nested_isolation", "storage_reclamation", "report_retention"} {
+	for _, id := range []string{"crash_reboot", "nested_kvm_guest_execution", "native_instance_scenario", "payload_transfer", "nested_isolation", "storage_reclamation", "report_retention"} {
 		if checkStatus(r, id) != "not_verified" {
 			t.Fatalf("overclaimed %s", id)
 		}
@@ -378,5 +396,27 @@ func TestIncusAcceptanceRejectsOtherScenarios(t *testing.T) {
 	cfg.RequireNestedKVM = true
 	if cfg.validate() == nil {
 		t.Fatal("incompatible image gates accepted")
+	}
+}
+
+func TestIncusAcceptanceRequiresSyntheticPayloadTransfer(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		c, b, cfg := acceptanceFixture(t)
+		cfg.RequirePayloadTransfer = true
+		c.badPayload = fail
+		r, err := runAcceptanceFixture(t, b, cfg, func(IncusAcceptanceReport) error { return nil }, func(_ context.Context, expiry time.Time) error {
+			b.now = func() time.Time { return expiry }
+			return nil
+		})
+		if len(c.vms) != 1 || checkStatus(r, "instance_cleanup") != "pass" || checkStatus(r, "root_volumes") != "pass" {
+			t.Fatalf("transfer cleanup unverified: %+v %v", r, err)
+		}
+		if fail {
+			if err == nil || r.Status != "fail" || r.FailureStage != "payload_transfer" || checkStatus(r, "payload_transfer") != "fail" {
+				t.Fatalf("corrupt transfer accepted: %+v %v", r, err)
+			}
+		} else if err != nil || r.Status != "pass" || checkStatus(r, "payload_transfer") != "pass" || string(c.payloadBytes) != syntheticGuestPayload {
+			t.Fatalf("fixed payload not delivered: %+v %v", r, err)
+		}
 	}
 }
