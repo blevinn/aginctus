@@ -6,15 +6,31 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/blevinn/aginctus/internal/cli"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/nativelifecycle"
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
 	"github.com/blevinn/aginctus/internal/plugins/composition"
 )
 
 func main() {
+	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "workload-bridge-observe" {
+		if len(os.Args) != 4 {
+			fmt.Fprintln(os.Stderr, "usage: aginctus internal workload-bridge-observe HOST_GRANT")
+			os.Exit(2)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		err := nativelifecycle.ObserveLocalWorkloadBridge(ctx, os.Args[3], os.Stdout)
+		cancel()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "approved bridge observation failed")
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "project-state-attachment" {
 		os.Exit(runProjectStateAttachment(os.Args[3:]))
 	}

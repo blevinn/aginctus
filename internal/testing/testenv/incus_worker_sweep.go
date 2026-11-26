@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const workerRecoveryLedgerDir = "/var/lib/aginctus-testenv-recovery"
+
 // TrustedIncusSweepOptions are configured ONLY by an installed dedicated
 // worker service. Never populate them from a workload checkout or MCP input.
 type TrustedIncusSweepOptions struct {
@@ -90,5 +92,5 @@ func RunTrustedIncusExpirySweep(ctx context.Context, cfg TrustedIncusSweepOption
 		return empty, err
 	}
 	defer clear(backend.policyKey)
-	return ReconcileExpiredIncusVMs(ctx, backend, now)
+	return ReconcileExpiredIncusVMsDurable(ctx, backend, now, workerRecoveryLedgerDir)
 }

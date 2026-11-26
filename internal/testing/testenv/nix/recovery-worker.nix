@@ -85,6 +85,8 @@ in
       wants = [ "incus.socket" ];
       serviceConfig = {
         Type = "oneshot";
+        StateDirectory = "aginctus-testenv-recovery";
+        StateDirectoryMode = "0700";
         User = "aginctus-testenv";
         Group = "aginctus-testenv";
         SupplementaryGroups = [ "incus-admin" ];
