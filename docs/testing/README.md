@@ -5,7 +5,7 @@ This page is the **canonical testing entry point** for Aginctus. Different test 
 | Tier | Start here | Side effects | A PASS establishes | Does **not** establish |
 | --- | --- | --- | --- | --- |
 | Hermetic repository validation | [Development checks](../development/README.md#validation-tiers) and [reporting contract](../design/test-reporting.md) | Local build/test fixtures; no live Incus or provider | Reproducible Go/Python/shell/Nix/doc contracts in CI | Host deployment, network denial or inference |
-| Disposable nested-Incus VM | [VM harness](testenv/vm-harness.md) | Explicit opt-in local QEMU VM, VM-local Incus | Selected guest/NixOS/Incus scenario in a disposable VM | Host pilot deployment or upstream provider traffic |
+| Disposable nested-Incus VM | [VM harness](testenv/vm-harness.md) | Explicit opt-in local QEMU VM, VM-local Incus; authorized development host permitted | Selected guest/NixOS/Incus scenario in a disposable VM | Host pilot deployment or upstream provider traffic |
 | Dedicated testenv worker | [Harness index](testenv/README.md); [worker authority contract](testenv/testenv-worker.md) and [worker operations](testenv/testenv-worker-operations.md); [outer VM image](testenv/testenv-incus-vm-image.md) | Separately approved **dedicated** worker Incus admin, pool/project/image lifecycle | Evidence of the *selected* worker test; depends on executed gates | Safe use on a pilot host or permission for coding agents to administer Incus |
 | Read-only pilot inspection | [OpenCode stage 2](acceptance/README.md#2-read-only-pilot-inspection) and [operator preflight](../operations/host/operator-preflight.md) | Inspects explicitly selected host/Incus state; may read limited guest metadata | Topology/configuration readiness | HTTP authentication, egress denial, model or tool execution |
 | Opt-in owned Herdr lifecycle | [OpenCode stage 3](acceptance/README.md#3-opt-in-real-herdr-lifecycle-not-yet-the-full-agent-task) | Mutates run-owned workspaces only with explicit approval | Selected lifecycle behavior | End-to-end coding task or inference |
@@ -14,7 +14,7 @@ This page is the **canonical testing entry point** for Aginctus. Different test 
 ## Operational decisions
 
 1. **Do you need safe code changes validated?** Run `just check ci` or `just check report` in the pinned development shell. The structured `just check report-json` variant is intended for machine exchange; never treat it as live acceptance.
-2. **Do you need guest/Incus behavior isolated from the pilot?** Read the VM harness trust boundary before opting into a disposable test. A dedicated persistent worker is a separate, privileged system, not a substitute for the disposable VM safety boundary.
+2. **Do you need guest/Incus behavior isolated from the pilot?** Read the VM harness trust boundary before opting into a disposable test. Trusted coding agents may run batch VM tests on their authorized development host under the standing authorization in [AGENTS.md](../../AGENTS.md); separate worker admission is not required. A dedicated persistent worker is a separate, privileged system with its own admission requirements.
 3. **Do you need to know whether a deployed pilot is ready?** Begin at stage 2 read-only preflight; it does not authorize stage 3 or 4.
 4. **Do you need actual model/agent evidence?** Use the operator-held staged acceptance, explicitly authorize credentials and any billable request, record independent attribution and revocation evidence, and independently verify cleanup.
 
@@ -46,4 +46,4 @@ to enable the production state service or perform lifecycle mutations.
 - [Test reporting design and implemented output contracts](../design/test-reporting.md) has detailed report/evidence semantics. A report only covers its own provenance and selected gates.
 - The developer-facing [test architecture refactor](https://github.com/blevinn/aginctus/issues/645) may change script placement; validate commands against the checked-out version, not a stale worktree.
 
-**Keep literal secret values out of tests, command output and Markdown.** Run host/VM/provider checks only when the associated operator or dedicated worker explicitly authorizes them.
+**Keep literal secret values out of tests, command output and Markdown.** Repository-defined disposable batch VM checks are authorized by the standing policy above; host mutations, persistent worker operations and live provider checks require separate explicit authorization.

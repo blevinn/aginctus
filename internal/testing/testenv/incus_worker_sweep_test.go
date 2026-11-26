@@ -2,6 +2,7 @@ package testenv
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"os"
 	"path/filepath"
@@ -107,5 +108,54 @@ func TestTrustedSweepRefusesInvalidConfigBeforeDaemon(t *testing.T) {
 	cancel()
 	if _, err := RunTrustedIncusExpirySweep(ctx, cfg, time.Now()); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation obscured: %v", err)
+	}
+}
+
+func TestPrivateWorkerACL(t *testing.T) {
+	const uid uint32 = 1234
+	const undefinedID = ^uint32(0)
+	acl := make([]byte, 44)
+	binary.LittleEndian.PutUint32(acl, 2)
+	for i, entry := range []struct {
+		tag, perm uint16
+		id        uint32
+	}{
+		{1, 4, undefinedID},
+		{2, 4, uid},
+		{4, 0, undefinedID},
+		{16, 4, undefinedID},
+		{32, 0, undefinedID},
+	} {
+		offset := 4 + 8*i
+		binary.LittleEndian.PutUint16(acl[offset:], entry.tag)
+		binary.LittleEndian.PutUint16(acl[offset+2:], entry.perm)
+		binary.LittleEndian.PutUint32(acl[offset+4:], entry.id)
+	}
+	if !privateWorkerACL(acl, uid) {
+		t.Fatal("systemd named-user read-only ACL rejected")
+	}
+	if privateWorkerACL(acl, uid+1) || privateWorkerACL(acl, 0) ||
+		privateWorkerACL(acl[:43], uid) || privateWorkerACL(append(append([]byte(nil), acl...), make([]byte, 8)...), uid) {
+		t.Fatal("wrong principal or malformed ACL admitted")
+	}
+	for _, offset := range []int{0, 6, 14, 22, 30, 38} {
+		bad := append([]byte(nil), acl...)
+		bad[offset] ^= 2
+		if privateWorkerACL(bad, uid) {
+			t.Fatalf("unexpected ACL version or permission admitted at offset %d", offset)
+		}
+	}
+}
+
+func TestWorkerSystemdCredentialRejectsArbitraryPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CREDENTIALS_DIRECTORY", dir)
+	if isWorkerSystemdCredential(filepath.Join(dir, "policy-key")) {
+		t.Fatal("arbitrary credential directory admitted")
+	}
+	t.Setenv("CREDENTIALS_DIRECTORY", "/run/credentials/aginctus-testenv-acceptance.service")
+	if isWorkerSystemdCredential("/run/credentials/aginctus-testenv-other.service/policy-key") ||
+		isWorkerSystemdCredential("/run/credentials/aginctus-testenv-acceptance.service/other-key") {
+		t.Fatal("wrong unit or credential admitted")
 	}
 }
