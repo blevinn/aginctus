@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"fmt"
-	"github.com/blevinn/aginctus/internal/orchestration/environment"
 	"maps"
 	"net/http"
 	"slices"
@@ -275,21 +274,6 @@ func PlanNetworkWithReader(ctx context.Context, intent NetworkIntent, client Net
 	}
 	if err := requireLocalScope(client, intent); err != nil {
 		return NetworkPlan{}, &ReconcileError{Stage: "transport", cause: err}
-	}
-	return planObservedNetwork(ctx, intent, client)
-}
-
-// PlanProjectNetworkPrerequisite observes a preauthorized host bridge as
-// exposed to an exact restricted project. This path cannot mutate networks.
-func PlanProjectNetworkPrerequisite(ctx context.Context, intent NetworkIntent, client interface {
-	NetworkReader
-	environment.RestrictedIncusProjectObserver
-}, binding environment.Binding, pin string) (NetworkPlan, error) {
-	if err := intent.Validate(); err != nil {
-		return NetworkPlan{}, err
-	}
-	if err := VerifyProjectTransport(ctx, client, binding, pin); err != nil {
-		return NetworkPlan{}, err
 	}
 	return planObservedNetwork(ctx, intent, client)
 }

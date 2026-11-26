@@ -23,6 +23,21 @@ verify ownership and terminal effects. The server never issues an Incus
 mutation. Submission acknowledgement is evidence from the cooperating
 executor, not independent proof of readiness or convergence.
 
+The installed workload draft requires a separate root-owned host grant for the
+exact instance, pool and bridge. Incus 7.5.1 exposes an inherited bridge to a
+restricted project, but redacts its configuration (including ownership markers)
+unless the caller can edit the network. The workload TLS principal is not given
+that entitlement. For the disposable fixture, an administrator-owned systemd
+Unix socket activates `aginctus internal workload-bridge-observe HOST_GRANT`.
+The configured `bridgeSocket` permits the workload operator to request only a
+fresh yes/no check. The helper accepts no request data, checks the live bridge
+and independently pinned standalone Incus server over the fixed administrative
+Unix socket, and returns only a digest of the exact grant on success. The
+executor checks the socket peer UID and grant digest. It separately verifies the
+restricted project's exact network and storage attachment policy over TLS.
+This is a point-in-time observation; it does not lock the host bridge or expose
+the administrative socket to the executor or the state service.
+
 There is no lease-based takeover. A disconnect can leave a session held; a
 restart releases the in-memory pin but refuses new native writers across the
 project if any earlier operation is still open or uncertain. A delayed request

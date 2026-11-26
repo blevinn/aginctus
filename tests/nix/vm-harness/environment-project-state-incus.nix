@@ -13,6 +13,8 @@ let
   serviceUID = 910;
   incusIP = "10.89.37.1";
   serviceIP = "10.89.37.2";
+  bridgeSocket = "/run/aginctus-workload-bridge.sock";
+  hostGrant = "/etc/aginctus-workload-host.json";
   mkGuest =
     address:
     nixpkgs.lib.nixosSystem {
@@ -66,6 +68,20 @@ pkgs.testers.runNixOSTest {
     };
     users.users.stateoperator = {
       isNormalUser = true;
+      extraGroups = [ "workload-observer" ];
+    };
+    users.groups.workload-observer = { };
+    systemd.sockets.workload-bridge.socketConfig = {
+      ListenStream = bridgeSocket;
+      Accept = true;
+      SocketGroup = "workload-observer";
+      SocketMode = "0660";
+    };
+    systemd.services."workload-bridge@".serviceConfig = {
+      ExecStart = "${cli}/bin/aginctus internal workload-bridge-observe ${hostGrant}";
+      StandardInput = "socket";
+      StandardOutput = "socket";
+      StandardError = "journal";
     };
     environment.systemPackages = [
       cli
@@ -191,9 +207,10 @@ pkgs.testers.runNixOSTest {
     save(private + "/execution.json", {"apiVersion": "aginctus.dev/project-execution-policy/v1alpha1", "grants": []})
     save(private + "/host.json", {"apiVersion": "aginctus.dev/workload-host-grant/v1alpha1", **binding,
                                  "environmentId": descriptors[0]["id"], "workloadId": "worker", "instance": "selected-worker",
-                                 "pool": "default", "bridge": "state-mgmt", "ipv4Address": "${incusIP}/24",
+                                 "pool": "default", "bridge": "state-mgmt", "bridgeSocket": "${bridgeSocket}", "ipv4Address": "${incusIP}/24",
                                  "ipv4Nat": False, "ipv4Routing": False, "ipv4DhcpGateway": "none", "ipv6Address": "none"})
-    machine.succeed(f"install -m 0644 {private}/host.json /etc/aginctus-workload-host.json")
+    machine.succeed(f"install -m 0644 {private}/host.json ${hostGrant}")
+    machine.fail("runuser -u stateoperator -- ${cli}/bin/aginctus internal workload-bridge-observe ${hostGrant}")
     machine.succeed("incus storage volume create default environment-accepted-data --project ${project}"
                     " user.aginctus.managed=true user.aginctus.resource=project-state-volume")
     machine.fail("incus storage volume show default environment-accepted-data --project foreign-environment")
@@ -257,9 +274,15 @@ pkgs.testers.runNixOSTest {
         for action in ("reconcile", "stop", "remove")]})
     machine.succeed(f"incus file push {private}/execution.json environment-state-service/etc/aginctus/execution.json"
                     " --project ${project} --uid 0 --gid 0 --mode 0644")
-    reconcile = f"reconcile --workload worker --expect {revisions[0]['id']} --host-grant /etc/aginctus-workload-host.json"
+    reconcile = f"reconcile --workload worker --expect {revisions[0]['id']} --host-grant ${hostGrant}"
     machine.fail(state_command(0, "member", reconcile))
+    # Missing observer and changed live host policy must both fail before create.
+    machine.fail(state_command(0, "promoter", reconcile))
+    machine.succeed("systemctl start workload-bridge.socket")
+    machine.succeed("incus network set state-mgmt user.aginctus.resource=foreign")
+    machine.fail(state_command(0, "promoter", reconcile))
     machine.fail("incus info selected-worker --project ${project}")
+    machine.succeed("incus network set state-mgmt user.aginctus.resource=management-network")
     first = json.loads(machine.succeed(state_command(0, "promoter", reconcile), timeout=90))
     first_effects = first["result"]["native"]["effects"]
     assert [effect["effect"]["action"] for effect in first_effects] == ["create", "start"]

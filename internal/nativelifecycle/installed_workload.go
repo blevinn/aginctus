@@ -62,8 +62,7 @@ func ExecuteInstalledWorkload(ctx context.Context, configPath, hostGrantPath, pr
 			return result, operationID, errors.New("accepted instance differs from independent workload grant")
 		}
 	}
-	bridge := managementnetwork.Spec{Name: grant.Bridge, IPv4Address: grant.IPv4Address, IPv4NAT: grant.IPv4NAT,
-		IPv4Routing: grant.IPv4Routing, IPv4DHCPGateway: grant.IPv4DHCPGateway, IPv6Address: grant.IPv6Address}
+	bridge := workloadBridge(grant)
 	verifyHost := func(ctx context.Context) error {
 		current, err := environment.ReadWorkloadHostGrant(hostGrantPath)
 		if err != nil || current != grant {
@@ -73,15 +72,7 @@ func ExecuteInstalledWorkload(ctx context.Context, configPath, hostGrantPath, pr
 	}
 	composer := LocalComposer{Environment: candidate.Environment, TrustedServerPin: operator.TrustedServerSHA256, Client: sdk,
 		Bridge: ManagementNetwork{Spec: bridge, VerifyObserved: func(ctx context.Context) error {
-			intent, err := bridge.NativeIntent()
-			if err != nil {
-				return err
-			}
-			observed, err := native.PlanProjectNetworkPrerequisite(ctx, intent, sdk, candidate.Environment.Binding, operator.TrustedServerSHA256)
-			if err != nil || observed.Action != native.Unchanged {
-				return errors.New("approved bridge unavailable or not converged")
-			}
-			return nil
+			return verifyWorkloadBridge(ctx, grant)
 		}, VerifyBinding: func(ctx context.Context, binding environment.Binding, spec managementnetwork.Spec) error {
 			if binding != candidate.Environment.Binding || spec != bridge {
 				return errors.New("management bridge outside grant")
