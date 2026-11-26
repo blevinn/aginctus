@@ -42,5 +42,6 @@ func NewAcceptance(handlers Handlers) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.ReportRoot, "report-root", "", "required: existing worker-owned 0700 evidence directory")
 	cmd.Flags().StringVar(&cfg.ForeignInstance, "foreign-instance", "", "required: existing unsigned foreign VM sentinel")
 	cmd.Flags().BoolVar(&cfg.RequireNestedKVM, "require-nested-kvm", false, "require the fixed nested KVM guest execution probe")
+	cmd.Flags().StringVar(&cfg.Scenario, "scenario", "", "optional fixed scenario: native-instance (requires the reviewed scenario image)")
 	return cmd
 }
