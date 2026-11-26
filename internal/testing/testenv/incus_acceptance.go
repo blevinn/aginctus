@@ -329,6 +329,9 @@ func runIncusAcceptance(ctx context.Context, b *IncusVMBackend, cfg IncusAccepta
 			spec.TimeToLive = nativeScenarioTTL
 		}
 		ref, createErr := b.Create(ctx, spec)
+		if createErr != nil {
+			result.FailureStage = string(mode) + "_" + incusCreateStage(createErr)
+		}
 		if ref.RunID != "" {
 			result.Handles = append(result.Handles, ref)
 		}
