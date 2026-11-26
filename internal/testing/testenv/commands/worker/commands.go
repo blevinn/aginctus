@@ -37,6 +37,6 @@ func New(h Handlers) *cobra.Command {
 		Use: "worker", Short: "Inspect or prepare a dedicated test environment worker",
 		RunE: groupRun,
 	}
-	root.AddCommand(newBootstrap(), NewPreflight(h), NewAcceptance(h), NewSweep(h))
+	root.AddCommand(newScenario(), newBootstrap(), NewPreflight(h), NewAcceptance(h), NewSweep(h))
 	return root
 }
