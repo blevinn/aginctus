@@ -6,7 +6,7 @@ This is a structure convention, not a new plugin or authorization contract.
 
 | Root | Ownership |
 | --- | --- |
-| `cmd/` | Go executable entry points, with behavior delegated to packages |
+| `cmd/` | Thin Go executable entry points; target only product and developer roots per [ADR 0007](../adr/0007-executable-boundaries.md) |
 | `pkg/` | Deliberately public Go APIs and contracts, not an overflow directory |
 | `internal/` | Private Go implementation and shared infrastructure |
 | `plugins/` | Concrete integrations, including their runtime scripts, embeddings, and tests |

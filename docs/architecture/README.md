@@ -42,6 +42,10 @@ The drawing shows **intended connectivity**, not proof that the deployed pilot c
 
 The **native cutover remains an active migration**, not a shipped global switch. The selected management-network backend is narrower than the overall desired native orchestrator. The code contract is described in [orchestration](orchestration.md); the migration rationale and outstanding parity gates belong to [ADR 0002](../adr/0002-native-incus-reconciliation.md) and the [native reconciliation design](../design/native-incus-reconciliation.md).
 
+## Executable direction
+
+[ADR 0007](../adr/0007-executable-boundaries.md) defines the intended distribution boundary: a single production `aginctus` binary (including independently supervised services), and `aginctus-dev` for development/test operations. Existing standalone tools and product testenv registration are transitional until their callers are migrated or retired. A common binary does not combine process identities, credentials, permissions or lifecycles; the decision does not activate deferred services.
+
 ## Host control and orchestration
 
 - **CLI/configuration:** `cmd/aginctus` and `internal/cli` implement status, lifecycle, gateway and Herdr commands. `internal/config` merges defaults, configuration files, environment and explicit overrides. The [configuration guide](../reference/configuration.md) is authoritative for precedence and values; [CLI operations](../reference/cli.md) documents effects and preview limits.
