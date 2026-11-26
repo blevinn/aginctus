@@ -4,6 +4,8 @@ Aginctus uses Nix to provide a small, reproducible development environment. For 
 
 For repository directory ownership and colocation rules, see the [repository layout contract](repository-layout.md). Run `just check layout` to verify tracked top-level paths.
 
+Authorized coding agents can use the repository-local [PR stack reconciliation skill](../../.opencode/skills/pr-stack-reconciliation/SKILL.md) to forward-integrate stacked pull requests after parent merges. Its temporary worktree root is `.tmp/aginctus-work/`, which is ignored by Git.
+
 For go-forward design and review requirements, see the [engineering contract](engineering-contract.md).
 
 ## Compatibility expectations
