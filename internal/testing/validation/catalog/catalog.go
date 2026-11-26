@@ -40,9 +40,10 @@ type Suite struct {
 // Scenario is a pinned NixOS test. Evidence means the existing v1 VM evidence
 // reader accepts its identity, not that the scenario has been executed.
 type Scenario struct {
-	Name        string
-	Target      string
-	Description string
+	Name          string
+	Target        string
+	ManagedTarget string
+	Description   string
 	Tier        Tier
 	Surface     Surface
 	Networked   bool
@@ -73,7 +74,7 @@ var scenarios = []Scenario{
 	{Name: "acceptance-egress-denial", Target: "vm-harness-acceptance-egress-denial", Description: "Gate D firewalld default-deny egress under reload and daemon outage", Tier: Disposable, Surface: Operator, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
 	{Name: "acceptance-firewalld", Target: "vm-harness-acceptance-firewalld", Description: "Gate D real firewalld HTTPS grant/revoke, routing, zone and conntrack safety on guest Incus", Tier: Disposable, Surface: Operator, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
 	{Name: "acceptance-state-boundary", Target: "vm-harness-acceptance-state-boundary", Description: "Gate E multi-environment local state fixture and unauthenticated public-CLI refusal", Tier: Disposable, Surface: Operator, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
-	{Name: "native-instance", Target: "vm-harness-native-instance", Description: "Native scoped create/config/start-stop and dry-run against disposable Incus", Tier: Disposable, Surface: Operator, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
+	{Name: "native-instance", Target: "vm-harness-native-instance", ManagedTarget: "testenv-managed-native-instance", Description: "Native scoped create/config/start-stop and dry-run against disposable Incus", Tier: Disposable, Surface: Operator, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
 	{Name: "gateway-topology", Target: "vm-harness-gateway-topology", Description: "Real guest-local LiteLLM/Postgres and Herdr/OpenCode topology (OCI pulls required; no inference)", Tier: Disposable, Surface: Operator, Networked: true, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
 	// Feasibility-only: runnable through Python, not exported by the Go CLI
 	// or accepted by the existing v1 evidence normalizer.

@@ -65,6 +65,16 @@ test-vm-storage-network:
 test-vm-runtime-lifecycle:
     python3 tests/vm_harness/runner.py test runtime-lifecycle
 
+# Fixed managed fixtures: reviewed source and an independently approved local
+# x86_64 KVM builder only. Request sandboxing; the operator must verify the
+# daemon's effective policy. No host Python driver or arbitrary target input.
+# These are experimental, not defaults or proof of fresh execution.
+testenv-worker-lifecycle:
+    env -u NIX_CONFIG -u NIX_REMOTE -u QEMU_OPTS -u QEMU_KERNEL_PARAMS -u SSH_AUTH_SOCK -u INCUS_SOCKET -u INCUS_DIR nix build --no-link --no-update-lock-file --option sandbox true --option builders "" --print-out-paths .#testenv-disposable-worker-fixture
+
+testenv-managed-native-instance:
+    env -u NIX_CONFIG -u NIX_REMOTE -u QEMU_OPTS -u QEMU_KERNEL_PARAMS -u SSH_AUTH_SOCK -u INCUS_SOCKET -u INCUS_DIR nix build --no-link --no-update-lock-file --option sandbox true --option builders "" --print-out-paths .#testenv-managed-native-instance
+
 # Native scoped instance lifecycle and dry-run against disposable Incus.
 test-vm-native-instance:
     python3 tests/vm_harness/runner.py test native-instance

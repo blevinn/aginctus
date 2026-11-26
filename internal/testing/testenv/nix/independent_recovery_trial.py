@@ -5,9 +5,9 @@ No direct sweep or fake clock; use the installed recovery timer.
 """
 
 import datetime
-import json
-import re
-import shlex
+import json as recovery_json
+import re as recovery_re
+import shlex as recovery_shlex
 
 RECOVERY_UNIT = "aginctus-testenv-recovery.service"
 RECOVERY_TIMER = "aginctus-testenv-recovery.timer"
@@ -23,10 +23,10 @@ def _retained_instance(machine):
         '| select(.ephemeral == false and .status == "Running")] '
         '| select(length == 1) | .[0].name'
     )
-    command = LIST + " | jq -er " + shlex.quote(query)
+    command = LIST + " | jq -er " + recovery_shlex.quote(query)
     machine.wait_until_succeeds(command, timeout=120)
     name = machine.succeed(command).strip()
-    if not re.fullmatch(r"testenv-vm-[0-9a-f]{24}", name):
+    if not recovery_re.fullmatch(r"testenv-vm-[0-9a-f]{24}", name):
         raise RuntimeError("unexpected retained instance identity")
     expires = machine.succeed(
         f"incus --project {PROJECT} config get {name} user.aginctus.testenv.expires"
@@ -40,7 +40,7 @@ def _retained_instance(machine):
         raise RuntimeError("retained VM too close to expiry for interruption")
     volume = 'any(.[]; .name == $name and .type == "virtual-machine")'
     machine.succeed(
-        VOLUMES + " | jq -e --arg name " + shlex.quote(name) + " " + shlex.quote(volume)
+        VOLUMES + " | jq -e --arg name " + recovery_shlex.quote(name) + " " + recovery_shlex.quote(volume)
     )
     return name
 
@@ -51,11 +51,11 @@ def _wait_for_recovery(machine, name):
     no_vm = 'all(.[]; .name != $name)'
     no_volume = 'all(.[]; .name != $name or .type != "virtual-machine")'
     machine.wait_until_succeeds(
-        LIST + " | jq -e --arg name " + shlex.quote(name) + " " + shlex.quote(no_vm),
+        LIST + " | jq -e --arg name " + recovery_shlex.quote(name) + " " + recovery_shlex.quote(no_vm),
         timeout=360,
     )
     machine.wait_until_succeeds(
-        VOLUMES + " | jq -e --arg name " + shlex.quote(name) + " " + shlex.quote(no_volume),
+        VOLUMES + " | jq -e --arg name " + recovery_shlex.quote(name) + " " + recovery_shlex.quote(no_volume),
         timeout=60,
     )
     machine.wait_until_succeeds(
@@ -67,10 +67,10 @@ def _wait_for_recovery(machine, name):
 
 
 def _sentinel(machine):
-    items = json.loads(machine.succeed(LIST))
+    items = recovery_json.loads(machine.succeed(LIST))
     if len(items) != 1 or items[0]["name"] != "foreign-sentinel" or items[0]["status"] != "Stopped":
         raise RuntimeError("foreign sentinel or final worker inventory changed")
-    if json.loads(machine.succeed("incus --project default list --format json")):
+    if recovery_json.loads(machine.succeed("incus --project default list --format json")):
         raise RuntimeError("default project changed")
     machine.succeed(
         VOLUMES + " | jq -e 'any(.[]; .name == \"foreign-sentinel\" and .type == \"virtual-machine\")'"
@@ -86,7 +86,7 @@ def run_independent_recovery(machine, argv):
     # No --wait/--pipe/--collect: the driver must observe the killed unit.
     async_argv = [arg for arg in argv if arg not in ("--wait", "--pipe", "--collect")]
     machine.succeed(f"systemctl start {RECOVERY_TIMER}")
-    machine.succeed(shlex.join(async_argv))
+    machine.succeed(recovery_shlex.join(async_argv))
     name = _retained_instance(machine)
     machine.succeed(f"systemctl kill --kill-whom=main --signal=SIGKILL {ACCEPTANCE_UNIT}")
     machine.wait_until_succeeds(
@@ -108,7 +108,7 @@ def run_independent_recovery(machine, argv):
         else arg
         for arg in async_argv
     ]
-    machine.succeed(shlex.join(reboot_argv))
+    machine.succeed(recovery_shlex.join(reboot_argv))
     reboot_name = _retained_instance(machine)
     if reboot_name == name:
         raise RuntimeError("retained VM identity reused")
@@ -129,13 +129,13 @@ def run_independent_recovery(machine, argv):
     if _sentinel(machine) != baseline:
         raise RuntimeError("foreign sentinel configuration changed after reboot")
     machine.succeed(f"incus --project {PROJECT} delete foreign-sentinel")
-    final_volumes = json.loads(machine.succeed(VOLUMES))
-    if json.loads(machine.succeed(LIST)) or any(volume["type"] != "image" for volume in final_volumes):
+    final_volumes = recovery_json.loads(machine.succeed(VOLUMES))
+    if recovery_json.loads(machine.succeed(LIST)) or any(volume["type"] != "image" for volume in final_volumes):
         raise RuntimeError("worker instance or non-image volume inventory not empty")
     # This marker is a scoped fixture observation, not host teardown proof.
     machine.succeed(
         "printf '%s\\n' "
-        + shlex.quote(json.dumps({
+        + recovery_shlex.quote(recovery_json.dumps({
             "schema_version": 1,
             "profile": "independent_worker_recovery_fixture",
             "status": "pass",
@@ -148,4 +148,4 @@ def run_independent_recovery(machine, argv):
         }))
         + " > /tmp/testenv-recovery-receipt.json"
     )
-    machine.copy_from_vm("/tmp/testenv-recovery-receipt.json")
+    machine.copy_from_machine("/tmp/testenv-recovery-receipt.json")
