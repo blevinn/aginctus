@@ -54,6 +54,17 @@ Direct guest execution needs no extra nested QEMU test node.
 The image has no outer NIC or host-share requirement; the outer policy,
 not guest settings, must enforce that. The fixed fixture is for fresh
 disposable VMs only, not installed pilot hosts or arbitrary source execution.
+The existing dedicated-worker acceptance command accepts
+`--scenario native-instance` with the imported fingerprint of this specific
+image. It starts the fixed service through the signed Incus VM agent,
+observes systemd completion with short bounded queries, then destroys the
+ephemeral VM and continues the retained TTL lifecycle trial. The scenario
+has a 30-minute execution budget and a 35-minute signed VM lifetime.
+Allow at least 43 minutes for the transient worker unit and its cleanup.
+The private receipt distinguishes `native_instance_scenario` from outer
+VM/root-volume cleanup and unverified isolation. Do not combine this mode
+with the third-layer KVM probe.
+
 The image build and real execution must be validated before treating this
 as a supported managed test path.
 

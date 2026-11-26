@@ -1,0 +1,16 @@
+package testenv
+
+import "testing"
+
+func TestNativeScenarioStateStrict(t *testing.T) {
+	const good = "LoadState=loaded\nActiveState=active\nSubState=exited\nResult=success\nExecMainCode=1\nExecMainStatus=0\n"
+	state, err := parseNativeScenarioState(good)
+	if err != nil || state.active != "active" || state.status != "0" {
+		t.Fatalf("state: %+v %v", state, err)
+	}
+	for _, bad := range []string{"", good+"ActiveState=failed\n", good+"Extra=field\n", good[:len(good)-17], "LoadState=not-found\n" + good} {
+		if _, err := parseNativeScenarioState(bad); err == nil {
+			t.Errorf("malformed state accepted")
+		}
+	}
+}
