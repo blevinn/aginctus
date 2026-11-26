@@ -34,6 +34,7 @@ type IncusAcceptanceOptions struct {
 	ForeignInstance  string
 	Revision         string
 	RequireNestedKVM bool
+	Scenario         string
 }
 
 type IncusAcceptanceCheck struct {
@@ -47,6 +48,7 @@ type IncusAcceptanceCheck struct {
 type IncusAcceptanceReport struct {
 	SchemaVersion    int                    `json:"schema_version"`
 	Profile          string                 `json:"profile"`
+	Scenario         string                 `json:"scenario,omitempty"`
 	Tier             string                 `json:"evidence_tier"`
 	RunID            string                 `json:"run_id"`
 	CreatedUTC       time.Time              `json:"created_utc"`
@@ -60,7 +62,8 @@ type IncusAcceptanceReport struct {
 }
 
 func (cfg IncusAcceptanceOptions) validate() error {
-	if cfg.Acknowledgement != DisposableWorkerAcknowledgement ||
+	if (cfg.Scenario != "" && (cfg.Scenario != nativeInstanceScenario || cfg.RequireNestedKVM)) ||
+		cfg.Acknowledgement != DisposableWorkerAcknowledgement ||
 		cfg.SocketPath != "/var/lib/incus/unix.socket" || cfg.Project != DefaultVMProject ||
 		!vmDigest.MatchString(cfg.ImageFingerprint) ||
 		!vmSafeName.MatchString(cfg.ForeignInstance) || strings.HasPrefix(cfg.ForeignInstance, "testenv-") ||
@@ -160,7 +163,11 @@ func RunTrustedIncusAcceptance(ctx context.Context, cfg IncusAcceptanceOptions) 
 	if err := save(report); err != nil {
 		return report, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	budget := 10 * time.Minute
+	if cfg.Scenario == nativeInstanceScenario {
+		budget = 40 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	client, err := ConnectTrustedIncusVMClient(ctx, cfg.SocketPath)
 	if err != nil {
@@ -193,9 +200,9 @@ func saveIncusAcceptanceReport(dir string, report IncusAcceptanceReport) error {
 
 func newIncusAcceptanceReport(cfg IncusAcceptanceOptions, runID string) IncusAcceptanceReport {
 	r := IncusAcceptanceReport{SchemaVersion: 1, Profile: "dedicated_worker", Tier: "disposable_guest_no_live_provider",
-		RunID: runID, CreatedUTC: time.Now().UTC(), Revision: cfg.Revision,
+		RunID: runID, CreatedUTC: time.Now().UTC(), Revision: cfg.Revision, Scenario: cfg.Scenario,
 		ImageFingerprint: cfg.ImageFingerprint, Project: cfg.Project, Status: "fail", FailureStage: "preflight"}
-	for _, id := range []string{"project_policy", "ephemeral_lifecycle", "retained_lifecycle", "scoped_ttl_recovery", "root_volumes", "foreign_preserved", "instance_cleanup", "crash_reboot", "nested_kvm_guest_execution", "nested_isolation", "storage_reclamation", "report_retention"} {
+	for _, id := range []string{"project_policy", "ephemeral_lifecycle", "retained_lifecycle", "scoped_ttl_recovery", "root_volumes", "foreign_preserved", "instance_cleanup", "crash_reboot", "nested_kvm_guest_execution", "native_instance_scenario", "nested_isolation", "storage_reclamation", "report_retention"} {
 		r.Results = append(r.Results, IncusAcceptanceCheck{ID: id, Status: "not_verified"})
 	}
 	return r
@@ -313,6 +320,9 @@ func runIncusAcceptance(ctx context.Context, b *IncusVMBackend, cfg IncusAccepta
 		result.FailureStage = string(mode) + "_create"
 		spec := VMCreateSpec{Backend: IncusBackend, Project: DefaultVMProject, ImageFingerprint: cfg.ImageFingerprint,
 			CPU: 2, MemoryMiB: 4096, RootDiskGiB: 32, TimeToLive: 3 * time.Minute, Retention: mode}
+		if cfg.Scenario == nativeInstanceScenario && mode == VMEphemeral {
+			spec.TimeToLive = nativeScenarioTTL
+		}
 		ref, createErr := b.Create(ctx, spec)
 		if ref.RunID != "" {
 			result.Handles = append(result.Handles, ref)
@@ -355,6 +365,14 @@ func runIncusAcceptance(ctx context.Context, b *IncusVMBackend, cfg IncusAccepta
 				// Both ephemeral and retained probes have passed.
 				result.set("nested_kvm_guest_execution", "pass")
 			}
+		}
+		if cfg.Scenario == nativeInstanceScenario && mode == VMEphemeral {
+			result.FailureStage = "native_instance_scenario"
+			if err := runNativeInstanceScenario(ctx, b, ref); err != nil {
+				result.set("native_instance_scenario", "fail")
+				return result, errors.New("native-instance scenario failed or unverified")
+			}
+			result.set("native_instance_scenario", "pass")
 		}
 		// A copied signed ref cannot be retargeted at a foreign resource.
 		forged := ref
