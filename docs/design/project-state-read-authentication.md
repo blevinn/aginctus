@@ -154,3 +154,37 @@ retarget, service crash/restart, recovery, and operator-host reads before
 relying on this binary. If the live trust lookup is forbidden to restricted
 identities, this executable remains intentionally non-operational until a
 different narrow non-admin authorization proof is implemented.
+
+## Gated promotion protocol increment (S3)
+
+The separate `AuthenticatedPromotionHandler` implements a candidate protocol
+for `POST /v1/promotion` over verified mTLS. It is not mounted by the installed
+read role. The JSON envelope has exactly `apiVersion`
+(`aginctus.dev/project-accepted-promotion/v1alpha1`), `environmentId` (an enrolled
+UUID), `expected` (explicit `null` for genesis, otherwise the complete revision
+envelope), and `candidate` (the full typed candidate). The request is bounded
+and cannot select a project, mount or promoter by header or override. Success
+returns the new revision identity; a stale comparison or unchanged candidate
+returns conflict. An unavailable/unknown outcome or lost response requires an
+authenticated re-read of accepted state before another request. No automatic
+retry, state merge, or resource reconciliation is part of promotion.
+
+The handler matches the actual TLS leaf against the live restricted Incus
+trust record, exact server/project and separately verified enrollment. A
+mandatory server-owned promoter policy checks the peer's DER SHA-256
+fingerprint and complete CAS request (enrollment, expected revision, canonical
+candidate and digest). Membership alone is insufficient. The store repeats the
+policy and live trust checks during its existing locked publication flow. A
+denial cannot publish the pointer; a late denial can leave an immutable orphan
+outside accepted history. These live checks and local publication are not a
+single transaction with Incus trust; they do not eliminate the revocation race
+after the last successful check.
+
+Before activation under [ADR 0006](../adr/0006-environment-incus-authority.md),
+review the real promoter provisioning and revocation source, nonroot writer
+and exclusive volume ownership/fencing, and service attachment, shutdown and
+recovery behavior. Run that exact restricted service and policy on a verified
+disposable worker, including cross-project denial and revocation. The local
+mTLS test uses synthetic certificates and an injected Incus observer with the
+real live-trust checks and real CAS store. It does not establish deployed
+authority. There is no installed promotion command, policy or listener wiring.

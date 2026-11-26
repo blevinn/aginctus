@@ -7,7 +7,9 @@ import (
 	"errors"
 )
 
-// LocalPromotionRequest is the exact operation a trusted fixture policy must
+var errLocalPromotionDenied = errors.New("local candidate promotion denied")
+
+// LocalPromotionRequest is the exact operation a trusted promotion policy must
 // approve. The expected revision is zero only for genesis. The digest covers
 // the entire proposed candidate, not a patch or set of user-supplied claims.
 type LocalPromotionRequest struct {
@@ -63,7 +65,7 @@ func (s *LocalProjectStateStore) PromoteLocalCandidate(ctx context.Context, enro
 		policyInput.Candidate = policyCandidate
 		binding, err := authorize(ctx, policyInput)
 		if err != nil || enrolled.VerifyBinding(binding) != nil {
-			return errors.New("local candidate promotion denied")
+			return errLocalPromotionDenied
 		}
 		return ctx.Err()
 	}
