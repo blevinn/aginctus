@@ -211,7 +211,7 @@ func runBasicCobraWithStateCapabilities(
 			logicalWorkload := cmd.Parent() != nil && (cmd.Parent().Name() == "workloads" || cmd.Parent().Name() == "agents" || cmd.Parent().Name() == "frontends" || cmd.Parent().Name() == "gateways") &&
 				(cmd.Name() == "list" || cmd.Name() == "show" || cmd.Name() == "status")
 			stateRead := cmd.Parent() != nil && cmd.Parent().Name() == "state" &&
-				(cmd.Name() == "show" || cmd.Name() == "diff" || cmd.Name() == "plan-accept" || cmd.Name() == "plan-native")
+				(cmd.Name() == "show" || cmd.Name() == "diff" || cmd.Name() == "plan-accept" || cmd.Name() == "plan-native" || cmd.Name() == "promote")
 			environmentRead := cmd.Parent() != nil && cmd.Parent().Name() == "environment" &&
 				(cmd.Name() == "list" || cmd.Name() == "show")
 			verifiedScopedWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workload" &&
@@ -234,7 +234,7 @@ func runBasicCobraWithStateCapabilities(
 		// the resource reader must still independently check project scope.
 		// Existing UUID-only injected readers remain usable without an
 		// environment inventory reader.
-		if (logicalWorkload || stateRead && cmd.Name() != "plan-native") && selectedEnvironmentID != "" &&
+		if (logicalWorkload || stateRead && cmd.Name() != "plan-native" && cmd.Name() != "promote") && selectedEnvironmentID != "" &&
 			!client.IsEnvironmentUUID(selectedEnvironmentID) {
 			if environmentReader == nil {
 				return fmt.Errorf("authenticated environment inventory required to resolve a display name")

@@ -104,12 +104,12 @@ mountpoint check. This adapter remains non-deployable until the service
 peer-authority gate and physical instance/volume evidence pass.
 ## Opt-in read-only daemon (2026-11-24)
 
-The `aginctus` Nix package includes an explicit, nonroot, GET-only mTLS
-reader. Run `aginctus serve project-state` as a separately supervised service.
+The `aginctus` Nix package includes an explicit, nonroot mTLS service,
+read-only by default. Run `aginctus serve project-state` as a separately supervised service.
 Update any explicit deployment to use this invocation instead of the removed
 `state-project-read` package. NixOS/Home Manager activation does not start it;
 there is no
-automatic bootstrap, volume attachment, project creation, write endpoint,
+automatic bootstrap, volume attachment, project creation,
 host Incus socket, or controller activation.
 
 The dedicated service instance needs an already-owned, exclusively attached
@@ -155,11 +155,12 @@ relying on this binary. If the live trust lookup is forbidden to restricted
 identities, this executable remains intentionally non-operational until a
 different narrow non-admin authorization proof is implemented.
 
-## Gated promotion protocol increment (S3)
+## Explicit, administrator-gated promotion
 
 The separate `AuthenticatedPromotionHandler` implements a candidate protocol
-for `POST /v1/promotion` over verified mTLS. It is not mounted by the installed
-read role. The JSON envelope has exactly `apiVersion`
+for `POST /v1/promotion` over verified mTLS. The installed service registers
+this route only when its configuration explicitly sets `promotionPolicyFile`.
+The JSON envelope has exactly `apiVersion`
 (`aginctus.dev/project-accepted-promotion/v1alpha1`), `environmentId` (an enrolled
 UUID), `expected` (explicit `null` for genesis, otherwise the complete revision
 envelope), and `candidate` (the full typed candidate). The request is bounded
@@ -177,8 +178,46 @@ candidate and digest). Membership alone is insufficient. The store repeats the
 policy and live trust checks during its existing locked publication flow. A
 denial cannot publish the pointer; a late denial can leave an immutable orphan
 outside accepted history. These live checks and local publication are not a
-single transaction with Incus trust; they do not eliminate the revocation race
+single transaction with Incus trust or the policy file; they do not eliminate the revocation race
 after the last successful check.
+
+### Provisioning exact grants
+
+For a reviewed deployment, the guest administrator may provision a policy
+file outside the state volume and set `promotionPolicyFile` in the existing
+private service configuration. The policy must be a regular file owned by
+guest root, readable by the service UID, with no group or other write bit.
+Every directory component must also be root-owned, non-symlink and protected
+against group or other writes. Never allow a promoter Incus access to the
+service guest or state volume as a substitute for the grant.
+
+The JSON document has `apiVersion: "aginctus.dev/project-promotion-policy/v1alpha1"`
+and a required `grants` array. Each grant contains exactly these values:
+
+| Field | Value |
+|---|---|
+| `peerSha256` | Lowercase SHA-256 of the exact promoter certificate in DER form. |
+| `serverId`, `project` | Independently verified binding of this service. |
+| `environmentId` | Exact enrolled environment UUID. |
+| `expectedId` | Exact current revision ID, or the literal `genesis`. |
+| `candidateDigest` | Lowercase SHA-256 of the full canonical candidate. |
+
+Grant changes and revocation use administrator-owned atomic replacement of
+the policy file. For example, replace its `grants` with `[]` to deny all
+promotion without restarting. The service reloads it on every authorization
+check. Missing or invalid policy fails startup when configured, and fails
+promotion if encountered later. Omitting the setting leaves the role read-only.
+
+The operator's `AGINCTUS_RESTRICTED_READ_CONFIG` supplies the explicit
+`configuredCandidateFile`, Incus trust and pinned state service used by both
+commands. After reviewing the preview, use its current accepted revision ID
+in `--expect`, or `genesis` for the first revision:
+
+```sh
+aginctus --incus-project team --environment UUID state plan-accept -o json
+aginctus --incus-project team --environment UUID state promote --expect genesis -o json
+aginctus --incus-project team --environment UUID state show -o json
+```
 
 Before activation under [ADR 0006](../adr/0006-environment-incus-authority.md),
 review the real promoter provisioning and revocation source, nonroot writer
@@ -187,4 +226,5 @@ recovery behavior. Run that exact restricted service and policy on a verified
 disposable worker, including cross-project denial and revocation. The local
 mTLS test uses synthetic certificates and an injected Incus observer with the
 real live-trust checks and real CAS store. It does not establish deployed
-authority. There is no installed promotion command, policy or listener wiring.
+authority. Bootstrap and exclusive attachment still require independently
+authorized provisioning; this route does not implement either operation.

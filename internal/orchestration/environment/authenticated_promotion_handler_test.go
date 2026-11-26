@@ -109,6 +109,56 @@ func TestAuthenticatedPromotionCASOverMTLS(t *testing.T) {
 	}
 }
 
+func TestInstalledPromotionTransportUsesExactGrant(t *testing.T) {
+	auth, registry, peer, key := liveIncusTrustKeyFixture(t)
+	h, c := newPromotionFixture(t, auth)
+	genesis, err := BuildAcceptedRevision(nil, nil, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := projectPromotionGrant{registry.record.Fingerprint, genesis.ServerID, genesis.Project, genesis.EnvironmentID, "genesis", genesis.CandidateDigest}
+	raw, err := json.Marshal(map[string]any{"apiVersion": projectPromotionPolicyVersion, "grants": []projectPromotionGrant{g}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grants, err := parseProjectPromotionPolicy(raw, c.Environment.Binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.AuthorizePromoter = func(_ context.Context, fingerprint string, req LocalPromotionRequest) error {
+		return authorizeProjectPromotion(grants, fingerprint, req)
+	}
+	reads := AuthenticatedAcceptedReadHandler{Authorizer: auth, Catalog: h.Catalog, Source: &MountedProjectPublishedSource{
+		store: h.Store, binding: c.Environment.Binding, verifier: h.Catalog.Verifier, checkMount: func(string) error { return nil },
+	}}
+	mux := http.NewServeMux()
+	mux.Handle("/v1/accepted", reads)
+	mux.Handle("/v1/promotion", h)
+	pool := x509.NewCertPool()
+	pool.AddCert(peer)
+	srv := httptest.NewUnstartedServer(mux)
+	srv.TLS = &tls.Config{ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: pool, MinVersion: tls.VersionTLS12}
+	srv.StartTLS()
+	defer srv.Close()
+	client := srv.Client()
+	client.Transport.(*http.Transport).TLSClientConfig.Certificates = []tls.Certificate{{Certificate: [][]byte{peer.Raw}, PrivateKey: key}}
+	s := restrictedHTTPSReadSession{project: genesis.Project, binding: c.Environment.Binding, verifier: h.Catalog.Verifier, endpoint: srv.URL, client: client}
+	changed := c
+	changed.Environment.Name = "unapproved-change"
+	if _, err := s.promote(t.Context(), changed, "genesis"); err == nil || !strings.Contains(err.Error(), "authority denied") {
+		t.Fatalf("ungranted candidate: %v", err)
+	}
+	if got, err := s.promote(t.Context(), c, "genesis"); err != nil || got != genesis {
+		t.Fatalf("granted candidate: got %v, err %v", got, err)
+	}
+	if _, err := s.promote(t.Context(), changed, "genesis"); !errors.Is(err, ErrAcceptedConflict) {
+		t.Fatalf("stale expected revision: %v", err)
+	}
+	if _, err := s.promote(t.Context(), changed, genesis.ID); err == nil || !strings.Contains(err.Error(), "authority denied") {
+		t.Fatalf("ungranted successor: %v", err)
+	}
+}
+
 func TestAuthenticatedPromotionDenialsPreserveUnpublishedState(t *testing.T) {
 	for _, scenario := range []string{"no peer", "no capability", "member denied", "trust revoked", "capability revoked", "foreign candidate", "missing expected", "ambiguous expected", "oversized"} {
 		t.Run(scenario, func(t *testing.T) {
