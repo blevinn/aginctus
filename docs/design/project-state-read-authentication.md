@@ -104,9 +104,11 @@ mountpoint check. This adapter remains non-deployable until the service
 peer-authority gate and physical instance/volume evidence pass.
 ## Opt-in read-only daemon (2026-11-24)
 
-`cmd/aginctus-project-state-read` packages an explicit, nonroot, GET-only
-mTLS reader. The Nix package is `state-project-read`. It is **not**
-installed or started by NixOS/Home Manager activation; there is no
+The `aginctus` Nix package includes an explicit, nonroot, GET-only mTLS
+reader. Run `aginctus serve project-state` as a separately supervised service.
+Update any explicit deployment to use this invocation instead of the removed
+`state-project-read` package. NixOS/Home Manager activation does not start it;
+there is no
 automatic bootstrap, volume attachment, project creation, write endpoint,
 host Incus socket, or controller activation.
 

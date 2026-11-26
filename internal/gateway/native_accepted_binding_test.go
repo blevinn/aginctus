@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -25,6 +26,7 @@ type acceptedGatewayFixtureClient struct {
 	mutations      []string
 	imagesBySource map[string]environment.GatewayImageSpec
 	before         func(string)
+	loseAliasAck   bool
 }
 
 func (c *acceptedGatewayFixtureClient) GetServer() (*api.Server, string, error) {
@@ -78,11 +80,14 @@ func (c *acceptedGatewayFixtureClient) CreateImage(in api.ImagesPost) (native.Ga
 func (c *acceptedGatewayFixtureClient) CreateImageAlias(in api.ImageAliasesPost) error {
 	c.mutate("alias:" + in.Name + "/" + in.Target)
 	c.aliases[in.Name] = &in.ImageAliasesEntry
+	if c.loseAliasAck {
+		return errors.New("fixture alias response lost after submit")
+	}
 	return nil
 }
 
 func TestAcceptedGatewayJoinsPinnedAuthorityWithConcreteSDKOperations(t *testing.T) {
-	for _, scenario := range []string{"apply", "foreign-guest", "foreign-alias", "registry-mismatch", "deny-alias", "runtime"} {
+	for _, scenario := range []string{"apply", "foreign-guest", "foreign-alias", "registry-mismatch", "deny-alias", "runtime", "lost-alias", "persist-failure"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx := t.Context()
 			top, devices, pair, base := environmentGatewayCreateFixture(t)
@@ -128,11 +133,23 @@ func TestAcceptedGatewayJoinsPinnedAuthorityWithConcreteSDKOperations(t *testing
 				base.aliases[g.LiteLLM.Alias] = &api.ImageAliasesEntry{Name: g.LiteLLM.Alias, ImageAliasesEntryPut: api.ImageAliasesEntryPut{Target: strings.Repeat("f", 64)}}
 			}
 			last := ""
-			client := &acceptedGatewayFixtureClient{fakeGatewayStoppedClient: base, server: &api.Server{Environment: api.ServerEnvironment{Project: top.Project, CertificateFingerprint: strings.TrimPrefix(desc.Binding.ServerID, "sha256:")}}, imagesBySource: map[string]environment.GatewayImageSpec{}, before: func(s string) {
+			provenanceDir := gatewayProvenanceFixtureDir(t)
+			provenance, err := OpenLocalGatewayImageProvenance(provenanceDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := &acceptedGatewayFixtureClient{fakeGatewayStoppedClient: base, server: &api.Server{Environment: api.ServerEnvironment{Project: top.Project, CertificateFingerprint: strings.TrimPrefix(desc.Binding.ServerID, "sha256:")}}, imagesBySource: map[string]environment.GatewayImageSpec{}, loseAliasAck: scenario == "lost-alias", before: func(s string) {
 				if s != last {
 					t.Fatalf("SDK submission not authorized for exact target: %s; last grant: %s", s, last)
 				}
 				last = ""
+				if scenario == "persist-failure" && strings.HasPrefix(s, "alias:") {
+					// Fail the store after the alias submission boundary, then
+					// restore the empty store before retrying the operation.
+					if err := os.Chmod(provenanceDir, 0o755); err != nil {
+						t.Fatal(err)
+					}
+				}
 			}}
 			source := func(i environment.GatewayImageSpec) string {
 				return "https://" + i.Registry + "/" + i.Repository + "@" + i.ManifestDigest
@@ -140,8 +157,7 @@ func TestAcceptedGatewayJoinsPinnedAuthorityWithConcreteSDKOperations(t *testing
 			client.imagesBySource[source(g.Postgres)] = g.Postgres
 			client.imagesBySource[source(g.LiteLLM)] = g.LiteLLM
 			want := []string{"image:" + source(g.Postgres), "alias:" + g.Postgres.Alias + "/" + g.Postgres.IncusFingerprint, "image:" + source(g.LiteLLM), "alias:" + g.LiteLLM.Alias + "/" + g.LiteLLM.IncusFingerprint, "volume:" + g.DatabasePool + "/" + top.DatabaseVolume, "guest:" + pair.Postgres.Name, "guest:" + pair.LiteLLM.Name}
-			reuse := false
-			deps := AcceptedGatewayDependencies{Client: client,
+			deps := AcceptedGatewayDependencies{Client: client, LocalImageProvenance: provenance,
 				Resolve: func(_ context.Context, s nativeoci.Source) (nativeoci.ResolvedImage, error) {
 					for _, i := range []environment.GatewayImageSpec{g.Postgres, g.LiteLLM} {
 						if reflect.DeepEqual(s, i.Source()) {
@@ -153,14 +169,6 @@ func TestAcceptedGatewayJoinsPinnedAuthorityWithConcreteSDKOperations(t *testing
 						}
 					}
 					return nativeoci.ResolvedImage{}, errors.New("unexpected OCI source")
-				}, ExistingImageEvidence: func(_ context.Context, r environment.AcceptedRevision, role string) (native.GatewayImageEvidence, error) {
-					if !reuse || r != *rev {
-						return native.GatewayImageEvidence{}, errors.New("unproven fixture image")
-					}
-					if role == "postgres" {
-						return base.imagesForCreate.Postgres.Evidence, nil
-					}
-					return base.imagesForCreate.LiteLLM.Evidence, nil
 				},
 			}
 			exec := orchestration.LocalNativeExecution{Store: store, Environment: desc,
@@ -218,6 +226,21 @@ func TestAcceptedGatewayJoinsPinnedAuthorityWithConcreteSDKOperations(t *testing
 				t.Fatalf("incomplete preview: %+v", preview.Native.Previews)
 			}
 			result, err := exec.ExecuteLocalNative(ctx, engine, plan, orchestration.ExecuteOptions{})
+			if scenario == "lost-alias" || scenario == "persist-failure" {
+				if err == nil || !slices.Equal(client.mutations, want[:2]) || len(result.Native.Effects) != 2 || result.Native.Effects[1].Outcome != orchestration.NativeEffectUncertain {
+					t.Fatalf("partial alias outcome: %+v %v", result.Native, err)
+				}
+				if err := os.Chmod(provenanceDir, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := provenance.ExistingImageEvidence(ctx, *rev, "postgres"); !errors.Is(err, errGatewayProvenanceAbsent) {
+					t.Fatalf("uncertain alias produced evidence: %v", err)
+				}
+				if _, err := exec.ExecuteLocalNative(ctx, engine, plan, orchestration.ExecuteOptions{}); err == nil || len(client.mutations) != 2 {
+					t.Fatal("uncertain marked alias was adopted or retry submitted writes")
+				}
+				return
+			}
 			if scenario == "deny-alias" {
 				if err == nil || !slices.Equal(client.mutations, want[:1]) || len(result.Native.Effects) != 2 || result.Native.Effects[1].Outcome != orchestration.NativeEffectBlocked {
 					t.Fatalf("lost effect denial: %+v %v", result.Native, err)
@@ -239,10 +262,24 @@ func TestAcceptedGatewayJoinsPinnedAuthorityWithConcreteSDKOperations(t *testing
 					t.Fatal("guest was not left stopped")
 				}
 			}
-			reuse = true
+			deps.LocalImageProvenance, err = OpenLocalGatewayImageProvenance(provenanceDir)
+			if err != nil {
+				t.Fatal(err)
+			}
 			repeat, err := exec.ExecuteLocalNative(ctx, engine, plan, orchestration.ExecuteOptions{})
 			if err != nil || len(repeat.Native.Effects) != 0 || !slices.Equal(client.mutations, want) {
 				t.Fatalf("verified repeat was not a no-op: %+v %v", repeat.Native, err)
+			}
+			// A same-layer replacement cannot inherit provenance by recreating
+			// the alias. Losing both daemon objects also cannot trigger a retry.
+			client.aliases[g.Postgres.Alias].Description = ""
+			if _, err := exec.ExecuteLocalNative(ctx, engine, plan, orchestration.ExecuteOptions{}); err == nil || !slices.Equal(client.mutations, want) {
+				t.Fatal("same-layer alias replacement was adopted")
+			}
+			delete(client.aliases, g.Postgres.Alias)
+			delete(client.images, g.Postgres.IncusFingerprint)
+			if _, err := exec.ExecuteLocalNative(ctx, engine, plan, orchestration.ExecuteOptions{}); err == nil || !slices.Equal(client.mutations, want) {
+				t.Fatal("stale provenance permitted reacquisition")
 			}
 		})
 	}

@@ -92,6 +92,19 @@ proves the target host, remote/project selection or credentials are safe.
 
 ## Read-only inspection and planning
 
+`state plan-native` previews the dependency graph for explicitly selected
+native workloads from the authenticated project's published accepted snapshot.
+Use the [authenticated planning example](../operations/host/restricted-project-enrollment-reads.md#preview-accepted-workload-dependencies)
+to select an explicit project and immutable environment UUID.
+
+Repeat `--workload` to select more workloads on the same accepted management
+network. The graph lists the management-network prerequisite first, then only
+the selected workloads in lexical order. The command reports `intent-only`,
+`unobserved` live state, and `writerPin: false`. It does not inspect resource
+state, compute create/update/no-op effects, or accept, pin or apply a revision.
+Herdr and gateway selection are outside this workload-only slice. The
+configured candidate file is not read by this command.
+
 | Surface | What it establishes | What it does not establish |
 | --- | --- | --- |
 | `aginctus help`, `version` | Available syntax and build identity | Host readiness |
