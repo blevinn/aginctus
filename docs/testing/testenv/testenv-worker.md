@@ -105,6 +105,17 @@ start, exec and destruction, including expiry reconciliation, and permit
 daemon metadata on an otherwise valid run. They do not prove actual Incus
 project enforcement, real-host isolation or complete storage reclamation.
 
+## Expiry sweep evidence
+
+The installed worker sweep independently queries the project-scoped VM root
+volume after verified instance deletion. It reports instance deletion counts
+separately from `root_volumes_absent` and `root_volumes_unverified`. A
+lingering or unreadable volume fails the sweep even when instance deletion
+succeeded. The sweep never deletes volumes directly or claims physical
+reclamation. A subsequent sweep cannot rediscover an already-absent instance;
+an operator must investigate unverified volume cleanup using independent
+inventory. The installed worker uses only the fixed local socket and pool.
+
 ## Operating procedures (separate authority)
 
 The dedicated worker is a **daemon-administrator** environment, not an agent sandbox.
