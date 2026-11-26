@@ -38,5 +38,6 @@ func New(h Handlers) *cobra.Command {
 		RunE: groupRun,
 	}
 	root.AddCommand(newBootstrap(), NewPreflight(h), NewAcceptance(h), NewSweep(h))
+	root.AddCommand(newPayload())
 	return root
 }
