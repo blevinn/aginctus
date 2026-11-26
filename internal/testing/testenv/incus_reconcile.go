@@ -19,8 +19,8 @@ type IncusReconcileResult struct {
 	Failed                int `json:"failed"`
 	RootVolumesAbsent     int `json:"root_volumes_absent"`
 	RootVolumesUnverified int `json:"root_volumes_unverified"`
-	PendingCleanup int `json:"pending_cleanup"`
-	RecoveredPending int `json:"recovered_pending"`
+	PendingCleanup        int `json:"pending_cleanup"`
+	RecoveredPending      int `json:"recovered_pending"`
 }
 
 // ReconcileExpiredIncusVMs runs one bounded, caller-triggered sweep via the
