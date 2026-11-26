@@ -282,6 +282,7 @@ func (s *LocalProjectStateStore) commitLocalCandidate(
 	defer lock.Close()
 	current,prior,err:=s.readNamespace(ctx,enrolled)
 	if err!=nil{return AcceptedRevision{},err}
+	if err := s.requireResolvedLocalNativeOperations(ctx, enrolled, path); err != nil { return AcceptedRevision{},err }
 	if (expected==nil)!=(current==nil) {return AcceptedRevision{},ErrAcceptedConflict}
 	if expected!=nil && *expected!=*current {return AcceptedRevision{},ErrAcceptedConflict}
 	next,err:=BuildAcceptedRevision(current,prior,candidate)

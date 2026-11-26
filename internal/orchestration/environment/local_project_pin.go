@@ -31,6 +31,7 @@ type LocalEnvironmentPin struct {
 	revision AcceptedRevision
 	workloadID string
 	closed bool
+	nativeJournalAllocated bool
 }
 
 // PinnedEnvironmentWorkload is nonsecret accepted intent copied from the
@@ -78,6 +79,10 @@ func (s *LocalProjectStateStore) pinLocalRevision(ctx context.Context, enrolled 
 	if err:=p.check(ctx);err!=nil{
 		_ = lock.Close()
 		return nil,err
+	}
+	if err := s.requireResolvedLocalNativeOperations(ctx, enrolled, path); err != nil {
+		_ = lock.Close()
+		return nil, err
 	}
 	return p,nil
 }
