@@ -109,3 +109,30 @@ func TestIncusReconcileRejectsNilClockAndCancellation(t *testing.T) {
 		t.Fatalf("cancelled recovery executed: %v", err)
 	}
 }
+
+func TestIncusReconcileSeparatesRootVolumeAbsence(t *testing.T) {
+	for _, lingering := range []bool{false, true} {
+		ctx := context.Background()
+		c := &acceptanceFake{fakeIncusVMClient: newFakeIncusClient(t), lingeringVolume: lingering}
+		b, err := newTestIncusBackend(c, "testenv")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ref, err := b.Create(ctx, admittedSpec())
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.vms["foreign"] = IncusVMInstance{Name: "foreign", Type: "virtual-machine", Status: "Stopped"}
+		summary, err := ReconcileExpiredIncusVMs(ctx, b, ref.Policy.ExpiresAt)
+		if summary.Destroyed != 1 || summary.Failed != 0 || c.volumeQueries != 1 || len(c.vms) != 1 {
+			t.Fatalf("instance cleanup or inventory incorrect: %+v %v", summary, err)
+		}
+		if lingering {
+			if err == nil || summary.RootVolumesUnverified != 1 || summary.RootVolumesAbsent != 0 {
+				t.Fatalf("lingering volume accepted: %+v %v", summary, err)
+			}
+		} else if err != nil || summary.RootVolumesAbsent != 1 || summary.RootVolumesUnverified != 0 {
+			t.Fatalf("absence not recorded: %+v %v", summary, err)
+		}
+	}
+}
