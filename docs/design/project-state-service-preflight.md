@@ -44,4 +44,6 @@ file. A passing preflight does not establish that a service process lacks
 administrator credentials, owns the mount exclusively at the kernel level,
 can survive backup/restore, or authenticates restricted project principals.
 Repeated observations detect visible drift; they do not hold a writer fence.
+See the [administrator-only deployment and isolation gate](project-state-service-topology.md#administrator-controlled-deployment-only)
+before configuring any listener.
 Continue #695/#696/#701/#704 real-Incus negative and recovery evidence.

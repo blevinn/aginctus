@@ -46,14 +46,67 @@ layout without changing ADR 0006's revision schema and per-environment CAS.
    authenticated connection evidence before exposing accepted-state APIs.
    Creating a new volume or instance never implicitly creates an accepted
    revision or applies any workload.
-5. Start the service under a nonroot UID. The experimental listener is Unix
-   same-UID/read-only and **not** reachable by external project principals.
-   The eventual production transport requires a separate restricted-project
-   credential or equivalent server-authenticated, no-root-deputy mechanism;
-   no generic root-mediated user request proxy is acceptable.
+5. Keep the listener off by default. The installed mTLS role can be started
+   under the dedicated nonroot UID for the administrator-controlled fixture
+   below. Delegated access requires a separately verified Incus isolation
+   boundary; no generic root-mediated user request proxy is acceptable.
 
 The admin-owned bootstrap path must remain outside accepted-state convergence
 or the service would depend on its own unavailable accepted pointer to recover.
+
+### Administrator-controlled deployment only
+
+**Gate:** On the current restricted TLS model, a certificate for the service's
+own Incus project gives access to guest exec, guest files and export. Treat
+holders of that credential as capable of controlling the service and accessing
+its keys and accepted state outside mTLS. Project restriction, ownership
+markers, `UsedBy`, a nonroot UID, and an exact promotion grant do not revoke
+those Incus permissions. This blocks delegated **reads as well as promotion**.
+
+For a disposable exercise, use a nondefault project on an administrator-controlled
+Incus daemon, with only the dedicated service guest and its custom state volume
+in that project. The host administrator owns the daemon, pool, profile, network,
+trust and enrollment; the guest administrator owns guest configuration and
+supervision. Keep every credential able to administer that project, including
+its restricted service and test peer keys, under the same trusted administration.
+Use distinct short-lived service, member and promoter credentials to exercise
+the application roles, not to delegate Incus authority. Keep the listener on
+an explicitly selected private interface reachable only by the fixture clients.
+Do not use real state or issue same-project credentials to ordinary users for
+this exercise. If that trust inventory cannot be guaranteed, leave the listener off.
+
+The installed operator path is explicit:
+
+| Who | Supported invocation | Effect / prerequisite |
+| --- | --- | --- |
+| Incus host administrator | `aginctus internal project-state-attachment --server-id SERVER_ID --project PROJECT --instance INSTANCE --pool POOL --volume VOLUME --device DEVICE --mount-path MOUNT_PATH` (add `--network NETWORK` for the managed NIC) | Read-only [preflight](project-state-service-preflight.md) over the fixed local socket; `SERVER_ID` is an independently pinned `sha256:` fingerprint. Manually provision or verify the exact guest, volume and attachment first. Stop on failure and repeat after replacement or attachment changes. |
+| Guest service UID | `aginctus serve project-state bootstrap` | After preflight, with the protected configuration and mounted volume below, prints `initialized` or `reopened`. Does not start a listener. |
+| Guest service UID, under administrator supervision | `aginctus serve project-state` | Set `AGINCTUS_PROJECT_STATE_READ_SERVICE_CONFIG` to the [private service configuration](project-state-read-authentication.md#opt-in-read-only-daemon-2026-11-24). Omit `promotionPolicyFile` for reads; set it only for an explicitly approved exact-grant fixture. Keep the host socket and unrestricted keys out of the guest. |
+| Administrator-held fixture peer | `aginctus --incus-project PROJECT --environment UUID state show -o json`; `state plan-accept -o json` and `state promote --expect EXPECTED -o json` with the same global selectors | Use the peer's private `AGINCTUS_RESTRICTED_READ_CONFIG`. Planning needs a selected candidate; promotion also needs the enabled route and exact grant. `EXPECTED` is the current revision ID or `genesis`. See the [operator example](project-state-read-authentication.md#provisioning-exact-grants). |
+
+These roles do not install a supported supervisor unit, enroll peers, provision
+resources or configure Incus authorization. The existing VM fixture contains
+administrator provisioning examples; it is not an isolation configuration.
+
+### Narrow isolation review
+
+1. **Review same-project Incus authorization first.** Preserve the existing
+   server/project binding while allowing only the required project/enrollment
+   observations and live peer trust lookups, and denying data-plane access to
+   the state guest and volume. Check that the exact TLS identity presented to
+   mTLS can actually be subject to that Incus policy: a separate limited
+   identity does not remove permissions from the restricted TLS key checked by
+   the installed authorizer. If the Incus authorization mode cannot combine
+   those requirements, an authorizer/client change is needed; there is no
+   supported policy switch in Aginctus today.
+2. **Review an administrator-only storage project or daemon only if the first
+   option cannot enforce the boundary.** Keep the logical environment binding
+   on the workload project and separately verify the physical attachment scope.
+   This needs a reviewed change to the current same-project attachment contract
+   and an exact, live non-admin authorization proof for workload peers. Merely
+   moving the guest and enrolling peers in its new project restores the same
+   access problem; issuing multi-project certificates also fails today's exact
+   single-project trust check.
 
 ### Guest store bootstrap
 
@@ -134,11 +187,33 @@ access cannot reach the service guest or volume. It also does not prove
 revocation during an operation, power-loss durability, consistent backup and
 restore, stale fences, or service upgrades. Keep #695, #696, #701 and #704 open.
 
+For isolation sign-off, first capture the restricted TLS baseline and then
+exercise the selected policy on an approved disposable Incus worker, using
+the **actual** service and operator identities and synthetic state. Extend the
+fixture with paired checks: the administrator can observe the exact resources;
+the restricted workload peer can still do required project reads, and the
+service can still resolve the live peer record. Against those same existing
+resources, require Incus authorization denials for ungranted principals on
+guest exec and file access, instance and volume snapshot/backup/export or copy,
+volume attachment to another guest, and changes to the service instance,
+devices, profiles or authorization. A missing resource, unavailable endpoint,
+client-side failure or mTLS denial is not evidence of an Incus ACL denial.
+
+Then require the intended mTLS read and exact-grant CAS to succeed, ungranted
+and foreign peers to fail, revoked peers to fail on fresh and in-flight
+requests, and retained authority, pointers and revisions to survive verified
+reattachment. Record the tested revision, Incus version and authorization mode,
+sanitized policy and identities, expected and observed results, and unchanged
+state after denials. Any unproven path keeps delegated access off; the existing
+fixture alone does not satisfy this gate.
+
 ### Production activation gates
 
 Before replacing this fixture with a user-facing `environment accept`
 endpoint:
 
+- Prove the [Incus isolation boundary](#narrow-isolation-review) for the exact
+  credentials used by the service and its peers before delegating any access.
 - Select and implement authenticated project-scoped state-service transport.
   A **caller-supplied** server/project label, a UID or a revision hash cannot
   act as authorization. A shared service must not hold unrestricted Incus
