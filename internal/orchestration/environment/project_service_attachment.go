@@ -155,7 +155,7 @@ func (a ProjectServiceAttachment) confinedInstance(i *api.Instance) bool {
 	}
 	for key, value := range i.ExpandedConfig {
 		if strings.HasPrefix(key, "raw.") || key == "linux.kernel_modules" ||
-			(strings.HasPrefix(key, "security.") && !(key == "security.privileged" && value == "false")) {
+			(strings.HasPrefix(key, "security.") && (key != "security.privileged" || value != "false")) {
 			return false
 		}
 	}
