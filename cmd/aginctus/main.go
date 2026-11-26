@@ -4,15 +4,24 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/blevinn/aginctus/internal/plugins/composition"
 	"github.com/blevinn/aginctus/internal/cli"
 	"github.com/blevinn/aginctus/internal/config"
 	"github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
+	"github.com/blevinn/aginctus/internal/plugins/composition"
 )
 
 func main() {
+	if len(os.Args) >= 3 && os.Args[1] == "serve" && os.Args[2] == "project-state" {
+		if len(os.Args) != 3 {
+			fmt.Fprintln(os.Stderr, "usage: aginctus serve project-state")
+			os.Exit(2)
+		}
+		os.Exit(runProjectStateService())
+	}
 	ctx := context.Background()
 	registry, err := appplugins.New(ctx)
 	if err != nil {
@@ -48,4 +57,22 @@ func main() {
 		config.NewLoader(),
 		registry,
 	))
+}
+
+// This supervised role starts before ordinary CLI configuration or plugin
+// composition. Its explicit restricted credentials remain independently scoped.
+func runProjectStateService() int {
+	path := os.Getenv("AGINCTUS_PROJECT_STATE_READ_SERVICE_CONFIG")
+	serviceConfig, err := environment.ReadProjectStateReadServiceConfig(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "project-state read service configuration unavailable")
+		return 1
+	}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if err := environment.ServeMountedProjectStateReads(ctx, serviceConfig); err != nil {
+		fmt.Fprintln(os.Stderr, "restricted project-state service unavailable")
+		return 1
+	}
+	return 0
 }
