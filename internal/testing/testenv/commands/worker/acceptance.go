@@ -18,8 +18,10 @@ func NewAcceptance(handlers Handlers) *cobra.Command {
 			cfg.Revision = handlers.Revision
 			report, err := handlers.Accept(cmd.Context(), cfg)
 			status := "pass"
+			stage := ""
 			if err != nil {
 				status = "fail"
+				stage = acceptanceFailureStage(report.FailureStage)
 				fmt.Fprintln(cmd.ErrOrStderr(), "worker acceptance incomplete or unverified; inspect private evidence")
 			}
 			writeErr := json.NewEncoder(cmd.OutOrStdout()).Encode(struct {
@@ -27,7 +29,8 @@ func NewAcceptance(handlers Handlers) *cobra.Command {
 				Profile       string `json:"profile"`
 				Status        string `json:"status"`
 				RunID         string `json:"run_id"`
-			}{1, "dedicated_worker", status, report.RunID})
+				FailureStage  string `json:"failure_stage,omitempty"`
+			}{1, "dedicated_worker", status, report.RunID, stage})
 			if err != nil || writeErr != nil {
 				return ErrIncomplete
 			}
@@ -45,4 +48,19 @@ func NewAcceptance(handlers Handlers) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.Scenario, "scenario", "", "optional fixed scenario: native-instance (requires the reviewed scenario image)")
 	cmd.Flags().BoolVar(&cfg.RequirePayloadTransfer, "require-payload-transfer", false, "require a fixed synthetic guest file transfer and exact readback")
 	return cmd
+}
+
+// Only expose fixed stage codes, never arbitrary errors or private evidence.
+func acceptanceFailureStage(stage string) string {
+	switch stage {
+	case "configuration", "worker_identity", "worker_marker", "worker_credential",
+		"report_root", "report_lock", "report_initialize", "evidence", "worker_daemon",
+		"preflight", "ephemeral_create", "retained_create", "ephemeral_agent", "retained_agent",
+		"ephemeral_status_exec_volume", "retained_status_exec_volume", "nested_kvm_guest_execution",
+		"payload_transfer", "native_instance_scenario", "ephemeral_destroy", "scoped_ttl_recovery",
+		"foreign_preserved", "cleanup":
+		return stage
+	default:
+		return "unknown"
+	}
 }
