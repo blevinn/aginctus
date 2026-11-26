@@ -45,7 +45,13 @@ type restrictedHTTPSReadSession struct {
 func (f RestrictedHTTPSReadSessionFactory) OpenReadSession(
 	ctx context.Context, enrolled Descriptor,
 ) (RestrictedProjectReadSession, error) {
-	fail := func() (RestrictedProjectReadSession, error) {
+	s, err := f.open(ctx, enrolled)
+	if err != nil { return nil, err }
+	return s, nil
+}
+
+func (f RestrictedHTTPSReadSessionFactory) open(ctx context.Context, enrolled Descriptor) (*restrictedHTTPSReadSession, error) {
+	fail := func() (*restrictedHTTPSReadSession, error) {
 		return nil, errors.New("restricted project-state HTTPS session unavailable")
 	}
 	if ctx == nil || ctx.Err() != nil || enrolled.Validate() != nil || f.Verifier == nil {
