@@ -33,6 +33,9 @@ type AcceptedGatewayDependencies struct {
 	Client                AcceptedGatewayClient
 	Resolve               func(context.Context, nativeoci.Source) (nativeoci.ResolvedImage, error)
 	ExistingImageEvidence func(context.Context, environment.AcceptedRevision, string) (native.GatewayImageEvidence, error)
+	// LocalImageProvenance is an alternative to an externally trusted evidence
+	// callback. Only use it under independently enforced fixture writer exclusion.
+	LocalImageProvenance *LocalGatewayImageProvenance
 }
 
 // BindAcceptedGateway is the fixture composer for LocalNativeExecution.Bind.
@@ -40,8 +43,12 @@ type AcceptedGatewayDependencies struct {
 // if the accepted candidate requests running; the infrastructure prefix may
 // be selected independently and its postcondition is stopped, never ready.
 func BindAcceptedGateway(c environment.Candidate, plan orchestration.NativePlan, deps AcceptedGatewayDependencies) (map[string]orchestration.NativeResourceBinding, error) {
-	if c.Gateway == nil || plan.Revision.ValidateAgainst(c) != nil || plan.Validate() != nil || deps.Client == nil || deps.Resolve == nil || deps.ExistingImageEvidence == nil {
+	if c.Gateway == nil || plan.Revision.ValidateAgainst(c) != nil || plan.Validate() != nil || deps.Client == nil || deps.Resolve == nil ||
+		(deps.ExistingImageEvidence == nil) == (deps.LocalImageProvenance == nil) {
 		return nil, errors.New("accepted gateway requires a pinned candidate and trusted fixture dependencies")
+	}
+	if deps.LocalImageProvenance != nil {
+		deps.ExistingImageEvidence = deps.LocalImageProvenance.ExistingImageEvidence
 	}
 	kinds := map[string]orchestration.NativeResourceKind{
 		orchestration.GatewayImageStage:    orchestration.NativeGatewayImage,
@@ -170,6 +177,16 @@ func (b *acceptedGatewayBinding) imageIntent(i int) native.GatewayImageAcquireIn
 	return native.GatewayImageAcquireIntent{Project: b.top.Project, Image: native.GatewayOCIIdentity{Registry: s.Registry, Repository: s.Repository, ManifestDigest: s.ManifestDigest, ConfigDigest: s.ConfigDigest, IncusFingerprint: s.IncusFingerprint}}
 }
 
+func (b *acceptedGatewayBinding) checkProvenanceAbsent(ctx context.Context, i int) error {
+	if b.deps.LocalImageProvenance != nil {
+		_, err := b.deps.ExistingImageEvidence(ctx, b.revision, gatewayRoles[i])
+		if !errors.Is(err, errGatewayProvenanceAbsent) {
+			return errors.New("gateway image alias absent with existing or uncertain provenance; inspect before retry")
+		}
+	}
+	return ctx.Err()
+}
+
 func (b *acceptedGatewayBinding) observeImages(ctx context.Context) (NativeGatewayCreateImages, [2]bool, error) {
 	var pending [2]bool
 	var pins [2]NativeGatewayCreateImage
@@ -183,6 +200,9 @@ func (b *acceptedGatewayBinding) observeImages(ctx context.Context) (NativeGatew
 		}
 		alias, _, err := b.deps.Client.GetImageAlias(s.Alias)
 		if api.StatusErrorCheck(err, http.StatusNotFound) {
+			if err := b.checkProvenanceAbsent(ctx, i); err != nil {
+				return NativeGatewayCreateImages{}, pending, err
+			}
 			if _, _, err := b.deps.Client.GetImage(s.IncusFingerprint); !api.StatusErrorCheck(err, http.StatusNotFound) {
 				return NativeGatewayCreateImages{}, pending, errors.New("gateway image absent alias has existing or unverified fingerprint")
 			}
@@ -258,6 +278,9 @@ func (b *acceptedGatewayBinding) applyImages(ctx context.Context, run orchestrat
 			if _, _, err := b.deps.Client.GetImageAlias(b.specs[i].Alias); !api.StatusErrorCheck(err, http.StatusNotFound) {
 				return errors.New("gateway acquisition alias no longer absent")
 			}
+			if err := b.checkProvenanceAbsent(ctx, i); err != nil {
+				return err
+			}
 			var err error
 			acquired, err = native.AcquireGatewayImageWithClient(ctx, want, b.deps.Client)
 			if err != nil || !acquired.Verified {
@@ -268,19 +291,34 @@ func (b *acceptedGatewayBinding) applyImages(ctx context.Context, run orchestrat
 			return err
 		}
 		alias := b.specs[i].Alias
+		evidence := native.GatewayImageEvidence{Project: want.Project, Alias: alias, Identity: want.Image}
 		if err := run(gatewayCreateEffect(gatewayAliasRoles[i]), func(ctx context.Context) error {
 			if err := b.verifyServer(ctx); err != nil {
 				return err
 			}
-			result, err := native.CreateGatewayImageAliasWithClient(ctx, native.GatewayAliasCreateIntent{Project: want.Project, Image: want.Image, Alias: alias, Acquisition: acquired}, b.deps.Client)
+			if err := b.checkProvenanceAbsent(ctx, i); err != nil {
+				return err
+			}
+			if b.deps.LocalImageProvenance != nil {
+				evidence.AliasMarker = newGatewayAliasMarker()
+			}
+			result, err := native.CreateGatewayImageAliasWithClient(ctx, native.GatewayAliasCreateIntent{Project: want.Project, Image: want.Image, Alias: alias, Acquisition: acquired, AliasMarker: evidence.AliasMarker}, b.deps.Client)
 			if err != nil || !result.Verified {
 				return errors.New("gateway image alias creation unverified")
+			}
+			if b.deps.LocalImageProvenance != nil {
+				if err := b.verifyServer(ctx); err != nil {
+					return err
+				}
+				return b.deps.LocalImageProvenance.record(ctx, b.revision, gatewayRoles[i], evidence)
 			}
 			return nil
 		}); err != nil {
 			return err
 		}
-		b.fresh[i] = native.GatewayImageEvidence{Project: want.Project, Alias: alias, Identity: want.Image}
+		if b.deps.LocalImageProvenance == nil {
+			b.fresh[i] = evidence
+		}
 	}
 	return ctx.Err()
 }
