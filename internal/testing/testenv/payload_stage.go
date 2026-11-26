@@ -47,6 +47,9 @@ func StageApprovedPayloadBundle(input io.Reader, expected, dir string) (PayloadB
 	if err := os.Link(tmp.Name(), name); err != nil {
 		return PayloadBundleReceipt{}, errors.New("payload staging publication failed or name already exists")
 	}
+	if err := os.Remove(tmp.Name()); err != nil {
+		return PayloadBundleReceipt{}, errors.New("payload staging temporary cleanup unverified")
+	}
 	// A sync failure after publication is uncertain; keep the published file
 	// for operator inspection rather than deleting a possibly replaced name.
 	parent, err := os.Open(dir)
