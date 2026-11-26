@@ -197,7 +197,7 @@ other rows or live provider inference.
 | D | `acceptance-nft` | Native NixOS nft DNS/DHCP chain, bridge ownership, unrelated port denial, restart | Full cross-backend egress grants |
 | D | `acceptance-egress-denial` | Firewalld default-deny egress under zone contamination, reload and daemon outage | Explicit grant/revoke convergence and all wrong-zone cases |
 | E | `acceptance-state-boundary` | Public CLI fails closed with no authenticated reader; multi-ID test fixture not accepted | Authenticated positive production reads |
-| E | `acceptance-environment-state` | Two independent CAS revisions in project-owned Incus volume and read-only service | Authenticated production enrollment |
+| E | `acceptance-environment-state` | Installed mounted bootstrap, mTLS promotion with an exact grant, and two retained histories across guest recreation | Authenticated production enrollment and service isolation |
 | E | `acceptance-accepted-state` | Persistence across service reconstruction, same-UID read boundary | Three-layer observed-state reconciliation |
 | E | `acceptance-home-manager` | User/root permissions, HM activation/rollback, host policy, report redaction | Full v0.2 live pilot |
 | E | `runtime-lifecycle` | Real Herdr/OpenCode image and instance convergence | Gateway OCI start and inference |
