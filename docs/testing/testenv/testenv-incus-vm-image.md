@@ -105,6 +105,22 @@ fixture construction nor a successful run proves agent-facing isolation,
 physical quota enforcement or independent worker-reboot recovery.
 A real KVM run is required to verify this fixture.
 
+The same fixed worker fixture can run the direct guest native-instance
+scenario end to end with its pinned scenario image:
+
+```sh
+nix build --no-link --no-update-lock-file .#testenv-managed-native-instance
+```
+
+This builds and stages the scenario-specific closure as part of the
+immutable image, starts the scenario via the signed worker lifecycle,
+checks scenario and outer lifecycle evidence, and independently checks the
+worker's instance and volume inventory. It still requires an authorized
+isolated KVM builder and a reviewed immutable source revision. It does not
+admit mutable worktrees, arbitrary callers, or host-level execution.
+The earlier lifecycle-only target remains available. Both targets are
+experimental until actually run.
+
 ## Future disposable-worker import gate
 
 **Operator-only; do not execute against the pilot daemon.** Provision a
