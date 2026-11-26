@@ -41,6 +41,22 @@ of `just check-all`. The pure `testenv-incus-vm-image-config` Nix
 check evaluates the image's guest-agent/Incus/SSH/network defaults; it
 does not test KVM, perform imports or provide isolation evidence.
 
+## Scenario-specific native-instance image
+
+The opt-in `testenv-native-instance-vm-image` output packages the existing
+native-instance fixture and its pinned Go test binary and container image
+inside an Incus VM. It shares the batch scenario's actual assertion script,
+not a second implementation. A fixed guest-local systemd oneshot named
+`aginctus-testenv-native-instance.service` runs only when requested by
+trusted worker code. It is not enabled at boot. The base image is unchanged.
+Direct guest execution needs no extra nested QEMU test node.
+
+The image has no outer NIC or host-share requirement; the outer policy,
+not guest settings, must enforce that. The fixed fixture is for fresh
+disposable VMs only, not installed pilot hosts or arbitrary source execution.
+The image build and real execution must be validated before treating this
+as a supported managed test path.
+
 ## Nested KVM guest execution probe
 
 The image contains a fixed no-NIC KVM probe at
