@@ -8,14 +8,22 @@ verified Incus project. `environment.ObserveLocalProjectServiceAttachment`
 performs read-only local-host administrative inspection; the injected
 `VerifyProjectServiceAttachment` provides the same checks for isolated tests.
 
-The preflight requires an explicit nondefault project, instance, pool,
-custom volume, disk device and absolute mount path. It checks:
+Run `aginctus internal project-state-attachment --help` for the installed
+entry point. Invoke it directly as an administrator on the daemon host. Supply
+the independently provisioned `sha256:` server certificate fingerprint, exact
+nondefault project, instance, pool, custom volume, disk device and absolute
+mount path. Supply the exact managed network if the guest has an `eth0` NIC.
+The command checks:
 
-- the local Incus connection selected the exact project;
+- the fixed local Incus socket returned the independently pinned server
+  fingerprint and exact project;
 - the project carries the Aginctus-owned deployment-project policy and
   isolates project storage volumes;
-- the instance and volume have independent Aginctus state-service ownership
-  markers, and a single expected disk device attaches the exact volume;
+- the container and volume have independent Aginctus state-service ownership
+  markers, and the expected disk is present in both local and effective devices;
+- expanded profile config does not introduce raw or privileged settings, and
+  the only effective devices are a pool-backed root disk, the exact state disk,
+  and the explicitly selected managed NIC if requested;
 - the Incus `UsedBy` inventory contains exactly one project-qualified
   consumer, that instance, and no unexpected custom volume is attached;
 - ETags, project policy, connection identity and attachment metadata remain
@@ -28,11 +36,12 @@ The proposed new resource markers are
 grants. Confirm marker compatibility with the disposable Incus fixture before
 using this preflight as a release condition.
 
-**Trust boundary:** This helper uses the local host Incus Unix socket, which
-may have administrator permissions. It is only for an already authorized
+**Trust boundary:** This helper uses `/var/lib/incus/unix.socket` directly,
+without a remote or ambient socket override. It is only for an already authorized
 host-side inspection path; NEVER expose it through an untrusted user RPC,
 Home Manager activation, state-service request handler, or arbitrary candidate
 file. A passing preflight does not establish that a service process lacks
 administrator credentials, owns the mount exclusively at the kernel level,
 can survive backup/restore, or authenticates restricted project principals.
+Repeated observations detect visible drift; they do not hold a writer fence.
 Continue #695/#696/#701/#704 real-Incus negative and recovery evidence.
