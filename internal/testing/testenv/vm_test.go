@@ -10,12 +10,12 @@ import (
 
 func TestVMScenariosAreFixedAndIndependent(t *testing.T) {
 	all := VMScenarios()
-	if len(all) != 18 {
-		t.Fatalf("expected eighteen enabled public scenarios, got %d", len(all))
+	if len(all) != 21 {
+		t.Fatalf("expected 21 enabled operator scenarios, got %d", len(all))
 	}
 	for _, scenario := range all {
-		if scenario.Name == "full-stack" {
-			t.Fatal("suspended full-stack scenario is discoverable")
+		if scenario.Name == "full-stack" || scenario.Name == "native-oci" {
+			t.Fatalf("unavailable operator scenario is discoverable: %s", scenario.Name)
 		}
 	}
 	if _, err := VMTestRequest("", "full-stack"); err == nil || !strings.Contains(err.Error(), "#1115") {
@@ -26,7 +26,7 @@ func TestVMScenariosAreFixedAndIndependent(t *testing.T) {
 	if err != nil || found.Target != "vm-harness-smoke" {
 		t.Fatalf("manifest changed: %#v, %v", found, err)
 	}
-	for _, invalid := range []string{"", "../smoke", "smoke;id", ".#vm-harness-smoke", "debug", "--unsafe"} {
+	for _, invalid := range []string{"", "../smoke", "smoke;id", ".#vm-harness-smoke", "debug", "--unsafe", "native-oci"} {
 		if _, err := VMScenario(invalid); err == nil {
 			t.Errorf("accepted unlisted scenario %q", invalid)
 		}
