@@ -214,10 +214,13 @@ nix --quiet develop --no-update-lock-file -c go test ./internal/testing/testenv 
 nix --quiet develop --no-update-lock-file -c just check report-json
 ```
 
-After the native port, validate before restoring the public launch paths,
-**only on a separately authorized dedicated KVM worker**: apply worker
-CPU/storage quotas and confirm no pilot credentials, routes, or Incus
-privileges. Preserve the private runner
+After the native port, validate before restoring the public launch paths.
+Trusted agents may run the disposable batch scenario on an authorized KVM
+development host under the [VM harness policy](vm-harness.md#security-and-execution-boundary),
+without independent worker admission. Bound CPU/storage use and keep pilot
+credentials, routes and host Incus out of test inputs and effects. For formal
+worker-isolation acceptance, use the separately authorized dedicated worker.
+Preserve the private runner
 result with revision and lock hash, reviewed staging receipts, phase outcomes,
 and packet-counter observations. Inspect failures without sharing raw driver
 transcripts. The runner has a 15-minute total runtime deadline, including OCI
