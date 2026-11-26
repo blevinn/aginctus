@@ -2,6 +2,8 @@ package testenv
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -36,6 +38,8 @@ type PayloadBundleReceipt struct {
 	Bytes           int64  `json:"bytes"`
 	Status          string `json:"status"`
 	SourceAuthority string `json:"source_authority"`
+	ManifestSHA256 string `json:"manifest_sha256,omitempty"`
+	ManifestBinding string `json:"manifest_binding,omitempty"`
 }
 
 // VerifyPayloadBundle consumes one bounded newline-terminated JSON manifest
@@ -44,6 +48,21 @@ type PayloadBundleReceipt struct {
 // untrusted and not proof of source identity; independent authorization and
 // transport deadlines must precede any future staging.
 func VerifyPayloadBundle(input io.Reader) (PayloadBundleReceipt, error) {
+	return verifyPayloadBundle(input, "")
+}
+
+// VerifyApprovedPayloadBundle matches the exact manifest bytes, including the
+// final newline, to an independently supplied digest before reading segments.
+// The digest must come from trusted configuration, never the supplied stream.
+// This operation does not establish the caller's authority or install bytes.
+func VerifyApprovedPayloadBundle(input io.Reader, expected string) (PayloadBundleReceipt, error) {
+	if !vmDigest.MatchString(expected) {
+		return PayloadBundleReceipt{}, errors.New("invalid approved payload manifest digest")
+	}
+	return verifyPayloadBundle(input, expected)
+}
+
+func verifyPayloadBundle(input io.Reader, expected string) (PayloadBundleReceipt, error) {
 	if input == nil {
 		return PayloadBundleReceipt{}, errors.New("payload bundle input required")
 	}
@@ -51,6 +70,11 @@ func VerifyPayloadBundle(input io.Reader) (PayloadBundleReceipt, error) {
 	header, err := r.ReadSlice('\n')
 	if err != nil || len(header) >= maxPayloadHeaderBytes {
 		return PayloadBundleReceipt{}, errors.New("payload manifest missing or too large")
+	}
+	manifestDigest := sha256.Sum256(header)
+	manifestHex := hex.EncodeToString(manifestDigest[:])
+	if expected != "" && manifestHex != expected {
+		return PayloadBundleReceipt{}, errors.New("payload manifest does not match approved digest")
 	}
 	decoder := json.NewDecoder(strings.NewReader(string(header)))
 	decoder.DisallowUnknownFields()
@@ -82,8 +106,13 @@ func VerifyPayloadBundle(input io.Reader) (PayloadBundleReceipt, error) {
 	if _, err := r.ReadByte(); err != io.EOF {
 		return PayloadBundleReceipt{}, errors.New("payload bundle has trailing bytes or unreadable end")
 	}
-	return PayloadBundleReceipt{
+	receipt := PayloadBundleReceipt{
 		SchemaVersion: 1, Segments: len(m.Segments), Bytes: total,
 		Status: "integrity_verified", SourceAuthority: "not_verified",
-	}, nil
+	}
+	if expected != "" {
+		receipt.ManifestSHA256 = manifestHex
+		receipt.ManifestBinding = "matched_expected_digest"
+	}
+	return receipt, nil
 }
