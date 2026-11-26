@@ -9,7 +9,6 @@ import json
 import re
 import shlex
 
-
 RECOVERY_UNIT = "aginctus-testenv-recovery.service"
 RECOVERY_TIMER = "aginctus-testenv-recovery.timer"
 ACCEPTANCE_UNIT = "aginctus-testenv-acceptance.service"
