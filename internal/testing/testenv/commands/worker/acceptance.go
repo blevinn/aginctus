@@ -43,5 +43,6 @@ func NewAcceptance(handlers Handlers) *cobra.Command {
 	cmd.Flags().StringVar(&cfg.ForeignInstance, "foreign-instance", "", "required: existing unsigned foreign VM sentinel")
 	cmd.Flags().BoolVar(&cfg.RequireNestedKVM, "require-nested-kvm", false, "require the fixed nested KVM guest execution probe")
 	cmd.Flags().StringVar(&cfg.Scenario, "scenario", "", "optional fixed scenario: native-instance (requires the reviewed scenario image)")
+	cmd.Flags().BoolVar(&cfg.RequirePayloadTransfer, "require-payload-transfer", false, "require a fixed synthetic guest file transfer and exact readback")
 	return cmd
 }
