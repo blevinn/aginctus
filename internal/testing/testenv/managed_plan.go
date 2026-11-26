@@ -43,6 +43,11 @@ func PlanManagedScenario(name string) (ManagedScenarioPlan, error) {
 			Status:        "not_admitted",
 			Blocking:      []string{"trusted_worker_admission", "managed_execution_transport", "independent_cleanup"},
 		}
+		if name == "native-instance" {
+			plan.Mode = "direct_guest"
+			plan.ResourceClass = "native_instance"
+			plan.Requires = []string{"pinned_scenario_image", "guest_local_incus", "bounded_storage", "outer_network_denial"}
+		}
 		if scenario.Networked {
 			plan.Network = "staging_required"
 			plan.Requires = append(plan.Requires, "immutable_oci_staging")
