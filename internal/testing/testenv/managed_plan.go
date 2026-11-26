@@ -13,6 +13,7 @@ type ManagedScenarioPlan struct {
 	SchemaVersion int      `json:"schema_version"`
 	Scenario      string   `json:"scenario"`
 	Target        string   `json:"target"`
+	ManagedTarget string   `json:"managed_target,omitempty"`
 	Mode          string   `json:"mode"`
 	Network       string   `json:"network"`
 	ResourceClass string   `json:"resource_class"`
@@ -36,6 +37,7 @@ func PlanManagedScenario(name string) (ManagedScenarioPlan, error) {
 			SchemaVersion: 1,
 			Scenario:      name,
 			Target:        scenario.Target,
+			ManagedTarget: scenario.ManagedTarget,
 			Mode:          "nested_batch",
 			Network:       "offline",
 			ResourceClass: "nested_batch",
@@ -43,10 +45,11 @@ func PlanManagedScenario(name string) (ManagedScenarioPlan, error) {
 			Status:        "not_admitted",
 			Blocking:      []string{"trusted_worker_admission", "managed_execution_transport", "independent_cleanup"},
 		}
-		if name == "native-instance" {
+		if scenario.ManagedTarget != "" {
 			plan.Mode = "direct_guest"
 			plan.ResourceClass = "native_instance"
 			plan.Requires = []string{"pinned_scenario_image", "guest_local_incus", "bounded_storage", "outer_network_denial"}
+			plan.Blocking = []string{"trusted_worker_admission", "managed_runtime_acceptance", "independent_cleanup"}
 		}
 		if scenario.Networked {
 			plan.Network = "staging_required"

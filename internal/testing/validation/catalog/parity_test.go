@@ -163,3 +163,21 @@ func TestCatalogReturnsDefensiveCopies(t *testing.T) {
 		t.Fatal("VM catalog shared mutable backing array")
 	}
 }
+
+func TestManagedFixtureTargetParity(t *testing.T) {
+	flake := readSource(t, "flake.nix")
+	just := readSource(t, "justfile")
+	for _, scenario := range VMScenarios() {
+		if scenario.ManagedTarget == "" {
+			continue
+		}
+		if scenario.Disabled || scenario.Networked || scenario.Surface != Operator {
+			t.Fatalf("managed fixture unexpectedly discoverable: %+v", scenario)
+		}
+		if !strings.Contains(flake, scenario.ManagedTarget+" =") ||
+			!strings.Contains(just, scenario.ManagedTarget+":") ||
+			!strings.Contains(just, ".#"+scenario.ManagedTarget) {
+			t.Fatalf("managed target drift: %+v", scenario)
+		}
+	}
+}

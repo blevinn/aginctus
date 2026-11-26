@@ -32,6 +32,9 @@ pkgs.testers.runNixOSTest {
   nodes.machine = { ... }: {
     imports = [ self.nixosModules.aginctusTestenvRecovery ];
     services.aginctusTestenvRecovery.enable = independentRecovery;
+    # Incus LVM storage requires the kernel thin-pool device-mapper target.
+    # Load it in the disposable worker, not on the calling host.
+    boot.kernelModules = [ "dm_thin_pool" ];
     virtualisation = {
       cores = 4;
       memorySize = 8192;
@@ -59,8 +62,12 @@ pkgs.testers.runNixOSTest {
     system.stateVersion = "26.05";
   };
   testScript =
-    (if independentRecovery then builtins.readFile ./independent_recovery_trial.py else "")
-    + (builtins.readFile ./fixture_receipt.py)
+    (
+      if independentRecovery then
+        builtins.readFile ./independent_recovery_trial.py
+      else
+        builtins.readFile ./fixture_receipt.py
+    )
     + ''
       import json
       import re
@@ -73,6 +80,7 @@ pkgs.testers.runNixOSTest {
       # absent. The disk is declared above, not selected by a caller or
       # discovered from host storage.
       machine.succeed("test -c /dev/kvm")
+      machine.succeed("dmsetup targets | grep -E '^thin-pool[[:space:]]'")
       machine.succeed("test -b /dev/vdb")
       assert machine.succeed("blockdev --getsize64 /dev/vdb").strip() == str(72 * 1024**3)
       assert machine.succeed("lsblk -nr -o MOUNTPOINT /dev/vdb").strip() == ""
@@ -166,7 +174,7 @@ pkgs.testers.runNixOSTest {
             # Only sanitized observations leave the worker. The Nix result can be
             # cached; the receipt does not assert this invocation created a new VM.
             machine.succeed("printf '%s\\n' " + shlex.quote(json.dumps(public, sort_keys=True)) + " > /tmp/testenv-fixture-receipt.json")
-            machine.copy_from_vm("/tmp/testenv-fixture-receipt.json")
+            machine.copy_from_machine("/tmp/testenv-fixture-receipt.json")
           ''
       }
     '';

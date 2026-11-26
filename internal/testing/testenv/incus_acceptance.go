@@ -110,22 +110,26 @@ func checkDisposableWorkerMarker(path string) error {
 // RunTrustedIncusAcceptance is an explicit operator-only real-daemon entrypoint.
 // Nothing calls it from normal checks, services, the public CLI or MCP.
 func RunTrustedIncusAcceptance(ctx context.Context, cfg IncusAcceptanceOptions) (IncusAcceptanceReport, error) {
-	var report IncusAcceptanceReport
+	report := IncusAcceptanceReport{FailureStage: "configuration"}
 	if err := cfg.validate(); err != nil {
 		return report, err
 	}
+	report.FailureStage = "worker_identity"
 	if os.Geteuid() == 0 {
 		return report, errors.New("acceptance requires a dedicated non-root worker")
 	}
+	report.FailureStage = "worker_marker"
 	if err := checkDisposableWorkerMarker(acceptanceMarker); err != nil {
 		return report, err
 	}
+	report.FailureStage = "worker_credential"
 	key, err := readTrustedWorkerKey(cfg.PolicyKeyPath)
 	if err != nil {
 		return report, err
 	}
 	defer clear(key)
 	// Trusted ancestors and same-UID writers remain the operator's boundary.
+	report.FailureStage = "report_root"
 	info, err := os.Lstat(cfg.ReportRoot)
 	if err != nil || !info.IsDir() || info.Mode().Perm() != 0700 {
 		return report, errors.New("report root must be a private existing directory")
@@ -134,11 +138,13 @@ func RunTrustedIncusAcceptance(ctx context.Context, cfg IncusAcceptanceOptions) 
 	if !ok || stat.Uid != uint32(os.Geteuid()) {
 		return report, errors.New("report root must be worker-owned")
 	}
+	report.FailureStage = "report_lock"
 	lock, err := filestate.LockRegistry(filepath.Join(cfg.ReportRoot, "acceptance"))
 	if err != nil {
 		return report, err
 	}
 	defer lock.Close()
+	report.FailureStage = "report_initialize"
 	var token [12]byte
 	if _, err := rand.Read(token[:]); err != nil {
 		return report, err
@@ -161,6 +167,7 @@ func RunTrustedIncusAcceptance(ctx context.Context, cfg IncusAcceptanceOptions) 
 		return saveIncusAcceptanceReport(dir, r)
 	}
 	report = newIncusAcceptanceReport(cfg, runID)
+	report.FailureStage = "evidence"
 	if err := save(report); err != nil {
 		return report, err
 	}
@@ -170,6 +177,7 @@ func RunTrustedIncusAcceptance(ctx context.Context, cfg IncusAcceptanceOptions) 
 	}
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
+	report.FailureStage = "worker_daemon"
 	client, err := ConnectTrustedIncusVMClient(ctx, cfg.SocketPath)
 	if err != nil {
 		return report, errors.New("acceptance worker daemon unavailable")
@@ -179,6 +187,7 @@ func RunTrustedIncusAcceptance(ctx context.Context, cfg IncusAcceptanceOptions) 
 		return report, err
 	}
 	defer clear(backend.policyKey)
+	report.FailureStage = "preflight"
 	return runIncusAcceptance(ctx, backend, cfg, report, save, waitAcceptanceExpiry)
 }
 

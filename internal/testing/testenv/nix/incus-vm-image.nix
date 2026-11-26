@@ -48,6 +48,9 @@ let
     ];
   };
   disk = guest.config.system.build.qemuImage;
+  # Incus rejects a zero creation_date as missing. Keep the metadata and
+  # tar timestamp deterministic, but use a positive Unix timestamp.
+  imageTimestamp = 1;
   # The VM image is intentionally NOT an unconditional flake check: creating
   # a full NixOS disk is a large, explicitly requested operator build.
   image =
@@ -72,7 +75,7 @@ let
             mkdir -p meta
             cat > meta/metadata.yaml <<'YAML'
         architecture: x86_64
-        creation_date: 0
+        creation_date: ${toString imageTimestamp}
         properties:
           os: NixOS
           description: Aginctus isolated disposable test VM${
@@ -80,7 +83,7 @@ let
           }
           type: virtual-machine
         YAML
-            tar --sort=name --mtime='@1' --owner=0 --group=0 --numeric-owner \
+            tar --sort=name --mtime='@${toString imageTimestamp}' --owner=0 --group=0 --numeric-owner \
               -C meta -cJf "$out/metadata.tar.xz" metadata.yaml
             chmod 0444 "$out/metadata.tar.xz"
       '';
