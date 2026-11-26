@@ -112,9 +112,14 @@ volume after verified instance deletion. It reports instance deletion counts
 separately from `root_volumes_absent` and `root_volumes_unverified`. A
 lingering or unreadable volume fails the sweep even when instance deletion
 succeeded. The sweep never deletes volumes directly or claims physical
-reclamation. A subsequent sweep cannot rediscover an already-absent instance;
-an operator must investigate unverified volume cleanup using independent
-inventory. The installed worker uses only the fixed local socket and pool.
+reclamation. The installed recovery service keeps signed pending references
+in its private systemd StateDirectory, `/var/lib/aginctus-testenv-recovery`.
+It records them durably before deletion and rechecks instance and volume
+absence on later sweeps, even when the instance no longer exists. The
+`pending_cleanup` and `recovered_pending` counts distinguish this from
+fresh deletion. Preserve this directory and the stable policy key across
+restarts. Corruption, drift or exhausted ledger capacity stops recovery;
+operator investigation is required, never blind removal of the ledger. The installed worker uses only the fixed local socket and pool.
 
 ## Operating procedures (separate authority)
 
