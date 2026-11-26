@@ -74,7 +74,11 @@ signed runs; do not regenerate it as a workaround for failure.
 Systemd copies the key using `LoadCredential` into a private
 credential directory. The service checks its open file descriptor for
 type, ownership, permissions and exact length before contacting the
-dedicated Incus daemon. The recovery subcommand accepts no command-line
+dedicated Incus daemon. In addition to a worker-owned private file, the
+loader accepts systemd's root-owned read-only named-user ACL representation
+only in the current worker service's credential directory, with no owning
+group or other access and no additional principals. The ACL mask can make
+its mode appear as 0440; ordinary group-readable files remain rejected. The recovery subcommand accepts no command-line
 arguments, uses no default Incus remote, rejects root, and prints only
 bounded aggregate success/failure counts.
 
