@@ -7,6 +7,9 @@
 }:
 let
   pkgs = import nixpkgs { inherit system; };
+  nestedKvmProbe = pkgs.writeShellScriptBin "aginctus-testenv-kvm-probe" ''
+    exec ${pkgs.python3}/bin/python3 ${./kvm_probe.py} ${pkgs.qemu}/bin/qemu-system-x86_64
+  '';
   guest = nixpkgs.lib.nixosSystem {
     inherit system;
     modules = [
@@ -32,6 +35,7 @@ let
           environment.systemPackages = [
             pkgs.git
             pkgs.util-linux
+            nestedKvmProbe
           ];
         }
       )
