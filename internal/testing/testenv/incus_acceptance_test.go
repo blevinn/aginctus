@@ -19,6 +19,8 @@ type acceptanceFake struct {
 	lingeringVolume   bool
 	badProbe          bool
 	badNestedProbe    bool
+	badScenario       bool
+	scenarioStarted   bool
 	createUncertain   bool
 	changeForeign     bool
 	commands          [][]string
@@ -48,6 +50,19 @@ func (c *acceptanceFake) ExecGuest(_ context.Context, _ string, argv []string) (
 			return VMExecResult{ExitCode: 1, Stderr: "private probe diagnostics"}, nil
 		}
 		return VMExecResult{Stdout: "nested_kvm_guest_execution_verified\n"}, nil
+	}
+	if len(argv) == 9 && argv[0] == systemctlGuest && argv[1] == "show" && argv[8] == nativeScenarioUnit {
+		if !c.scenarioStarted {
+			return VMExecResult{Stdout: "LoadState=loaded\nActiveState=inactive\nSubState=dead\nResult=success\nExecMainCode=0\nExecMainStatus=0\n"}, nil
+		}
+		if c.badScenario {
+			return VMExecResult{Stdout: "LoadState=loaded\nActiveState=failed\nSubState=failed\nResult=exit-code\nExecMainCode=1\nExecMainStatus=1\n"}, nil
+		}
+		return VMExecResult{Stdout: "LoadState=loaded\nActiveState=active\nSubState=exited\nResult=success\nExecMainCode=1\nExecMainStatus=0\n"}, nil
+	}
+	if len(argv) == 4 && argv[0] == systemctlGuest && argv[1] == "start" && argv[2] == "--no-block" && argv[3] == nativeScenarioUnit {
+		c.scenarioStarted = true
+		return VMExecResult{}, nil
 	}
 	if len(argv) != 2 || argv[0] != "/run/current-system/sw/bin/incus" || argv[1] != "--version" {
 		return VMExecResult{}, errors.New("unexpected command")
@@ -141,7 +156,7 @@ func TestIncusAcceptanceUsesSignedBackendAndActualScopedExpiry(t *testing.T) {
 			t.Fatalf("missing actual check %s: %+v", id, r)
 		}
 	}
-	for _, id := range []string{"crash_reboot", "nested_kvm_guest_execution", "nested_isolation", "storage_reclamation", "report_retention"} {
+	for _, id := range []string{"crash_reboot", "nested_kvm_guest_execution", "native_instance_scenario", "nested_isolation", "storage_reclamation", "report_retention"} {
 		if checkStatus(r, id) != "not_verified" {
 			t.Fatalf("overclaimed %s", id)
 		}
@@ -328,5 +343,40 @@ func TestIncusAcceptanceRequiresNestedKVMOnlyWhenSelected(t *testing.T) {
 		if checkStatus(r, "nested_isolation") != "not_verified" || len(c.vms) != 1 || checkStatus(r, "instance_cleanup") != "pass" {
 			t.Fatalf("overclaimed isolation or failed cleanup: %+v", r)
 		}
+	}
+}
+
+func TestIncusAcceptanceRunsFixedNativeScenarioAndCleans(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		c, b, cfg := acceptanceFixture(t)
+		cfg.Scenario = nativeInstanceScenario
+		c.badScenario = fail
+		r, err := runAcceptanceFixture(t, b, cfg, func(IncusAcceptanceReport) error { return nil }, func(_ context.Context, expiry time.Time) error {
+			b.now = func() time.Time { return expiry }
+			return nil
+		})
+		if !c.scenarioStarted || len(c.vms) != 1 || checkStatus(r, "instance_cleanup") != "pass" {
+			t.Fatalf("scenario or cleanup missing: %+v %v", r, err)
+		}
+		if fail {
+			if err == nil || checkStatus(r, "native_instance_scenario") != "fail" || r.Status != "fail" || r.FailureStage != "native_instance_scenario" || checkStatus(r, "root_volumes") != "pass" {
+				t.Fatalf("failed scenario accepted: %+v %v", r, err)
+			}
+		} else if err != nil || checkStatus(r, "native_instance_scenario") != "pass" || r.Scenario != nativeInstanceScenario || r.Status != "pass" {
+			t.Fatalf("scenario evidence missing: %+v %v", r, err)
+		}
+	}
+}
+
+func TestIncusAcceptanceRejectsOtherScenarios(t *testing.T) {
+	_, _, cfg := acceptanceFixture(t)
+	cfg.Scenario = "full-stack"
+	if cfg.validate() == nil {
+		t.Fatal("unreviewed scenario accepted")
+	}
+	cfg.Scenario = nativeInstanceScenario
+	cfg.RequireNestedKVM = true
+	if cfg.validate() == nil {
+		t.Fatal("incompatible image gates accepted")
 	}
 }
