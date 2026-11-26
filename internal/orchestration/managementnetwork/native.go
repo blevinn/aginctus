@@ -125,6 +125,9 @@ func (s Spec) NativePrerequisite(id, revision string, reader native.NetworkReade
 
 // BindNativePrerequisite binds an independently authorized read-only bridge check.
 func BindNativePrerequisite(id, revision string, verify func(context.Context) error) (orchestration.NativeResource, orchestration.NativeResourceBinding, error) {
+	if verify == nil {
+		return orchestration.NativeResource{}, orchestration.NativeResourceBinding{}, errors.New("explicit authorized host bridge observer required")
+	}
 	return orchestration.NativeResource{ID: id, Kind: orchestration.NativeManagementNetwork}, orchestration.NativeResourceBinding{
 		Validate: func() error { return nil },
 		Preview: func(ctx context.Context) (orchestration.NativePreview, error) {

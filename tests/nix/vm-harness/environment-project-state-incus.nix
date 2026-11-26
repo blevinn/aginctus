@@ -253,7 +253,8 @@ pkgs.testers.runNixOSTest {
     machine.fail(state_command(0, "promoter", "promote --expect genesis"))
     save(private + "/execution.json", {"apiVersion": "aginctus.dev/project-execution-policy/v1alpha1", "grants": [
         {"peerSha256": fingerprint("promoter"), **binding, "environmentId": descriptors[0]["id"],
-         "revisionId": revisions[0]["id"], "workloadId": "worker", "operation": "reconcile"}]})
+         "revisionId": revisions[0]["id"], "workloadId": "worker", "operation": action}
+        for action in ("reconcile", "stop", "remove")]})
     machine.succeed(f"incus file push {private}/execution.json environment-state-service/etc/aginctus/execution.json"
                     " --project ${project} --uid 0 --gid 0 --mode 0644")
     reconcile = f"reconcile --workload worker --expect {revisions[0]['id']} --host-grant /etc/aginctus-workload-host.json"
@@ -268,6 +269,14 @@ pkgs.testers.runNixOSTest {
     assert not second["result"]["native"]["effects"], "repeat reconciliation submitted writes"
     journal = f"${mount}/environments/{descriptors[0]['id']}/native-operations/{first['operationId']}.json"
     machine.succeed(owner + f" cat {journal} | jq -e '.status == \"completed\"'")
+    incarnation = machine.succeed("incus list selected-worker --project ${project} --format json | jq -er '.[0].created_at'").strip()
+    machine.fail(state_command(0, "promoter", reconcile + " --operation stop --instance-created-at 2000-01-01T00:00:00Z"))
+    stopped = json.loads(machine.succeed(state_command(0, "promoter", reconcile + f" --operation stop --instance-created-at {incarnation}"), timeout=90))
+    assert [effect["effect"]["action"] for effect in stopped["result"]["native"]["effects"]] == ["stop"]
+    machine.succeed("incus list selected-worker --project ${project} --format json | jq -e 'length == 1 and .[0].status == \"Stopped\"'")
+    removed = json.loads(machine.succeed(state_command(0, "promoter", reconcile + f" --operation remove --instance-created-at {incarnation}"), timeout=90))
+    assert [effect["effect"]["action"] for effect in removed["result"]["native"]["effects"]] == ["delete"]
+    machine.fail("incus info selected-worker --project ${project}")
 
     def digests():
         paths = ["${mount}/authority.json"]

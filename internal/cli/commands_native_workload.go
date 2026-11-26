@@ -4,11 +4,13 @@ import (
 	"errors"
 	"io"
 	"os"
+	"time"
 
 	clioutput "github.com/blevinn/aginctus/internal/cli/output"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/nativelifecycle"
 	"github.com/blevinn/aginctus/internal/orchestration"
+	"github.com/blevinn/aginctus/internal/orchestration/native"
 	"github.com/blevinn/aginctus/pkg/api"
 	"github.com/blevinn/aginctus/pkg/client"
 	"github.com/spf13/cobra"
@@ -21,7 +23,7 @@ type workloadReconcileDocument struct {
 }
 
 func registerNativeWorkloadReconcile(state *cobra.Command, out io.Writer, format func() (clioutput.Format, error), project, id *string) {
-	var workload, revision, grant string
+	var workload, revision, grant, operation, createdAt string
 	cmd := &cobra.Command{
 		Use: "reconcile", Short: "Reconcile one explicitly selected accepted native workload", Hidden: true,
 		Args: cobra.NoArgs,
@@ -40,7 +42,14 @@ func registerNativeWorkloadReconcile(state *cobra.Command, out io.Writer, format
 			if config == "" {
 				return errors.New("state reconcile requires AGINCTUS_RESTRICTED_READ_CONFIG")
 			}
-			result, op, err := nativelifecycle.ReconcileInstalledWorkload(cmd.Context(), config, grant, *project, *id, revision, workload)
+			var incarnation time.Time
+			if createdAt != "" {
+				incarnation, err = time.Parse(time.RFC3339Nano, createdAt)
+				if err != nil || incarnation.IsZero() {
+					return api.NewError(api.CodeInvalidArgument, "instance creation timestamp must be RFC3339")
+				}
+			}
+			result, op, err := nativelifecycle.ExecuteInstalledWorkload(cmd.Context(), config, grant, *project, *id, revision, workload, native.ProjectInstanceOperation(operation), incarnation)
 			if op == "" && err != nil {
 				return err
 			}
@@ -52,6 +61,8 @@ func registerNativeWorkloadReconcile(state *cobra.Command, out io.Writer, format
 	cmd.Flags().StringVar(&workload, "workload", "", "Exact accepted workload ID")
 	cmd.Flags().StringVar(&revision, "expect", "", "Exact accepted revision ID")
 	cmd.Flags().StringVar(&grant, "host-grant", "", "Independently installed administrator-owned attachment grant")
+	cmd.Flags().StringVar(&operation, "operation", "reconcile", "Lifecycle action: reconcile, stop, or remove (requires its own grant)")
+	cmd.Flags().StringVar(&createdAt, "instance-created-at", "", "Expected live instance creation timestamp (RFC3339; required for stop or remove)")
 	for _, flag := range []string{"workload", "expect", "host-grant"} {
 		_ = cmd.MarkFlagRequired(flag)
 	}

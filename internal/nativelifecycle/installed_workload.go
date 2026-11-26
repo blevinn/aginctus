@@ -12,10 +12,14 @@ import (
 	check "github.com/blevinn/aginctus/pkg/orchestration"
 )
 
-// ReconcileInstalledWorkload composes one selected workload with a read-only
+// ExecuteInstalledWorkload composes one selected workload with a read-only
 // management bridge prerequisite. No controller, fixture store, ambient SDK
 // client, or host mutation transport participates.
-func ReconcileInstalledWorkload(ctx context.Context, configPath, hostGrantPath, project, id, revision, workloadID string) (result orchestration.Result, operationID string, err error) {
+func ExecuteInstalledWorkload(ctx context.Context, configPath, hostGrantPath, project, id, revision, workloadID string, operation native.ProjectInstanceOperation, incarnation time.Time) (result orchestration.Result, operationID string, err error) {
+	if operation != native.ReconcileInstance && operation != native.StopInstance && operation != native.RemoveInstance ||
+		(operation == native.ReconcileInstance) != incarnation.IsZero() {
+		return result, "", errors.New("explicit stop or removal requires an exact instance creation timestamp")
+	}
 	grant, err := environment.ReadWorkloadHostGrant(hostGrantPath)
 	if err != nil {
 		return result, "", err
@@ -33,16 +37,17 @@ func ReconcileInstalledWorkload(ctx context.Context, configPath, hostGrantPath, 
 		return result, "", err
 	}
 	defer sdk.Disconnect()
-	session, candidate, closeReads, err := environment.OpenProjectExecution(ctx, operator, project, id, revision, workloadID, "reconcile")
+	session, candidate, closeReads, err := environment.OpenProjectExecution(ctx, operator, project, id, revision, workloadID, string(operation))
 	if err != nil {
 		return result, "", err
 	}
 	defer closeReads()
 	operationID = session.ID()
+	completed := false
 	defer func() {
 		finish, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
-		err = errors.Join(err, session.Finish(finish, err == nil))
+		err = errors.Join(err, session.Finish(finish, completed))
 	}()
 	accepted := session.Revision()
 	if err := accepted.ValidateAgainst(candidate); err != nil {
@@ -51,6 +56,11 @@ func ReconcileInstalledWorkload(ctx context.Context, configPath, hostGrantPath, 
 	preview, err := orchestration.PreviewAcceptedIntent(accepted, candidate, orchestration.AcceptedIntentSelection{Workloads: []string{workloadID}})
 	if err != nil {
 		return result, operationID, err
+	}
+	for _, w := range candidate.Workloads {
+		if w.ID == workloadID && w.InstanceName != grant.Instance {
+			return result, operationID, errors.New("accepted instance differs from independent workload grant")
+		}
 	}
 	bridge := managementnetwork.Spec{Name: grant.Bridge, IPv4Address: grant.IPv4Address, IPv4NAT: grant.IPv4NAT,
 		IPv4Routing: grant.IPv4Routing, IPv4DHCPGateway: grant.IPv4DHCPGateway, IPv6Address: grant.IPv6Address}
@@ -88,12 +98,24 @@ func ReconcileInstalledWorkload(ctx context.Context, configPath, hostGrantPath, 
 			}
 			return verifyHost(ctx)
 		}}
-	plan, resources, err := composer.BindLifecycle(candidate, preview.Selection, false)
+	requested := preview.Selection
+	if operation != native.ReconcileInstance {
+		requested.Resources = []orchestration.NativeResource{{ID: workloadID, Kind: orchestration.NativeWorkload}}
+	}
+	var plan orchestration.NativePlan
+	var resources map[string]orchestration.NativeResourceBinding
+	if operation == native.ReconcileInstance {
+		plan, resources, err = composer.BindLifecycle(candidate, requested, false)
+	} else {
+		plan, resources, err = composer.BindTeardown(candidate, requested, orchestration.LocalLifecycleTeardown{
+			Operation: operation, Instances: map[string]time.Time{workloadID: incarnation},
+		})
+	}
 	if err != nil {
 		return result, operationID, err
 	}
 	bound, ok := resources[workloadID]
-	if !ok || bound.Apply == nil || len(resources) != 2 {
+	if !ok || bound.Apply == nil || len(resources) != len(requested.Resources) {
 		return result, operationID, errors.New("unexpected native workload graph")
 	}
 	apply := bound.Apply
@@ -126,17 +148,20 @@ func ReconcileInstalledWorkload(ctx context.Context, configPath, hostGrantPath, 
 				return ctx.Err()
 			}},
 		VerifyPlan: func(ctx context.Context, verified orchestration.NativePlan) error {
-			if verified.Revision != accepted || len(verified.Resources) != 2 || verified.Resources[0].ID != ManagementNetworkID ||
-				verified.Resources[1].ID != workloadID {
+			if verified.Revision != accepted || len(verified.Resources) != len(requested.Resources) ||
+				verified.Resources[len(verified.Resources)-1].ID != workloadID ||
+				(operation == native.ReconcileInstance && verified.Resources[0].ID != ManagementNetworkID) {
 				return errors.New("native workload selection changed")
 			}
 			return verifyHost(ctx)
 		}, BeforeEffect: func(ctx context.Context, rev environment.AcceptedRevision, resource orchestration.NativeResource, effect orchestration.NativeEffect) error {
-			if rev != accepted || resource.Kind != orchestration.NativeWorkload || resource.ID != workloadID || effect.Target != workloadID ||
-				(effect.Action != native.Create && effect.Action != native.Start) {
+			permitted := operation == native.ReconcileInstance && (effect.Action == native.Create || effect.Action == native.Start) ||
+				operation == native.StopInstance && effect.Action == native.Stop || operation == native.RemoveInstance && effect.Action == native.Delete
+			if rev != accepted || resource.Kind != orchestration.NativeWorkload || resource.ID != workloadID || effect.Target != workloadID || !permitted {
 				return errors.New("out-of-scope native workload effect")
 			}
 			return verifyHost(ctx)
 		}}, orchestration.ExecuteOptions{})
+	completed = err == nil
 	return result, operationID, err
 }
