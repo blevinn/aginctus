@@ -39,5 +39,6 @@ func New(h Handlers) *cobra.Command {
 	}
 	root.AddCommand(newScenario())
 	root.AddCommand(newBootstrap(), NewPreflight(h), NewAcceptance(h), NewSweep(h))
+	root.AddCommand(newPayload())
 	return root
 }
