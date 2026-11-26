@@ -161,7 +161,7 @@ pkgs.testers.runNixOSTest {
     # TLS identity. No CLI-side filtering, broken transport, or empty foreign
     # project may masquerade as isolation. Root's guest-local API is only an
     # existence control, never evidence that the operator is confined.
-    def api_get(path, admin=False, patch=None):
+    def api_get(path, admin=False, patch=None, post=None, timeout=15):
         if admin:
             curl = "curl --silent --show-error --unix-socket /var/lib/incus/unix.socket"
             url = "http://localhost" + path
@@ -170,7 +170,9 @@ pkgs.testers.runNixOSTest {
             url = "https://127.0.0.1:8443" + path
         if patch is not None:
             curl += " --request PATCH --header 'Content-Type: application/json' --data " + shlex.quote(json.dumps(patch))
-        output = machine.succeed(curl + " --max-time 15 --write-out '\\n%{http_code}' " + shlex.quote(url))
+        if post is not None:
+            curl += " --request POST --header 'Content-Type: application/json' --data " + shlex.quote(json.dumps(post))
+        output = machine.succeed(curl + f" --max-time {timeout} --write-out '\\n%{{http_code}}' " + shlex.quote(url), timeout=timeout + 10)
         body, status = output.rsplit("\n", 1)
         response = json.loads(body)
         print("AUTHZ API: " + ("admin " if admin else "operator ") + path + " => HTTP " + status)
@@ -497,6 +499,73 @@ pkgs.testers.runNixOSTest {
       "incus storage volume get default foreign-sentinel user.authz_sentinel --project unrelated"
     ).strip() == "foreign-only", "foreign volume changed during attachment attempt"
     print("INCUS PROJECT STORAGE: permitted scoped custom volume attachment; foreign image and volume invisible/denied to restricted TLS client")
+
+    # Feasibility probe for protected placement. Workload TLS must get an
+    # authorization denial for real protected guest and backup endpoints, not
+    # a CLI preflight failure or a lookup against an empty project.
+    protected_guest = "incus --project unrelated"
+    machine.succeed(f"{protected_guest} init foreign-image protected-service --storage default", timeout=180)
+    machine.succeed(f"{protected_guest} config device add protected-service state disk pool=default source=foreign-sentinel path=/mnt/protected")
+    machine.succeed(f"{protected_guest} start protected-service", timeout=180)
+    machine.wait_until_succeeds(f"{protected_guest} exec protected-service -- test -d /mnt/protected", timeout=60)
+    machine.succeed(f"{protected_guest} exec protected-service -- touch /mnt/protected/synthetic-marker")
+    machine.succeed(f"{protected_guest} file pull protected-service/mnt/protected/synthetic-marker /tmp/protected-marker")
+    gi = "/1.0/instances/protected-service"
+    gv = "/1.0/storage-pools/default/volumes/custom/foreign-sentinel"
+    protected_project = "?project=unrelated"
+
+    def protected_denial(path, post=None, patch=None):
+        status, response = api_get(path, post=post, patch=patch)
+        assert status == 403 and response["type"] == "error" and response["error_code"] == 403, f"expected daemon authorization denial for {path}: {status}"
+
+    def wait_for_admin_task(status, reply, project_query):
+        assert status == 202 and reply["operation"].startswith("/1.0/operations/")
+        wait_path = reply["operation"].split("?", 1)[0] + "/wait" + project_query
+        status, reply = api_get(wait_path, admin=True, timeout=120)
+        assert status == 200 and reply["metadata"]["status_code"] == 200
+
+    protected_denial(gi + "/exec" + protected_project, post={"command": ["true"], "wait-for-websocket": False})
+    protected_denial(gi + "/files" + protected_project + "&path=/mnt/protected/synthetic-marker")
+    protected_denial(gi + protected_project, patch={"config": {"user.authz_sentinel": "forbidden"}})
+    protected_denial(gi + protected_project, patch={"devices": {"state": {"type": "none"}}})
+    protected_denial("/1.0/profiles/foreign-sentinel" + protected_project, patch={"config": {"user.authz_sentinel": "forbidden"}})
+    machine.succeed(f"{protected_guest} stop protected-service --force", timeout=180)
+    for path in (gi, gv):
+        protected_denial(path + "/snapshots" + protected_project, post={"name": "blocked"})
+        protected_denial(path + "/backups" + protected_project, post={"name": "blocked"})
+    machine.succeed(f"{protected_guest} snapshot create protected-service protected-snap")
+    machine.succeed(f"{protected_guest} storage volume snapshot create default foreign-sentinel protected-snap")
+    for path in (gi, gv):
+        snap = path + "/snapshots/protected-snap" + protected_project
+        assert api_get(snap, admin=True)[0] == 200
+        protected_denial(snap)
+    # Keep named backup positive controls long enough to check export.
+    for path in (gi, gv):
+        status, reply = api_get(path + "/backups" + protected_project, admin=True, post={"name": "protected-backup"})
+        wait_for_admin_task(status, reply, protected_project)
+        backup = path + "/backups/protected-backup"
+        assert api_get(backup + protected_project, admin=True)[0] == 200
+        export = backup + "/export" + protected_project
+        machine.succeed("curl --fail --silent --show-error --max-time 90 --output /tmp/protected-backup"
+                        " --unix-socket /var/lib/incus/unix.socket " + shlex.quote("http://localhost" + export))
+        machine.succeed("test -s /tmp/protected-backup")
+        protected_denial(export)
+
+    workload_project = "?project=aginctus-authz"
+    copy = {
+      "name": "denied-protected-copy", "type": "container",
+      "source": {"type": "copy", "source": "protected-service", "project": "unrelated", "instance_only": True},
+      # Clear the inherited custom device. The target project cannot resolve
+      # that volume; an invalid target must not masquerade as denied source access.
+      "devices": {"state": {"type": "none"}},
+    }
+    protected_denial("/1.0/instances" + workload_project, post=copy)
+    machine.succeed(f"{protected_guest} storage volume show default foreign-sentinel | grep -F protected-service")
+    machine.fail("incus info denied-protected-copy --project aginctus-authz")
+    status, reply = api_get("/1.0/instances" + workload_project, admin=True, post=copy)
+    wait_for_admin_task(status, reply, workload_project)
+    machine.succeed("incus delete denied-protected-copy --project aginctus-authz")
+    print("INCUS PROTECTED PLACEMENT: protected data-plane probes use real admin-observed resources")
 
     # Revocation and re-enrollment must be enforced by Incus, not by a
     # cached CLI project selector. Establish a positive control on the same
