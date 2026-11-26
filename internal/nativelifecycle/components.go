@@ -34,6 +34,8 @@ type ManagementNetwork struct {
 	// VerifyBinding confirms the observer and the exact bridge policy are
 	// independently approved for the enrolled project. It must be read-only.
 	VerifyBinding func(context.Context, environment.Binding, managementnetwork.Spec) error
+	// VerifyObserved is a read-only scoped observer when no local transport is supplied.
+	VerifyObserved func(context.Context) error
 }
 
 type Selection struct {
@@ -78,22 +80,28 @@ func build(enrolled environment.Descriptor, revision environment.AcceptedRevisio
 		if op == native.StopInstance || op == native.RemoveInstance {
 			return nil, nil
 		}
-		if bridge.Reader == nil || bridge.VerifyBinding == nil || bridge.Spec.Name != name {
+		if (bridge.Reader == nil && bridge.VerifyObserved == nil) || bridge.VerifyBinding == nil || bridge.Spec.Name != name {
 			return nil, errors.New("selected attachment requires the exact approved management bridge")
 		}
 		if verifyBridge == nil {
 			verifyBinding := func(ctx context.Context) error { return bridge.VerifyBinding(ctx, enrolled.Binding, bridge.Spec) }
-			resource, binding, err := bridge.Spec.NativePrerequisite(ManagementNetworkID, revision.ID, bridge.Reader, verifyBinding)
-			if err != nil {
-				return nil, err
-			}
-			add(resource, binding)
 			verifyBridge = func(ctx context.Context) error {
 				if err := verifyBinding(ctx); err != nil {
 					return err
 				}
+				if bridge.VerifyObserved != nil {
+					return bridge.VerifyObserved(ctx)
+				}
 				return bridge.Spec.VerifyNative(ctx, bridge.Reader)
 			}
+			if _, err := bridge.Spec.NativeIntent(); err != nil {
+				return nil, err
+			}
+			resource, binding, err := managementnetwork.BindNativePrerequisite(ManagementNetworkID, revision.ID, verifyBridge)
+			if err != nil {
+				return nil, err
+			}
+			add(resource, binding)
 		}
 		return []string{ManagementNetworkID}, nil
 	}

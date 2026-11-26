@@ -62,7 +62,17 @@ func ReconcileInstalledWorkload(ctx context.Context, configPath, hostGrantPath, 
 		return native.VerifyProjectTransport(ctx, sdk, candidate.Environment.Binding, operator.TrustedServerSHA256)
 	}
 	composer := LocalComposer{Environment: candidate.Environment, TrustedServerPin: operator.TrustedServerSHA256, Client: sdk,
-		Bridge: ManagementNetwork{Spec: bridge, Reader: sdk, VerifyBinding: func(ctx context.Context, binding environment.Binding, spec managementnetwork.Spec) error {
+		Bridge: ManagementNetwork{Spec: bridge, VerifyObserved: func(ctx context.Context) error {
+			intent, err := bridge.NativeIntent()
+			if err != nil {
+				return err
+			}
+			observed, err := native.PlanProjectNetworkPrerequisite(ctx, intent, sdk, candidate.Environment.Binding, operator.TrustedServerSHA256)
+			if err != nil || observed.Action != native.Unchanged {
+				return errors.New("approved bridge unavailable or not converged")
+			}
+			return nil
+		}, VerifyBinding: func(ctx context.Context, binding environment.Binding, spec managementnetwork.Spec) error {
 			if binding != candidate.Environment.Binding || spec != bridge {
 				return errors.New("management bridge outside grant")
 			}

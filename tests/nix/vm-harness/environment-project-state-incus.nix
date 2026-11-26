@@ -13,39 +13,43 @@ let
   serviceUID = 910;
   incusIP = "10.89.37.1";
   serviceIP = "10.89.37.2";
-  guestImage = nixpkgs.lib.nixosSystem {
-    inherit system;
-    modules = [
-      "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
-      {
-        system.stateVersion = "26.05";
-        networking.useDHCP = false;
-        networking.interfaces.eth0.ipv4.addresses = [
-          {
-            address = serviceIP;
-            prefixLength = 24;
-          }
-        ];
-        networking.firewall.interfaces.eth0.allowedTCPPorts = [ 8444 ];
-        users.groups.aginctusproject.gid = serviceUID;
-        users.users.aginctusproject = {
-          uid = serviceUID;
-          isSystemUser = true;
-          group = "aginctusproject";
-        };
-        environment.systemPackages = [
-          cli
-          pkgs.util-linux
-        ];
-        # Deliberately not started until mount, restricted TLS and policy exist.
-        systemd.services.aginctus-project-state.serviceConfig = {
-          User = "aginctusproject";
-          Environment = "AGINCTUS_PROJECT_STATE_READ_SERVICE_CONFIG=/run/aginctus/state.json";
-          ExecStart = "${cli}/bin/aginctus serve project-state";
-        };
-      }
-    ];
-  };
+  mkGuest =
+    address:
+    nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
+        {
+          system.stateVersion = "26.05";
+          networking.useDHCP = false;
+          networking.interfaces.eth0.ipv4.addresses = [
+            {
+              inherit address;
+              prefixLength = 24;
+            }
+          ];
+          networking.firewall.interfaces.eth0.allowedTCPPorts = [ 8444 ];
+          users.groups.aginctusproject.gid = serviceUID;
+          users.users.aginctusproject = {
+            uid = serviceUID;
+            isSystemUser = true;
+            group = "aginctusproject";
+          };
+          environment.systemPackages = [
+            cli
+            pkgs.util-linux
+          ];
+          # Deliberately not started until mount, restricted TLS and policy exist.
+          systemd.services.aginctus-project-state.serviceConfig = {
+            User = "aginctusproject";
+            Environment = "AGINCTUS_PROJECT_STATE_READ_SERVICE_CONFIG=/run/aginctus/state.json";
+            ExecStart = "${cli}/bin/aginctus serve project-state";
+          };
+        }
+      ];
+    };
+  guestImage = mkGuest serviceIP;
+  workerImage = mkGuest "10.89.37.3";
 in
 pkgs.testers.runNixOSTest {
   name = "aginctus-environment-project-state-incus";
@@ -100,7 +104,8 @@ pkgs.testers.runNixOSTest {
                     f"install -m 0644 {private}/incus.crt /var/lib/incus/server.crt",
                     "systemctl start incus.socket incus.service")
     machine.wait_for_unit("incus.service", timeout=60)
-    machine.succeed("incus network create state-mgmt ipv4.address=${incusIP}/24 ipv4.dhcp=false ipv4.nat=false ipv6.address=none",
+    machine.succeed("incus network create state-mgmt ipv4.address=${incusIP}/24 ipv4.dhcp=false ipv4.nat=false ipv6.address=none"
+                    " ipv4.routing=false ipv4.dhcp.gateway=none user.aginctus.managed=true user.aginctus.resource=management-network",
                     "incus config set core.https_address=${incusIP}:8443")
     machine.succeed("incus project create ${project} -c restricted=true -c features.images=true"
                     " -c features.profiles=true -c features.storage.volumes=true -c features.networks=false"
@@ -152,15 +157,24 @@ pkgs.testers.runNixOSTest {
     machine.succeed(f"cat {private}/promoter.crt {private}/member.crt >{private}/peers.pem")
     compose(private + "/state.json", {"apiVersion": "aginctus.dev/project-state-read-service/v1alpha1",
              "project": "${project}", "listenAddress": "${serviceIP}:8444", "mountPath": "${mount}",
-             "operatorConfigFile": "/run/aginctus/incus.json", "promotionPolicyFile": "/etc/aginctus/promotion.json"},
+              "operatorConfigFile": "/run/aginctus/incus.json", "promotionPolicyFile": "/etc/aginctus/promotion.json",
+              "executionPolicyFile": "/etc/aginctus/execution.json"},
             {"serviceCertificatePem": "state.crt", "servicePrivateKeyPem": "state.key", "trustedClientCertificatesPem": "peers.pem"})
 
     operator_dir = "/home/stateoperator/state"
     machine.succeed(f"install -d -m 0700 -o stateoperator {operator_dir}")
+    machine.succeed("incus image import ${guestImage.config.system.build.metadata}/tarball/* ${guestImage.config.system.build.tarball}/tarball/* --alias state-guest --project ${project}", timeout=180)
+    machine.succeed("incus image import ${workerImage.config.system.build.metadata}/tarball/* ${workerImage.config.system.build.tarball}/tarball/* --alias worker-guest --project ${project}", timeout=180)
+    image = machine.succeed("incus image info worker-guest --project ${project} | awk '/^Fingerprint:/ { print $2 }'").strip()
     grants = []
     for i, desc in enumerate(descriptors):
         candidate = {"apiVersion": "aginctus.dev/environment/v1alpha1", "kind": "EnvironmentCandidate",
                      "environment": desc, "selectedWorkloads": [], "workloads": []}
+        if i == 0:
+            candidate["selectedWorkloads"] = ["worker"]
+            candidate["workloads"] = [{"id": "worker", "instanceName": "selected-worker", "instanceType": "container",
+                                       "imageFingerprint": image, "profiles": [], "ensureRunning": True,
+                                       "native": {"runtime": "fixture", "storagePool": "default", "managementNetwork": "state-mgmt"}}]
         candidate_path = f"{operator_dir}/candidate-{i}.json"
         save(candidate_path, candidate)
         machine.succeed(f"chown stateoperator {candidate_path}")
@@ -174,7 +188,12 @@ pkgs.testers.runNixOSTest {
             machine.succeed(f"chown stateoperator {path}")
     save(private + "/promotion.json", {"apiVersion": "aginctus.dev/project-promotion-policy/v1alpha1", "grants": grants})
 
-    machine.succeed("incus image import ${guestImage.config.system.build.metadata}/tarball/* ${guestImage.config.system.build.tarball}/tarball/* --alias state-guest --project ${project}", timeout=180)
+    save(private + "/execution.json", {"apiVersion": "aginctus.dev/project-execution-policy/v1alpha1", "grants": []})
+    save(private + "/host.json", {"apiVersion": "aginctus.dev/workload-host-grant/v1alpha1", **binding,
+                                 "environmentId": descriptors[0]["id"], "workloadId": "worker", "instance": "selected-worker",
+                                 "pool": "default", "bridge": "state-mgmt", "ipv4Address": "${incusIP}/24",
+                                 "ipv4Nat": False, "ipv4Routing": False, "ipv4DhcpGateway": "none", "ipv6Address": "none"})
+    machine.succeed(f"install -m 0644 {private}/host.json /etc/aginctus-workload-host.json")
     machine.succeed("incus storage volume create default environment-accepted-data --project ${project}"
                     " user.aginctus.managed=true user.aginctus.resource=project-state-volume")
     machine.fail("incus storage volume show default environment-accepted-data --project foreign-environment")
@@ -200,6 +219,7 @@ pkgs.testers.runNixOSTest {
         for name, dest, uid, mode in (
             ("bootstrap", "/etc/aginctus/project-state-bootstrap.json", 0, "0644"),
             ("promotion", "/etc/aginctus/promotion.json", 0, "0644"),
+            ("execution", "/etc/aginctus/execution.json", 0, "0644"),
             ("incus", "/run/aginctus/incus.json", ${toString serviceUID}, "0600"),
             ("state", "/run/aginctus/state.json", ${toString serviceUID}, "0600"),
         ):
@@ -209,7 +229,7 @@ pkgs.testers.runNixOSTest {
         machine.succeed(guest + " test ! -e /var/lib/incus/unix.socket")
 
     def state_command(i, role, args):
-        return (f"timeout 25 runuser -u stateoperator -- env AGINCTUS_RESTRICTED_READ_CONFIG={operator_dir}/{role}-{i}.json"
+        return (f"timeout 75 runuser -u stateoperator -- env AGINCTUS_RESTRICTED_READ_CONFIG={operator_dir}/{role}-{i}.json"
                 f" ${cli}/bin/aginctus --incus-project ${project} --environment {descriptors[i]['id']} state {args} -o json")
 
     def status(i, role="promoter"):
@@ -231,6 +251,23 @@ pkgs.testers.runNixOSTest {
     assert all(r["generation"] == 1 for r in revisions)
     assert revisions[0]["id"] != revisions[1]["id"]
     machine.fail(state_command(0, "promoter", "promote --expect genesis"))
+    save(private + "/execution.json", {"apiVersion": "aginctus.dev/project-execution-policy/v1alpha1", "grants": [
+        {"peerSha256": fingerprint("promoter"), **binding, "environmentId": descriptors[0]["id"],
+         "revisionId": revisions[0]["id"], "workloadId": "worker", "operation": "reconcile"}]})
+    machine.succeed(f"incus file push {private}/execution.json environment-state-service/etc/aginctus/execution.json"
+                    " --project ${project} --uid 0 --gid 0 --mode 0644")
+    reconcile = f"reconcile --workload worker --expect {revisions[0]['id']} --host-grant /etc/aginctus-workload-host.json"
+    machine.fail(state_command(0, "member", reconcile))
+    machine.fail("incus info selected-worker --project ${project}")
+    first = json.loads(machine.succeed(state_command(0, "promoter", reconcile), timeout=90))
+    first_effects = first["result"]["native"]["effects"]
+    assert [effect["effect"]["action"] for effect in first_effects] == ["create", "start"]
+    assert all(effect["outcome"] == "applied" for effect in first_effects)
+    machine.succeed("incus list selected-worker --project ${project} --format json | jq -e 'length == 1 and .[0].status == \"Running\"'")
+    second = json.loads(machine.succeed(state_command(0, "promoter", reconcile), timeout=90))
+    assert not second["result"]["native"]["effects"], "repeat reconciliation submitted writes"
+    journal = f"${mount}/environments/{descriptors[0]['id']}/native-operations/{first['operationId']}.json"
+    machine.succeed(owner + f" cat {journal} | jq -e '.status == \"completed\"'")
 
     def digests():
         paths = ["${mount}/authority.json"]
