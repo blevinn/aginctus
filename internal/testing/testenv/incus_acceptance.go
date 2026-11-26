@@ -34,6 +34,7 @@ type IncusAcceptanceOptions struct {
 	ForeignInstance  string
 	Revision         string
 	RequireNestedKVM bool
+	RequirePayloadTransfer bool
 	Scenario         string
 }
 
@@ -202,7 +203,7 @@ func newIncusAcceptanceReport(cfg IncusAcceptanceOptions, runID string) IncusAcc
 	r := IncusAcceptanceReport{SchemaVersion: 1, Profile: "dedicated_worker", Tier: "disposable_guest_no_live_provider",
 		RunID: runID, CreatedUTC: time.Now().UTC(), Revision: cfg.Revision, Scenario: cfg.Scenario,
 		ImageFingerprint: cfg.ImageFingerprint, Project: cfg.Project, Status: "fail", FailureStage: "preflight"}
-	for _, id := range []string{"project_policy", "ephemeral_lifecycle", "retained_lifecycle", "scoped_ttl_recovery", "root_volumes", "foreign_preserved", "instance_cleanup", "crash_reboot", "nested_kvm_guest_execution", "native_instance_scenario", "nested_isolation", "storage_reclamation", "report_retention"} {
+	for _, id := range []string{"project_policy", "ephemeral_lifecycle", "retained_lifecycle", "scoped_ttl_recovery", "root_volumes", "foreign_preserved", "instance_cleanup", "crash_reboot", "nested_kvm_guest_execution", "native_instance_scenario", "payload_transfer", "nested_isolation", "storage_reclamation", "report_retention"} {
 		r.Results = append(r.Results, IncusAcceptanceCheck{ID: id, Status: "not_verified"})
 	}
 	return r
@@ -361,6 +362,14 @@ func runIncusAcceptance(ctx context.Context, b *IncusVMBackend, cfg IncusAccepta
 				// Both ephemeral and retained probes have passed.
 				result.set("nested_kvm_guest_execution", "pass")
 			}
+		}
+		if cfg.RequirePayloadTransfer && mode == VMEphemeral {
+			result.FailureStage = "payload_transfer"
+			if _, err := b.deliverApprovedPayloadBundle(ctx, ref, []byte(syntheticGuestPayload), syntheticGuestPayloadManifest); err != nil {
+				result.set("payload_transfer", "fail")
+				return result, errors.New("synthetic guest payload transfer unverified")
+			}
+			result.set("payload_transfer", "pass")
 		}
 		if cfg.Scenario == nativeInstanceScenario && mode == VMEphemeral {
 			result.FailureStage = "native_instance_scenario"
