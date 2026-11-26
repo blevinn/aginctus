@@ -5,15 +5,22 @@
   self,
   nixpkgs,
   system,
+  nativeInstance ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
-  image = self.packages.${system}.testenv-incus-vm-image;
+  image =
+    if nativeInstance then
+      self.packages.${system}.testenv-native-instance-vm-image
+    else
+      self.packages.${system}.testenv-incus-vm-image;
+  workerTimeout = if nativeInstance then "43min" else "13min";
+  trialTimeout = if nativeInstance then 2700 else 900;
   worker = self.packages.${system}.testenv-cli;
   product = self.packages.${system}.aginctus;
 in
 pkgs.testers.runNixOSTest {
-  name = "aginctus-testenv-disposable-worker";
+  name = if nativeInstance then "aginctus-testenv-managed-native-instance" else "aginctus-testenv-disposable-worker";
   nodes.machine = { ... }: {
     virtualisation = {
       cores = 4;
@@ -88,7 +95,7 @@ pkgs.testers.runNixOSTest {
         "--property=ProtectSystem=strict", "--property=ProtectHome=yes",
         "--property=PrivateTmp=yes", "--property=PrivateDevices=yes",
         "--property=RestrictAddressFamilies=AF_UNIX", "--property=IPAddressDeny=any",
-        "--property=TimeoutStartSec=13min", "--property=TimeoutStopSec=150s",
+        "--property=TimeoutStartSec=${workerTimeout}", "--property=TimeoutStopSec=150s",
         "${worker}/bin/aginctus-testenv", "worker", "acceptance",
         "--disposable-worker", "DEDICATED_DISPOSABLE_WORKER",
         "--socket", "/var/lib/incus/unix.socket", "--project", "aginctus-testenv",
@@ -100,7 +107,10 @@ pkgs.testers.runNixOSTest {
     # The worker itself is nested under the NixOS test driver. Requiring
     # another guest inside the Incus VM would add a third VM layer; keep
     # that distinct from this two-layer lifecycle fixture.
-    machine.succeed(shlex.join(argv), timeout=900)
+    ${pkgs.lib.optionalString nativeInstance ''
+      argv += ["--scenario", "native-instance"]
+    ''}
+    machine.succeed(shlex.join(argv), timeout=${toString trialTimeout})
     reports = machine.succeed("find /var/lib/aginctus-testenv-acceptance -mindepth 2 -maxdepth 2 -name result.json").splitlines()
     assert len(reports) == 1
     report = json.loads(machine.succeed("cat " + shlex.quote(reports[0])))
@@ -108,6 +118,10 @@ pkgs.testers.runNixOSTest {
     checks = {check["id"]: check["status"] for check in report["results"]}
     for key in ("ephemeral_lifecycle", "retained_lifecycle", "instance_cleanup", "root_volumes", "foreign_preserved", "scoped_ttl_recovery"):
         assert checks[key] == "pass", key
+    ${pkgs.lib.optionalString nativeInstance ''
+      assert report["scenario"] == "native-instance"
+      assert checks["native_instance_scenario"] == "pass"
+    ''}
     assert checks["nested_kvm_guest_execution"] == "not_verified"
     assert checks["nested_isolation"] == "not_verified"
     remaining = json.loads(machine.succeed("incus --project aginctus-testenv list --format json"))
