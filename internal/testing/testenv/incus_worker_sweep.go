@@ -10,10 +10,10 @@ import (
 	"time"
 )
 
-// TrustedIncusSweepOptions are configured ONLY by an installed dedicated
-// worker service. Never populate them from a workload checkout or MCP input.
 const workerRecoveryLedgerDir = "/var/lib/aginctus-testenv-recovery"
 
+// TrustedIncusSweepOptions are configured ONLY by an installed dedicated
+// worker service. Never populate them from a workload checkout or MCP input.
 type TrustedIncusSweepOptions struct {
 	SocketPath    string
 	StoragePool   string
