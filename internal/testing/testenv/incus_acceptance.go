@@ -25,17 +25,17 @@ const (
 // IncusAcceptanceOptions are operator inputs, never CLI/MCP agent arguments.
 // The marker and acknowledgement do not establish host isolation by themselves.
 type IncusAcceptanceOptions struct {
-	Acknowledgement  string
-	SocketPath       string
-	Project          string
-	ImageFingerprint string
-	PolicyKeyPath    string
-	ReportRoot       string
-	ForeignInstance  string
-	Revision         string
-	RequireNestedKVM bool
+	Acknowledgement        string
+	SocketPath             string
+	Project                string
+	ImageFingerprint       string
+	PolicyKeyPath          string
+	ReportRoot             string
+	ForeignInstance        string
+	Revision               string
+	RequireNestedKVM       bool
 	RequirePayloadTransfer bool
-	Scenario         string
+	Scenario               string
 }
 
 type IncusAcceptanceCheck struct {
