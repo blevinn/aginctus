@@ -83,6 +83,10 @@ func TestNativeIntentPlanProjectsAuthenticatedSnapshot(t *testing.T) {
 		reads       bool
 	}{
 		{"team", desc.ID, nil, false},
+		{"team", desc.ID, []string{"--all", "--herdr"}, false},
+		{"team", desc.ID, []string{"--all"}, true}, // Must not silently drop unsupported accepted workloads.
+		{"team", desc.ID, []string{"--herdr"}, true},
+		{"team", desc.ID, []string{"--gateway"}, true},
 		{"team", desc.ID, []string{"--workload", "alpha", "--workload", "alpha"}, false},
 		{"team", "dev", []string{"--workload", "alpha"}, false},
 		{"foreign", desc.ID, []string{"--workload", "alpha"}, true},
@@ -103,6 +107,58 @@ func TestNativeIntentPlanProjectsAuthenticatedSnapshot(t *testing.T) {
 	model.Source = planPublished{&rev, &c}
 	if output, err := run("team", desc.ID, "--workload", "alpha"); err == nil || output != "" {
 		t.Fatal("tampered accepted snapshot produced a plan")
+	}
+	c.SelectedWorkloads = []string{"beta", "alpha"}
+	c.Workloads = []acceptedstate.WorkloadSpec{workload("beta", "bridge"), workload("alpha", "bridge")}
+	c.Herdr = &environment.HerdrSpec{InstanceName: "test-herdr", ImageFingerprint: strings.Repeat("b", 64), StoragePool: "fixture-pool", ManagementNetwork: "bridge", AllowStateBootstrap: true}
+	image := func(alias, digit string) environment.GatewayImageSpec {
+		return environment.GatewayImageSpec{Registry: "registry.example", Repository: alias, Architecture: "amd64", Alias: alias,
+			IncusFingerprint: strings.Repeat(digit, 64), ManifestDigest: "sha256:" + strings.Repeat(digit, 64), ConfigDigest: "sha256:" + strings.Repeat("d", 64)}
+	}
+	c.Gateway = &environment.GatewaySpec{ManagementNetwork: "gateway-bridge", RootPool: "fixture-pool", DatabasePool: "fixture-pool",
+		Postgres: image("postgres", "e"), LiteLLM: image("litellm", "f"), EnsureRunning: true, CredentialVersion: "fixture-version"}
+	rev, err = environment.BuildAcceptedRevision(nil, nil, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, err := run("team", desc.ID, "--all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mixed, err := run("team", desc.ID, "--gateway", "--workload", "alpha", "--herdr", "--workload", "beta")
+	if err != nil || mixed != full {
+		t.Fatalf("full and equivalent explicit selection disagree: %v", err)
+	}
+	for _, tc := range []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"--all"}, []string{"gateway-image:", "gateway-volume:gateway-image", "gateway-instance:gateway-volume", "management-network:", "alpha:management-network", "beta:management-network", "herdr-system-state:management-network", "herdr-client:herdr-system-state"}},
+		{[]string{"--gateway"}, []string{"gateway-image:", "gateway-volume:gateway-image", "gateway-instance:gateway-volume"}},
+		{[]string{"--herdr"}, []string{"management-network:", "herdr-system-state:management-network", "herdr-client:herdr-system-state"}},
+	} {
+		output, err := run("team", desc.ID, tc.args...)
+		if err != nil || json.Unmarshal([]byte(output), &preview) != nil || preview.WriterPin || preview.LiveState != "unobserved" {
+			t.Fatalf("invalid scope preview: %v", err)
+		}
+		var got []string
+		for _, r := range preview.Selection.Resources {
+			got = append(got, r.ID+":"+strings.Join(r.DependsOn, ","))
+		}
+		if !slices.Equal(got, tc.want) || strings.Contains(output, "fixture-version") {
+			t.Fatalf("incorrect dependency graph or leaked intent: %v", got)
+		}
+	}
+	if err := json.Unmarshal([]byte(full), &preview); err != nil {
+		t.Fatal(err)
+	}
+	wantCapabilities := []orchestration.AcceptedIntentCapability{
+		{ID: "execution-authority", Status: "required-unverified"}, {ID: "host-attachments", Status: "required-unverified"},
+		{ID: "herdr-state-bootstrap", Status: "separate-approval-required"}, {ID: "gateway-image-provenance", Status: "required-unverified"},
+		{ID: "gateway-runtime", Status: "gated"},
+	}
+	if !slices.Equal(preview.Capabilities, wantCapabilities) {
+		t.Fatalf("full preview did not preserve capability gates: %+v", preview.Capabilities)
 	}
 }
 

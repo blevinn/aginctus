@@ -92,18 +92,25 @@ proves the target host, remote/project selection or credentials are safe.
 
 ## Read-only inspection and planning
 
-`state plan-native` previews the dependency graph for explicitly selected
-native workloads from the authenticated project's published accepted snapshot.
+`state plan-native` previews dependencies and capability requirements from the
+authenticated project's published accepted snapshot.
 Use the [authenticated planning example](../operations/host/restricted-project-enrollment-reads.md#preview-accepted-workload-dependencies)
 to select an explicit project and immutable environment UUID.
 
-Repeat `--workload` to select more workloads on the same accepted management
-network. The graph lists the management-network prerequisite first, then only
-the selected workloads in lexical order. The command reports `intent-only`,
-`unobserved` live state, and `writerPin: false`. It does not inspect resource
-state, compute create/update/no-op effects, or accept, pin or apply a revision.
-Herdr and gateway selection are outside this workload-only slice. The
-configured candidate file is not read by this command.
+Select one or more `--workload` IDs, `--herdr`, and/or `--gateway`; or use
+`--all` alone for every accepted workload and any accepted Herdr and gateway
+components. Full scope fails if the accepted selection is unsupported; it does
+not skip legacy workloads. Selected workloads and Herdr must share the same
+accepted management network. The deterministic graph orders that prerequisite
+before workloads and Herdr state, and Herdr state before the Herdr client.
+Gateway stages order pinned images, the database volume, then stopped guests.
+Co-selection does not infer cross-stack edges. The preview lists host attachment
+and execution authority as requiring verification, Herdr bootstrap as requiring
+separate approval or unaccepted, and gateway runtime as gated.
+
+The command reports `intent-only`, live state `unobserved`, and `writerPin: false`.
+It does not read the configured candidate file, inspect resources, compute live
+effects, or accept, pin or apply a revision.
 
 | Surface | What it establishes | What it does not establish |
 | --- | --- | --- |
