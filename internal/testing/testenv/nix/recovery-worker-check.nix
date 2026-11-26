@@ -50,6 +50,8 @@ assert cfg.services.aginctusTestenvRecovery.enable;
 assert service.serviceConfig.User == "aginctus-testenv";
 assert lib.hasSuffix "/bin/aginctus-testenv worker sweep" service.serviceConfig.ExecStart;
 assert service.serviceConfig.NoNewPrivileges;
+assert service.serviceConfig.StateDirectory == "aginctus-testenv-recovery";
+assert service.serviceConfig.StateDirectoryMode == "0700";
 assert service.serviceConfig.PrivateDevices;
 assert service.serviceConfig.ProtectSystem == "strict";
 assert service.serviceConfig.IPAddressDeny == "any";
