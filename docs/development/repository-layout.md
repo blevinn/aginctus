@@ -15,6 +15,8 @@ This is a structure convention, not a new plugin or authorization contract.
 | `tools/` | Maintainer and operator tooling, not production payloads |
 | `docs/` | Current documentation, design records, and explicitly labeled historical records |
 | `.just/`, `justfile` | The one developer-facing task interface and its modules |
+| `.opencode/skills/` | Repository-scoped OpenCode agent skills and their instructions |
+| `.tmp/` | Git-ignored local scratch data and isolated worktrees; never source or deliverables |
 
 Place resources and language-specific files next to the component that owns
 their lifecycle. In particular, production plugins own their embedded Python,
