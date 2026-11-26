@@ -29,9 +29,9 @@ pkgs.testers.runNixOSTest {
       "aginctus-testenv-managed-native-instance"
     else
       "aginctus-testenv-disposable-worker";
-  nodes.machine = { lib, ... }: {
-    imports = lib.optional independentRecovery self.nixosModules.aginctusTestenvRecovery;
-    services.aginctusTestenvRecovery.enable = lib.mkIf independentRecovery true;
+  nodes.machine = { ... }: {
+    imports = [ self.nixosModules.aginctusTestenvRecovery ];
+    services.aginctusTestenvRecovery.enable = independentRecovery;
     virtualisation = {
       cores = 4;
       memorySize = 8192;
