@@ -7,3 +7,6 @@ result-*
 __pycache__/
 *.py[cod]
 .vm-harness-results/
+
+# Repository-local isolated worktrees and scratch files
+.tmp/
