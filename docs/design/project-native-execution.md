@@ -37,7 +37,6 @@ executor checks the socket peer UID and grant digest. It separately verifies the
 restricted project's exact network and storage attachment policy over TLS.
 This is a point-in-time observation; it does not lock the host bridge or expose
 the administrative socket to the executor or the state service.
-
 There is no lease-based takeover. A disconnect can leave a session held; a
 restart releases the in-memory pin but refuses new native writers across the
 project if any earlier operation is still open or uncertain. A delayed request
