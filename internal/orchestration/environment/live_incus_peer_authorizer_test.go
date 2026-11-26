@@ -37,6 +37,12 @@ func (r *testLiveRestrictedTrust) GetCertificate(_ string) (*api.Certificate, st
 
 func liveIncusTrustFixture(t *testing.T) (LiveIncusPeerAuthorizer, *testLiveRestrictedTrust, *x509.Certificate) {
 	t.Helper()
+	auth, reader, peer, _ := liveIncusTrustKeyFixture(t)
+	return auth, reader, peer
+}
+
+func liveIncusTrustKeyFixture(t *testing.T) (LiveIncusPeerAuthorizer, *testLiveRestrictedTrust, *x509.Certificate, *ecdsa.PrivateKey) {
+	t.Helper()
 	verifier, observer := restrictedIncusVerifierFixture(t)
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil { t.Fatal(err) }
@@ -66,7 +72,7 @@ func liveIncusTrustFixture(t *testing.T) (LiveIncusPeerAuthorizer, *testLiveRest
 	return LiveIncusPeerAuthorizer{
 		Reader: registry, Project: "team",
 		PinnedServerCertificateSHA256: verifier.PinnedServerCertificateSHA256,
-	}, registry, peer
+	}, registry, peer, key
 }
 
 func TestLiveIncusPeerAuthorizerChecksActualTrustRecord(t *testing.T) {

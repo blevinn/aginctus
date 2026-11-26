@@ -290,6 +290,7 @@ func (s *LocalProjectStateStore) commitLocalCandidate(
 	if err!=nil{return AcceptedRevision{},err}
 	immutable,err:=json.Marshal(localEnvironmentRecord{Revision:next,Candidate:body})
 	if err!=nil{return AcceptedRevision{},err}
+	if int64(len(immutable)) > localProjectRecordLimit {return AcceptedRevision{},errors.New("accepted revision exceeds local storage limit")}
 	if err:=ctx.Err();err!=nil{return AcceptedRevision{},err}
 	if beforePublish != nil {
 		if err := beforePublish(); err != nil { return AcceptedRevision{}, err }
@@ -306,6 +307,7 @@ func (s *LocalProjectStateStore) commitLocalCandidate(
 	latest, _, err := s.readNamespace(ctx,enrolled)
 	if err != nil { return AcceptedRevision{},err }
 	if (latest==nil)!=(current==nil) || latest!=nil && *latest!=*current { return AcceptedRevision{},ErrAcceptedConflict }
+	if err := ctx.Err(); err != nil { return AcceptedRevision{},err }
 	if err:=publishLocalProjectPointer(path,pointer);err!=nil {
 		// Rename can have completed before a directory sync failure.
 		return AcceptedRevision{},fmt.Errorf("local accepted pointer outcome uncertain; re-read before retry: %w",err)
