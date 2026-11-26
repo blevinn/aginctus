@@ -2,6 +2,19 @@
 
 This is the operational companion to the [dedicated worker trust/installation contract](testenv-worker.md). **Prerequisite:** review the entire dedicated host boundary, runtime signing credential, systemd/Incus authority and instance-ownership policy there before taking any action. The worker has its own daemon and must have no pilot host secrets, pilot network routes or host Incus socket. This document does not grant mutating access to coding agents and does not claim real-host validation absent separately observed evidence.
 
+## Synthetic guest payload transfer gate
+
+The existing operator worker acceptance command accepts the optional
+`--require-payload-transfer` flag. It transfers one fixed nonsecret
+manifest-bound test vector into the fresh signed ephemeral VM via the Incus
+file API, verifies exact readback and private file metadata, and records
+`payload_transfer` separately from instance and root-volume cleanup.
+No arbitrary payload, guest path, extraction, installation or source
+authority is admitted. The underlying upload is not atomic no-replace;
+the reviewed fixture must have no concurrent guest writers. An uncertain
+transfer fails the trial and the existing owned cleanup runs. Actual VM
+agent file-transfer support requires separate runtime acceptance.
+
 ## Opt-in real-worker lifecycle helper
 
 `testenv-worker-acceptance` packages the fixed

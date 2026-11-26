@@ -24,6 +24,14 @@ type projectPromotionGrant struct {
 // replaceable by the service UID. Reload on every authorization, including the
 // CAS publication check, so removing a grant does not require a restart.
 func readProjectPromotionPolicy(path string, binding Binding) (map[projectPromotionGrant]struct{}, error) {
+	data, err := readAdministratorPolicy(path)
+	if err != nil {
+		return nil, errLocalPromotionDenied
+	}
+	return parseProjectPromotionPolicy(data, binding)
+}
+
+func readAdministratorPolicy(path string) ([]byte, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
 		return nil, errLocalPromotionDenied
 	}
@@ -53,7 +61,7 @@ func readProjectPromotionPolicy(path string, binding Binding) (map[projectPromot
 	if err != nil || len(data) > maxRestrictedOperatorConfigBytes {
 		return nil, errLocalPromotionDenied
 	}
-	return parseProjectPromotionPolicy(data, binding)
+	return data, nil
 }
 
 func parseProjectPromotionPolicy(data []byte, binding Binding) (map[projectPromotionGrant]struct{}, error) {

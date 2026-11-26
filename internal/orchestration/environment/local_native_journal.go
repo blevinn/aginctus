@@ -52,6 +52,7 @@ type LocalNativeOperation struct {
 	Revision   AcceptedRevision          `json:"revision"`
 	Status     LocalNativeStatus         `json:"status"`
 	Effects    []LocalNativeEffectRecord `json:"effects"`
+	Execution  *projectExecutionGrant    `json:"execution,omitempty"`
 }
 
 // LocalNativeStatus describes the invocation, not ongoing resource health.
@@ -238,12 +239,18 @@ func (s *LocalProjectStateStore) ReadLocalNativeOperation(ctx context.Context, e
 	if canonical, err := json.Marshal(op); err != nil || string(canonical) != string(data) {
 		return LocalNativeOperation{}, errors.New("noncanonical local native operation journal")
 	}
-	revision, _, err := s.ReadLocalRevision(ctx, enrolled, op.Revision.ID)
+	revision, candidate, err := s.ReadLocalRevision(ctx, enrolled, op.Revision.ID)
 	if err != nil || revision != op.Revision {
 		return LocalNativeOperation{}, errors.New("local operation revision is not in published history")
 	}
+	if op.Execution != nil && (!op.Execution.valid(enrolled.Binding) ||
+		op.Execution.RevisionID != op.Revision.ID || op.Execution.EnvironmentID != enrolled.ID ||
+		op.Execution.Operation == "recover" || !slices.Contains(candidate.SelectedWorkloads, op.Execution.WorkloadID)) {
+		return LocalNativeOperation{}, errors.New("invalid journal execution scope")
+	}
 	for i, effect := range op.Effects {
-		if !effect.valid() || ((i+1 < len(op.Effects) || op.Status == LocalNativeCompleted) && effect.Outcome != LocalNativeApplied) {
+		if !effect.valid() || (op.Execution != nil && !op.Execution.permits(effect)) ||
+			((i+1 < len(op.Effects) || op.Status == LocalNativeCompleted) && effect.Outcome != LocalNativeApplied) {
 			return LocalNativeOperation{}, errors.New("invalid or out-of-order local native effect evidence")
 		}
 	}
@@ -421,6 +428,10 @@ func (s *LocalProjectStateStore) ResolveLocalNativeOperation(ctx context.Context
 	}
 	request := LocalNativeRecoveryRequest{enrolled, expected, op}
 	request.Operation.Effects = slices.Clone(op.Effects)
+	if op.Execution != nil {
+		grant := *op.Execution
+		request.Operation.Execution = &grant
+	}
 	binding, err := verify(ctx, request)
 	if err != nil || enrolled.VerifyBinding(binding) != nil {
 		return errors.New("local native recovery verification denied")
@@ -429,7 +440,8 @@ func (s *LocalProjectStateStore) ResolveLocalNativeOperation(ctx context.Context
 		return err
 	}
 	latest, err := s.ReadLocalNativeOperation(ctx, enrolled, id)
-	if err != nil || latest.Status != op.Status || latest.Revision != op.Revision || !slices.Equal(latest.Effects, op.Effects) {
+	latestData, digestErr := localNativeRecoveryBytes(latest)
+	if err != nil || digestErr != nil || string(latestData) != string(data) {
 		return ErrLocalNativeUnresolved
 	}
 	if err := ctx.Err(); err != nil {
