@@ -223,20 +223,20 @@ func (b *IncusVMBackend) Create(ctx context.Context, spec VMCreateSpec) (VMRef, 
 	if err := b.client.Create(ctx, plan); err != nil {
 		// Submission may have succeeded even when its response/wait failed.
 		// The sealed handle permits verification, never automatic adoption.
-		return ref, safeIncusError("testenv VM create outcome uncertain; recovery required", err)
+		return ref, withIncusCreateStage("create_request", safeIncusError("testenv VM create outcome uncertain; recovery required", err), err)
 	}
 	actual, err := b.client.Get(ctx, ref.Instance)
 	if err != nil {
-		return ref, safeIncusError("created VM requires recovery: cannot verify instance", err)
+		return ref, withIncusCreateStage("create_readback", safeIncusError("created VM requires recovery: cannot verify instance", err), nil)
 	}
 	if _, err := b.checkIncusOwned(actual, ref); err != nil || actual.Ephemeral != plan.Ephemeral ||
 		actual.Devices["root"]["pool"] != b.pool {
-		return ref, ErrOwnershipMismatch
+		return ref, withIncusCreateStage("create_ownership", ErrOwnershipMismatch, nil)
 	}
 	// An instance can exist after a crash between Create and Start. The
 	// trusted orphan/TTL reconciler will handle that; never blindly retry.
 	if err := b.client.Start(ctx, ref.Instance); err != nil {
-		return ref, safeIncusError("created VM requires recovery: start failed", err)
+		return ref, withIncusCreateStage("create_start", safeIncusError("created VM requires recovery: start failed", err), err)
 	}
 	return ref, nil
 }
