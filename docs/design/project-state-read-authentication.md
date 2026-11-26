@@ -106,6 +106,9 @@ peer-authority gate and physical instance/volume evidence pass.
 
 The `aginctus` Nix package includes an explicit, nonroot mTLS service,
 read-only by default. Run `aginctus serve project-state` as a separately supervised service.
+Keep this role inside the [administrator-controlled fixture](project-state-service-topology.md#administrator-controlled-deployment-only)
+until physical isolation is proven, even for read-only use. The listener's
+authorization does not limit the peer's direct Incus permissions.
 Update any explicit deployment to use this invocation instead of the removed
 `state-project-read` package. NixOS/Home Manager activation does not start it;
 there is no
