@@ -23,8 +23,8 @@ func NewSweep(handlers Handlers) *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), 120*time.Second)
 			defer cancel()
 			result, err := handlers.Sweep(ctx, options, handlers.Now().UTC())
-			fmt.Fprintf(cmd.OutOrStdout(), "testenv-recovery scanned=%d skipped=%d destroyed=%d failed=%d\n",
-				result.Scanned, result.Skipped, result.Destroyed, result.Failed)
+			fmt.Fprintf(cmd.OutOrStdout(), "testenv-recovery scanned=%d skipped=%d destroyed=%d failed=%d root_volumes_absent=%d root_volumes_unverified=%d\n",
+				result.Scanned, result.Skipped, result.Destroyed, result.Failed, result.RootVolumesAbsent, result.RootVolumesUnverified)
 			if err != nil {
 				fmt.Fprintln(cmd.ErrOrStderr(), "testenv recovery: incomplete or unverified")
 				return ErrIncomplete
