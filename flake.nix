@@ -177,6 +177,12 @@
                 inherit self nixpkgs system;
                 nativeInstance = true;
               };
+          testenv-independent-recovery =
+            import ./internal/testing/testenv/nix/disposable-worker-fixture.nix
+              {
+                inherit self nixpkgs system;
+                independentRecovery = true;
+              };
           testenv-disposable-worker-fixture =
             import ./internal/testing/testenv/nix/disposable-worker-fixture.nix
               {
