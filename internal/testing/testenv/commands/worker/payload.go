@@ -37,5 +37,27 @@ func newPayload() *cobra.Command {
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(receipt)
 		},
 	})
+	root.AddCommand(&cobra.Command{
+		Use:  "verify-approved-bundle MANIFEST_SHA256",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			receipt, err := testenv.VerifyApprovedPayloadBundle(cmd.InOrStdin(), args[0])
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(receipt)
+		},
+	})
+	root.AddCommand(&cobra.Command{
+		Use:  "stage-approved-bundle MANIFEST_SHA256 PRIVATE_DIRECTORY",
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			receipt, err := testenv.StageApprovedPayloadBundle(cmd.InOrStdin(), args[0], args[1])
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(receipt)
+		},
+	})
 	return root
 }

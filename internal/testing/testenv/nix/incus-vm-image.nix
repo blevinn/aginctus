@@ -4,6 +4,7 @@
   self,
   nixpkgs,
   system,
+  nativeInstance ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
@@ -14,7 +15,12 @@ let
     inherit system;
     modules = [
       "${nixpkgs}/nixos/modules/virtualisation/incus-virtual-machine.nix"
-      (import ../../../../tests/nix/vm-harness/aginctus-host.nix { inherit self system; })
+      (
+        if nativeInstance then
+          import ./native-instance-guest.nix { inherit self nixpkgs system; }
+        else
+          import ../../../../tests/nix/vm-harness/aginctus-host.nix { inherit self system; }
+      )
       (
         { lib, pkgs, ... }:
         {
@@ -69,7 +75,9 @@ let
         creation_date: 0
         properties:
           os: NixOS
-          description: Aginctus isolated disposable test VM
+          description: Aginctus isolated disposable test VM${
+            if nativeInstance then " (native-instance)" else ""
+          }
           type: virtual-machine
         YAML
             tar --sort=name --mtime='@1' --owner=0 --group=0 --numeric-owner \
