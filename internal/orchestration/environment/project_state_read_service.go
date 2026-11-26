@@ -28,6 +28,7 @@ type ProjectStateReadServiceConfig struct {
 	ServiceCertificatePEM string `json:"serviceCertificatePem"`
 	ServicePrivateKeyPEM string `json:"servicePrivateKeyPem"`
 	TrustedClientCertificatesPEM string `json:"trustedClientCertificatesPem"`
+	PromotionPolicyFile string `json:"promotionPolicyFile,omitempty"`
 }
 
 func ReadProjectStateReadServiceConfig(path string) (ProjectStateReadServiceConfig, error) {
@@ -50,7 +51,13 @@ func ReadProjectStateReadServiceConfig(path string) (ProjectStateReadServiceConf
 	if err != nil || len(data) == 0 || len(data) > maxRestrictedOperatorConfigBytes ||
 		rejectCandidateDuplicateKeys(data) != nil { return deny() }
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(data, &fields) != nil || candidateKeys(fields,
+	if json.Unmarshal(data, &fields) != nil { return deny() }
+	if raw, exists := fields["promotionPolicyFile"]; exists {
+		var path string
+		if json.Unmarshal(raw, &path) != nil || path == "" { return deny() }
+		delete(fields, "promotionPolicyFile")
+	}
+	if candidateKeys(fields,
 		"apiVersion", "project", "listenAddress", "mountPath", "operatorConfigFile",
 		"serviceCertificatePem", "servicePrivateKeyPem", "trustedClientCertificatesPem") != nil {
 		return deny()
@@ -81,7 +88,7 @@ func validateProjectStateReadListener(address string) error {
 	return nil
 }
 
-// ServeMountedProjectStateReads starts a read-only HTTPS service only when
+// ServeMountedProjectStateReads starts an HTTPS service only when
 // physical attachment, nonroot service identity, independent restricted Incus
 // TLS project verification and *live* peer-certificate trust lookup all pass.
 // Incus GetCertificate may be denied under restricted TLS on some versions;
@@ -89,8 +96,8 @@ func validateProjectStateReadListener(address string) error {
 //
 // The operator/host must independently preflight Incus service instance and
 // exclusive project-owned volume attachment before launching this command.
-// No provisioning, root delegation, accepted-state writes or reconciliation
-// APIs exist on the listener.
+// An independently administered policy file explicitly enables CAS for a
+// reviewed deployment. The listener does not provision or reconcile Incus.
 func ServeMountedProjectStateReads(ctx context.Context, c ProjectStateReadServiceConfig) error {
 	deny := func() error { return errors.New("project state read service preflight failed") }
 	if ctx == nil || ctx.Err() != nil || os.Geteuid() == 0 ||
@@ -135,10 +142,28 @@ func ServeMountedProjectStateReads(ctx context.Context, c ProjectStateReadServic
 		ClientAuth: tls.RequireAndVerifyClientCert,
 		ClientCAs: peerRoots,
 	}
-	handler := AuthenticatedAcceptedReadHandler{
+	catalog := NewRestrictedIncusReadCatalog(scoped, operator.TrustedServerSHA256)
+	var handler http.Handler = AuthenticatedAcceptedReadHandler{
 		Authorizer: authorizer,
-		Catalog: NewRestrictedIncusReadCatalog(scoped, operator.TrustedServerSHA256),
+		Catalog: catalog,
 		Source: volume,
+	}
+	if c.PromotionPolicyFile != "" {
+		if _, err := readProjectPromotionPolicy(c.PromotionPolicyFile, volume.binding); err != nil {
+			return deny()
+		}
+		read := handler
+		promotion := AuthenticatedPromotionHandler{
+			Authorizer: authorizer, Catalog: catalog, Store: volume.store,
+			AuthorizePromoter: mountedProjectPromoter(c.PromotionPolicyFile, volume),
+		}
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/promotion" {
+				promotion.ServeHTTP(w, r)
+				return
+			}
+			read.ServeHTTP(w, r)
+		})
 	}
 	// A TCP listener is permitted only after all authority checks pass.
 	listener, err := net.Listen("tcp", c.ListenAddress)
