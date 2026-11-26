@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	guestPayloadPath = "/run/aginctus-testenv-payload.bundle"
+	guestPayloadPath      = "/run/aginctus-testenv-payload.bundle"
 	maxGuestPayloadBytes = 1 << 20
-	guestPayloadTimeout = 30 * time.Second
+	guestPayloadTimeout  = 30 * time.Second
 )
 
 // This optional trusted capability has one fixed guest destination. It
