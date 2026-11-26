@@ -310,6 +310,9 @@
           operator-settings-parity = import ./tests/nix/operator-settings-parity-check.nix {
             inherit self nixpkgs system;
           };
+          environment-candidate-parity = import ./tests/nix/environment-candidate-parity-check.nix {
+            inherit self nixpkgs system;
+          };
           gateway-config-parity = import ./tests/nix/gateway-config-parity-check.nix {
             inherit self nixpkgs system;
           };

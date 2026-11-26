@@ -211,6 +211,19 @@ class RunnerTests(unittest.TestCase):
             runner.clean_environment({"AGINCTUS_NATIVE_OCI_SPIKE": "disposable-vm"}),
         )
 
+    def test_native_lifecycle_scenarios_are_fixed_disposable_targets(self):
+        expected = {
+            "native-gateway-stopped-pair": "vm-harness-native-gateway-stopped-pair",
+            "native-gateway-stop-retention": "vm-harness-native-gateway-stop-retention",
+            "native-joined-lifecycle": "vm-harness-native-joined-lifecycle",
+        }
+        for scenario, target in expected.items():
+            with self.subTest(scenario=scenario):
+                args = runner.build_arguments(scenario, False)
+                self.assertEqual(args[-1], f".#{target}")
+                self.assertNotIn("bash", args)
+                self.assertNotIn("sh", args)
+
     def test_heavyweight_state_and_authority_scenarios_are_fixed_nix_derivations(self):
         expected = {
             "acceptance-project-authority": "incus-project-authority",

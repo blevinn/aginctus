@@ -60,6 +60,27 @@ Requires an x86_64-linux KVM worker and sufficient disk space. The Go acceptance
 tests skip without both the explicit opt-in and the guest-only marker. Hermetic
 checks do not run the VM; a skipped Go test is not real-Incus acceptance.
 
+## Native lifecycle stack scenarios
+
+The accepted-state stack's joined lifecycle, stopped gateway-pair and retained
+Herdr-volume scenarios are available through the disposable batch runner. Each
+uses a fixed Nix target, starts Incus only inside its guest, and writes the
+standard run-scoped receipt. `native-oci` is networked and exercises pinned OCI
+acquisition; the other three are offline fixture scenarios.
+
+```sh
+nix develop --offline -c python3 tests/vm_harness/runner.py test native-joined-lifecycle
+nix develop --offline -c python3 tests/vm_harness/runner.py test native-gateway-stopped-pair
+nix develop --offline -c python3 tests/vm_harness/runner.py test native-gateway-stop-retention
+nix develop --offline -c python3 tests/vm_harness/runner.py test native-oci
+```
+
+The runner's outer `native-oci` runtime limit is 30 minutes to accommodate the
+guest scenario's 25-minute test timeout plus VM startup/shutdown overhead. Use
+an x86_64 Linux KVM worker with sufficient disk and public OCI registry access;
+no credentials or live provider are required. Receipts intentionally report
+`cleanup: not_verified` and `upstream_inference: not_verified`.
+
 The separate accepted-workload observation gate runs on an x86_64 Linux KVM
 worker:
 

@@ -31,6 +31,21 @@ NixOS may emit `/etc/aginctus/environment-candidate.json` with
 candidate, changes project accepted state or activates a new writer. The
 legacy `workloadCandidate` stays an experimental separate document.
 
+Both `environmentCandidate` options support optional `workloads[].native`
+(`runtime`, `storagePool`, `managementNetwork`) and `herdr` (`instanceName`,
+`imageFingerprint`, `storagePool`, `managementNetwork`, `allowStateBootstrap`).
+Omitting them leaves those keys out of the JSON. `allowStateBootstrap` must be
+declared explicitly and does not authorize a bootstrap operation.
+
+The optional `gateway` block accepts existing management-network and storage
+pool references, explicit `ensureRunning`, and an opaque `credentialVersion`
+reference. Each `postgres` and `litellm` image requires a registry host, OCI
+repository, architecture, variant (empty when none), manifest and config
+digests, Incus fingerprint, and a distinct alias. Set `egressNetwork` and
+`egressIPv4` both to empty strings to omit the egress attachment, or supply an
+existing distinct network and a canonical IPv4 CIDR identifying a usable host.
+The modules do not resolve images or provision credentials, pools or networks.
+
 See [explicit candidate sources](../design/environment-candidate-sources.md)
 for schema, authority boundaries and migration requirements.
 

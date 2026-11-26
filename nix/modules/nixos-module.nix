@@ -189,7 +189,7 @@ in
     assertions = [
       {
         assertion = cfg.environmentCandidate == null || environmentSchema.valid cfg.environmentCandidate;
-        message = "services.aginctus.environmentCandidate must use a non-default project, unique workload/instance identities and bounded explicit profiles";
+        message = "services.aginctus.environmentCandidate requires a non-default project, bounded unique workload/profile selections, noncolliding instance names and valid gateway references";
       }
       {
         assertion =
