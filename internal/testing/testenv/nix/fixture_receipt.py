@@ -4,7 +4,7 @@ The returned object describes observed guest-side checks only. It is not
 a fresh-build attestation, host cleanup proof, or authorization token.
 """
 
-import re
+import re as receipt_re
 
 REQUIRED_LIFECYCLE = (
     "project_policy",
@@ -32,8 +32,8 @@ def fixture_receipt(report, scenario, source_revision, lock_sha256, image_finger
         or report.get("status") != "pass"
         or report.get("scenario", "") != scenario
         or report.get("image_fingerprint") != image_fingerprint
-        or not re.fullmatch(r"[0-9a-f]{64}", image_fingerprint)
-        or not re.fullmatch(r"[0-9a-f]{64}", lock_sha256)
+        or not receipt_re.fullmatch(r"[0-9a-f]{64}", image_fingerprint)
+        or not receipt_re.fullmatch(r"[0-9a-f]{64}", lock_sha256)
     ):
         raise ValueError("worker fixture receipt identity or status unverified")
     if scenario not in ("", "native-instance"):
