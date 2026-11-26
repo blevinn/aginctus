@@ -121,6 +121,14 @@ admit mutable worktrees, arbitrary callers, or host-level execution.
 The earlier lifecycle-only target remains available. Both targets are
 experimental until actually run.
 
+A successful fixture result includes `testenv-fixture-receipt.json` in the
+Nix output. It records the scenario, flake revision (or `unavailable`),
+lock digest, imported image fingerprint and scoped lifecycle checks. Private
+signed handles and guest logs are excluded. The receipt does not establish
+agent admission or independent host teardown, and a cached Nix output is
+not a fresh execution. Record the exact derivation and independently
+observed builder execution when collecting acceptance evidence.
+
 ## Future disposable-worker import gate
 
 **Operator-only; do not execute against the pilot daemon.** Provision a
