@@ -27,6 +27,7 @@
     {
       nixosModules = {
         aginctus = import ./nix/modules/nixos-module.nix { inherit self; };
+        aginctusProjectState = import ./nix/modules/project-state-service.nix { inherit self; };
         aginctusTestenvRecovery = import ./internal/testing/testenv/nix/recovery-worker.nix {
           inherit self;
         };
