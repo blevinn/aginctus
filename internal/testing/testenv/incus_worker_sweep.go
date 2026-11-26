@@ -2,12 +2,16 @@ package testenv
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 const workerRecoveryLedgerDir = "/var/lib/aginctus-testenv-recovery"
@@ -35,13 +39,22 @@ func readTrustedWorkerKey(path string) ([]byte, error) {
 	file := os.NewFile(uintptr(fd), "worker-policy-key")
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 ||
-		info.Size() != 32 {
+	if err != nil || !info.Mode().IsRegular() || info.Size() != 32 {
 		return nil, errors.New("trusted worker policy credential has unsafe attributes")
 	}
 	raw, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || raw.Uid != uint32(os.Geteuid()) || raw.Nlink != 1 {
+	if !ok || raw.Nlink != 1 {
 		return nil, errors.New("trusted worker policy credential has unsafe owner")
+	}
+	uid := uint32(os.Geteuid())
+	// systemd prefers a root-owned read-only credential with a named-user
+	// ACL; the group mode bits then represent the ACL mask, not group access.
+	// Keep ordinary file admission strict and admit only that exact ACL.
+	if raw.Uid != uid || info.Mode().Perm()&0077 != 0 {
+		if raw.Uid != 0 || uid == 0 || info.Mode().Perm() != 0440 ||
+			!isWorkerSystemdCredential(path) || !hasPrivateWorkerACL(fd, uid) {
+			return nil, errors.New("trusted worker policy credential has unsafe owner or permissions")
+		}
 	}
 	key := make([]byte, 32)
 	if _, err := io.ReadFull(file, key); err != nil {
@@ -49,6 +62,60 @@ func readTrustedWorkerKey(path string) ([]byte, error) {
 		return nil, errors.New("trusted worker policy credential unreadable")
 	}
 	return key, nil
+}
+
+// isWorkerSystemdCredential limits ACL-backed admission to the current unit's
+// systemd credential directory. /run/credentials is a trusted system boundary.
+func isWorkerSystemdCredential(path string) bool {
+	dir := filepath.Dir(path)
+	unit := filepath.Base(dir)
+	if filepath.Base(path) != "policy-key" || filepath.Dir(dir) != "/run/credentials" ||
+		dir != os.Getenv("CREDENTIALS_DIRECTORY") ||
+		!strings.HasPrefix(unit, "aginctus-testenv-") || !strings.HasSuffix(unit, ".service") {
+		return false
+	}
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0022 != 0 {
+		return false
+	}
+	raw, ok := info.Sys().(*syscall.Stat_t)
+	return ok && raw.Uid == 0
+}
+
+// Linux POSIX ACL xattrs have a little-endian version header and fixed
+// 8-byte entries. Require exactly owner read, service UID read, no owning
+// group permissions, read-only mask, and no other permissions. Reject
+// additional principals, malformed or unavailable ACLs, and writable masks.
+func hasPrivateWorkerACL(fd int, uid uint32) bool {
+	var acl [44]byte
+	n, err := unix.Fgetxattr(fd, "system.posix_acl_access", acl[:])
+	return err == nil && n == len(acl) && privateWorkerACL(acl[:], uid)
+}
+
+func privateWorkerACL(acl []byte, uid uint32) bool {
+	if uid == 0 || len(acl) != 44 || binary.LittleEndian.Uint32(acl[:4]) != 2 {
+		return false
+	}
+	const undefinedID = ^uint32(0)
+	expected := [...]struct {
+		tag, perm uint16
+		id        uint32
+	}{
+		{0x01, 4, undefinedID}, // ACL_USER_OBJ
+		{0x02, 4, uid},         // ACL_USER
+		{0x04, 0, undefinedID}, // ACL_GROUP_OBJ
+		{0x10, 4, undefinedID}, // ACL_MASK
+		{0x20, 0, undefinedID}, // ACL_OTHER
+	}
+	for i, entry := range expected {
+		offset := 4 + 8*i
+		if binary.LittleEndian.Uint16(acl[offset:]) != entry.tag ||
+			binary.LittleEndian.Uint16(acl[offset+2:]) != entry.perm ||
+			binary.LittleEndian.Uint32(acl[offset+4:]) != entry.id {
+			return false
+		}
+	}
+	return true
 }
 
 // RunTrustedIncusExpirySweep performs one externally scheduled reconciliation.

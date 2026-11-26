@@ -58,7 +58,27 @@ func acceptanceFailureStage(stage string) string {
 		"preflight", "ephemeral_create", "retained_create", "ephemeral_agent", "retained_agent",
 		"ephemeral_status_exec_volume", "retained_status_exec_volume", "nested_kvm_guest_execution",
 		"payload_transfer", "native_instance_scenario", "ephemeral_destroy", "scoped_ttl_recovery",
-		"foreign_preserved", "cleanup":
+		"foreign_preserved", "cleanup",
+		"ephemeral_create_request", "retained_create_request",
+		"ephemeral_create_readback", "retained_create_readback",
+		"ephemeral_create_ownership", "retained_create_ownership",
+		"ephemeral_create_start", "retained_create_start",
+		"ephemeral_create_submit", "retained_create_submit",
+		"ephemeral_create_wait", "retained_create_wait",
+		"ephemeral_create_wait_timeout", "retained_create_wait_timeout",
+		"ephemeral_create_wait_size", "retained_create_wait_size",
+		"ephemeral_create_wait_capacity", "retained_create_wait_capacity",
+		"ephemeral_create_wait_image", "retained_create_wait_image",
+		"ephemeral_create_wait_permission", "retained_create_wait_permission",
+		"ephemeral_create_wait_storage", "retained_create_wait_storage",
+		"ephemeral_create_start_submit", "retained_create_start_submit",
+		"ephemeral_create_start_wait", "retained_create_start_wait",
+		"ephemeral_create_start_wait_timeout", "retained_create_start_wait_timeout",
+		"ephemeral_create_start_wait_size", "retained_create_start_wait_size",
+		"ephemeral_create_start_wait_capacity", "retained_create_start_wait_capacity",
+		"ephemeral_create_start_wait_image", "retained_create_start_wait_image",
+		"ephemeral_create_start_wait_permission", "retained_create_start_wait_permission",
+		"ephemeral_create_start_wait_storage", "retained_create_start_wait_storage":
 		return stage
 	default:
 		return "unknown"

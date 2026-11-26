@@ -90,9 +90,11 @@ its separate 72 GiB test disk, initializes only its guest-local Incus
 daemon, imports the store-pinned image, and runs the existing signed worker
 lifecycle acceptance. It is a candidate for eliminating the manually
 prepared worker from that acceptance gate, not the general developer
-launcher. Use only a reviewed immutable source revision and authorized KVM
-builder with the Nix build sandbox enabled; never run a mutable test-driver
-console under a pilot identity.
+launcher. Trusted agents may run the self-contained fixture as a development
+test on an authorized KVM builder with effective Nix sandboxing, without
+independent worker admission. Use a reviewed immutable source revision for
+formal acceptance; never run a mutable test-driver console under a pilot
+identity.
 
 ```sh
 nix build --no-link --no-update-lock-file .#testenv-disposable-worker-fixture
@@ -115,9 +117,11 @@ nix build --no-link --no-update-lock-file .#testenv-managed-native-instance
 This builds and stages the scenario-specific closure as part of the
 immutable image, starts the scenario via the signed worker lifecycle,
 checks scenario and outer lifecycle evidence, and independently checks the
-worker's instance and volume inventory. It still requires an authorized
-isolated KVM builder and a reviewed immutable source revision. It does not
-admit mutable worktrees, arbitrary callers, or host-level execution.
+worker's instance and volume inventory. The local development fixture requires
+an authorized KVM builder with effective Nix sandboxing, not a separately
+admitted persistent worker. Record the tested source; formal acceptance still
+requires a reviewed immutable revision. This does not admit arbitrary callers
+or grant host-level execution.
 The earlier lifecycle-only target remains available. Both targets are
 experimental until actually run.
 

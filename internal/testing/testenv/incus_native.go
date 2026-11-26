@@ -182,10 +182,10 @@ func (n *nativeIncusVMClient) Create(ctx context.Context, plan IncusInstancePlan
 	defer cancel()
 	op, err := server.CreateInstance(req)
 	if err != nil {
-		return safeIncusError("testenv Incus create submission failed", err)
+		return withIncusCreateStage("create_submit", safeIncusError("testenv Incus create submission failed", err), nil)
 	}
 	if err := waitIncusOperation(ctx, op); err != nil {
-		return safeIncusError("testenv Incus create completion unverified", err)
+		return withIncusCreateStage(incusCreateWaitStage("create_wait", op.Get().Err, err), safeIncusError("testenv Incus create completion unverified", err), nil)
 	}
 	return nil
 }
@@ -200,10 +200,10 @@ func (n *nativeIncusVMClient) Start(ctx context.Context, name string) error {
 		Action: "start", Timeout: 30,
 	}, "")
 	if err != nil {
-		return safeIncusError("testenv Incus start submission failed", err)
+		return withIncusCreateStage("create_start_submit", safeIncusError("testenv Incus start submission failed", err), nil)
 	}
 	if err := waitIncusOperation(ctx, op); err != nil {
-		return safeIncusError("testenv Incus start completion unverified", err)
+		return withIncusCreateStage(incusCreateWaitStage("create_start_wait", op.Get().Err, err), safeIncusError("testenv Incus start completion unverified", err), nil)
 	}
 	return nil
 }
