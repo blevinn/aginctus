@@ -93,7 +93,17 @@ pkgs.testers.runNixOSTest {
       for key, value in sorted(policy["config"].items()):
           argv += ["-c", key + "=" + value]
       machine.succeed(shlex.join(argv))
+      ${pkgs.lib.optionalString (!independentRecovery) ''
+        # The fixed fixture contains only synthetic data. Capture operation
+        # failures privately, without exporting event metadata or signed handles.
+        machine.succeed("install -m 0600 /dev/null /run/testenv-operation-events.json")
+        machine.succeed("systemd-run --unit=aginctus-testenv-operation-monitor --service-type=exec --property=RuntimeMaxSec=45min --property=LimitFSIZE=4194304 --property=StandardOutput=append:/run/testenv-operation-events.json --property=StandardError=null ${pkgs.incus}/bin/incus --project aginctus-testenv monitor --type=operation --format=json")
+        print("FIXTURE IMAGE GEOMETRY:", machine.succeed("${pkgs.qemu}/bin/qemu-img info --output=json ${image}/disk.qcow2 | jq -c '{format,virtual_size:.\"virtual-size\",actual_size:.\"actual-size\"}'").strip())
+      ''}
       machine.succeed("incus --project aginctus-testenv image import ${image}/metadata.tar.xz ${image}/disk.qcow2", timeout=240)
+      ${pkgs.lib.optionalString (!independentRecovery) ''
+        machine.succeed("systemctl is-active aginctus-testenv-operation-monitor.service")
+      ''}
       images = json.loads(machine.succeed("incus --project aginctus-testenv image list --format json"))
       assert len(images) == 1 and images[0]["type"] == "virtual-machine"
       fingerprint = images[0]["fingerprint"]
@@ -139,7 +149,23 @@ pkgs.testers.runNixOSTest {
           ''
         else
           ''
-            machine.succeed(shlex.join(argv), timeout=${toString trialTimeout})
+            try:
+                machine.succeed(shlex.join(argv), timeout=${toString trialTimeout})
+            except Exception:
+                # Capture only bounded error strings from the synthetic project,
+                # redact long hex tokens, and omit all other event fields.
+                machine.execute("systemctl stop aginctus-testenv-operation-monitor.service")
+                code, diagnostic = machine.execute("jq -cs '[.[] | select(.type == \"operation\") | .metadata | .err | strings | select(length > 0) | gsub(\"[0-9a-fA-F]{24,}\"; \"<redacted>\") | .[:2048]][-8:]' /run/testenv-operation-events.json")
+                if code == 0:
+                    print("FIXTURE INCUS OPERATION ERRORS:", diagnostic.strip())
+                else:
+                    print("FIXTURE INCUS OPERATION ERRORS: monitor evidence unavailable")
+                code, diagnostic = machine.execute("lvs --reportformat json --units b --nosuffix -o lv_size,lv_attr,data_percent,metadata_percent testenv | jq -c '.report[].lv'")
+                if code == 0:
+                    print("FIXTURE LVM GEOMETRY:", diagnostic.strip())
+                raise
+            else:
+                machine.succeed("systemctl stop aginctus-testenv-operation-monitor.service")
             reports = machine.succeed("find /var/lib/aginctus-testenv-acceptance -mindepth 2 -maxdepth 2 -name result.json").splitlines()
             assert len(reports) == 1
             # Do not expose the private signed recovery handles to the outer driver.

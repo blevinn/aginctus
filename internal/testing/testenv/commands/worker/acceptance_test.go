@@ -3,7 +3,7 @@ package worker
 import "testing"
 
 func TestAcceptanceFailureStageAllowlist(t *testing.T) {
-	for _, stage := range []string{"configuration", "worker_identity", "worker_marker", "worker_credential", "report_root", "report_lock", "report_initialize", "evidence", "worker_daemon", "preflight", "ephemeral_create", "cleanup"} {
+	for _, stage := range []string{"configuration", "worker_identity", "worker_marker", "worker_credential", "report_root", "report_lock", "report_initialize", "evidence", "worker_daemon", "preflight", "ephemeral_create", "ephemeral_create_wait_size", "retained_create_ownership", "retained_create_start_wait_timeout", "cleanup"} {
 		if got := acceptanceFailureStage(stage); got != stage {
 			t.Fatalf("stage %q mapped to %q", stage, got)
 		}
