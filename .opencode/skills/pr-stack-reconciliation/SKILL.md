@@ -67,15 +67,19 @@ appropriate to each PR using documented repository commands. Scope validation
 to the affected changes, but do not omit required checks needed to prepare the
 whole PR for review.
 
-Respect each check's documented prerequisites and evidence tier. In particular,
-run isolated-VM tests only on a host/builder satisfying their documented
-requirements. Never bypass a prerequisite, alter host security settings, use
-sudo to evade an isolation failure, or report a skipped/blocked test as passed.
-When a check cannot run, state that it was blocked or not run, give the concrete
-reason, and identify the appropriate host or manual follow-up. Do not execute
-live providers, credentialed operations, destructive integration tests, or
-host-mutating checks without the required explicit authorization and disposable
-environment.
+Respect each check's documented prerequisites and evidence tier. For isolated
+VM coverage, use the appropriate repository [testenv setup](../../../docs/testing/testenv/README.md)
+and follow the [VM harness procedure](../../../docs/testing/testenv/vm-harness.md)
+to run the selected scenario in its intended isolated environment; do not
+substitute direct execution on the coding host. Use a dedicated testenv worker
+only under its separate operator authorization and worker contract. Never
+bypass isolation controls, alter host security settings, use sudo to evade an
+isolation failure, or report a skipped/blocked test as passed. If no suitable
+testenv is available, report that check as blocked or not run, give the concrete
+reason, and identify the appropriate testenv setup or operator follow-up. Do
+not execute live providers, credentialed operations, destructive integration
+tests, or host-mutating checks without the required explicit authorization and
+disposable environment.
 
 Update PR descriptions to reflect the **current known validation state**:
 confirmed passes, failures, pending checks, blocked checks and checks not run.
