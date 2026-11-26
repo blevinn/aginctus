@@ -92,6 +92,11 @@ proves the target host, remote/project selection or credentials are safe.
 
 ## Read-only inspection and planning
 
+For an already-provisioned project-state service, the host administrator can
+run the [project-state attachment preflight](../design/project-state-service-preflight.md)
+to check the pinned local Incus server, effective guest devices and exclusive
+volume use.
+
 `state plan-accept` previews configured-to-accepted changes. The separate
 `state promote` command publishes the explicitly configured candidate only
 through an [enabled mTLS promotion service](../design/project-state-read-authentication.md#explicit-administrator-gated-promotion).
