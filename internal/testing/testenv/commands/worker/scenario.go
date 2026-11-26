@@ -12,7 +12,7 @@ import (
 func newScenario() *cobra.Command {
 	root := &cobra.Command{Use: "scenario", Short: "Plan a managed disposable scenario", RunE: groupRun}
 	root.AddCommand(&cobra.Command{
-		Use: "plan SCENARIO",
+		Use:  "plan SCENARIO",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			plan, err := testenv.PlanManagedScenario(args[0])
