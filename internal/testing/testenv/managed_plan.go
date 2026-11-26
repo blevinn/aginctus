@@ -34,14 +34,14 @@ func PlanManagedScenario(name string) (ManagedScenarioPlan, error) {
 		}
 		plan := ManagedScenarioPlan{
 			SchemaVersion: 1,
-			Scenario: name,
-			Target: scenario.Target,
-			Mode: "nested_batch",
-			Network: "offline",
+			Scenario:      name,
+			Target:        scenario.Target,
+			Mode:          "nested_batch",
+			Network:       "offline",
 			ResourceClass: "nested_batch",
-			Requires: []string{"immutable_test_payload", "nested_kvm_guest_execution", "guest_local_nix", "bounded_storage", "outer_network_denial"},
-			Status: "not_admitted",
-			Blocking: []string{"trusted_worker_admission", "managed_execution_transport", "independent_cleanup"},
+			Requires:      []string{"immutable_test_payload", "nested_kvm_guest_execution", "guest_local_nix", "bounded_storage", "outer_network_denial"},
+			Status:        "not_admitted",
+			Blocking:      []string{"trusted_worker_admission", "managed_execution_transport", "independent_cleanup"},
 		}
 		if scenario.Networked {
 			plan.Network = "staging_required"
