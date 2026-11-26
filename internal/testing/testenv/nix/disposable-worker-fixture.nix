@@ -136,7 +136,9 @@ pkgs.testers.runNixOSTest {
     assert not any(volume["name"].startswith("testenv-vm-") for volume in volumes)
     machine.succeed("incus --project aginctus-testenv delete foreign-sentinel")
     assert json.loads(machine.succeed("incus --project aginctus-testenv list --format json")) == []
-    assert json.loads(machine.succeed("incus --project aginctus-testenv storage volume list testenv --format json")) == []
+    # Incus may retain the imported image cache; no non-image volumes may remain.
+    final_volumes = json.loads(machine.succeed("incus --project aginctus-testenv storage volume list testenv --format json"))
+    assert all(volume["type"] == "image" for volume in final_volumes)
     public = fixture_receipt(
         report,
         ${builtins.toJSON (if nativeInstance then "native-instance" else "")},
