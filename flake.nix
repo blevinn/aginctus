@@ -171,9 +171,11 @@
           # explicitly selected; not a run-nixos-vm QEMU batch launcher.
         }
         // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-          testenv-disposable-worker-fixture = import ./internal/testing/testenv/nix/disposable-worker-fixture.nix {
-            inherit self nixpkgs system;
-          };
+          testenv-disposable-worker-fixture =
+            import ./internal/testing/testenv/nix/disposable-worker-fixture.nix
+              {
+                inherit self nixpkgs system;
+              };
           testenv-incus-vm-image =
             (import ./internal/testing/testenv/nix/incus-vm-image.nix {
               inherit self nixpkgs system;
