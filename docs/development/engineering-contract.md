@@ -27,6 +27,10 @@ Use these terms consistently in new contracts:
 | Converged | Observed managed state matches the accepted revision. |
 | Unverified | Evidence is insufficient for the claimed condition. |
 
+## Executable boundaries
+
+[ADR 0007](../adr/0007-executable-boundaries.md) sets the target of one production Go executable (`aginctus`) and one developer Go executable (`aginctus-dev`). Use role-specific subcommands and independent supervised processes, not a new binary per daemon, helper, test or generator. New persistent executables require an explicit reviewed architectural exception; `aginctus-testsrv` is deferred. Keep developer/test dependencies out of production transitively and MCP exposure independently allowlisted. Preserve separate service identities, credentials, project authority, disposable-worker confinement and activation gates. Retire superseded tools rather than porting them without a supported consumer. This is a go-forward contract, not current binary inventory.
+
 ## Implementation and review
 
 - Prefer domain-owned types and small, coherent vertical slices. Parse once, execute once, render once; use typed errors and explicit injected effect capabilities. Avoid new mutable global transport hooks, redundant adapters and generic utility layers.

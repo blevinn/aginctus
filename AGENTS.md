@@ -21,6 +21,7 @@ Follow the [engineering contract](docs/development/engineering-contract.md) and 
 
 - Use an isolated worktree for local work; do not disrupt parallel worktrees. Never write to repositories or external resources outside the authorized `blevinn/aginctus` repository.
 - Identify the canonical contract, existing implementation and tracking issue before adding a new abstraction or parallel path. Prefer completing and replacing existing paths over adding scaffolding.
+- Follow [ADR 0007](docs/adr/0007-executable-boundaries.md): one production executable (`aginctus`), one developer executable (`aginctus-dev`). Use subcommands for new roles; do not introduce another persistent executable without a reviewed architectural exception. Keep production dependencies and authority isolated from development tooling.
 - Preserve independent host authority, explicit environment acceptance, verified scope and ownership, pinned revision and writer exclusion. Configuration origin, names and labels do not grant authority. Never activate a privileged write path merely because a fixture passes.
 - Use typed JSON-first intent, native reconciliation and static plugin composition for new lifecycle work. Do not expand legacy drivers or introduce speculative compatibility layers.
 - Keep credentials out of accepted state, Nix store, readable resource configuration and diagnostics. Require explicit approval for host mutations, privileged integration and live providers.
