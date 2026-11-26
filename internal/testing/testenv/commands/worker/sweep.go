@@ -11,13 +11,13 @@ import (
 
 func NewSweep(handlers Handlers) *cobra.Command {
 	return &cobra.Command{
-		Use: "sweep",
+		Use:   "sweep",
 		Short: "Reconcile expired signed VMs on the installed dedicated worker",
-		Args: cobra.NoArgs,
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			options := testenv.TrustedIncusSweepOptions{
-				SocketPath: handlers.Getenv("AGINCTUS_TESTENV_WORKER_SOCKET"),
-				StoragePool: handlers.Getenv("AGINCTUS_TESTENV_WORKER_POOL"),
+				SocketPath:    handlers.Getenv("AGINCTUS_TESTENV_WORKER_SOCKET"),
+				StoragePool:   handlers.Getenv("AGINCTUS_TESTENV_WORKER_POOL"),
 				PolicyKeyPath: handlers.Getenv("AGINCTUS_TESTENV_POLICY_KEY_FILE"),
 			}
 			ctx, cancel := context.WithTimeout(cmd.Context(), 120*time.Second)

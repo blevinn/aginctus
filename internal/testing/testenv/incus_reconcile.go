@@ -13,11 +13,11 @@ const MaxIncusReconcileCandidates = 64
 // independent root-volume API absence. Neither proves physical reclamation,
 // guest evidence or worker filesystem cleanup.
 type IncusReconcileResult struct {
-	Scanned   int `json:"scanned"`
-	Skipped   int `json:"skipped"`
-	Destroyed int `json:"destroyed"`
-	Failed    int `json:"failed"`
-	RootVolumesAbsent int `json:"root_volumes_absent"`
+	Scanned               int `json:"scanned"`
+	Skipped               int `json:"skipped"`
+	Destroyed             int `json:"destroyed"`
+	Failed                int `json:"failed"`
+	RootVolumesAbsent     int `json:"root_volumes_absent"`
 	RootVolumesUnverified int `json:"root_volumes_unverified"`
 }
 
