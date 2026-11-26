@@ -16,10 +16,10 @@ func TestManagedPlanCatalog(t *testing.T) {
 			t.Fatalf("bad plan: %+v", p)
 		}
 		if scenario.Name == "native-instance" {
-			if p.Mode != "direct_guest" || !slices.Contains(p.Requires, "pinned_scenario_image") || slices.Contains(p.Requires, "nested_kvm_guest_execution") {
+			if p.ManagedTarget != "testenv-managed-native-instance" || !slices.Contains(p.Blocking, "managed_runtime_acceptance") || p.Mode != "direct_guest" || !slices.Contains(p.Requires, "pinned_scenario_image") || slices.Contains(p.Requires, "nested_kvm_guest_execution") {
 				t.Fatalf("direct guest plan: %+v", p)
 			}
-		} else if p.Mode != "nested_batch" || !slices.Contains(p.Requires, "nested_kvm_guest_execution") {
+		} else if p.ManagedTarget != "" || p.Mode != "nested_batch" || !slices.Contains(p.Requires, "nested_kvm_guest_execution") {
 			t.Fatalf("nested plan: %+v", p)
 		}
 	}

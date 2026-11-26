@@ -39,6 +39,29 @@ Nix builds can still download locked dependencies and consume host disk/CPU.
 No real network isolation or quota is claimed by this runner alone. Existing
 `just check-all` remains hostless and does not start this VM.
 
+## Managed worker entrypoint (experimental)
+
+The fixed managed `native-instance` build is a separate operator path,
+using the reviewed disposable-worker image rather than a checkout Python
+driver on the invoking account. On an independently approved local
+x86_64 KVM builder with sufficient storage and effective Nix sandboxing,
+from a reviewed immutable checkout:
+
+```sh
+just testenv-worker-lifecycle
+just testenv-managed-native-instance
+```
+
+The recipes request sandboxing, strip common inherited daemon/QEMU/SSH
+overrides, select the fixed derivation and request no remote builders.
+These options are not a substitute for verifying the actual Nix daemon
+policy or caller identity. The build prints its output store path; inspect
+`testenv-fixture-receipt.json` there. A cached result is not a fresh trial.
+The worker scenario plan reports `managed_target` separately from the
+legacy batch target; it remains `not_admitted` until runtime acceptance.
+No ordinary VM test or MCP execution default changes. See the
+[worker fixture runbook](testenv-incus-vm-image.md) for prerequisites.
+
 ## Native CLI entrypoint (experimental)
 
 The `native-instance` scenario boots an isolated real Incus daemon, imports a

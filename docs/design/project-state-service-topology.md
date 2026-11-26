@@ -103,6 +103,85 @@ it is not an isolation configuration.
 
 ### Narrow isolation review
 
+**Decision approved for implementation and testing** under
+[#704](https://github.com/blevinn/aginctus/issues/704): use separate
+administrator-owned placement for secret-bearing gateway resources and the
+state-service guest and volume. Keep the logical authority on the workload
+project. See the [maintainer decision](https://github.com/blevinn/aginctus/pull/1167#issuecomment-7202001582).
+Delegated access remains gated on passing and reviewing the placement and
+authorization tests below.
+
+#### Finding in the pinned Incus 7.5.1 implementation
+
+The flake's Incus source contains `authorization.client.tls-restricted` in
+`internal/server/cluster/config/config.go`. `internal/server/auth/router.go`
+classifies a certificate by fingerprint and selects **one** authorizer for
+that request. A scriptlet can therefore govern the same restricted TLS
+certificate that Aginctus checks over mTLS. It replaces rather than adds to
+the native TLS driver's project check. The scriptlet driver receives the
+authenticated username and certificate record; a replacement policy would
+have to reapply the exact-project constraint and default-deny unknown
+principals, projects, objects and entitlements. A second credential or an
+OIDC-only policy would not constrain the existing TLS certificate.
+
+The actual attachment path poses a separate problem. `cmd/incusd/instances.go`
+checks `can_create_instances` on the project, not on the requested instance
+name or attached custom volumes. `internal/server/device/disk.go` resolves a
+custom disk through the instance's effective storage project and database,
+without a source-volume authorization check in that path. In
+`internal/server/project/permissions.go`, `restricted.devices.disk=managed`
+checks whether the disk is backed by an allowed pool; it is not a per-volume
+or per-certificate rule. A volume API denial and a denied update to the
+protected instance are therefore insufficient evidence: the authorized
+instance-create path can reference an existing same-project filesystem volume.
+Exclusive `UsedBy` is only an observation.
+
+Project-wide `restricted.devices.disk=block` would also prohibit the required
+state-service custom disk and gateway database attachment in that project.
+A different pool alone has the same conflict: the pool allowlist is project
+wide. Pre-provisioning every workload with no delegated create or device-edit
+privilege is a narrower, different lifecycle, not a replacement for supported
+instance reconciliation. Do not introduce a request-body filtering proxy or
+assume OpenFGA can enforce an entitlement that the Incus path never checks.
+These are source findings plus the previously measured restricted-TLS
+baseline; they are not a new VM result.
+
+#### Approved placement direction and authority split
+
+Use a nondefault protected project on the same pinned, standalone daemon as
+the first candidate. Isolate project-local volumes, profiles, and images;
+verify physical scope independently and refuse inherited storage or broad
+guest attachment grants. If the same-daemon policy cannot pass the tests,
+use an independently administered daemon and separately pin both endpoints.
+No accepted-state schema change is needed to represent physical placement.
+
+| Principal | Required authority | Boundary |
+| --- | --- | --- |
+| Infrastructure administrator | Direct provisioning, trust, host networking, storage, and physical attachment preflight | No callable admin relay for project peers. |
+| State service | Pinned workload-project metadata/enrollment and exact live peer-certificate lookup; private mounted store | No Incus mutation or access to protected guests through the Incus API. Test a metadata-only certificate policy rather than assuming ordinary restricted TLS is metadata-only. |
+| Reader / promoter | Workload-project verification and mTLS reads; exact CAS grant for the promoter | No protected-project certificate or privileged deployment role. |
+| Workload executor | Invoking restricted identity for workload create, observe, start, stop and removal; separate exact application grants and host attachment checks | No protected-project guest, storage or host administrative access. |
+| Gateway publisher / executor | Independently authorized access to the exact protected gateway pair and its storage under the trusted boundary | No state store or general host access through a publisher request; no use of the ordinary workload key. |
+| Recovery authority | Separate exact application grant and least-privilege live observations of relevant daemon operations and resources | No replay, asserted terminality, or privileged Incus mutation through the service. |
+
+Keep the service's live peer verifier pinned to the **workload** project and
+require its existing single-project certificate check. The administrator's
+physical attachment contract must instead verify the separate protected scope
+and bind it to that exact logical authority. A protected gateway execution
+binding also needs review under ADR 0006: the accepted revision would name the
+logical environment while allowing a separately authorized runtime resource
+binding, never a caller-selected project override. Review the concrete runtime
+binding under ADR 0006 while preserving mTLS, enrollment, persistent ownership,
+and accepted revision checks.
+
+Implement exact protected placement and installation, then
+exercise the tests below with distinct real credentials and existing resources.
+Also exercise custom-disk references at **instance creation**, not just updates
+to existing guests, and check the effective storage project when a feature is
+inherited. Probe accepted asynchronous work separately from fresh requests:
+certificate removal can prevent the next request but does not cancel an
+already accepted daemon operation or retract bytes already returned.
+
 1. **Review same-project Incus authorization first.** Preserve the existing
    server/project binding while allowing only the required project/enrollment
    observations and live peer trust lookups, and denying data-plane access to

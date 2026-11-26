@@ -105,15 +105,17 @@ func TestWorkerAcceptancePreservesSummaryAndRevision(t *testing.T) {
 			t.Fatal("incorrect worker options", cfg)
 		}
 		return testenv.IncusAcceptanceReport{
-			RunID: strings.Repeat("a", 24),
-			Handles: []testenv.VMRef{{PolicyMAC: "private-handle"}},
+			RunID:        strings.Repeat("a", 24),
+			FailureStage: "worker_credential",
+			Handles:      []testenv.VMRef{{PolicyMAC: "private-handle"}},
 		}, errors.New("private-credential-secret")
 	}
 	var out, stderr bytes.Buffer
 	code := executeWithServices(context.Background(), []string{"worker", "acceptance",
 		"--image", "operator-image", "--socket", "/operator/socket"}, strings.NewReader(""), &out, &stderr, services)
 	if code != 1 || !strings.Contains(out.String(), `"status":"fail"`) ||
-		!strings.Contains(out.String(), `"profile":"dedicated_worker"`) {
+		!strings.Contains(out.String(), `"profile":"dedicated_worker"`) ||
+		!strings.Contains(out.String(), `"failure_stage":"worker_credential"`) {
 		t.Fatal(code, out.String(), stderr.String())
 	}
 	for _, private := range []string{"private-credential-secret", "private-handle", "operator-image", "/operator/socket"} {
