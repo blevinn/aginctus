@@ -211,7 +211,7 @@ func runBasicCobraWithStateCapabilities(
 			logicalWorkload := cmd.Parent() != nil && (cmd.Parent().Name() == "workloads" || cmd.Parent().Name() == "agents" || cmd.Parent().Name() == "frontends" || cmd.Parent().Name() == "gateways") &&
 				(cmd.Name() == "list" || cmd.Name() == "show" || cmd.Name() == "status")
 			stateRead := cmd.Parent() != nil && cmd.Parent().Name() == "state" &&
-				(cmd.Name() == "show" || cmd.Name() == "diff" || cmd.Name() == "plan-accept" || cmd.Name() == "plan-native" || cmd.Name() == "promote" || cmd.Name() == "reconcile")
+				(cmd.Name() == "show" || cmd.Name() == "diff" || cmd.Name() == "plan-accept" || cmd.Name() == "plan-native" || cmd.Name() == "operations" || cmd.Name() == "promote" || cmd.Name() == "reconcile")
 			environmentRead := cmd.Parent() != nil && cmd.Parent().Name() == "environment" &&
 				(cmd.Name() == "list" || cmd.Name() == "show")
 			verifiedScopedWorkload := cmd.Parent() != nil && cmd.Parent().Name() == "workload" &&
