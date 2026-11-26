@@ -92,6 +92,14 @@ proves the target host, remote/project selection or credentials are safe.
 
 ## Read-only inspection and planning
 
+`state plan-accept` previews configured-to-accepted changes. The separate
+`state promote` command publishes the explicitly configured candidate only
+through an [enabled mTLS promotion service](../design/project-state-read-authentication.md#explicit-administrator-gated-promotion).
+It requires an immutable environment UUID, an explicit Incus project, and
+`--expect` with the current accepted revision ID (or `genesis`). It does not
+reconcile infrastructure. If acknowledgement is lost, inspect accepted state
+before retrying.
+
 `state plan-native` previews dependencies and capability requirements from the
 authenticated project's published accepted snapshot.
 Use the [authenticated planning example](../operations/host/restricted-project-enrollment-reads.md#preview-accepted-workload-dependencies)
