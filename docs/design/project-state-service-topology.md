@@ -55,6 +55,38 @@ layout without changing ADR 0006's revision schema and per-environment CAS.
 The admin-owned bootstrap path must remain outside accepted-state convergence
 or the service would depend on its own unavailable accepted pointer to recover.
 
+### Guest store bootstrap
+
+After an independently authorized administrator verifies the existing service
+instance and exclusive writable volume attachment using
+[host preflight](project-state-service-preflight.md), the dedicated guest
+service UID can invoke `aginctus serve project-state bootstrap`. The one-shot
+role takes no arguments or environment overrides. It uses the nonsecret,
+guest-administrator-owned `/etc/aginctus/project-state-bootstrap.json`
+(root-owned regular file, mode `0644`, no symlinks or hard links):
+
+```json
+{
+  "apiVersion": "aginctus.dev/project-state-bootstrap/v1alpha1",
+  "binding": {"serverId": "sha256:<pinned-Incus-server-certificate-hash>", "project": "team"},
+  "serviceUid": 1234,
+  "mountPath": "/srv/aginctus-state",
+  "operatorConfigFile": "/run/aginctus/restricted-incus.json"
+}
+```
+
+Provision the selected service-UID-private restricted Incus TLS configuration
+independently. The role verifies the exact pinned server/project and requires
+an existing service-UID-private dedicated mountpoint. It serializes cooperating
+bootstrap calls on the mount and initializes an empty mount using the existing
+`environments/` and `authority.json` layout. The authority record is synced and
+published last without replacing any existing entry. An exact retained store
+reopens without rewriting its authority or revisions. A partial, nonempty
+foreign or unreadable mount requires independent inspection; retry does not
+adopt or clean it up. The mount check and guest lock do not attest Incus
+attachment exclusivity or fence another guest. The role creates no Incus
+resource, publishes no accepted revision, and starts no listener.
+
 ### Failure, replacement, backup and recovery
 
 - Ordinary restart: retain the custom volume; revalidate project identity,
