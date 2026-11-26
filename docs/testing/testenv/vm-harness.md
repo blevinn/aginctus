@@ -29,11 +29,17 @@ code typed in the console can access the worker account's host files. The test
 driver itself is not a security boundary. Do not give this console to an
 untrusted agent with the same Unix identity as the pilot operator.
 
-Run the harness under a **dedicated unprivileged Unix worker**, preferably
-on a separate KVM runner/host, with no pilot credentials, host Incus privileges,
-SSH agent, pilot network routes, or writable sensitive host paths. Guest root
-can inspect all guest state. As a later slice, #428 will gain a typed guest
-command transport that does not expose the Python test-driver console.
+Trusted coding agents may execute repository-defined batch tests on their
+operator-authorized development host, including a multipurpose host, under
+[AGENTS.md](../../../AGENTS.md). No independently admitted worker, separate
+Unix account or per-run approval is required for this local batch path.
+Use the normal unprivileged build account; keep credentials, host Incus,
+pilot services and sensitive host paths out of test inputs and effects.
+A dedicated isolated worker (preferably a separate KVM host) remains
+recommended and is required for untrusted agents. Guest root can inspect all
+guest state; the host-side driver is not a security sandbox. As a later slice,
+#428 will gain a typed guest command transport that does not expose the Python
+test-driver console. Persistent/external worker admission is a separate gate.
 
 Nix builds can still download locked dependencies and consume host disk/CPU.
 No real network isolation or quota is claimed by this runner alone. Existing
@@ -42,10 +48,11 @@ No real network isolation or quota is claimed by this runner alone. Existing
 ## Managed worker entrypoint (experimental)
 
 The fixed managed `native-instance` build is a separate operator path,
-using the reviewed disposable-worker image rather than a checkout Python
-driver on the invoking account. On an independently approved local
-x86_64 KVM builder with sufficient storage and effective Nix sandboxing,
-from a reviewed immutable checkout:
+using the disposable-worker image rather than the legacy batch runner.
+For local development testing, use an authorized x86_64 KVM builder with
+sufficient storage and effective Nix sandboxing; no independent worker
+admission is required. Record the exact tested source; formal acceptance
+still requires a reviewed immutable checkout:
 
 ```sh
 just testenv-worker-lifecycle
@@ -87,8 +94,8 @@ checks do not run the VM; a skipped Go test is not real-Incus acceptance.
 
 The joined lifecycle, stopped gateway-pair, and gateway stop/retention
 scenarios are offline fixtures registered in `testenv vm list` and `plan`,
-the operator-only batch runner, and the v1 receipt readers. From a verified
-dedicated disposable worker, select one explicitly:
+the batch runner, and the v1 receipt readers. From an authorized development
+host or disposable worker, select one explicitly:
 
 ```sh
 nix develop --offline -c just test-vm-native-joined-lifecycle
@@ -171,10 +178,11 @@ aginctus testenv vm test smoke
 aginctus testenv vm test storage-network
 ```
 
-Execute `test` **from the repository checkout** on an unprivileged,
-dedicated test worker. The current Python script is sourced from that checkout,
-which a coding agent may modify; this is **not** an immutable installed
-supervisor or a safe way to grant an untrusted agent host execution.
+Execute `test` **from the repository checkout** on an authorized development
+host or dedicated test worker using an unprivileged account. The Python script
+is sourced from that checkout, which a coding agent may modify; this is
+**not** an immutable installed supervisor or a safe way to grant an untrusted
+agent host execution.
 Native persistent VM exec/up/reset/destroy and MCP tool execution remain
 disabled until the separate trusted supervisor and permission work lands.
 `list`, `plan` and `help testenv` do not load host configuration or
@@ -214,7 +222,7 @@ boundary. Use only on a dedicated non-privileged worker.
 
 ## Commands
 
-From the repository root on x86_64-linux with KVM, using the dedicated worker:
+From the repository root on an authorized x86_64-linux development host or worker with KVM:
 
 ```sh
 nix develop -c just test-vm-runner
@@ -328,12 +336,12 @@ are not inferred from the presence of an Incus service or a green mock.
 The report contains no VM transcript, raw headers, credentials, or provider
 payload. It does **not** prove that cleanup completed, establish a cryptographic
 attestation, or sanitize diagnostic output printed by the Nix builder.
-Only run this on a separate unprivileged worker without pilot secrets.
+Run using the authorized unprivileged batch path described above; do not expose pilot secrets to the test.
 Reports are mode `0600` under run-scoped directories and excluded from Git.
 
 ## Read-only concise evidence view
 
-After a separately authorized VM run produces `.vm-harness-results/<run-id>/result.json`,
+After an authorized VM run produces `.vm-harness-results/<run-id>/result.json`,
 copy its **24-character hexadecimal run ID** from the report path. Inspect the
 *existing* record from the same repository checkout:
 
