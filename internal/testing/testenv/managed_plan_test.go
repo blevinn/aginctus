@@ -12,9 +12,15 @@ func TestManagedPlanCatalog(t *testing.T) {
 			t.Fatal(err)
 		}
 		if p.Scenario != scenario.Name || p.Target != scenario.Target || p.Status != "not_admitted" ||
-			p.Mode != "nested_batch" || !slices.Contains(p.Requires, "nested_kvm_guest_execution") ||
 			!slices.Contains(p.Blocking, "independent_cleanup") {
 			t.Fatalf("bad plan: %+v", p)
+		}
+		if scenario.Name == "native-instance" {
+			if p.Mode != "direct_guest" || !slices.Contains(p.Requires, "pinned_scenario_image") || slices.Contains(p.Requires, "nested_kvm_guest_execution") {
+				t.Fatalf("direct guest plan: %+v", p)
+			}
+		} else if p.Mode != "nested_batch" || !slices.Contains(p.Requires, "nested_kvm_guest_execution") {
+			t.Fatalf("nested plan: %+v", p)
 		}
 	}
 	for _, name := range []string{"", "full-stack", "native-oci", "../smoke", "smoke;id"} {
