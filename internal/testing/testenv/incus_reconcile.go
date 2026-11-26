@@ -9,14 +9,16 @@ import (
 
 const MaxIncusReconcileCandidates = 64
 
-// IncusReconcileResult captures verified Incus instance deletion only.
-// Guest evidence, storage-pool quotas and worker filesystem cleanup are
-// separate acceptance domains; this is NOT a crash-surviving timer alone.
+// IncusReconcileResult distinguishes verified instance deletion from
+// independent root-volume API absence. Neither proves physical reclamation,
+// guest evidence or worker filesystem cleanup.
 type IncusReconcileResult struct {
 	Scanned   int `json:"scanned"`
 	Skipped   int `json:"skipped"`
 	Destroyed int `json:"destroyed"`
 	Failed    int `json:"failed"`
+	RootVolumesAbsent int `json:"root_volumes_absent"`
+	RootVolumesUnverified int `json:"root_volumes_unverified"`
 }
 
 // ReconcileExpiredIncusVMs runs one bounded, caller-triggered sweep via the
@@ -54,6 +56,20 @@ func ReconcileExpiredIncusVMs(ctx context.Context, backend *IncusVMBackend, now 
 			continue
 		}
 		summary.Destroyed++
+		// A successful Destroy proves only instance absence. A real worker
+		// also has the separate project-scoped volume inventory capability.
+		inventory, ok := backend.client.(incusRootVolumeInventory)
+		if !ok {
+			summary.RootVolumesUnverified++
+			continue
+		}
+		present, err := inventory.RootVolumePresent(ctx, backend.pool, vm.Ref.Instance)
+		if err != nil || present || ctx.Err() != nil {
+			summary.RootVolumesUnverified++
+			failures = append(failures, fmt.Errorf("expired run %s root-volume absence not verified", vm.Ref.RunID))
+			continue
+		}
+		summary.RootVolumesAbsent++
 	}
 	return summary, errors.Join(failures...)
 }
