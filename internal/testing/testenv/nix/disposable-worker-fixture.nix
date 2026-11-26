@@ -52,7 +52,7 @@ pkgs.testers.runNixOSTest {
     networking.nftables.enable = true;
     system.stateVersion = "26.05";
   };
-  testScript = ''
+  testScript = (builtins.readFile ./fixture_receipt.py) + ''
     import json
     import re
     import shlex
@@ -117,7 +117,8 @@ pkgs.testers.runNixOSTest {
     machine.succeed(shlex.join(argv), timeout=${toString trialTimeout})
     reports = machine.succeed("find /var/lib/aginctus-testenv-acceptance -mindepth 2 -maxdepth 2 -name result.json").splitlines()
     assert len(reports) == 1
-    report = json.loads(machine.succeed("cat " + shlex.quote(reports[0])))
+    # Do not expose the private signed recovery handles to the outer driver.
+    report = json.loads(machine.succeed("jq -c '{schema_version,profile,evidence_tier,status,scenario:(.scenario // \"\"),image_fingerprint,results}' " + shlex.quote(reports[0])))
     assert report["status"] == "pass"
     checks = {check["id"]: check["status"] for check in report["results"]}
     for key in ("ephemeral_lifecycle", "retained_lifecycle", "instance_cleanup", "root_volumes", "foreign_preserved", "scoped_ttl_recovery"):
@@ -134,5 +135,20 @@ pkgs.testers.runNixOSTest {
     volumes = json.loads(machine.succeed("incus --project aginctus-testenv storage volume list testenv --format json"))
     assert not any(volume["name"].startswith("testenv-vm-") for volume in volumes)
     machine.succeed("incus --project aginctus-testenv delete foreign-sentinel")
+    assert json.loads(machine.succeed("incus --project aginctus-testenv list --format json")) == []
+    # Incus may retain the imported image cache; no non-image volumes may remain.
+    final_volumes = json.loads(machine.succeed("incus --project aginctus-testenv storage volume list testenv --format json"))
+    assert all(volume["type"] == "image" for volume in final_volumes)
+    public = fixture_receipt(
+        report,
+        ${builtins.toJSON (if nativeInstance then "native-instance" else "")},
+        ${builtins.toJSON (self.rev or "unavailable")},
+        ${builtins.toJSON (builtins.hashFile "sha256" "${self}/flake.lock")},
+        fingerprint,
+    )
+    # Only sanitized observations leave the worker. The Nix result can be
+    # cached; the receipt does not assert this invocation created a new VM.
+    machine.succeed("printf '%s\\n' " + shlex.quote(json.dumps(public, sort_keys=True)) + " > /tmp/testenv-fixture-receipt.json")
+    machine.copy_from_vm("/tmp/testenv-fixture-receipt.json")
   '';
 }

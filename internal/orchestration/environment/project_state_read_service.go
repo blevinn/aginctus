@@ -29,6 +29,7 @@ type ProjectStateReadServiceConfig struct {
 	ServicePrivateKeyPEM string `json:"servicePrivateKeyPem"`
 	TrustedClientCertificatesPEM string `json:"trustedClientCertificatesPem"`
 	PromotionPolicyFile string `json:"promotionPolicyFile,omitempty"`
+	ExecutionPolicyFile string `json:"executionPolicyFile,omitempty"`
 }
 
 func ReadProjectStateReadServiceConfig(path string) (ProjectStateReadServiceConfig, error) {
@@ -52,10 +53,12 @@ func ReadProjectStateReadServiceConfig(path string) (ProjectStateReadServiceConf
 		rejectCandidateDuplicateKeys(data) != nil { return deny() }
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(data, &fields) != nil { return deny() }
-	if raw, exists := fields["promotionPolicyFile"]; exists {
-		var path string
-		if json.Unmarshal(raw, &path) != nil || path == "" { return deny() }
-		delete(fields, "promotionPolicyFile")
+	for _, key := range []string{"promotionPolicyFile", "executionPolicyFile"} {
+		if raw, exists := fields[key]; exists {
+			var path string
+			if json.Unmarshal(raw, &path) != nil || path == "" { return deny() }
+			delete(fields, key)
+		}
 	}
 	if candidateKeys(fields,
 		"apiVersion", "project", "listenAddress", "mountPath", "operatorConfigFile",
@@ -163,6 +166,21 @@ func ServeMountedProjectStateReads(ctx context.Context, c ProjectStateReadServic
 				return
 			}
 			read.ServeHTTP(w, r)
+		})
+	}
+	if c.ExecutionPolicyFile != "" {
+		if _, err := readProjectExecutionPolicy(c.ExecutionPolicyFile, volume.binding); err != nil {
+			return deny()
+		}
+		execution := &projectExecutionHandler{volume: volume, authorizer: authorizer, catalog: catalog, policy: c.ExecutionPolicyFile}
+		defer execution.close()
+		previous := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == projectExecutionPath {
+				execution.ServeHTTP(w, r)
+				return
+			}
+			previous.ServeHTTP(w, r)
 		})
 	}
 	// A TCP listener is permitted only after all authority checks pass.
