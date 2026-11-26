@@ -2,6 +2,7 @@ package native
 
 import (
 	"context"
+
 	"fmt"
 	"maps"
 	"net/http"
@@ -274,6 +275,10 @@ func PlanNetworkWithReader(ctx context.Context, intent NetworkIntent, client Net
 	if err := requireLocalScope(client, intent); err != nil {
 		return NetworkPlan{}, &ReconcileError{Stage: "transport", cause: err}
 	}
+	return planObservedNetwork(ctx, intent, client)
+}
+
+func planObservedNetwork(ctx context.Context, intent NetworkIntent, client NetworkReader) (NetworkPlan, error) {
 	observed, etag, err := observeNetwork(ctx, client, intent.Name)
 	if err != nil {
 		return NetworkPlan{}, &ReconcileError{Stage: "observation", cause: err}

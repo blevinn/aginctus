@@ -33,6 +33,10 @@ func OpenProductionOperatorReads(
 	if err := ctx.Err(); err != nil { return ProductionOperatorReadSet{}, nil, err }
 	config, err := ReadRestrictedOperatorReadConfig(privateConfigPath)
 	if err != nil { return ProductionOperatorReadSet{}, nil, errors.New("operator read configuration unavailable") }
+	return openProductionOperatorReads(ctx, config)
+}
+
+func openProductionOperatorReads(ctx context.Context, config RestrictedOperatorReadConfig) (ProductionOperatorReadSet, func(), error) {
 	scoped, err := OpenExplicitRestrictedIncusProject(ctx, config.Connection())
 	if err != nil { return ProductionOperatorReadSet{}, nil, errors.New("restricted Incus connection unavailable") }
 	catalog := NewRestrictedIncusReadCatalog(scoped, config.TrustedServerSHA256)
