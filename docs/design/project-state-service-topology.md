@@ -90,11 +90,13 @@ administrator provisioning examples; it is not an isolation configuration.
 
 ### Narrow isolation review
 
-**Decision requested under [#704](https://github.com/blevinn/aginctus/issues/704):**
-approve testing separate administrator-owned placement for secret-bearing
-gateway resources and the state-service guest and volume. Keep the logical
-authority on the workload project. Do not enable delegated access until the
-placement and authorization tests below pass and are reviewed.
+**Decision approved for implementation and testing** under
+[#704](https://github.com/blevinn/aginctus/issues/704): use separate
+administrator-owned placement for secret-bearing gateway resources and the
+state-service guest and volume. Keep the logical authority on the workload
+project. See the [maintainer decision](https://github.com/blevinn/aginctus/pull/1167#issuecomment-7202001582).
+Delegated access remains gated on passing and reviewing the placement and
+authorization tests below.
 
 #### Finding in the pinned Incus 7.5.1 implementation
 
@@ -131,7 +133,7 @@ assume OpenFGA can enforce an entitlement that the Incus path never checks.
 These are source findings plus the previously measured restricted-TLS
 baseline; they are not a new VM result.
 
-#### Recommended placement and authority split
+#### Approved placement direction and authority split
 
 Use a nondefault protected project on the same pinned, standalone daemon as
 the first candidate. Isolate project-local volumes, profiles, and images;
@@ -155,11 +157,11 @@ physical attachment contract must instead verify the separate protected scope
 and bind it to that exact logical authority. A protected gateway execution
 binding also needs review under ADR 0006: the accepted revision would name the
 logical environment while allowing a separately authorized runtime resource
-binding, never a caller-selected project override. Maintainer approval is
-needed for precisely this physical/runtime split, not for relaxing mTLS,
-enrollment, persistent ownership, or accepted revision checks.
+binding, never a caller-selected project override. Review the concrete runtime
+binding under ADR 0006 while preserving mTLS, enrollment, persistent ownership,
+and accepted revision checks.
 
-After approval, implement exact protected placement and installation, then
+Implement exact protected placement and installation, then
 exercise the tests below with distinct real credentials and existing resources.
 Also exercise custom-disk references at **instance creation**, not just updates
 to existing guests, and check the effective storage project when a feature is
