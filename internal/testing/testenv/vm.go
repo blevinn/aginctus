@@ -52,8 +52,8 @@ func VMScenario(name string) (Scenario, error) {
 }
 
 // VMRunnerRequest is a fixed-argv invocation of the existing batch harness.
-// It is operator-only: the Python script comes from the source checkout.
-// Untrusted-agent execution must wait for the installed immutable supervisor.
+// Authorized developers and trusted coding agents may use the local batch path.
+// The checkout Python script is not a sandbox or an untrusted-agent supervisor.
 type VMRunnerRequest struct {
 	Program string
 	Args    []string
@@ -98,7 +98,8 @@ func VMTestRequest(root, scenarioName string) (VMRunnerRequest, error) {
 
 // RunVMTest reuses the already-validated batch runner. This is not a
 // persistent VM or a safe transport for arbitrary agent-supplied commands.
-// Invoke only from a dedicated unprivileged test worker without pilot access.
+// Invoke on an authorized development host or dedicated unprivileged worker;
+// keep pilot resources out of the test. Persistent worker admission is separate.
 func RunVMTest(ctx context.Context, root, scenarioName string, stdout, stderr io.Writer) error {
 	request, err := VMTestRequest(root, scenarioName)
 	if err != nil {
