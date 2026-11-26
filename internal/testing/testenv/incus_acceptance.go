@@ -33,6 +33,7 @@ type IncusAcceptanceOptions struct {
 	ReportRoot       string
 	ForeignInstance  string
 	Revision         string
+	RequireNestedKVM bool
 }
 
 type IncusAcceptanceCheck struct {
@@ -194,7 +195,7 @@ func newIncusAcceptanceReport(cfg IncusAcceptanceOptions, runID string) IncusAcc
 	r := IncusAcceptanceReport{SchemaVersion: 1, Profile: "dedicated_worker", Tier: "disposable_guest_no_live_provider",
 		RunID: runID, CreatedUTC: time.Now().UTC(), Revision: cfg.Revision,
 		ImageFingerprint: cfg.ImageFingerprint, Project: cfg.Project, Status: "fail", FailureStage: "preflight"}
-	for _, id := range []string{"project_policy", "ephemeral_lifecycle", "retained_lifecycle", "scoped_ttl_recovery", "root_volumes", "foreign_preserved", "instance_cleanup", "crash_reboot", "nested_isolation", "storage_reclamation", "report_retention"} {
+	for _, id := range []string{"project_policy", "ephemeral_lifecycle", "retained_lifecycle", "scoped_ttl_recovery", "root_volumes", "foreign_preserved", "instance_cleanup", "crash_reboot", "nested_kvm_guest_execution", "nested_isolation", "storage_reclamation", "report_retention"} {
 		r.Results = append(r.Results, IncusAcceptanceCheck{ID: id, Status: "not_verified"})
 	}
 	return r
@@ -338,6 +339,22 @@ func runIncusAcceptance(ctx context.Context, b *IncusVMBackend, cfg IncusAccepta
 		present, err := inventory.RootVolumePresent(ctx, "testenv", ref.Instance)
 		if err != nil || !present {
 			return result, errors.New("acceptance live root volume unverified")
+		}
+		// Probe only the immutable admitted image, before arbitrary guest work.
+		// This verifies guest instructions under nested KVM, not inner NixOS
+		// boot, networking, or isolation. The ordinary lifecycle trial remains
+		// usable with old images unless the operator explicitly requires this.
+		if cfg.RequireNestedKVM {
+			result.FailureStage = "nested_kvm_guest_execution"
+			out, err := b.Exec(ctx, ref, []string{"/run/current-system/sw/bin/aginctus-testenv-kvm-probe"}, 25*time.Second)
+			if err != nil || out.ExitCode != 0 || out.Stdout != "nested_kvm_guest_execution_verified\n" || out.Stderr != "" {
+				result.set("nested_kvm_guest_execution", "fail")
+				return result, errors.New("nested KVM guest execution unverified")
+			}
+			if mode == VMRetained {
+				// Both ephemeral and retained probes have passed.
+				result.set("nested_kvm_guest_execution", "pass")
+			}
 		}
 		// A copied signed ref cannot be retargeted at a foreign resource.
 		forged := ref

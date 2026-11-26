@@ -41,6 +41,21 @@ of `just check-all`. The pure `testenv-incus-vm-image-config` Nix
 check evaluates the image's guest-agent/Incus/SSH/network defaults; it
 does not test KVM, perform imports or provide isolation evidence.
 
+## Nested KVM guest execution probe
+
+The image contains a fixed no-NIC KVM probe at
+`/run/current-system/sw/bin/aginctus-testenv-kvm-probe`. It requires actual
+execution of a small x86 boot sector under hardware acceleration; no software
+emulation fallback is permitted. Its success marker is not evidence of a
+nested NixOS boot, inner Incus, or outer isolation.
+
+On an independently authorized disposable worker, the existing worker
+acceptance command accepts `--require-nested-kvm` to require this probe on
+both ephemeral and retained guests. Older images may run the default
+lifecycle trial without the optional gate, leaving the nested KVM result
+unverified. A failed probe fails the requested trial and still triggers
+owned cleanup. Never run this procedure on the pilot.
+
 ## Future disposable-worker import gate
 
 **Operator-only; do not execute against the pilot daemon.** Provision a

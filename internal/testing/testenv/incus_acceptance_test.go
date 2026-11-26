@@ -18,6 +18,7 @@ type acceptanceFake struct {
 	missingLiveVolume bool
 	lingeringVolume   bool
 	badProbe          bool
+	badNestedProbe    bool
 	createUncertain   bool
 	changeForeign     bool
 	commands          [][]string
@@ -41,6 +42,12 @@ func (c *acceptanceFake) ExecGuest(_ context.Context, _ string, argv []string) (
 			return VMExecResult{Stdout: "synthetic-private-guest-output"}, nil
 		}
 		return VMExecResult{}, nil
+	}
+	if len(argv) == 1 && argv[0] == "/run/current-system/sw/bin/aginctus-testenv-kvm-probe" {
+		if c.badNestedProbe {
+			return VMExecResult{ExitCode: 1, Stderr: "private probe diagnostics"}, nil
+		}
+		return VMExecResult{Stdout: "nested_kvm_guest_execution_verified\n"}, nil
 	}
 	if len(argv) != 2 || argv[0] != "/run/current-system/sw/bin/incus" || argv[1] != "--version" {
 		return VMExecResult{}, errors.New("unexpected command")
@@ -134,7 +141,7 @@ func TestIncusAcceptanceUsesSignedBackendAndActualScopedExpiry(t *testing.T) {
 			t.Fatalf("missing actual check %s: %+v", id, r)
 		}
 	}
-	for _, id := range []string{"crash_reboot", "nested_isolation", "storage_reclamation", "report_retention"} {
+	for _, id := range []string{"crash_reboot", "nested_kvm_guest_execution", "nested_isolation", "storage_reclamation", "report_retention"} {
 		if checkStatus(r, id) != "not_verified" {
 			t.Fatalf("overclaimed %s", id)
 		}
@@ -299,5 +306,27 @@ func TestIncusAcceptancePrivateEvidenceRetainsSignedHandlesAndBounds(t *testing.
 	again, err := filestate.ReadPrivateFile(path, 32*1024)
 	if err != nil || string(again) != string(data) {
 		t.Fatal("failed replacement corrupted retained evidence")
+	}
+}
+
+func TestIncusAcceptanceRequiresNestedKVMOnlyWhenSelected(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		c, b, cfg := acceptanceFixture(t)
+		cfg.RequireNestedKVM = true
+		c.badNestedProbe = fail
+		r, err := runAcceptanceFixture(t, b, cfg, func(IncusAcceptanceReport) error { return nil }, func(_ context.Context, expiry time.Time) error {
+			b.now = func() time.Time { return expiry }
+			return nil
+		})
+		if fail {
+			if err == nil || r.Status != "fail" || checkStatus(r, "nested_kvm_guest_execution") != "fail" {
+				t.Fatalf("probe failure admitted: %+v %v", r, err)
+			}
+		} else if err != nil || checkStatus(r, "nested_kvm_guest_execution") != "pass" || len(c.commands) != 6 {
+			t.Fatalf("probe not observed for both runs: %+v %v", r, err)
+		}
+		if checkStatus(r, "nested_isolation") != "not_verified" || len(c.vms) != 1 || checkStatus(r, "instance_cleanup") != "pass" {
+			t.Fatalf("overclaimed isolation or failed cleanup: %+v", r)
+		}
 	}
 }
