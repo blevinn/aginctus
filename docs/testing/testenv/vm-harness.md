@@ -62,24 +62,37 @@ checks do not run the VM; a skipped Go test is not real-Incus acceptance.
 
 ## Native lifecycle stack scenarios
 
-The accepted-state stack's joined lifecycle, stopped gateway-pair and retained
-Herdr-volume scenarios are available through the disposable batch runner. Each
-uses a fixed Nix target, starts Incus only inside its guest, and writes the
-standard run-scoped receipt. `native-oci` is networked and exercises pinned OCI
-acquisition; the other three are offline fixture scenarios.
+The joined lifecycle, stopped gateway-pair, and gateway stop/retention
+scenarios are offline fixtures registered in `testenv vm list` and `plan`,
+the operator-only batch runner, and the v1 receipt readers. From a verified
+dedicated disposable worker, select one explicitly:
 
 ```sh
-nix develop --offline -c python3 tests/vm_harness/runner.py test native-joined-lifecycle
-nix develop --offline -c python3 tests/vm_harness/runner.py test native-gateway-stopped-pair
-nix develop --offline -c python3 tests/vm_harness/runner.py test native-gateway-stop-retention
-nix develop --offline -c python3 tests/vm_harness/runner.py test native-oci
+nix develop --offline -c just test-vm-native-joined-lifecycle
+nix develop --offline -c just test-vm-native-gateway-stopped-pair
+nix develop --offline -c just test-vm-native-gateway-stop-retention
+```
+
+The existing `acceptance-project-authority` scenario (`just
+test-vm-acceptance-project-authority`) also covers exact-project TLS peer trust
+lookup and revocation. Those assertions run inside the same fixture; a receipt
+reports the scenario outcome, not a separately verified trust-lookup result or
+a deployed state-service authorization guarantee.
+
+`native-oci` is a separate networked feasibility spike, selectable only in
+the Python runner and excluded from the v1 receipt readers:
+
+```sh
+nix develop -c python3 tests/vm_harness/runner.py test native-oci
 ```
 
 The runner's outer `native-oci` runtime limit is 30 minutes to accommodate the
 guest scenario's 25-minute test timeout plus VM startup/shutdown overhead. Use
 an x86_64 Linux KVM worker with sufficient disk and public OCI registry access;
 no credentials or live provider are required. Receipts intentionally report
-`cleanup: not_verified` and `upstream_inference: not_verified`.
+`cleanup: not_verified` and `upstream_inference: not_verified`. An offline
+scenario's successful Nix build may reuse a realized output; the receipt cannot
+establish fresh VM execution or independently verify cleanup.
 
 The separate accepted-workload observation gate runs on an x86_64 Linux KVM
 worker:

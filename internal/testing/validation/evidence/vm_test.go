@@ -40,6 +40,27 @@ func TestNormalizeVMKeepsOnlyBoundedSyntheticMetadata(t *testing.T) {
 	}
 }
 
+func TestNormalizeVMNativeFixtureReceipts(t *testing.T) {
+	id := strings.Repeat("a", 24)
+	for _, scenario := range []string{
+		"native-gateway-stopped-pair", "native-gateway-stop-retention", "native-joined-lifecycle", "acceptance-project-authority",
+	} {
+		t.Run(scenario, func(t *testing.T) {
+			// Synthetic parser input only; a receipt does not certify a fresh VM run.
+			raw := bytes.Replace(fixture(id), []byte(`"smoke"`), []byte(`"`+scenario+`"`), 1)
+			report, err := NormalizeVM(raw, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := report["results"].([]any)[0].(map[string]any)
+			if result["id"] != "vm/"+scenario || result["rerun"] != "just test-vm-"+scenario ||
+				report["cleanup"] != unverified || report["upstream_inference"] != unverified {
+				t.Fatalf("incorrect fixture receipt projection: %#v", report)
+			}
+		})
+	}
+}
+
 func TestVMReportWritersEmitNormalizedOutput(t *testing.T) {
 	id := strings.Repeat("e", 24)
 	report, err := NormalizeVM(fixture(id), id)

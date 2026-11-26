@@ -69,6 +69,16 @@ test-vm-runtime-lifecycle:
 test-vm-native-instance:
     python3 tests/vm_harness/runner.py test native-instance
 
+# Offline native lifecycle fixtures; execute only on a dedicated VM worker.
+test-vm-native-gateway-stopped-pair:
+    python3 tests/vm_harness/runner.py test native-gateway-stopped-pair
+
+test-vm-native-gateway-stop-retention:
+    python3 tests/vm_harness/runner.py test native-gateway-stop-retention
+
+test-vm-native-joined-lifecycle:
+    python3 tests/vm_harness/runner.py test native-joined-lifecycle
+
 # Gate C project/image lease and collision
 test-vm-acceptance-project-image:
     python3 tests/vm_harness/runner.py test acceptance-project-image
@@ -112,6 +122,7 @@ test-vm-ownership-recovery:
     python3 tests/vm_harness/runner.py test ownership-recovery
 
 # Heavyweight vmTests are explicit NixOS builds (never default CI or host Incus).
+# Project authority includes the restricted TLS peer trust lookup and revocation.
 test-vm-acceptance-project-authority:
     python3 tests/vm_harness/runner.py test acceptance-project-authority
 
