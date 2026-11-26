@@ -22,6 +22,19 @@ receipt, not physical reclamation or independent host teardown evidence.
 The build is intentionally opt-in; actual KVM execution remains required.
 Do not run it on the pilot or infer fresh execution from a cached output.
 
+## Synthetic guest payload transfer gate
+
+The existing operator worker acceptance command accepts the optional
+`--require-payload-transfer` flag. It transfers one fixed nonsecret
+manifest-bound test vector into the fresh signed ephemeral VM via the Incus
+file API, verifies exact readback and private file metadata, and records
+`payload_transfer` separately from instance and root-volume cleanup.
+No arbitrary payload, guest path, extraction, installation or source
+authority is admitted. The underlying upload is not atomic no-replace;
+the reviewed fixture must have no concurrent guest writers. An uncertain
+transfer fails the trial and the existing owned cleanup runs. Actual VM
+agent file-transfer support requires separate runtime acceptance.
+
 ## Opt-in real-worker lifecycle helper
 
 `testenv-worker-acceptance` packages the fixed

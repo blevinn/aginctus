@@ -60,6 +60,7 @@ pkgs.testers.runNixOSTest {
   };
   testScript =
     (if independentRecovery then builtins.readFile ./independent_recovery_trial.py else "")
+    + (builtins.readFile ./fixture_receipt.py)
     + ''
       import json
       import re
@@ -67,9 +68,7 @@ pkgs.testers.runNixOSTest {
 
       start_all()
       machine.wait_for_unit("incus.service")
-      ${pkgs.lib.optionalString independentRecovery ''
-        machine.succeed("systemctl stop aginctus-testenv-recovery.timer aginctus-testenv-recovery.service")
-      ''}
+      ${pkgs.lib.optionalString independentRecovery ''machine.succeed("systemctl stop aginctus-testenv-recovery.timer aginctus-testenv-recovery.service")''}
       # Fail before provisioning if nested KVM or the dedicated test disk is
       # absent. The disk is declared above, not selected by a caller or
       # discovered from host storage.
@@ -125,34 +124,50 @@ pkgs.testers.runNixOSTest {
       ${pkgs.lib.optionalString nativeInstance ''
         argv += ["--scenario", "native-instance"]
       ''}
-    ''
-    + (
-      if independentRecovery then
-        ''
-          run_independent_recovery(machine, argv)
-        ''
-      else
-        ''
-          machine.succeed(shlex.join(argv), timeout=${toString trialTimeout})
-          reports = machine.succeed("find /var/lib/aginctus-testenv-acceptance -mindepth 2 -maxdepth 2 -name result.json").splitlines()
-          assert len(reports) == 1
-          report = json.loads(machine.succeed("cat " + shlex.quote(reports[0])))
-          assert report["status"] == "pass"
-          checks = {check["id"]: check["status"] for check in report["results"]}
-          for key in ("ephemeral_lifecycle", "retained_lifecycle", "instance_cleanup", "root_volumes", "foreign_preserved", "scoped_ttl_recovery"):
-              assert checks[key] == "pass", key
-          ${pkgs.lib.optionalString nativeInstance ''
-            assert report["scenario"] == "native-instance"
-            assert checks["native_instance_scenario"] == "pass"
-          ''}
-          assert checks["nested_kvm_guest_execution"] == "not_verified"
-          assert checks["nested_isolation"] == "not_verified"
-          remaining = json.loads(machine.succeed("incus --project aginctus-testenv list --format json"))
-          assert len(remaining) == 1 and remaining[0]["name"] == "foreign-sentinel" and remaining[0]["status"] == "Stopped"
-          assert json.loads(machine.succeed("incus --project default list --format json")) == []
-          volumes = json.loads(machine.succeed("incus --project aginctus-testenv storage volume list testenv --format json"))
-          assert not any(volume["name"].startswith("testenv-vm-") for volume in volumes)
-          machine.succeed("incus --project aginctus-testenv delete foreign-sentinel")
-        ''
-    );
+      ${
+        if independentRecovery then
+          ''
+            run_independent_recovery(machine, argv)
+          ''
+        else
+          ''
+            machine.succeed(shlex.join(argv), timeout=${toString trialTimeout})
+            reports = machine.succeed("find /var/lib/aginctus-testenv-acceptance -mindepth 2 -maxdepth 2 -name result.json").splitlines()
+            assert len(reports) == 1
+            # Do not expose the private signed recovery handles to the outer driver.
+            report = json.loads(machine.succeed("jq -c '{schema_version,profile,evidence_tier,status,scenario:(.scenario // \"\"),image_fingerprint,results}' " + shlex.quote(reports[0])))
+            assert report["status"] == "pass"
+            checks = {check["id"]: check["status"] for check in report["results"]}
+            for key in ("ephemeral_lifecycle", "retained_lifecycle", "instance_cleanup", "root_volumes", "foreign_preserved", "scoped_ttl_recovery"):
+                assert checks[key] == "pass", key
+            ${pkgs.lib.optionalString nativeInstance ''
+              assert report["scenario"] == "native-instance"
+              assert checks["native_instance_scenario"] == "pass"
+            ''}
+            assert checks["nested_kvm_guest_execution"] == "not_verified"
+            assert checks["nested_isolation"] == "not_verified"
+            remaining = json.loads(machine.succeed("incus --project aginctus-testenv list --format json"))
+            assert len(remaining) == 1 and remaining[0]["name"] == "foreign-sentinel" and remaining[0]["status"] == "Stopped"
+            assert json.loads(machine.succeed("incus --project default list --format json")) == []
+            volumes = json.loads(machine.succeed("incus --project aginctus-testenv storage volume list testenv --format json"))
+            assert not any(volume["name"].startswith("testenv-vm-") for volume in volumes)
+            machine.succeed("incus --project aginctus-testenv delete foreign-sentinel")
+            assert json.loads(machine.succeed("incus --project aginctus-testenv list --format json")) == []
+            # Incus may retain the imported image cache; no non-image volumes may remain.
+            final_volumes = json.loads(machine.succeed("incus --project aginctus-testenv storage volume list testenv --format json"))
+            assert all(volume["type"] == "image" for volume in final_volumes)
+            public = fixture_receipt(
+                report,
+                ${builtins.toJSON (if nativeInstance then "native-instance" else "")},
+                ${builtins.toJSON (self.rev or "unavailable")},
+                ${builtins.toJSON (builtins.hashFile "sha256" "${self}/flake.lock")},
+                fingerprint,
+            )
+            # Only sanitized observations leave the worker. The Nix result can be
+            # cached; the receipt does not assert this invocation created a new VM.
+            machine.succeed("printf '%s\\n' " + shlex.quote(json.dumps(public, sort_keys=True)) + " > /tmp/testenv-fixture-receipt.json")
+            machine.copy_from_vm("/tmp/testenv-fixture-receipt.json")
+          ''
+      }
+    '';
 }
