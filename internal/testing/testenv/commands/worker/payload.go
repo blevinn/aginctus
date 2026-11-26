@@ -2,6 +2,7 @@ package worker
 
 import (
 	"encoding/json"
+	"errors"
 	"strconv"
 
 	"github.com/blevinn/aginctus/internal/testing/testenv"
@@ -16,7 +17,7 @@ func newPayload() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			n, err := strconv.ParseInt(args[1], 10, 64)
 			if err != nil {
-				return err
+				return errors.New("invalid payload segment byte count")
 			}
 			receipt, err := testenv.VerifyPayloadSegment(cmd.InOrStdin(), args[0], n)
 			if err != nil {
