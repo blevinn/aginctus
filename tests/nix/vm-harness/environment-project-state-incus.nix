@@ -187,8 +187,13 @@ pkgs.testers.runNixOSTest {
         machine.succeed("incus config device add environment-state-service accepted-data disk pool=default"
                         " source=environment-accepted-data path=${mount} --project ${project}")
         # Admin-side attachment observation is separate from in-guest mount checks.
-        query = shlex.quote("/1.0/storage-pools/default/volumes/custom/environment-accepted-data?project=${project}")
-        machine.succeed(f"incus query {query} | jq -e '.used_by == [\"/1.0/instances/environment-state-service?project=${project}\"]'")
+        attachment = ("${cli}/bin/aginctus internal project-state-attachment"
+                      " --project ${project} --instance environment-state-service"
+                      " --pool default --volume environment-accepted-data --device accepted-data"
+                      " --mount-path ${mount} --network state-mgmt")
+        wrong_pin = "sha256:" + ("0" * 64 if binding["serverId"] != "sha256:" + "0" * 64 else "1" * 64)
+        machine.fail(f"{attachment} --server-id {wrong_pin}")
+        machine.succeed(f"{attachment} --server-id {binding['serverId']}")
         machine.succeed("incus start environment-state-service --project ${project}", timeout=180)
         machine.wait_until_succeeds(guest + " id aginctusproject", timeout=120)
         machine.succeed(guest + " install -d -m 0755 /etc/aginctus /run/aginctus")

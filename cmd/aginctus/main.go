@@ -15,6 +15,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "project-state-attachment" {
+		os.Exit(runProjectStateAttachment(os.Args[3:]))
+	}
 	if len(os.Args) >= 3 && os.Args[1] == "serve" && os.Args[2] == "project-state" {
 		if len(os.Args) == 4 && os.Args[3] == "bootstrap" {
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
