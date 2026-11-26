@@ -59,8 +59,12 @@ pkgs.testers.runNixOSTest {
     system.stateVersion = "26.05";
   };
   testScript =
-    (if independentRecovery then builtins.readFile ./independent_recovery_trial.py else "")
-    + (builtins.readFile ./fixture_receipt.py)
+    (
+      if independentRecovery then
+        builtins.readFile ./independent_recovery_trial.py
+      else
+        builtins.readFile ./fixture_receipt.py
+    )
     + ''
       import json
       import re
@@ -166,7 +170,7 @@ pkgs.testers.runNixOSTest {
             # Only sanitized observations leave the worker. The Nix result can be
             # cached; the receipt does not assert this invocation created a new VM.
             machine.succeed("printf '%s\\n' " + shlex.quote(json.dumps(public, sort_keys=True)) + " > /tmp/testenv-fixture-receipt.json")
-            machine.copy_from_vm("/tmp/testenv-fixture-receipt.json")
+            machine.copy_from_machine("/tmp/testenv-fixture-receipt.json")
           ''
       }
     '';
