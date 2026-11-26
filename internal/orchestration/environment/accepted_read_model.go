@@ -79,6 +79,19 @@ func (r AcceptedReadModel) selected(ctx context.Context, project, id string) (De
 	return descriptor, rev, candidate, nil
 }
 
+// ReadAcceptedSnapshot returns one authenticated, content-checked read for
+// intent projection. It does not hold the current revision or acquire a pin.
+func (r AcceptedReadModel) ReadAcceptedSnapshot(ctx context.Context, project, id string) (AcceptedRevision, Candidate, error) {
+	_, rev, candidate, err := r.selected(ctx, project, id)
+	if err != nil {
+		return AcceptedRevision{}, Candidate{}, err
+	}
+	if rev == nil {
+		return AcceptedRevision{}, Candidate{}, errors.New("enrolled environment has no published accepted revision")
+	}
+	return *rev, *candidate, nil
+}
+
 // GetAcceptedState is a typed, read-only status projection. An absent
 // revision is returned ONLY after the catalog and source successfully read
 // the authenticated selected project and environment.

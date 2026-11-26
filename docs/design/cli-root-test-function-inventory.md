@@ -22,6 +22,8 @@ without an updated owner decision.
 | `read_capabilities_test.go` | `TestUnifiedReadCapabilitiesFailClosedWhenMissing` | CLI read composition | Retain root cross-family and missing-authority evidence |
 | `commands_state_reads_test.go` | `TestStateCLIReadOnlyTypedOutput` | State read-only CLI composition | Retain fail-closed root entrypoint and typed output evidence |
 | `commands_state_reads_test.go` | `TestStateCLIDeniesAbsentAuthorityAndProject` | State read-only CLI composition | Retain fail-closed root entrypoint and typed output evidence |
+| `commands_native_intent_plan_test.go` | `TestNativeIntentPlanProjectsAuthenticatedSnapshot` | Accepted-intent CLI composition | Retain scope, validation and deterministic output evidence |
+| `commands_native_intent_plan_test.go` | `TestInstalledNativeIntentPlanRequiresExplicitReadConfig` | Installed CLI authority selection | Retain fail-closed root entrypoint evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveDependencyOrder` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveStopsBeforeNetworkOnGatewayFailure` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveRejectsFlags` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
