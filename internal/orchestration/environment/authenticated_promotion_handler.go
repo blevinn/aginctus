@@ -16,10 +16,9 @@ import (
 const acceptedPromotionWireVersion = "aginctus.dev/project-accepted-promotion/v1alpha1"
 const maxAcceptedPromotionBytes = maxCandidateBytes + (16 << 10)
 
-// AuthenticatedPromotionHandler is an unwired protocol increment. A future
-// service must independently provision and isolate its store, restricted Incus
-// reader, catalog and promoter policy. Use only behind RequireAndVerifyClientCert.
-// No product listener or CLI config exposes this handler.
+// AuthenticatedPromotionHandler requires an independently provisioned and
+// isolated store, restricted Incus reader, catalog and promoter policy. Use
+// only behind RequireAndVerifyClientCert.
 type AuthenticatedPromotionHandler struct {
 	Authorizer LiveIncusPeerAuthorizer
 	Catalog    Catalog

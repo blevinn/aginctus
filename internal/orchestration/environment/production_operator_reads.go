@@ -16,6 +16,8 @@ type ProductionOperatorReadSet struct {
 	Accepted client.AcceptedStateReader
 	AcceptedSnapshot *AcceptedReadModel
 	Diff client.ConfiguredAcceptedDiffReader
+	stateSession *RestrictedHTTPSReadSessionFactory
+	configuredSource ExplicitConfiguredCandidateFile
 }
 
 // OpenProductionOperatorReads opens ONE explicitly selected, independently
@@ -41,14 +43,15 @@ func OpenProductionOperatorReads(
 		verified := RestrictedIncusProjectVerifier{
 			Observer: scoped, PinnedServerCertificateSHA256: config.TrustedServerSHA256,
 		}
-		published := RestrictedPublishedSource{Factory: RestrictedHTTPSReadSessionFactory{
+		factory := RestrictedHTTPSReadSessionFactory{
 			Endpoint: config.StateServiceEndpoint,
 			ServiceCertificatePEM: config.StateServiceCertificatePEM,
 			ServiceCertificateSHA256: config.StateServiceSHA256,
 			ClientCertificatePEM: config.ClientCertificatePEM,
 			ClientPrivateKeyPEM: config.ClientPrivateKeyPEM,
 			Verifier: verified,
-		}}
+		}
+		published := RestrictedPublishedSource{Factory: factory}
 		configured := ExplicitConfiguredCandidateFile{
 			AbsolutePath: config.ConfiguredCandidateFile,
 		}
@@ -56,6 +59,8 @@ func OpenProductionOperatorReads(
 		out.Configured = VerifiedConfiguredReadModel{Catalog: catalog, Configured: configured}
 		out.Accepted = model
 		out.AcceptedSnapshot = &model
+		out.stateSession = &factory
+		out.configuredSource = configured
 		out.Diff = VerifiedConfiguredDiffReader{Model: model, Configured: configured}
 	}
 	if err := ctx.Err(); err != nil {
