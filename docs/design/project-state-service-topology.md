@@ -116,21 +116,23 @@ The opt-in test (not a routine PR gate):
 nix build -L --no-link .#vmTests.x86_64-linux.environment-project-state-incus
 ```
 
-creates a disposable NixOS VM and its own Incus daemon, project, custom
-volume and service instance. It explicitly accepts two distinct environments
-in the same project with generation-one revisions, checks stale-CAS failure,
-the same-UID Unix reader's cross-UID/POST refusal, service restart, and
-**instance deletion/recreation with the same external volume**. It verifies
-accepted record hashes and identities persist and the guest does not see a
-local Incus admin socket. It does not contact the development host.
+is written to exercise the installed nonroot bootstrap, mTLS state service,
+and operator CLI against Incus inside a disposable NixOS VM. It checks the
+volume's exclusive `UsedBy` separately, bootstraps an empty mount, denies
+promotion to a project member without the exact grant, and accepts two
+generation-one revisions through the CLI. After **instance deletion/recreation
+with the same external volume**, it checks retained reopen and byte-identical
+authority and revision records. The service guest has no local Incus admin
+socket. A direct mTLS read checks that the listener denies a revoked member on
+a fresh request. The scenario does not contact the development host.
 
 **Evidence is not complete until the test is actually run on an authorized
 NixOS/KVM host** and the nonsecret result/version/configuration is recorded
-under #695/#701. The test is not a restricted TLS multi-principal service
-and does not prove cross-project read denial through a production transport,
-AppArmor constraints, revocation during an operation, power-loss durability,
-consistent backups/restores, stale fences, or service upgrades. Keep #695,
-#696, #701 and #704 open.
+under #695/#701. The scenario uses distinct ephemeral certificates and an
+administrator-owned grant file, but does not prove that same-project Incus API
+access cannot reach the service guest or volume. It also does not prove
+revocation during an operation, power-loss durability, consistent backup and
+restore, stale fences, or service upgrades. Keep #695, #696, #701 and #704 open.
 
 ### Production activation gates
 
