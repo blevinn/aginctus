@@ -54,3 +54,29 @@ func TestPayloadBundleAggregateLimitBeforeReadingPayload(t *testing.T) {
 		t.Fatalf("aggregate limit not enforced: %v", err)
 	}
 }
+
+func TestVerifyApprovedPayloadBundle(t *testing.T) {
+	valid := bundleFixture(t, "abc", "def")
+	header, _, _ := strings.Cut(valid, "\n")
+	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(header+"\n")))
+	receipt, err := VerifyApprovedPayloadBundle(strings.NewReader(valid), digest)
+	if err != nil || receipt.ManifestBinding != "matched_expected_digest" ||
+		receipt.ManifestSHA256 != digest || receipt.SourceAuthority != "not_verified" {
+		t.Fatalf("manifest binding: %+v %v", receipt, err)
+	}
+	for _, input := range []string{
+		strings.Replace(valid, `"source_dirty":false`, `"source_dirty":true`, 1),
+		bundleFixture(t, "abc", "xyz"),
+		strings.Replace(valid, "}\n", "} \n", 1),
+		valid + "x",
+	} {
+		if got, err := VerifyApprovedPayloadBundle(strings.NewReader(input), digest); err == nil || got.Status != "" {
+			t.Fatalf("accepted modified bundle: %+v", got)
+		}
+	}
+	for _, invalid := range []string{"", strings.ToUpper(digest), strings.Repeat("0", 64)} {
+		if _, err := VerifyApprovedPayloadBundle(strings.NewReader(valid), invalid); err == nil {
+			t.Fatal("accepted invalid manifest pin")
+		}
+	}
+}
