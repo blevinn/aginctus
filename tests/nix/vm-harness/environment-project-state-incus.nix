@@ -283,6 +283,12 @@ pkgs.testers.runNixOSTest {
     machine.fail(state_command(0, "promoter", reconcile))
     machine.fail("incus info selected-worker --project ${project}")
     machine.succeed("incus network set state-mgmt user.aginctus.resource=management-network")
+    observed = f"plan-native --workload worker --expect {revisions[0]['id']} --host-grant ${hostGrant}"
+    plan = json.loads(machine.succeed(state_command(0, "member", observed), timeout=90))
+    assert not plan["writerPin"] and plan["revision"] == revisions[0]["id"]
+    assert [stage["resourceId"] for stage in plan["result"]["native"]["previews"]] == ["management-network", "worker"]
+    assert not plan["result"]["native"]["effects"]
+    machine.fail("incus info selected-worker --project ${project}")
     first = json.loads(machine.succeed(state_command(0, "promoter", reconcile), timeout=90))
     first_effects = first["result"]["native"]["effects"]
     assert [effect["effect"]["action"] for effect in first_effects] == ["create", "start"]

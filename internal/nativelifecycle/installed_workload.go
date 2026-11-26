@@ -16,6 +16,17 @@ import (
 // management bridge prerequisite. No controller, fixture store, ambient SDK
 // client, or host mutation transport participates.
 func ExecuteInstalledWorkload(ctx context.Context, configPath, hostGrantPath, project, id, revision, workloadID string, operation native.ProjectInstanceOperation, incarnation time.Time) (result orchestration.Result, operationID string, err error) {
+	return runInstalledWorkload(ctx, configPath, hostGrantPath, project, id, revision, workloadID, operation, incarnation, false)
+}
+
+// PlanInstalledWorkload runs the same native preflight without opening a
+// writer session. Live observations are point-in-time, not effect authority.
+func PlanInstalledWorkload(ctx context.Context, configPath, hostGrantPath, project, id, revision, workloadID string) (orchestration.Result, error) {
+	result, _, err := runInstalledWorkload(ctx, configPath, hostGrantPath, project, id, revision, workloadID, native.ReconcileInstance, time.Time{}, true)
+	return result, err
+}
+
+func runInstalledWorkload(ctx context.Context, configPath, hostGrantPath, project, id, revision, workloadID string, operation native.ProjectInstanceOperation, incarnation time.Time, planning bool) (result orchestration.Result, operationID string, err error) {
 	if operation != native.ReconcileInstance && operation != native.StopInstance && operation != native.RemoveInstance ||
 		(operation == native.ReconcileInstance) != incarnation.IsZero() {
 		return result, "", errors.New("explicit stop or removal requires an exact instance creation timestamp")
@@ -37,19 +48,45 @@ func ExecuteInstalledWorkload(ctx context.Context, configPath, hostGrantPath, pr
 		return result, "", err
 	}
 	defer sdk.Disconnect()
-	session, candidate, closeReads, err := environment.OpenProjectExecution(ctx, operator, project, id, revision, workloadID, string(operation))
-	if err != nil {
-		return result, "", err
-	}
-	defer closeReads()
-	operationID = session.ID()
+	var accepted environment.AcceptedRevision
+	var candidate environment.Candidate
+	var session *environment.ProjectExecutionSession
+	var snapshot *environment.AcceptedReadModel
 	completed := false
-	defer func() {
-		finish, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		defer cancel()
-		err = errors.Join(err, session.Finish(finish, completed))
-	}()
-	accepted := session.Revision()
+	var client native.ProjectInstanceClient = sdk
+	if planning {
+		reads, closeReads, err := environment.OpenProductionOperatorReads(ctx, configPath)
+		if err != nil {
+			return result, "", err
+		}
+		defer closeReads()
+		snapshot = reads.AcceptedSnapshot
+		if snapshot == nil {
+			return result, "", errors.New("authenticated project-state service configuration required")
+		}
+		accepted, candidate, err = snapshot.ReadAcceptedSnapshot(ctx, project, id)
+		if err != nil {
+			return result, "", err
+		}
+		if accepted.ID != revision {
+			return result, "", environment.ErrAcceptedConflict
+		}
+	} else {
+		var closeReads func()
+		session, candidate, closeReads, err = environment.OpenProjectExecution(ctx, operator, project, id, revision, workloadID, string(operation))
+		if err != nil {
+			return result, "", err
+		}
+		defer closeReads()
+		operationID = session.ID()
+		accepted = session.Revision()
+		client = trackedWorkloadClient{ProjectInstanceClient: sdk, record: session.RecordDaemonOperation, project: project, instance: grant.Instance}
+		defer func() {
+			finish, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			err = errors.Join(err, session.Finish(finish, completed))
+		}()
+	}
 	if err := accepted.ValidateAgainst(candidate); err != nil {
 		return result, operationID, err
 	}
@@ -70,8 +107,7 @@ func ExecuteInstalledWorkload(ctx context.Context, configPath, hostGrantPath, pr
 		}
 		return native.VerifyProjectTransport(ctx, sdk, candidate.Environment.Binding, operator.TrustedServerSHA256)
 	}
-	tracked := trackedWorkloadClient{ProjectInstanceClient: sdk, record: session.RecordDaemonOperation, project: project, instance: grant.Instance}
-	composer := LocalComposer{Environment: candidate.Environment, TrustedServerPin: operator.TrustedServerSHA256, Client: tracked,
+	composer := LocalComposer{Environment: candidate.Environment, TrustedServerPin: operator.TrustedServerSHA256, Client: client,
 		Bridge: ManagementNetwork{Spec: bridge, VerifyObserved: func(ctx context.Context) error {
 			return verifyWorkloadBridge(ctx, grant)
 		}, VerifyBinding: func(ctx context.Context, binding environment.Binding, spec managementnetwork.Spec) error {
@@ -111,26 +147,33 @@ func ExecuteInstalledWorkload(ctx context.Context, configPath, hostGrantPath, pr
 		return result, operationID, errors.New("unexpected native workload graph")
 	}
 	apply := bound.Apply
-	bound.Apply = func(ctx context.Context, run orchestration.RunNativeEffect) error {
-		return apply(ctx, func(effect orchestration.NativeEffect, submit func(context.Context) error) error {
-			if submit == nil {
-				return run(effect, nil)
-			}
-			return run(effect, func(ctx context.Context) error {
-				if err := session.BeginEffect(ctx, string(effect.Action)); err != nil {
-					return err
+	if planning {
+		for key, resource := range resources {
+			resource.Apply = nil
+			resources[key] = resource
+		}
+	} else {
+		bound.Apply = func(ctx context.Context, run orchestration.RunNativeEffect) error {
+			return apply(ctx, func(effect orchestration.NativeEffect, submit func(context.Context) error) error {
+				if submit == nil {
+					return run(effect, nil)
 				}
-				if err := verifyHost(ctx); err != nil {
-					return err
-				}
-				if err := errors.Join(submit(ctx), ctx.Err()); err != nil {
-					return err
-				}
-				return session.MarkApplied(ctx)
+				return run(effect, func(ctx context.Context) error {
+					if err := session.BeginEffect(ctx, string(effect.Action)); err != nil {
+						return err
+					}
+					if err := verifyHost(ctx); err != nil {
+						return err
+					}
+					if err := errors.Join(submit(ctx), ctx.Err()); err != nil {
+						return err
+					}
+					return session.MarkApplied(ctx)
+				})
 			})
-		})
+		}
+		resources[workloadID] = bound
 	}
-	resources[workloadID] = bound
 	result, err = orchestration.NewEngine(nil).ExecuteNative(ctx, plan, orchestration.NativeBindings{
 		Resources: resources, CheckPolicy: orchestration.CheckPolicy{Mode: orchestration.ReadOnlyChecks,
 			Authorize: func(ctx context.Context, scope orchestration.TargetScope, c check.Check) error {
@@ -153,7 +196,13 @@ func ExecuteInstalledWorkload(ctx context.Context, configPath, hostGrantPath, pr
 				return errors.New("out-of-scope native workload effect")
 			}
 			return verifyHost(ctx)
-		}}, orchestration.ExecuteOptions{})
+		}}, orchestration.ExecuteOptions{DryRun: planning})
+	if err == nil && planning {
+		after, _, recheckErr := snapshot.ReadAcceptedSnapshot(ctx, project, id)
+		if recheckErr != nil || after != accepted {
+			return orchestration.Result{}, "", environment.ErrAcceptedConflict
+		}
+	}
 	completed = err == nil
 	return result, operationID, err
 }
