@@ -75,6 +75,16 @@ func TestProjectExecutionExcludesPeerAndRetainsUncertainty(t *testing.T) {
 	if err := e.beginEffect(ctx, "create", aGrant); err != nil {
 		t.Fatal(err)
 	}
+	const daemonID = "6916c8a6-9b7d-4abd-90b3-aedfec7ec7da"
+	if err := e.journal.recordDaemonOperation(ctx, "https://elsewhere/operations/1"); !errors.Is(err, ErrLocalNativeUnresolved) {
+		t.Fatalf("invalid daemon operation ID accepted: %v", err)
+	}
+	if err := e.journal.recordDaemonOperation(ctx, daemonID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.journal.recordDaemonOperation(ctx, daemonID); !errors.Is(err, ErrLocalNativeUnresolved) {
+		t.Fatalf("duplicate submission acknowledgement: %v", err)
+	}
 	id := e.journal.ID()
 	if err := e.close(); err != nil {
 		t.Fatal(err)
@@ -84,7 +94,8 @@ func TestProjectExecutionExcludesPeerAndRetainsUncertainty(t *testing.T) {
 		t.Fatal(err)
 	}
 	op, err := store.ReadLocalNativeOperation(ctx, a.Environment, id)
-	if err != nil || op.Execution == nil || *op.Execution != aGrant || len(op.Effects) != 1 || op.Effects[0].Outcome != LocalNativeUncertain {
+	if err != nil || op.Execution == nil || *op.Execution != aGrant || len(op.Effects) != 1 ||
+		op.Effects[0].Outcome != LocalNativeUncertain || op.Effects[0].DaemonID != daemonID {
 		t.Fatalf("missing durable uncertainty: %+v %v", op, err)
 	}
 	inspect := aGrant

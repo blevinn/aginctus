@@ -305,6 +305,8 @@ pkgs.testers.runNixOSTest {
     assert any(item["id"] == first["operationId"] and not item["unresolved"] for item in listing)
     details = json.loads(machine.succeed(state_command(0, "member", inspect + f" {first['operationId']}")))["operations"]
     assert [effect["action"] for effect in details[0]["effects"]] == ["create", "start"]
+    daemon_ids = [effect["daemonOperationId"] for effect in details[0]["effects"]]
+    assert len(set(daemon_ids)) == 2 and all(len(identity) == 36 for identity in daemon_ids)
     machine.fail(state_command(0, "member", reconcile))
     incarnation = machine.succeed("incus list selected-worker --project ${project} --format json | jq -er '.[0].created_at'").strip()
     machine.fail(state_command(0, "promoter", reconcile + " --operation stop --instance-created-at 2000-01-01T00:00:00Z"))

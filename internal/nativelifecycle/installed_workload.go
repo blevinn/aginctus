@@ -70,7 +70,8 @@ func ExecuteInstalledWorkload(ctx context.Context, configPath, hostGrantPath, pr
 		}
 		return native.VerifyProjectTransport(ctx, sdk, candidate.Environment.Binding, operator.TrustedServerSHA256)
 	}
-	composer := LocalComposer{Environment: candidate.Environment, TrustedServerPin: operator.TrustedServerSHA256, Client: sdk,
+	tracked := trackedWorkloadClient{ProjectInstanceClient: sdk, record: session.RecordDaemonOperation, project: project, instance: grant.Instance}
+	composer := LocalComposer{Environment: candidate.Environment, TrustedServerPin: operator.TrustedServerSHA256, Client: tracked,
 		Bridge: ManagementNetwork{Spec: bridge, VerifyObserved: func(ctx context.Context) error {
 			return verifyWorkloadBridge(ctx, grant)
 		}, VerifyBinding: func(ctx context.Context, binding environment.Binding, spec managementnetwork.Spec) error {
