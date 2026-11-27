@@ -3,6 +3,7 @@ package environment
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 )
 
 const projectExecutionPolicyVersion = "aginctus.dev/project-execution-policy/v1alpha1"
@@ -29,6 +30,10 @@ func (g projectExecutionGrant) valid(binding Binding) bool {
 		return false
 	}
 	switch g.Operation {
+	case "gateway-deliver", "gateway-inspect":
+		return g.WorkloadID == "gateway-credentials"
+	case "herdr-reconcile", "herdr-inspect":
+		return g.WorkloadID == "herdr-client"
 	case "reconcile", "stop", "remove", "recover", "inspect":
 		return true
 	default:
@@ -41,6 +46,10 @@ func (g projectExecutionGrant) permits(e LocalNativeEffectRecord) bool {
 		return false
 	}
 	switch g.Operation {
+	case "gateway-deliver":
+		return e.Action == "deliver"
+	case "herdr-reconcile":
+		return e.Action == "create" || e.Action == "start"
 	case "reconcile":
 		return e.Action == "create" || e.Action == "start"
 	case "stop":
@@ -53,7 +62,7 @@ func (g projectExecutionGrant) permits(e LocalNativeEffectRecord) bool {
 }
 
 func (g projectExecutionGrant) writer() bool {
-	return g.Operation == "reconcile" || g.Operation == "stop" || g.Operation == "remove"
+	return g.Operation == "reconcile" || g.Operation == "stop" || g.Operation == "remove" || g.Operation == "gateway-deliver" || g.Operation == "herdr-reconcile"
 }
 
 func readProjectExecutionPolicy(path string, binding Binding) (map[projectExecutionGrant]struct{}, error) {
@@ -89,4 +98,43 @@ func parseProjectExecutionPolicy(data []byte, binding Binding) (map[projectExecu
 		grants[grant] = struct{}{}
 	}
 	return grants, nil
+}
+
+func (g projectExecutionGrant) domainSelected(c Candidate) bool {
+	switch g.Operation {
+	case "gateway-deliver", "gateway-inspect":
+		return g.WorkloadID == "gateway-credentials" && c.Gateway != nil
+	case "herdr-reconcile", "herdr-inspect":
+		return g.WorkloadID == "herdr-client" && c.Herdr != nil
+	default:
+		return slices.Contains(c.SelectedWorkloads, g.WorkloadID)
+	}
+}
+
+func (g projectExecutionGrant) domainScope() bool {
+	return g.Operation == "gateway-deliver" || g.Operation == "herdr-reconcile"
+}
+
+func (g projectExecutionGrant) inspection() bool {
+	return g.Operation == "inspect" || g.Operation == "gateway-inspect" || g.Operation == "herdr-inspect"
+}
+
+func (g projectExecutionGrant) inspects(other projectExecutionGrant) bool {
+	if g.WorkloadID != other.WorkloadID {
+		return false
+	}
+	switch g.Operation {
+	case "gateway-inspect":
+		return other.Operation == "gateway-deliver"
+	case "herdr-inspect":
+		return other.Operation == "herdr-reconcile"
+	case "inspect":
+		return !other.domainScope()
+	default:
+		return false
+	}
+}
+
+func (g projectExecutionGrant) synchronous(action string) bool {
+	return g.Operation == "gateway-deliver" && action == "deliver"
 }
