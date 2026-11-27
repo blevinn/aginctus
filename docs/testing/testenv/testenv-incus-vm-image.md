@@ -194,8 +194,10 @@ nix build --no-link --no-update-lock-file .#testenv-runtime-resources
 This separate opt-in variant boots a fixed retained synthetic probe from the
 pinned base image, in the restricted project, with the ordinary acceptance
 allocation of 2 vCPUs, 4096 MiB RAM and a 32 GiB root disk. The trusted outer
-driver observes the running guest's CPU count, kernel-visible RAM (allowing
-reserved memory), root block device size and read-only end-of-device
+driver observes the running guest's present and online CPU masks (both
+must contain the same two CPUs; additional possible hotplug slots do not
+count), kernel-visible RAM (allowing reserved memory), root block device
+size and read-only end-of-device
 boundary. It deletes only the fixed probe, checks restoration of the
 instance/volume inventory and existing configuration, then runs the ordinary
 signed lifecycle trial. The receipt adds `guest_cpu_count`,
