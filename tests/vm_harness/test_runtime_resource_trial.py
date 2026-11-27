@@ -30,6 +30,32 @@ class RuntimeResourceTest(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     resource.validate_cpu_topology(*topology)
 
+    def test_cleanup_allows_only_pinned_image_cache(self):
+        fingerprint = "a" * 64
+        cache = ("image", fingerprint)
+        states = [("foreign-sentinel", "Stopped")]
+        disks = [("virtual-machine", "foreign-sentinel")]
+        configs = [("foreign-sentinel", "unchanged")]
+        baseline = states, disks, configs
+        resource.validate_resource_cleanup(baseline, baseline, fingerprint)
+        with_cache = states, sorted([*disks, cache]), configs
+        resource.validate_resource_cleanup(baseline, with_cache, fingerprint)
+        resource.validate_resource_cleanup(with_cache, with_cache, fingerprint)
+        for current in (
+            (states, sorted([*disks, ("image", "b" * 64)]), configs),
+            (states, sorted([*disks, cache, cache]), configs),
+            (states, sorted([*disks, ("virtual-machine", "resource-probe")]), configs),
+            (states, sorted([*disks, ("custom", "foreign-volume")]), configs),
+            (states, [cache], configs),
+            ([], disks, []),
+            (states, disks, [("foreign-sentinel", "changed")]),
+        ):
+            with self.subTest(current=current):
+                with self.assertRaises(RuntimeError):
+                    resource.validate_resource_cleanup(baseline, current, fingerprint)
+        with self.assertRaises(RuntimeError):
+            resource.validate_resource_cleanup(with_cache, baseline, fingerprint)
+
     def test_expected_capacity(self):
         result = resource.validate_resource_observations("2\n", "4000000\n", "34359738368", "512", "0")
         self.assertEqual(
