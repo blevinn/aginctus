@@ -484,8 +484,9 @@ pkgs.testers.runNixOSTest {
         machine.fail(domain_step("check", id=attempt, sequence=1))
         install_domain_policy([deliver])
         machine.succeed(guest + " systemctl restart aginctus-project-state.service")
-        machine.succeed(member_read + " | grep -x 200")
-        machine.fail(domain_step("acquire"))
+        machine.wait_until_succeeds(member_read + " | grep -x 200", timeout=30)
+        conflict = domain_step("acquire").replace("curl -fsS", "curl -sS -o /dev/null -w '%{http_code}'", 1)
+        assert machine.succeed(conflict).strip() == "409"
     machine.succeed("incus config trust remove " + fingerprint("member"))
     assert machine.succeed(member_read).strip() == "403"
     assert status(0)["revision"]["id"] == revisions[0]["id"], "revocation blocked the independent promoter read"
