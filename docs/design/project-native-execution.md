@@ -102,3 +102,18 @@ or partial delivery remains unresolved. A session check revalidates the
 current grant and both locks without advancing the journal. These grants
 coordinate only: they convey no physical Incus authority and do not enable
 delegated execution. Gateway runtime and Herdr state creation are not granted.
+### Installed Herdr resource lifecycle
+
+The hidden `state reconcile --herdr --expect REV --host-grant FILE -o json`
+uses the accepted Herdr domain, existing bridge observer, actual restricted
+SDK and a separate `herdr-reconcile` grant. The host grant uses workloadId
+herdr-client and exact Herdr instance/pool/network. An explicit
+`--bootstrap-herdr-state` additionally requires accepted AllowStateBootstrap
+and a distinct herdr-bootstrap grant. The synchronous volume create is
+journaled as create-state and independently observed by the existing domain
+binding; instance creates/starts record daemon UUIDs. Existing state is
+retained and foreign or missing state is refused unless initial bootstrap was
+authorized. Live `state plan-native --herdr` supports the same host grant,
+expected revision and JSON output without a writer pin. This is resource
+lifecycle only: SSH, workspace, application readiness, stop/remove and recovery
+of component journals remain separate. No delegated activation approved.

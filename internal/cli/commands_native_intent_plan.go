@@ -47,6 +47,7 @@ func registerNativeIntentPlan(state *cobra.Command, out io.Writer, format func()
 ) {
 	var selection orchestration.AcceptedIntentSelection
 	var hostGrant, expected string
+	var bootstrapHerdr bool
 	cmd := &cobra.Command{
 		Use: "plan-native", Short: "Preview native dependencies and capabilities from accepted state",
 		Long: "Preview an intent-only graph for explicitly selected accepted resources. For one workload, --host-grant and --expect enable a point-in-time live preview. Neither mode pins a writer revision or executes changes.",
@@ -65,7 +66,17 @@ func registerNativeIntentPlan(state *cobra.Command, out io.Writer, format func()
 			if err := selection.Validate(); err != nil {
 				return err
 			}
-			if cmd.Flags().Changed("host-grant") || cmd.Flags().Changed("expect") {
+			if cmd.Flags().Changed("host-grant") || cmd.Flags().Changed("expect") || bootstrapHerdr {
+				if selection.Herdr && !selection.All && !selection.Gateway && len(selection.Workloads) == 0 && hostGrant != "" && expected != "" && f == clioutput.JSON {
+					result, _, err := nativelifecycle.ExecuteInstalledHerdr(cmd.Context(), os.Getenv("AGINCTUS_RESTRICTED_READ_CONFIG"), hostGrant, *project, *id, expected, bootstrapHerdr, true)
+					if err != nil {
+						return err
+					}
+					return clioutput.WriteStructured(out, f, observedWorkloadPlan{TypeMeta: api.TypeMeta{APIVersion: "aginctus.dev/v1alpha1", Kind: "ObservedNativeHerdrPlan"}, Revision: expected, Result: result})
+				}
+				if bootstrapHerdr {
+					return errors.New("herdr bootstrap preview requires explicit Herdr selection and live grant")
+				}
 				if hostGrant == "" || expected == "" || len(selection.Workloads) != 1 || selection.All || selection.Herdr || selection.Gateway || f != clioutput.JSON {
 					return errors.New("live native planning requires one workload, --host-grant, --expect, and json output")
 				}
@@ -98,6 +109,7 @@ func registerNativeIntentPlan(state *cobra.Command, out io.Writer, format func()
 	cmd.Flags().BoolVar(&selection.Herdr, "herdr", false, "Select accepted Herdr intent")
 	cmd.Flags().BoolVar(&selection.Gateway, "gateway", false, "Select accepted gateway stopped provisioning")
 	cmd.Flags().BoolVar(&selection.All, "all", false, "Select the full accepted scope (cannot be combined with other selectors)")
+	cmd.Flags().BoolVar(&bootstrapHerdr, "bootstrap-herdr-state", false, "Preview separately authorized initial Herdr state creation")
 	cmd.Flags().StringVar(&hostGrant, "host-grant", "", "Administrator-owned attachment grant for single-workload live preview")
 	cmd.Flags().StringVar(&expected, "expect", "", "Exact accepted revision for single-workload live preview")
 	state.AddCommand(cmd)
