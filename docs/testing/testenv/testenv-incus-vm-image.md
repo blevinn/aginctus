@@ -208,6 +208,32 @@ quota, host memory pressure limit, physical storage reclamation, packet
 containment or agent admission proof. No guest disk writes are needed for
 the capacity probes. Only use this fixture in the disposable outer worker.
 
+## Offline network boundary fixture
+
+```sh
+nix build --no-link --no-update-lock-file .#testenv-offline-network
+```
+
+This explicit fixture creates a synthetic TCP/UDP echo endpoint in a
+worker-local network namespace on a dedicated veth pair, using only the
+documentation subnet 192.0.2.0/30. A positive control from the worker
+must reach the endpoint before and after negative probes. A fixed no-NIC
+VM must retain only loopback and fail to reach the endpoint over TCP and
+UDP, both before and after guest root flushes its own nftables ruleset.
+Guest-local loopback controls must succeed; the endpoint's receive count
+must not change during the negative probes. The fixture removes only
+its synthetic resources, checks instance/volume inventory and existing
+configuration (allowing the pinned optimized image cache), and runs the
+ordinary signed lifecycle trial. The receipt identifies
+`offline-network` with `offline_tcp_udp_boundary` and
+`guest_firewall_independence` pass gates.
+
+No real host, internet, pilot, DNS or DHCP endpoints are contacted. This
+is evidence for the existing no-NIC IPv4 boundary and synthetic TCP/UDP
+traffic, not complete nested isolation, attached-network containment,
+DNS/DHCP enforcement, live provider admission, or hostile guest escape
+resistance. Keep `nested_isolation` unverified until separately tested.
+
 ## Future disposable-worker import gate
 
 **Operator-only; do not execute against the pilot daemon.** Provision a

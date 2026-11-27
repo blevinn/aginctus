@@ -224,6 +224,8 @@ func (r LocalNativeEffectRecord) valid() bool {
 		"image-postgres", "image-litellm", "alias-postgres", "alias-litellm", "volume-database", "instance-postgres", "instance-litellm",
 		"configure-postgres", "configure-litellm", "start-postgres", "start-litellm":
 		return true
+	case "create-state":
+		return true
 	}
 	return false
 }
