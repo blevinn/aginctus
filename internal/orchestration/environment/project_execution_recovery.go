@@ -40,7 +40,7 @@ func (s *LocalProjectStateStore) recoverProjectExecution(ctx context.Context, de
 	defer lock.Close()
 	return s.ResolveLocalNativeOperation(ctx, desc, revision, id, func(ctx context.Context, req LocalNativeRecoveryRequest) (Binding, error) {
 		op := req.Operation
-		if op.Execution == nil || op.Execution.Operation != "reconcile" ||
+		if len(op.Effects) == 0 || op.Execution == nil || op.Execution.Operation != "reconcile" ||
 			op.Execution.WorkloadID != grant.WorkloadID || op.Revision != revision || !authorize() {
 			return Binding{}, errRecoveryUnverified
 		}
