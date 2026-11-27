@@ -165,7 +165,7 @@ pkgs.testers.runNixOSTest {
         args = " ".join(f"--rawfile {field} {private}/{file}" for field, file in files.items())
         transform = "." + "".join(f" | .{field} = $" + field for field in files)
         machine.succeed(f"umask 077 && printf '%s' {shlex.quote(compact(data))}"
-                        f" | jq {args} {shlex.quote(transform)} >{path}")
+                        f" | jq -c {args} {shlex.quote(transform)} >{path}")
 
     def incus_config():
         return {"apiVersion": "aginctus.dev/restricted-operator-read/v1alpha1",
@@ -364,17 +364,32 @@ pkgs.testers.runNixOSTest {
                             " --project ${protectedProject} --uid 0 --gid 0 --mode 0644")
             command = "${cli}/bin/aginctus internal gateway-protected-"
             args = f" {grant_file} {root_reads}"
-            machine.succeed(command + "provision" + args, timeout=700)
+            machine.fail(command + "publish" + args)
+            provisioned = json.loads(machine.succeed(command + "provision" + args, timeout=700))
+            assert len(provisioned["result"]["native"]["effects"]) == 7
             repeated = json.loads(machine.succeed(command + "provision" + args, timeout=120))
             assert not repeated["result"]["native"]["effects"]
             machine.succeed(f"incus list {gateway_scope} --format json | jq -e 'length == 2 and all(.[]; .status == \"Stopped\")'")
+            machine.succeed(f"incus storage volume get default {volume} user.aginctus.environment-id {gateway_scope} | grep -Fx {gateway_env}")
+            machine.fail(f"incus storage volume show default {volume} --project ${project}")
             # The canonical credential source is constructed privately inside the VM.
             machine.succeed(f"umask 077; for key in postgresPassword masterKey saltKey; do"
                             f" (printf sk-; openssl rand -hex 32 | tr -d '\\n') >{private}/$key; done")
             shape = {"apiVersion": "aginctus.dev/protected-gateway-credentials/v1alpha1", "grant": gateway_grant,
                      "version": "fixture-v1", "postgresPassword": "", "masterKey": "", "saltKey": ""}
-            compose(gateway_dir + "/credentials.json", shape, {key: key for key in ("postgresPassword", "masterKey", "saltKey")})
-            published = json.loads(machine.succeed(command + "publish" + args, timeout=180))
+            secret_files = {key: key for key in ("postgresPassword", "masterKey", "saltKey")}
+            compose(gateway_dir + "/credentials.json", {**shape, "version": "wrong-version"}, secret_files)
+            machine.fail(command + "publish" + args + f" >{private}/publisher-denial 2>&1")
+            compose(gateway_dir + "/credentials.json", shape, secret_files)
+            save(grant_file, {**gateway_grant, "revisionId": revisions[0]["id"]})
+            machine.fail(command + "publish" + args)
+            save(grant_file, gateway_grant)
+            machine.succeed(command + "publish" + args + f" >{private}/publisher-result 2>{private}/publisher-error", timeout=180)
+            for guest_name in (pg, llm):
+                machine.succeed(f"incus config show {guest_name} {gateway_scope} >{private}/{guest_name}-config")
+            for key in secret_files:
+                machine.succeed(f"grep -Flf {private}/{key} {private}/publisher-* {private}/*-config >/dev/null; test $? -eq 1")
+            published = json.loads(machine.succeed(f"cat {private}/publisher-result"))
             assert published["receipt"]["verified"] and published["receipt"]["version"] == "fixture-v1"
             # An unrelated unrestricted project precludes a private bridge proof.
             machine.fail(command + "start" + args)
