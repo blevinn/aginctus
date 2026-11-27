@@ -80,3 +80,23 @@ pinned LiteLLM user and converted entrypoint, /run persistence across startup,
 Incus file API containment, protected-project isolation and secret source before
 connecting it to the installed runtime. The candidate initially supports the
 root-run LiteLLM image and the reviewed PostgreSQL Alpine UID/GID 70 path only.
+### Protected placement implementation increment
+
+The #1167 approved protected placement is independently selected by an
+administrator-owned `aginctus.dev/protected-gateway-grant/v1alpha1` JSON file
+with `serverId`, `project` (logical), `environmentId`, `revisionId`, and
+`protectedProject`. The exact accepted revision commits to the complete
+image, network, pool and credential-version intent. The candidate cannot
+select the physical project. The first implementation uses a dedicated
+nondefault gateway project on the same pinned standalone daemon, marked
+`user.aginctus.logical-project`, `user.aginctus.protected-purpose=gateway`
+and the canonical environment ID. Keep it separate from state storage.
+
+The installed administrator-only `aginctus internal gateway-protected-preview GRANT OPERATOR_CONFIG`
+role takes the grant path and administrator-held pinned operator configuration
+as its two positional inputs (see usage on an invalid invocation). It reads the
+actual accepted snapshot over mTLS, verifies the local pinned daemon and both
+project policies, requires exact network/pool allowlists, and observes the
+physical pair and retained database. This is a read-only prerequisite: the
+report explicitly does not hold a writer pin, establish OCI acquisition
+provenance or permit runtime activation. No gateway credentials are read.

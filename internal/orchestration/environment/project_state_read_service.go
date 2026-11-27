@@ -172,7 +172,7 @@ func ServeMountedProjectStateReads(ctx context.Context, c ProjectStateReadServic
 		if _, err := readProjectExecutionPolicy(c.ExecutionPolicyFile, volume.binding); err != nil {
 			return deny()
 		}
-		execution := &projectExecutionHandler{volume: volume, authorizer: authorizer, catalog: catalog, policy: c.ExecutionPolicyFile}
+		execution := &projectExecutionHandler{volume: volume, authorizer: authorizer, catalog: catalog, policy: c.ExecutionPolicyFile, recoveryObserver: scoped}
 		defer execution.close()
 		previous := handler
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

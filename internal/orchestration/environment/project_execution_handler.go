@@ -42,6 +42,7 @@ type projectExecutionHandler struct {
 	catalog    Catalog
 	policy     string
 	closed     bool
+	recoveryObserver projectRecoveryObserver
 }
 
 func (h *projectExecutionHandler) close() {
@@ -105,7 +106,7 @@ func (h *projectExecutionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			return false
 		}
 		binding, err := h.authorizer.AuthorizeProjectPeer(ctx, peer)
-		if err != nil || binding != h.volume.binding || !grant.valid(binding) || grant.Operation == "recover" {
+		if err != nil || binding != h.volume.binding || !grant.valid(binding) {
 			return false
 		}
 		grants, err := readProjectExecutionPolicy(h.policy, binding)
@@ -139,6 +140,15 @@ func (h *projectExecutionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(result)
+		return
+	}
+	if req.Operation == "recover" {
+		if h.active != nil || h.recoveryObserver == nil || h.volume.store.recoverProjectExecution(ctx, desc, req.Revision, grant, req.ID, h.recoveryObserver, verify) != nil {
+			deny(http.StatusConflict)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(projectExecutionResponse{projectExecutionWireVersion, req.ID})
 		return
 	}
 	if req.Step == "acquire" {
@@ -207,6 +217,9 @@ func (r projectExecutionRequest) validStep() bool {
 	}
 	if r.Revision.ValidateIdentity() != nil {
 		return false
+	}
+	if r.Operation == "recover" {
+		return r.Step == "recover" && localEnvironmentAttemptID.MatchString(r.ID) && r.Action == "" && r.Sequence == 0 && !r.Succeeded
 	}
 	switch r.Step {
 	case "acquire":

@@ -6,6 +6,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"errors"
+	"os"
+	"path/filepath"
+
+	"github.com/blevinn/aginctus/internal/filestate"
 	"slices"
 )
 
@@ -16,6 +21,7 @@ type ProjectOperationSummary struct {
 	Operation  string                    `json:"operation"`
 	Status     LocalNativeStatus         `json:"status"`
 	Unresolved bool                      `json:"unresolved"`
+	Recovered bool                       `json:"recovered,omitempty"`
 	Effects    []LocalNativeEffectRecord `json:"effects,omitempty"`
 }
 
@@ -50,6 +56,22 @@ func (s *LocalProjectStateStore) inspectProjectOperations(ctx context.Context, d
 			continue
 		}
 		entry := ProjectOperationSummary{ID: op.ID, Operation: op.Execution.Operation, Status: op.Status, Unresolved: op.unresolved()}
+		if entry.Unresolved {
+			path, err := s.namespace(desc)
+			if err != nil {
+				return nil, errProjectExecutionDenied
+			}
+			receipt, err := filestate.ReadPrivateFile(filepath.Join(path, "native-operations", op.ID+".recovered"), 1024)
+			if err == nil {
+				want, err := localNativeRecoveryBytes(op)
+				if err != nil || !bytes.Equal(receipt, want) {
+					return nil, errProjectExecutionDenied
+				}
+				entry.Recovered, entry.Unresolved = true, false
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return nil, errProjectExecutionDenied
+			}
+		}
 		if id != "" {
 			entry.Effects = op.Effects
 		}

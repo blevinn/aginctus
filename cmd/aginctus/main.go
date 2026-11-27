@@ -17,6 +17,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "gateway-protected-preview" {
+		os.Exit(runProtectedGatewayPreview(os.Args[3:]))
+	}
 	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "workload-bridge-observe" {
 		if len(os.Args) != 4 {
 			fmt.Fprintln(os.Stderr, "usage: aginctus internal workload-bridge-observe HOST_GRANT")
