@@ -536,9 +536,9 @@ pkgs.testers.runNixOSTest {
                         f" --key {private}/promoter.key https://${serviceIP}:8444/v1/native-execution"
                         " -H 'Content-Type: application/json'")
 
-        def step(name, **fields):
+        def step(name, operation="reconcile", **fields):
             body = {"apiVersion": "aginctus.dev/project-native-execution/v1alpha1", "step": name,
-                    "revision": revisions[0], "workloadId": "worker", "operation": "reconcile", **fields}
+                    "revision": revisions[0], "workloadId": "worker", "operation": operation, **fields}
             return f"{coordination} --data-binary {shlex.quote(compact(body))}"
 
         attempt = json.loads(machine.succeed(step("acquire")))["id"]
@@ -559,7 +559,19 @@ pkgs.testers.runNixOSTest {
         assert result["recovered"] and result["operationId"] == attempt
         again = json.loads(machine.succeed(state_command(0, "promoter", reconcile), timeout=90))
         assert not again["result"]["native"]["effects"], "recovery replayed a successful task"
-        machine.succeed(state_command(0, "promoter", reconcile + f" --operation stop --instance-created-at {incarnation}"), timeout=90)
+        stop_attempt = json.loads(machine.succeed(step("acquire", operation="stop")))["id"]
+        recover_stop = f"operations {stop_attempt} --workload worker --revision {revisions[0]['id']} --recover"
+        machine.fail(state_command(0, "member", recover_stop))
+        machine.succeed(step("begin", operation="stop", id=stop_attempt, action="stop", sequence=1))
+        submitted_stop = json.loads(machine.succeed(f"{daemon}{update} -X PUT -d '{{\"action\":\"stop\",\"force\":true}}'"))
+        stop_task = submitted_stop["operation"].split("?")[0]
+        assert stop_task.startswith("/1.0/operations/")
+        machine.succeed(step("submitted", operation="stop", id=stop_attempt, sequence=1, daemonOperationId=stop_task.rsplit("/", 1)[1]),
+                        f"{daemon}{stop_task}/wait?project=${project} | jq -e '.metadata.status == \"Success\"'",
+                        step("applied", operation="stop", id=stop_attempt, sequence=1),
+                        guest + " systemctl restart aginctus-project-state.service")
+        result = json.loads(machine.succeed(state_command(0, "member", recover_stop)))
+        assert result["recovered"] and result["operationId"] == stop_attempt
     machine.succeed("incus list selected-worker --project ${project} --format json | jq -e 'length == 1 and .[0].status == \"Stopped\"'")
     removed = json.loads(machine.succeed(state_command(0, "promoter", reconcile + f" --operation remove --instance-created-at {incarnation}"), timeout=90))
     assert [effect["effect"]["action"] for effect in removed["result"]["native"]["effects"]] == ["delete"]

@@ -144,3 +144,73 @@ func TestDeniedTerminalRecoveryKeepsWriterFence(t *testing.T) {
 		})
 	}
 }
+
+func TestSuccessfulStopRecoveryRetainsExactWorkload(t *testing.T) {
+	ctx := t.Context()
+	verifier, restricted := restrictedIncusVerifierFixture(t)
+	c := candidateFixture()
+	c.Environment.Binding = Binding{ServerID: "sha256:" + verifier.PinnedServerCertificateSHA256, Project: "team"}
+	c.Workloads[0].Native = &acceptedstate.WorkloadNativeSpec{Runtime: "fixture", StoragePool: "default", ManagementNetwork: "test-mgmt"}
+	store, err := InitializeLocalProjectStateStore(filepath.Join(t.TempDir(), "project"), c.Environment.Binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rev, err := store.CommitLocalCandidate(ctx, c.Environment, c.Environment.Binding, nil, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := projectExecutionGrant{PeerSHA256: strings.Repeat("a", 64), ServerID: rev.ServerID, Project: rev.Project,
+		EnvironmentID: rev.EnvironmentID, RevisionID: rev.ID, WorkloadID: "beta", Operation: "stop"}
+	e, err := store.beginProjectExecution(ctx, c.Environment, rev, writer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const taskID = "6916c8a6-9b7d-4abd-90b3-aedfec7ec7da"
+	if err := e.beginEffect(ctx, "stop", writer); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.journal.recordDaemonOperation(ctx, taskID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.journal.MarkApplied(); err != nil {
+		t.Fatal(err)
+	}
+	id := e.journal.ID()
+	if err := e.close(); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	w := c.Workloads[0]
+	obs := stopRecoveryObserver{recoveryObserverFixture: recoveryObserverFixture{fixtureRestrictedIncusObserver: restricted,
+		task: &api.Operation{ID: taskID, Class: api.OperationClassTask, StatusCode: api.Success, Description: "Stopping instance", CreatedAt: now, UpdatedAt: now, Resources: map[string][]string{"instances": {"/1.0/instances/beta-instance?project=team"}}}},
+		instance: &api.Instance{}}
+	obs.instance.Name, obs.instance.Project, obs.instance.Type, obs.instance.Status, obs.instance.CreatedAt = w.InstanceName, "team", w.InstanceType, "Stopped", now.Add(time.Second)
+	obs.instance.Config = map[string]string{"user.aginctus.managed": "true", "user.aginctus.resource": "workload", "user.aginctus.workload": "beta", "user.aginctus.environment-id": rev.EnvironmentID, "volatile.base_image": w.ImageFingerprint}
+	obs.instance.Profiles = w.Profiles
+	grant := writer
+	grant.PeerSHA256, grant.Operation = strings.Repeat("b", 64), "recover"
+	// Same-name replacement after the stop task is not recovery evidence.
+	if err := store.recoverProjectExecution(ctx, c.Environment, rev, grant, id, &obs, func() bool { return true }); err == nil {
+		t.Fatal("replacement accepted")
+	}
+	obs.instance.CreatedAt = now.Add(-time.Minute)
+	if err := store.recoverProjectExecution(ctx, c.Environment, rev, grant, id, &obs, func() bool { return true }); err != nil {
+		t.Fatal(err)
+	}
+	next, err := store.beginProjectExecution(ctx, c.Environment, rev, writer)
+	if err != nil {
+		t.Fatalf("recovery did not release fence: %v", err)
+	}
+	if err := next.close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type stopRecoveryObserver struct {
+	recoveryObserverFixture
+	instance *api.Instance
+}
+
+func (o *stopRecoveryObserver) GetInstance(string) (*api.Instance, string, error) {
+	return o.instance, "instance-etag", nil
+}

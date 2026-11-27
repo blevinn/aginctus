@@ -121,7 +121,6 @@ unresolved effects fail closed. The lock cannot exclude independent admin or
 external image writers; the administrator must exclude those during acquisition.
 Exact-revision reuse only in this increment; successor reuse is separate.
 Do not expose the role through a lower-privilege endpoint.
-
 ### Installed administrator credential publisher
 
 After protected stopped provisioning, the direct root-only
