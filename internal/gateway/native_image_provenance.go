@@ -28,7 +28,10 @@ var errGatewayProvenanceUnverified = errors.New("gateway image provenance unavai
 // composer supplies an existing private directory under trusted ancestors, not
 // a path from the candidate. This store does not enforce a write lease, protect
 // against its own UID, authenticate a daemon, or authorize reuse or mutation.
-type LocalGatewayImageProvenance struct{ directory string }
+type LocalGatewayImageProvenance struct {
+	directory string
+	protected *environment.ProtectedGatewayGrant
+}
 
 func OpenLocalGatewayImageProvenance(directory string) (*LocalGatewayImageProvenance, error) {
 	s := &LocalGatewayImageProvenance{directory: directory}
@@ -70,8 +73,16 @@ func gatewayProvenanceName(revision environment.AcceptedRevision, role string) (
 	return revision.ID + "-" + role + ".json", nil
 }
 
-func (r gatewayProvenanceRecord) valid() bool {
-	return r.Version == gatewayProvenanceVersion && r.Revision.Project == r.Evidence.Project &&
+func (s *LocalGatewayImageProvenance) validRecord(r gatewayProvenanceRecord) bool {
+	project := r.Revision.Project
+	if s.protected != nil {
+		g := *s.protected
+		if r.Revision.Project != g.Project || r.Revision.ServerID != g.ServerID || r.Revision.EnvironmentID != g.EnvironmentID || r.Revision.ID != g.RevisionID {
+			return false
+		}
+		project = g.ProtectedProject
+	}
+	return r.Version == gatewayProvenanceVersion && project == r.Evidence.Project &&
 		r.Evidence.AliasMarker != "" && r.Evidence.Validate() == nil
 }
 
@@ -108,7 +119,7 @@ func (s *LocalGatewayImageProvenance) ExistingImageEvidence(ctx context.Context,
 	data, err := io.ReadAll(io.LimitReader(file, gatewayProvenanceLimit+1))
 	var record gatewayProvenanceRecord
 	if err != nil || len(data) > gatewayProvenanceLimit || json.Unmarshal(data, &record) != nil ||
-		record.Revision != revision || record.Role != role || !record.valid() {
+		record.Revision != revision || record.Role != role || !s.validRecord(record) {
 		return empty, errGatewayProvenanceUnverified
 	}
 	canonical, err := json.Marshal(record)
@@ -136,7 +147,7 @@ func newGatewayAliasMarker() string {
 func (s *LocalGatewayImageProvenance) record(ctx context.Context, revision environment.AcceptedRevision, role string, e native.GatewayImageEvidence) error {
 	name, err := gatewayProvenanceName(revision, role)
 	r := gatewayProvenanceRecord{Version: gatewayProvenanceVersion, Revision: revision, Role: role, Evidence: e}
-	if err != nil || !r.valid() {
+	if err != nil || !s.validRecord(r) {
 		return errGatewayProvenanceUnverified
 	}
 	data, err := json.Marshal(r)
