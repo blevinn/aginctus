@@ -155,7 +155,7 @@ pkgs.testers.runNixOSTest {
           ''
             try:
                 machine.succeed(shlex.join(argv), timeout=${toString trialTimeout})
-            except Exception as failure:
+            except Exception:
                 # Capture only bounded error strings from the synthetic project,
                 # redact long hex tokens, and omit all other event fields.
                 machine.execute("systemctl stop aginctus-testenv-operation-monitor.service")
@@ -188,7 +188,7 @@ pkgs.testers.runNixOSTest {
                   if not found:
                       print("FIXTURE NATIVE TEST FAILURE: tagged console evidence unavailable")
                 ''}
-                raise failure
+                raise RuntimeError("worker acceptance failed; inspect bounded diagnostics above")
             else:
                 machine.succeed("systemctl stop aginctus-testenv-operation-monitor.service")
             reports = machine.succeed("find /var/lib/aginctus-testenv-acceptance -mindepth 2 -maxdepth 2 -name result.json").splitlines()
