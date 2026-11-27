@@ -26,6 +26,7 @@ type projectExecutionRequest struct {
 	Action     string           `json:"action,omitempty"`
 	Sequence   int              `json:"sequence,omitempty"`
 	Succeeded  bool             `json:"succeeded,omitempty"`
+	DaemonID   string           `json:"daemonOperationId,omitempty"`
 }
 
 type projectExecutionResponse struct {
@@ -169,8 +170,13 @@ func (h *projectExecutionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 				deny(http.StatusConflict)
 				return
 			}
+		case "submitted":
+			if req.Sequence != n || e.journal.recordDaemonOperation(ctx, req.DaemonID) != nil {
+				deny(http.StatusConflict)
+				return
+			}
 		case "applied":
-			if req.Sequence != n || e.journal.MarkApplied() != nil {
+			if req.Sequence != n || n == 0 || e.journal.op.Effects[n-1].DaemonID == "" || e.journal.MarkApplied() != nil {
 				deny(http.StatusConflict)
 				return
 			}
@@ -192,6 +198,9 @@ func (h *projectExecutionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 }
 
 func (r projectExecutionRequest) validStep() bool {
+	if (r.Step == "submitted" && !daemonOperationID.MatchString(r.DaemonID)) || (r.Step != "submitted" && r.DaemonID != "") {
+		return false
+	}
 	if r.Operation == "inspect" {
 		return r.Step == "inspect" && (r.ID == "" || localEnvironmentAttemptID.MatchString(r.ID)) &&
 			r.Action == "" && r.Sequence == 0 && !r.Succeeded && r.Revision == inspectionRevision(r.Revision)
@@ -204,7 +213,7 @@ func (r projectExecutionRequest) validStep() bool {
 		return r.ID == "" && r.Action == "" && r.Sequence == 0 && !r.Succeeded
 	case "begin":
 		return localEnvironmentAttemptID.MatchString(r.ID) && r.Action != "" && r.Sequence > 0 && !r.Succeeded
-	case "applied":
+	case "applied", "submitted":
 		return localEnvironmentAttemptID.MatchString(r.ID) && r.Action == "" && r.Sequence > 0 && !r.Succeeded
 	case "finish":
 		return localEnvironmentAttemptID.MatchString(r.ID) && r.Action == "" && r.Sequence >= 0
