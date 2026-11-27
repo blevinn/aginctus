@@ -65,6 +65,28 @@ def validate_resource_observations(cpu, memory, disk, last_sector, beyond_disk):
     ]
 
 
+def validate_resource_cleanup(baseline, current, fingerprint):
+    """Allow only the pinned image's lazily created optimized cache volume."""
+    before_states, before_disks, before_configs = baseline
+    after_states, after_disks, after_configs = current
+    if before_states != after_states:
+        raise RuntimeError("resource probe cleanup: instance inventory changed")
+    if before_configs != after_configs:
+        raise RuntimeError("resource probe cleanup: existing instance configuration changed")
+    cache = ("image", fingerprint)
+    if after_disks == before_disks:
+        return
+    if cache not in before_disks and after_disks == sorted([*before_disks, cache]):
+        print("FIXTURE RESOURCE CLEANUP: pinned image cache retained")
+        return
+    raise RuntimeError(
+        "resource probe cleanup: unexpected volume inventory change; "
+        f"before={len(before_disks)} after={len(after_disks)} "
+        f"probe_volume_present={any(name == RESOURCE_PROBE for _, name in after_disks)} "
+        f"pinned_cache_present={cache in after_disks}"
+    )
+
+
 def run_runtime_resources(machine, fingerprint, inventory, project_prefix, sentinel):
     if not resource_re.fullmatch(r"[0-9a-f]{64}", fingerprint):
         raise RuntimeError("resource probe requires the pinned image fingerprint")
@@ -127,6 +149,5 @@ dd if="$root" bs=512 skip=67108864 count=1 status=none | wc -c
     checks = validate_resource_observations(cpu, memory, *disk_observations)
     machine.succeed(prefix + "stop " + RESOURCE_PROBE + " --force", timeout=120)
     machine.succeed(prefix + "delete " + RESOURCE_PROBE, timeout=120)
-    if inventory(machine) != baseline:
-        raise RuntimeError("resource probe cleanup did not restore baseline")
+    validate_resource_cleanup(baseline, inventory(machine), fingerprint)
     return checks
