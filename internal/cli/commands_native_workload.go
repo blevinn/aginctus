@@ -51,12 +51,18 @@ func registerNativeWorkloadReconcile(state *cobra.Command, out io.Writer, format
 				}
 			}
 			if herdr {
-				if workload!=""||operation!="reconcile"||createdAt!=""{return errors.New("select Herdr alone for reconcile")}
-				result,op,err:=nativelifecycle.ExecuteInstalledHerdr(cmd.Context(),config,grant,*project,*id,revision,bootstrap,false)
-				if op==""&&err!=nil{return err}
-				return errors.Join(err,clioutput.WriteStructured(out,f,workloadReconcileDocument{TypeMeta:api.TypeMeta{APIVersion:"aginctus.dev/v1alpha1",Kind:"NativeHerdrResult"},OperationID:op,Result:result}))
+				if workload != "" || operation != "reconcile" || createdAt != "" {
+					return errors.New("select Herdr alone for reconcile")
+				}
+				result, op, err := nativelifecycle.ExecuteInstalledHerdr(cmd.Context(), config, grant, *project, *id, revision, bootstrap, false)
+				if op == "" && err != nil {
+					return err
+				}
+				return errors.Join(err, clioutput.WriteStructured(out, f, workloadReconcileDocument{TypeMeta: api.TypeMeta{APIVersion: "aginctus.dev/v1alpha1", Kind: "NativeHerdrResult"}, OperationID: op, Result: result}))
 			}
-			if workload==""||bootstrap{return errors.New("select one workload or Herdr; bootstrap applies only to Herdr")}
+			if workload == "" || bootstrap {
+				return errors.New("select one workload or Herdr; bootstrap applies only to Herdr")
+			}
 			result, op, err := nativelifecycle.ExecuteInstalledWorkload(cmd.Context(), config, grant, *project, *id, revision, workload, native.ProjectInstanceOperation(operation), incarnation)
 			if op == "" && err != nil {
 				return err
@@ -66,8 +72,8 @@ func registerNativeWorkloadReconcile(state *cobra.Command, out io.Writer, format
 			}))
 		},
 	}
-	cmd.Flags().BoolVar(&herdr,"herdr",false,"Select accepted Herdr instance and retained state")
-	cmd.Flags().BoolVar(&bootstrap,"bootstrap-herdr-state",false,"Separately authorized initial Herdr state creation")
+	cmd.Flags().BoolVar(&herdr, "herdr", false, "Select accepted Herdr instance and retained state")
+	cmd.Flags().BoolVar(&bootstrap, "bootstrap-herdr-state", false, "Separately authorized initial Herdr state creation")
 	cmd.Flags().StringVar(&workload, "workload", "", "Exact accepted workload ID")
 	cmd.Flags().StringVar(&revision, "expect", "", "Exact accepted revision ID")
 	cmd.Flags().StringVar(&grant, "host-grant", "", "Independently installed administrator-owned attachment grant")
