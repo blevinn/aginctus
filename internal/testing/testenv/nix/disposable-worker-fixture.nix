@@ -32,9 +32,12 @@ pkgs.testers.runNixOSTest {
   nodes.machine = { ... }: {
     imports = [ self.nixosModules.aginctusTestenvRecovery ];
     services.aginctusTestenvRecovery.enable = independentRecovery;
-    # Incus LVM storage requires the kernel thin-pool device-mapper target.
-    # Load it in the disposable worker, not on the calling host.
-    boot.kernelModules = [ "dm_thin_pool" ];
+    # LVM pool creation and cloning an imported image require both targets.
+    # Load them in the disposable worker, not on the calling host.
+    boot.kernelModules = [
+      "dm_thin_pool"
+      "dm_snapshot"
+    ];
     virtualisation = {
       cores = 4;
       memorySize = 8192;
@@ -81,6 +84,7 @@ pkgs.testers.runNixOSTest {
       # discovered from host storage.
       machine.succeed("test -c /dev/kvm")
       machine.succeed("dmsetup targets | grep -E '^thin-pool[[:space:]]'")
+      machine.succeed("dmsetup targets | grep -E '^snapshot[[:space:]]'")
       machine.succeed("test -b /dev/vdb")
       assert machine.succeed("blockdev --getsize64 /dev/vdb").strip() == str(72 * 1024**3)
       assert machine.succeed("lsblk -nr -o MOUNTPOINT /dev/vdb").strip() == ""

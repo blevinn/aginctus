@@ -84,9 +84,22 @@ The installed operator path is explicit:
 | Guest service UID, under administrator supervision | `aginctus serve project-state` | Set `AGINCTUS_PROJECT_STATE_READ_SERVICE_CONFIG` to the [private service configuration](project-state-read-authentication.md#opt-in-read-only-daemon-2026-11-24). Omit `promotionPolicyFile` for reads; set it only for an explicitly approved exact-grant fixture. Keep the host socket and unrestricted keys out of the guest. |
 | Administrator-held fixture peer | `aginctus --incus-project PROJECT --environment UUID state show -o json`; `state plan-accept -o json` and `state promote --expect EXPECTED -o json` with the same global selectors | Use the peer's private `AGINCTUS_RESTRICTED_READ_CONFIG`. Planning needs a selected candidate; promotion also needs the enabled route and exact grant. `EXPECTED` is the current revision ID or `genesis`. See the [operator example](project-state-read-authentication.md#provisioning-exact-grants). |
 
-These roles do not install a supported supervisor unit, enroll peers, provision
-resources or configure Incus authorization. The existing VM fixture contains
-administrator provisioning examples; it is not an isolation configuration.
+For an administrator-controlled NixOS service guest, import
+`nixosModules.aginctusProjectState`, set `services.aginctus-project-state.enable`
+and set `services.aginctus-project-state.uid` to the dedicated UID in the
+bootstrap config and retained mount. The module installs the nonroot unit
+without scheduling it at boot or starting it on module activation. Provision
+the independently verified attachment, bootstrap configuration and private
+credentials before running `systemctl start aginctus-project-state.service`
+inside the guest. The unit runs the same installed bootstrap before opening
+the listener. Its service configuration is fixed at `/run/aginctus/state.json`;
+the administrator must restage volatile credentials after guest reboot. Use
+`systemctl stop aginctus-project-state.service` before reattachment or guest
+replacement and repeat host preflight before a manual start on the replacement.
+
+The module does not enroll peers, provision Incus resources or configure Incus
+authorization. The VM fixture contains administrator provisioning examples;
+it is not an isolation configuration.
 
 ### Narrow isolation review
 
