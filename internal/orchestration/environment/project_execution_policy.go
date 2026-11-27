@@ -30,7 +30,7 @@ func (g projectExecutionGrant) valid(binding Binding) bool {
 		return false
 	}
 	switch g.Operation {
-	case "gateway-deliver", "gateway-provision", "gateway-inspect":
+	case "gateway-deliver", "gateway-provision", "gateway-start", "gateway-inspect":
 		return g.WorkloadID == "gateway-credentials"
 	case "herdr-reconcile", "herdr-inspect":
 		return g.WorkloadID == "herdr-client"
@@ -52,6 +52,8 @@ func (g projectExecutionGrant) permits(e LocalNativeEffectRecord) bool {
 			return true
 		}
 		return false
+	case "gateway-start":
+		return e.Action == "configure-postgres" || e.Action == "configure-litellm" || e.Action == "start-postgres" || e.Action == "start-litellm"
 	case "gateway-deliver":
 		return e.Action == "deliver"
 	case "herdr-reconcile":
@@ -68,7 +70,7 @@ func (g projectExecutionGrant) permits(e LocalNativeEffectRecord) bool {
 }
 
 func (g projectExecutionGrant) writer() bool {
-	return g.Operation == "reconcile" || g.Operation == "stop" || g.Operation == "remove" || g.Operation == "gateway-deliver" || g.Operation == "gateway-provision" || g.Operation == "herdr-reconcile"
+	return g.Operation == "reconcile" || g.Operation == "stop" || g.Operation == "remove" || g.Operation == "gateway-deliver" || g.Operation == "gateway-provision" || g.Operation == "gateway-start" || g.Operation == "herdr-reconcile"
 }
 
 func readProjectExecutionPolicy(path string, binding Binding) (map[projectExecutionGrant]struct{}, error) {
@@ -108,7 +110,7 @@ func parseProjectExecutionPolicy(data []byte, binding Binding) (map[projectExecu
 
 func (g projectExecutionGrant) domainSelected(c Candidate) bool {
 	switch g.Operation {
-	case "gateway-deliver", "gateway-provision", "gateway-inspect":
+	case "gateway-deliver", "gateway-provision", "gateway-start", "gateway-inspect":
 		return g.WorkloadID == "gateway-credentials" && c.Gateway != nil
 	case "herdr-reconcile", "herdr-inspect":
 		return g.WorkloadID == "herdr-client" && c.Herdr != nil
@@ -118,7 +120,7 @@ func (g projectExecutionGrant) domainSelected(c Candidate) bool {
 }
 
 func (g projectExecutionGrant) domainScope() bool {
-	return g.Operation == "gateway-deliver" || g.Operation == "gateway-provision" || g.Operation == "herdr-reconcile"
+	return g.Operation == "gateway-deliver" || g.Operation == "gateway-provision" || g.Operation == "gateway-start" || g.Operation == "herdr-reconcile"
 }
 
 func (g projectExecutionGrant) inspection() bool {
@@ -131,7 +133,7 @@ func (g projectExecutionGrant) inspects(other projectExecutionGrant) bool {
 	}
 	switch g.Operation {
 	case "gateway-inspect":
-		return other.Operation == "gateway-deliver" || other.Operation == "gateway-provision"
+		return other.Operation == "gateway-deliver" || other.Operation == "gateway-provision" || other.Operation == "gateway-start"
 	case "herdr-inspect":
 		return other.Operation == "herdr-reconcile"
 	case "inspect":

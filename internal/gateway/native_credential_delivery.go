@@ -161,7 +161,7 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 			}
 			for _, config := range []map[string]string{instance.Config, instance.ExpandedConfig} {
 				for key := range config {
-					if strings.HasPrefix(key, "environment.") || strings.HasPrefix(key, "raw.") || strings.HasPrefix(key, "security.") {
+					if strings.HasPrefix(key, "environment.") || strings.HasPrefix(key, "raw.") || strings.HasPrefix(key, "security.") || strings.HasPrefix(key, "oci.") {
 						return errCredentialDelivery
 					}
 				}
@@ -188,23 +188,7 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 	if err != nil || closeErr != nil || n > 32<<10 || hex.EncodeToString(h.Sum(nil)) != reviewedPostgresEntrypoint {
 		return fail("PostgreSQL entrypoint digest")
 	}
-	type entry struct {
-		guest, path, kind, data string
-		uid, gid                int64
-		mode                    int
-	}
-	entries := []entry{
-		{pair.Postgres.Name, "/run/aginctus", "directory", "", 0, 0, 0o755},
-		{pair.Postgres.Name, credentialDirectory, "directory", "", 70, 70, 0o700},
-		{pair.Postgres.Name, credentialDirectory + "/postgres-password", "file", material.password + "\n", 70, 70, 0o600},
-		{pair.Postgres.Name, credentialDirectory + "/postgres.pgpass", "file", "127.0.0.1:5432:litellm:litellm:" + material.password + "\n", 70, 70, 0o600},
-		{pair.LiteLLM.Name, "/run/aginctus", "directory", "", 0, 0, 0o755},
-		{pair.LiteLLM.Name, credentialDirectory, "directory", "", 0, 0, 0o700},
-		{pair.LiteLLM.Name, credentialDirectory + "/postgres-password", "file", material.password + "\n", 0, 0, 0o600},
-		{pair.LiteLLM.Name, credentialDirectory + "/master-key", "file", material.master + "\n", 0, 0, 0o600},
-		{pair.LiteLLM.Name, credentialDirectory + "/salt-key", "file", material.salt + "\n", 0, 0, 0o600},
-		{pair.LiteLLM.Name, credentialDirectory + "/litellm-bootstrap.py", "file", gatewayBootstrap, 0, 0, 0o400},
-	}
+	entries := gatewayCredentialEntries(pair, material)
 	absent := func(guest, path string) bool {
 		body, _, err := sdk.GetInstanceFile(guest, path)
 		if body != nil {
@@ -223,7 +207,57 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 			return fail("guest parent preflight")
 		}
 	}
-	readback := func(e entry) bool {
+	for _, e := range entries {
+		if verify() != nil || !absent(e.guest, e.path) {
+			return fail("before guest file submission")
+		}
+		args := incus.InstanceFileArgs{UID: e.uid, GID: e.gid, Mode: e.mode, Type: e.kind, WriteMode: "overwrite"}
+		if e.kind == "file" {
+			args.Content = strings.NewReader(e.data)
+		}
+		if err := sdk.CreateInstanceFile(e.guest, e.path, args); err != nil {
+			return fail("guest file submission")
+		}
+		if verify() != nil || !gatewayCredentialReadback(sdk,e) {
+			return fail("guest file readback")
+		}
+	}
+	// Detect changes across the multi-file handoff. A failed partial stage is
+	// not overwritten or automatically deleted on retry.
+	for _, e := range entries {
+		if !gatewayCredentialReadback(sdk,e) {
+			return fail("final guest file readback")
+		}
+	}
+	if verify() != nil {
+		return fail("final stopped guest preflight")
+	}
+	return GatewayCredentialDeliveryReceipt{Revision: revision, PhysicalProject: top.Project,
+		Version: material.version, PostgresCreatedAt: incarnations[0], LiteLLMCreatedAt: incarnations[1], Verified: true}, nil
+}
+
+type gatewayCredentialEntry struct {
+		guest, path, kind, data string
+		uid, gid                int64
+		mode                    int
+}
+func gatewayCredentialEntries(pair NativeGatewayInstancePair, material GatewayCredentialMaterial) []gatewayCredentialEntry {
+	return []gatewayCredentialEntry{
+		{pair.Postgres.Name, "/run/aginctus", "directory", "", 0, 0, 0o755},
+		{pair.Postgres.Name, credentialDirectory, "directory", "", 70, 70, 0o700},
+		{pair.Postgres.Name, credentialDirectory + "/postgres-password", "file", material.password + "\n", 70, 70, 0o600},
+		{pair.Postgres.Name, credentialDirectory + "/postgres.pgpass", "file", "127.0.0.1:5432:litellm:litellm:" + material.password + "\n", 70, 70, 0o600},
+		{pair.LiteLLM.Name, "/run/aginctus", "directory", "", 0, 0, 0o755},
+		{pair.LiteLLM.Name, credentialDirectory, "directory", "", 0, 0, 0o700},
+		{pair.LiteLLM.Name, credentialDirectory + "/postgres-password", "file", material.password + "\n", 0, 0, 0o600},
+		{pair.LiteLLM.Name, credentialDirectory + "/master-key", "file", material.master + "\n", 0, 0, 0o600},
+		{pair.LiteLLM.Name, credentialDirectory + "/salt-key", "file", material.salt + "\n", 0, 0, 0o600},
+		{pair.LiteLLM.Name, credentialDirectory + "/litellm-bootstrap.py", "file", gatewayBootstrap, 0, 0, 0o400},
+	}
+
+}
+
+func gatewayCredentialReadback(sdk incus.InstanceServer,e gatewayCredentialEntry) bool {
 		body, meta, err := sdk.GetInstanceFile(e.guest, e.path)
 		if body != nil {
 			defer body.Close()
@@ -241,31 +275,3 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 		data, err := io.ReadAll(io.LimitReader(body, int64(len(e.data))+1))
 		return err == nil && subtle.ConstantTimeCompare(data, []byte(e.data)) == 1
 	}
-	for _, e := range entries {
-		if verify() != nil || !absent(e.guest, e.path) {
-			return fail("before guest file submission")
-		}
-		args := incus.InstanceFileArgs{UID: e.uid, GID: e.gid, Mode: e.mode, Type: e.kind, WriteMode: "overwrite"}
-		if e.kind == "file" {
-			args.Content = strings.NewReader(e.data)
-		}
-		if err := sdk.CreateInstanceFile(e.guest, e.path, args); err != nil {
-			return fail("guest file submission")
-		}
-		if verify() != nil || !readback(e) {
-			return fail("guest file readback")
-		}
-	}
-	// Detect changes across the multi-file handoff. A failed partial stage is
-	// not overwritten or automatically deleted on retry.
-	for _, e := range entries {
-		if !readback(e) {
-			return fail("final guest file readback")
-		}
-	}
-	if verify() != nil {
-		return fail("final stopped guest preflight")
-	}
-	return GatewayCredentialDeliveryReceipt{Revision: revision, PhysicalProject: top.Project,
-		Version: material.version, PostgresCreatedAt: incarnations[0], LiteLLMCreatedAt: incarnations[1], Verified: true}, nil
-}

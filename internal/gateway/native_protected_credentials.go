@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"os"
 
 	"github.com/blevinn/aginctus/internal/filestate"
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
@@ -85,9 +86,53 @@ func PublishLocalProtectedGatewayCredentials(ctx context.Context,grantPath,opera
 		return ctx.Err()
 	}
 	if guard(ctx)!=nil{return receipt,id,errCredentialDelivery}
+	if prior,readErr:=e.deliveryReceipt();readErr==nil {
+		if e.verifyDelivery(ctx,prior,material,images)!=nil{return receipt,id,errCredentialDelivery}
+		return prior,id,nil
+	} else if !errors.Is(readErr,os.ErrNotExist){return receipt,id,errCredentialDelivery}
 	if e.session.BeginEffect(ctx,"deliver")!=nil{return receipt,id,errProtectedGateway}
 	receipt,err=StageStoppedGatewayCredentialFiles(ctx,e.revision,e.candidate,e.plan.top,e.plan.devices,e.plan.pair,images,resolved[0],resolved[1],material,e.sdk,guard)
 	if err!=nil{return receipt,id,errCredentialDelivery}
-	if guard(ctx)!=nil||e.session.MarkApplied(ctx)!=nil{return receipt,id,errCredentialDelivery}
+	if guard(ctx)!=nil||e.saveDeliveryReceipt(receipt)!=nil||e.session.MarkApplied(ctx)!=nil{return receipt,id,errCredentialDelivery}
 	return receipt,id,nil
+}
+
+func (e *protectedExecution) deliveryReceipt()(GatewayCredentialDeliveryReceipt,error){
+	var receipt GatewayCredentialDeliveryReceipt
+	path:=filepath.Join(e.provenance.directory,"delivery.json")
+	raw,err:=filestate.ReadPrivateFile(path,8192)
+	if err!=nil{return receipt,err}
+	if json.Unmarshal(raw,&receipt)!=nil{return receipt,errCredentialDelivery}
+	canonical,err:=json.Marshal(receipt)
+	if err!=nil||!bytes.Equal(raw,canonical)||!receipt.Verified||receipt.Revision!=e.revision||
+		receipt.PhysicalProject!=e.grant.ProtectedProject||receipt.Version!=e.candidate.Gateway.CredentialVersion||
+		receipt.PostgresCreatedAt.IsZero()||receipt.LiteLLMCreatedAt.IsZero(){return GatewayCredentialDeliveryReceipt{},errCredentialDelivery}
+	return receipt,nil
+}
+func (e *protectedExecution) saveDeliveryReceipt(r GatewayCredentialDeliveryReceipt)error{
+	path:=filepath.Join(e.provenance.directory,"delivery.json")
+	raw,err:=json.Marshal(r);if err!=nil{return errCredentialDelivery}
+	file,err:=os.OpenFile(path,os.O_CREATE|os.O_EXCL|os.O_WRONLY,0600);if err!=nil{return errCredentialDelivery}
+	_,werr:=file.Write(raw);serr:=file.Sync();cerr:=file.Close()
+	if errors.Join(werr,serr,cerr)!=nil{return errCredentialDelivery}
+	dir,err:=os.Open(e.provenance.directory);if err!=nil{return errCredentialDelivery}
+	defer dir.Close()
+	return dir.Sync()
+}
+func (e *protectedExecution) verifyDelivery(ctx context.Context,r GatewayCredentialDeliveryReceipt,m GatewayCredentialMaterial,images NativeGatewayCreateImages)error{
+	if e.guard(ctx)!=nil||r.Revision!=e.revision||r.PhysicalProject!=e.grant.ProtectedProject||r.Version!=m.version||!r.Verified{return errCredentialDelivery}
+	current,err:=e.credentialMaterial()
+	if err!=nil||current!=m{return errCredentialDelivery}
+	if ObserveNativeGatewayAttachmentsWithReader(ctx,e.plan.top,e.plan.devices,e.sdk)!=nil{return errCredentialDelivery}
+	obs,err:=observePinnedGatewayInstances(ctx,e.plan.top,e.plan.pair,images,e.sdk)
+	if err!=nil||len(obs)!=2||obs[0].Status!=NativeGatewayCompatible||obs[1].Status!=NativeGatewayCompatible{return errCredentialDelivery}
+	for i,spec:=range []NativeGatewayInstanceSpec{e.plan.pair.Postgres,e.plan.pair.LiteLLM}{
+		guest,_,err:=e.sdk.GetInstance(spec.Name)
+		want:=r.PostgresCreatedAt;if i==1{want=r.LiteLLMCreatedAt}
+		if err!=nil||guest==nil||!guest.CreatedAt.Equal(want)||guest.Stateful||!equalNativeDevices(guest.ExpandedDevices,spec.Devices){return errCredentialDelivery}
+	}
+	for _,entry:=range gatewayCredentialEntries(e.plan.pair,m){
+		if !gatewayCredentialReadback(e.sdk,entry){return errCredentialDelivery}
+	}
+	return e.guard(ctx)
 }

@@ -140,3 +140,26 @@ it applied only after file readback. Receipt does not grant startup. Existing
 or partially written destinations are not overwritten. A failed/uncertain
 handoff remains blocked; no automatic repair, secret rotation or consumption
 claim. Keep root invocation and protected placement review boundaries.
+
+### Installed protected startup candidate
+
+The direct administrator-only internal gateway-protected-start role requires
+the same placement and operator configuration and a separate exact gateway-start
+grant plus accepted EnsureRunning. The publisher stores a nonsecret delivery
+receipt under the protected directory; startup rechecks the exact file bytes,
+credential version and both guest incarnations. It sets only the fixed nonsecret
+OCI entrypoint, cwd, UID and GID (Incus 7.5.1 supports these). Both existing
+launchers are preflighted before either is changed; running guests cannot be
+reconfigured. The existing ordered startup primitive checks authenticated
+PostgreSQL SCRAM readiness before LiteLLM, then authenticated readiness/details
+and connected database. The coordinator records configuration and start task IDs.
+Repeated healthy start performs no writes. This first candidate refuses shared
+management networks and egress: only the owned pair on a dedicated unrouted
+bridge with managed DNS and no other nondefault project network access is
+supported. This is a conservative implementation boundary, not the final
+workload-access topology. Verify real Incus UsedBy, network policy, DNS,
+launcher argv, /run persistence and both real consumers in disposable execution
+before merge; do not activate delegated or pilot execution. No secret values
+in Incus config. Registry metadata is still resolved online before runtime;
+strict offline full-stack staging requires follow-up. No rotation or implicit
+repair of partial handoff is implemented.
