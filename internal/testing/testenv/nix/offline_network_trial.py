@@ -11,8 +11,6 @@ import shlex as network_shlex
 NETWORK_PROBE = "network-probe"
 NETWORK_NS = "te-netprobe"
 NETWORK_UNIT = "aginctus-testenv-network-probe"
-NETWORK_PEER = "192.0.2.2"
-NETWORK_PORT = 18937
 
 NETWORK_SERVER = """import selectors
 import socket
@@ -108,11 +106,12 @@ def _network_command(*args):
 def _network_marker(machine, command, marker):
     actual = machine.succeed(command, timeout=20).strip()
     if actual != marker:
-        raise RuntimeError("network probe marker mismatch")
+        raise RuntimeError(f"network probe marker mismatch: expected {marker}, observed {actual[:128]!r}")
 
 
 def _network_count(machine):
     # The listener logs exactly one marker per accepted TCP or UDP request.
+    machine.succeed("journalctl --sync", timeout=20)
     output = machine.succeed(
         "journalctl -b -u " + NETWORK_UNIT + ".service --no-pager -o cat "
         "| awk '/^PROBE (tcp|udp)$/ {n++} END {print n+0}'"
