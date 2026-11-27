@@ -335,6 +335,10 @@
             {
               inherit self nixpkgs system;
             };
+        protected-gateway-start = import ./tests/nix/vm-harness/environment-project-state-incus.nix {
+          inherit self nixpkgs system;
+          gatewayStartup = true;
+        };
       });
 
       checks = forAllSystems (

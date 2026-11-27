@@ -14,12 +14,13 @@ var gatewaySecretVersion = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}
 // within its Incus project's authority. Credential version and exact resource
 // ownership are carried without secrets, paths, or any implied start grant.
 type NativeGatewayRuntimeBinding struct {
-	Resources                   NativeGatewayResourceIdentity `json:"resources"`
-	AcceptedEnvironmentRevision environment.AcceptedRevision  `json:"acceptedEnvironmentRevision"`
-	CredentialVersion           string                        `json:"credentialVersion"`
-	Images                      NativeGatewayCreateImages     `json:"images"`
-	RootPool                    string                        `json:"rootPool"`
-	DatabasePool                string                        `json:"databasePool"`
+	Protected                   *environment.ProtectedGatewayGrant `json:"protected,omitempty"`
+	Resources                   NativeGatewayResourceIdentity      `json:"resources"`
+	AcceptedEnvironmentRevision environment.AcceptedRevision       `json:"acceptedEnvironmentRevision"`
+	CredentialVersion           string                             `json:"credentialVersion"`
+	Images                      NativeGatewayCreateImages          `json:"images"`
+	RootPool                    string                             `json:"rootPool"`
+	DatabasePool                string                             `json:"databasePool"`
 }
 
 // Validate requires a canonical verified server/project environment binding
@@ -27,8 +28,9 @@ type NativeGatewayRuntimeBinding struct {
 // AcceptedEnvironmentRevision is a pointer into the project-scoped accepted
 // state service; this function does not authenticate or retrieve that pointer.
 func (b NativeGatewayRuntimeBinding) Validate(descriptor environment.Descriptor, selected environment.Binding, pair NativeGatewayInstancePair) error {
-	if err := b.Resources.ValidateEnvironmentIdentity(descriptor, selected); err != nil {
-		return err
+	identity, err := b.physicalIdentity(descriptor, selected)
+	if err != nil || identity != b.Resources {
+		return fmt.Errorf("native gateway physical identity unverified")
 	}
 	if err := validateNativeGatewayPairOwner(pair); err != nil {
 		return err
@@ -38,7 +40,7 @@ func (b NativeGatewayRuntimeBinding) Validate(descriptor environment.Descriptor,
 		pair.Postgres.Project != b.Resources.Project || pair.LiteLLM.Project != b.Resources.Project ||
 		pair.Postgres.Name != b.Resources.PostgresInstance ||
 		pair.LiteLLM.Name != b.Resources.LiteLLMInstance ||
-		!gatewayRevisionMatches(b.AcceptedEnvironmentRevision, descriptor, selected) ||
+		!gatewayRevisionMatches(b.AcceptedEnvironmentRevision, descriptor, descriptor.Binding) ||
 		!nativeDeviceName.MatchString(b.RootPool) || !nativeDeviceName.MatchString(b.DatabasePool) ||
 		pair.Postgres.Devices["root"]["pool"] != b.RootPool || pair.LiteLLM.Devices["root"]["pool"] != b.RootPool ||
 		pair.Postgres.Devices["database"]["pool"] != b.DatabasePool ||
@@ -75,4 +77,19 @@ func VerifyNativeGatewayRuntimeBinding(ctx context.Context, descriptor environme
 		return fmt.Errorf("native gateway accepted revision or credential delivery unverified")
 	}
 	return ctx.Err()
+}
+
+func (b NativeGatewayRuntimeBinding) physicalIdentity(descriptor environment.Descriptor, selected environment.Binding) (NativeGatewayResourceIdentity, error) {
+	if b.Protected == nil {
+		return NativeGatewayIdentity(descriptor, selected)
+	}
+	g := *b.Protected
+	if descriptor.Binding.ServerID != g.ServerID || descriptor.Binding.Project != g.Project || descriptor.ID != g.EnvironmentID ||
+		b.AcceptedEnvironmentRevision.ID != g.RevisionID || selected.ServerID != g.ServerID || selected.Project != g.ProtectedProject ||
+		g.ProtectedProject == g.Project || g.ProtectedProject == "default" {
+		return NativeGatewayResourceIdentity{}, fmt.Errorf("protected gateway placement does not match logical revision")
+	}
+	physical := descriptor
+	physical.Binding = selected
+	return NativeGatewayIdentity(physical, selected)
 }

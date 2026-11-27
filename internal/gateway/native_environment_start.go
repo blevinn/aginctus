@@ -85,7 +85,7 @@ func StartNativeEnvironmentGatewayWithClient(
 	if guard == nil || verifier == nil || ready == nil {
 		return fail("authority", "gateway", false)
 	}
-	identity, err := NativeGatewayIdentity(descriptor, selected)
+	identity, err := binding.physicalIdentity(descriptor, selected)
 	if err != nil || top.Project != identity.Project || top.EnvironmentID != identity.EnvironmentID ||
 		top.DatabaseVolume != identity.DatabaseVolume {
 		return fail("environment", "gateway", false)
@@ -121,6 +121,9 @@ func StartNativeEnvironmentGatewayWithClient(
 				if idx == i && instance.Status != "Running" {
 					return false
 				}
+			}
+			if binding.Protected != nil && !gatewayLauncherMatches(instance, spec, pair.Postgres.Name) {
+				return false
 			}
 			for _, config := range []map[string]string{instance.Config, instance.ExpandedConfig} {
 				for key := range config {
