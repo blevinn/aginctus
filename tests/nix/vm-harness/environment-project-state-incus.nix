@@ -362,7 +362,7 @@ pkgs.testers.runNixOSTest {
                 for op in gateway_ops]})
             machine.succeed(f"incus file push {private}/gateway-execution.json environment-state-service/etc/aginctus/execution.json"
                             " --project ${protectedProject} --uid 0 --gid 0 --mode 0644")
-            command = f"${cli}/bin/aginctus internal gateway-protected-"
+            command = "${cli}/bin/aginctus internal gateway-protected-"
             args = f" {grant_file} {root_reads}"
             machine.succeed(command + "provision" + args, timeout=700)
             repeated = json.loads(machine.succeed(command + "provision" + args, timeout=120))
