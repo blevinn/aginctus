@@ -17,6 +17,7 @@ type projectServiceInspectionFake struct {
 	server        api.Server
 	project       api.Project
 	projectETag   string
+	logical       *api.Project
 	instance      api.Instance
 	volume        api.StorageVolume
 	instanceETag  string
@@ -28,7 +29,10 @@ type projectServiceInspectionFake struct {
 func (f *projectServiceInspectionFake) GetConnectionInfo() (*incusclient.ConnectionInfo, error) {
 	return &f.connection, nil
 }
-func (f *projectServiceInspectionFake) GetProject(string) (*api.Project, string, error) {
+func (f *projectServiceInspectionFake) GetProject(name string) (*api.Project, string, error) {
+	if f.logical != nil && name == f.logical.Name {
+		return f.logical, "logical-etag", nil
+	}
 	return &f.project, f.projectETag, nil
 }
 func (f *projectServiceInspectionFake) GetServer() (*api.Server, string, error) {
@@ -168,6 +172,42 @@ func TestProjectServiceAttachmentFailsClosedOnForeignAndAmbiguousResources(t *te
 			tc.change(&want, f)
 			if err := VerifyProjectServiceAttachment(context.Background(), f, want); err == nil {
 				t.Fatal("accepted unverified project state volume attachment")
+			}
+		})
+	}
+}
+
+func TestProtectedProjectStateAttachment(t *testing.T) {
+	for _, change := range []string{"none", "same-project", "foreign-logical", "missing-project-marker", "missing-volume-marker", "missing-guest-marker", "inherited-storage", "logical-unrestricted"} {
+		t.Run(change, func(t *testing.T) {
+			want, f := projectAttachmentFixture()
+			want.LogicalProject = "workloads"
+			f.logical = &api.Project{Name: want.LogicalProject, ProjectPut: api.ProjectPut{
+				Config: incusscope.ProjectScope{Name: want.LogicalProject}.DesiredConfig(),
+			}}
+			f.logical.Config["restricted"] = "true"
+			for _, config := range []map[string]string{f.project.Config, f.instance.Config, f.instance.ExpandedConfig, f.volume.Config} {
+				config["user.aginctus.logical-project"] = want.LogicalProject
+			}
+			switch change {
+			case "same-project":
+				want.LogicalProject = want.Binding.Project
+			case "foreign-logical":
+				f.logical.Name = "foreign"
+			case "missing-project-marker":
+				delete(f.project.Config, "user.aginctus.logical-project")
+			case "missing-volume-marker":
+				delete(f.volume.Config, "user.aginctus.logical-project")
+			case "missing-guest-marker":
+				delete(f.instance.Config, "user.aginctus.logical-project")
+			case "inherited-storage":
+				f.project.Config["features.storage.volumes"] = "false"
+			case "logical-unrestricted":
+				f.logical.Config["restricted"] = "false"
+			}
+			err := VerifyProjectServiceAttachment(context.Background(), f, want)
+			if (err == nil) != (change == "none") {
+				t.Fatalf("unexpected protected attachment result: %v", err)
 			}
 		})
 	}

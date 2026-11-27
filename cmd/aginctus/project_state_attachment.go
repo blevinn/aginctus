@@ -17,11 +17,12 @@ func runProjectStateAttachment(args []string) int {
 	var target environment.ProjectServiceAttachment
 	flags := flag.NewFlagSet("aginctus internal project-state-attachment", flag.ContinueOnError)
 	flags.Usage = func() {
-		fmt.Fprintln(flags.Output(), "Usage: aginctus internal project-state-attachment --server-id ID --project NAME --instance NAME --pool NAME --volume NAME --device NAME --mount-path PATH [--network NAME]")
+		fmt.Fprintln(flags.Output(), "Usage: aginctus internal project-state-attachment --server-id ID --project NAME [--logical-project NAME] --instance NAME --pool NAME --volume NAME --device NAME --mount-path PATH [--network NAME]")
 		flags.PrintDefaults()
 	}
 	flags.StringVar(&target.Binding.ServerID, "server-id", "", "Independently pinned Incus server ID (sha256:<certificate fingerprint>)")
 	flags.StringVar(&target.Binding.Project, "project", "", "Exact restricted Incus project")
+	flags.StringVar(&target.LogicalProject, "logical-project", "", "Independent workload project for protected placement; omit only for same-project administrator exercise")
 	flags.StringVar(&target.Instance, "instance", "", "Dedicated state-service container name")
 	flags.StringVar(&target.Pool, "pool", "", "State volume pool")
 	flags.StringVar(&target.Volume, "volume", "", "Project-owned custom filesystem volume")

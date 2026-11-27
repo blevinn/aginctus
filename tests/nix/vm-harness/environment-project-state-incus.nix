@@ -9,6 +9,7 @@ let
   pkgs = import nixpkgs { inherit system; };
   cli = self.packages.${system}.aginctus;
   project = "accepted-environments";
+  protectedProject = "accepted-protected";
   mount = "/var/lib/aginctus-project-state";
   serviceUID = 910;
   incusIP = "10.89.37.1";
@@ -122,6 +123,12 @@ pkgs.testers.runNixOSTest {
                     " -c user.aginctus.deployment=${project} -c restricted.devices.nic=managed"
                     " -c restricted.devices.disk=managed -c restricted.networks.access=state-mgmt"
                     " -c restricted.storage-pools.access=default")
+    machine.succeed("incus project create ${protectedProject} -c restricted=true -c features.images=true"
+                    " -c features.profiles=true -c features.storage.volumes=true -c features.networks=false"
+                    " -c user.aginctus.managed=true -c user.aginctus.resource=deployment-project"
+                    " -c user.aginctus.deployment=${protectedProject} -c user.aginctus.logical-project=${project}"
+                    " -c restricted.devices.nic=managed -c restricted.devices.disk=managed"
+                    " -c restricted.networks.access=state-mgmt -c restricted.storage-pools.access=default")
     machine.succeed("incus project create foreign-environment -c features.storage.volumes=true")
     for name in ("service", "promoter", "member"):
         machine.succeed(f"incus config trust add-certificate {private}/{name}.crt --name {name} --restricted --projects ${project}")
@@ -172,7 +179,7 @@ pkgs.testers.runNixOSTest {
 
     operator_dir = "/home/stateoperator/state"
     machine.succeed(f"install -d -m 0700 -o stateoperator {operator_dir}")
-    machine.succeed("incus image import ${guestImage.config.system.build.metadata}/tarball/* ${guestImage.config.system.build.tarball}/tarball/* --alias state-guest --project ${project}", timeout=180)
+    machine.succeed("incus image import ${guestImage.config.system.build.metadata}/tarball/* ${guestImage.config.system.build.tarball}/tarball/* --alias state-guest --project ${protectedProject}", timeout=180)
     machine.succeed("incus image import ${workerImage.config.system.build.metadata}/tarball/* ${workerImage.config.system.build.tarball}/tarball/* --alias worker-guest --project ${project}", timeout=180)
     image = machine.succeed("incus image info worker-guest --project ${project} | awk '/^Fingerprint:/ { print $2 }'").strip()
     grants = []
@@ -204,26 +211,26 @@ pkgs.testers.runNixOSTest {
                                  "ipv4Nat": False, "ipv4Routing": False, "ipv4DhcpGateway": "none", "ipv6Address": "none"})
     machine.succeed(f"install -m 0644 {private}/host.json ${hostGrant}")
     machine.fail("runuser -u stateoperator -- ${cli}/bin/aginctus internal workload-bridge-observe ${hostGrant}")
-    machine.succeed("incus storage volume create default environment-accepted-data --project ${project}"
-                    " user.aginctus.managed=true user.aginctus.resource=project-state-volume")
+    machine.succeed("incus storage volume create default environment-accepted-data --project ${protectedProject}"
+                    " user.aginctus.managed=true user.aginctus.resource=project-state-volume user.aginctus.logical-project=${project}")
     machine.fail("incus storage volume show default environment-accepted-data --project foreign-environment")
-    guest = "timeout 30 incus exec environment-state-service --project ${project} --disable-stdin --"
+    guest = "timeout 30 incus exec environment-state-service --project ${protectedProject} --disable-stdin --"
     owner = guest + " runuser -u aginctusproject --"
 
     def provision():
-        machine.succeed("incus init state-guest environment-state-service --project ${project} --storage default --network state-mgmt"
-                        " -c user.aginctus.managed=true -c user.aginctus.resource=project-state-service", timeout=180)
+        machine.succeed("incus init state-guest environment-state-service --project ${protectedProject} --storage default --network state-mgmt"
+                        " -c user.aginctus.managed=true -c user.aginctus.resource=project-state-service -c user.aginctus.logical-project=${project}", timeout=180)
         machine.succeed("incus config device add environment-state-service accepted-data disk pool=default"
-                        " source=environment-accepted-data path=${mount} --project ${project}")
+                        " source=environment-accepted-data path=${mount} --project ${protectedProject}")
         # Admin-side attachment observation is separate from in-guest mount checks.
         attachment = ("${cli}/bin/aginctus internal project-state-attachment"
-                      " --project ${project} --instance environment-state-service"
+                      " --project ${protectedProject} --logical-project ${project} --instance environment-state-service"
                       " --pool default --volume environment-accepted-data --device accepted-data"
                       " --mount-path ${mount} --network state-mgmt")
         wrong_pin = "sha256:" + ("0" * 64 if binding["serverId"] != "sha256:" + "0" * 64 else "1" * 64)
         machine.fail(f"{attachment} --server-id {wrong_pin}")
         machine.succeed(f"{attachment} --server-id {binding['serverId']}")
-        machine.succeed("incus start environment-state-service --project ${project}", timeout=180)
+        machine.succeed("incus start environment-state-service --project ${protectedProject}", timeout=180)
         machine.wait_until_succeeds(guest + " id aginctusproject", timeout=120)
         machine.succeed(guest + " install -d -m 0755 /etc/aginctus /run/aginctus")
         for name, dest, uid, mode in (
@@ -234,7 +241,7 @@ pkgs.testers.runNixOSTest {
             ("state", "/run/aginctus/state.json", ${toString serviceUID}, "0600"),
         ):
             machine.succeed(f"incus file push {private}/{name}.json environment-state-service{dest}"
-                            f" --project ${project} --uid {uid} --gid {uid} --mode {mode}")
+                            f" --project ${protectedProject} --uid {uid} --gid {uid} --mode {mode}")
         machine.succeed(guest + " chown aginctusproject:aginctusproject ${mount}", guest + " chmod 0700 ${mount}")
         machine.succeed(guest + " test ! -e /var/lib/incus/unix.socket")
 
@@ -250,6 +257,14 @@ pkgs.testers.runNixOSTest {
         machine.wait_until_succeeds(state_command(0, "member", "show"), timeout=60)
 
     provision()
+    # Exercise the actual logical peer against existing protected data-plane objects.
+    # No protected-project certificate is installed for any fixture peer.
+    for peer in ("service", "promoter", "member"):
+        for resource in ("instances/environment-state-service", "storage-pools/default/volumes/custom/environment-accepted-data"):
+            path = shlex.quote(f"https://${incusIP}:8443/1.0/{resource}?project=${protectedProject}")
+            query = (f"curl -sS --max-time 10 --cacert {private}/incus.crt --cert {private}/{peer}.crt"
+                     f" --key {private}/{peer}.key --output /dev/null --write-out '%{{http_code}}' {path}")
+            assert machine.succeed(query).strip() == "403", "protected resource API must deny logical peer"
     machine.fail(guest + " systemctl is-active --quiet aginctus-project-state.service")
     machine.fail(guest + " ${cli}/bin/aginctus serve project-state bootstrap")
     assert machine.succeed(owner + " ${cli}/bin/aginctus serve project-state bootstrap").strip() == "initialized"
@@ -267,7 +282,7 @@ pkgs.testers.runNixOSTest {
          "revisionId": revisions[0]["id"], "workloadId": "worker", "operation": action}
         for action in ("reconcile", "stop", "remove")]})
     machine.succeed(f"incus file push {private}/execution.json environment-state-service/etc/aginctus/execution.json"
-                    " --project ${project} --uid 0 --gid 0 --mode 0644")
+                    " --project ${protectedProject} --uid 0 --gid 0 --mode 0644")
     reconcile = f"reconcile --workload worker --expect {revisions[0]['id']} --host-grant ${hostGrant}"
     machine.fail(state_command(0, "member", reconcile))
     # Missing observer and changed live host policy must both fail before create.
@@ -300,7 +315,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed(f"jq --argjson grant {shlex.quote(compact(inspection_grant))} '.grants += [$grant]'"
                     f" {private}/execution.json >{private}/inspection.json")
     machine.succeed(f"incus file push {private}/inspection.json environment-state-service/etc/aginctus/execution.json"
-                    " --project ${project} --uid 0 --gid 0 --mode 0644")
+                    " --project ${protectedProject} --uid 0 --gid 0 --mode 0644")
     listing = json.loads(machine.succeed(state_command(0, "member", inspect)))["operations"]
     assert any(item["id"] == first["operationId"] and not item["unresolved"] for item in listing)
     details = json.loads(machine.succeed(state_command(0, "member", inspect + f" {first['operationId']}")))["operations"]
@@ -328,9 +343,9 @@ pkgs.testers.runNixOSTest {
     for i, r in enumerate(revisions):
         assert status(i)["revision"]["id"] == r["id"]
 
-    machine.succeed("incus stop environment-state-service --project ${project} --force", timeout=180)
-    machine.succeed("incus delete environment-state-service --project ${project}")
-    machine.succeed("incus storage volume show default environment-accepted-data --project ${project}")
+    machine.succeed("incus stop environment-state-service --project ${protectedProject} --force", timeout=180)
+    machine.succeed("incus delete environment-state-service --project ${protectedProject}")
+    machine.succeed("incus storage volume show default environment-accepted-data --project ${protectedProject}")
     provision()
     assert machine.succeed(owner + " ${cli}/bin/aginctus serve project-state bootstrap").strip() == "reopened"
     start_service()
