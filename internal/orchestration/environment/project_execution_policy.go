@@ -134,3 +134,7 @@ func (g projectExecutionGrant) inspects(other projectExecutionGrant) bool {
 		return false
 	}
 }
+
+func (g projectExecutionGrant) synchronous(action string) bool {
+	return g.Operation == "gateway-deliver" && action == "deliver"
+}
