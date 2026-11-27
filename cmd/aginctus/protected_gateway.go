@@ -33,19 +33,22 @@ func runProtectedGatewayPreview(args []string) int {
 }
 
 func runProtectedGatewayProvision(args []string) int {
-	if len(args)!=2 {
-		fmt.Fprintln(os.Stderr,"usage: aginctus internal gateway-protected-provision GRANT OPERATOR_CONFIG")
+	if len(args) != 2 {
+		fmt.Fprintln(os.Stderr, "usage: aginctus internal gateway-protected-provision GRANT OPERATOR_CONFIG")
 		return 2
 	}
-	ctx,stop:=signal.NotifyContext(context.Background(),os.Interrupt,syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	ctx,cancel:=context.WithTimeout(ctx,20*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
-	result,id,err:=gateway.ProvisionLocalProtectedGateway(ctx,args[0],args[1])
-	if id!="" {
-		_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"operationId":id,"result":result})
+	result, id, err := gateway.ProvisionLocalProtectedGateway(ctx, args[0], args[1])
+	if id != "" {
+		_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"operationId": id, "result": result})
 	}
-	if err!=nil {fmt.Fprintln(os.Stderr,"protected gateway provisioning failed; inspect operation before retry");return 1}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "protected gateway provisioning failed; inspect operation before retry")
+		return 1
+	}
 	return 0
 }
 
