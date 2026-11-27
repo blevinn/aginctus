@@ -80,12 +80,16 @@ func VerifyNativeGatewayRuntimeBinding(ctx context.Context, descriptor environme
 }
 
 func (b NativeGatewayRuntimeBinding) physicalIdentity(descriptor environment.Descriptor, selected environment.Binding) (NativeGatewayResourceIdentity, error) {
-	if b.Protected == nil {
-		return NativeGatewayIdentity(descriptor, selected)
+	return gatewayPhysicalIdentity(descriptor,selected,b.AcceptedEnvironmentRevision,b.Protected)
+}
+
+func gatewayPhysicalIdentity(descriptor environment.Descriptor, selected environment.Binding, revision environment.AcceptedRevision, protected *environment.ProtectedGatewayGrant) (NativeGatewayResourceIdentity,error) {
+	if protected == nil {
+		return NativeGatewayIdentity(descriptor,selected)
 	}
-	g := *b.Protected
+	g:=*protected
 	if descriptor.Binding.ServerID != g.ServerID || descriptor.Binding.Project != g.Project || descriptor.ID != g.EnvironmentID ||
-		b.AcceptedEnvironmentRevision.ID != g.RevisionID || selected.ServerID != g.ServerID || selected.Project != g.ProtectedProject ||
+		revision.ID != g.RevisionID || selected.ServerID != g.ServerID || selected.Project != g.ProtectedProject ||
 		g.ProtectedProject == g.Project || g.ProtectedProject == "default" {
 		return NativeGatewayResourceIdentity{}, fmt.Errorf("protected gateway placement does not match logical revision")
 	}

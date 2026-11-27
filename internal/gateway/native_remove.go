@@ -27,6 +27,7 @@ type NativeGatewayRemovalClient interface {
 // must establish that discarding its root filesystem is authorized, including
 // any application/OAuth state; neither an empty disk list nor this intent proves it.
 type NativeGatewayRemoval struct {
+	Protected *environment.ProtectedGatewayGrant
 	Revision          environment.AcceptedRevision
 	Instance          string
 	InstanceUUID      string
@@ -65,9 +66,9 @@ func RemoveNativeEnvironmentGatewayServiceWithClient(ctx context.Context, descri
 	if guard == nil {
 		return fail("authority", false)
 	}
-	id, err := NativeGatewayIdentity(descriptor, selected)
+	id, err := gatewayPhysicalIdentity(descriptor, selected,intent.Revision,intent.Protected)
 	if err != nil || top.Project != id.Project || top.EnvironmentID != id.EnvironmentID || top.DatabaseVolume != id.DatabaseVolume ||
-		!gatewayRevisionMatches(intent.Revision, descriptor, selected) || !gatewayEnvironmentIDPattern.MatchString(intent.InstanceUUID) || intent.InstanceCreatedAt.IsZero() {
+		!gatewayRevisionMatches(intent.Revision, descriptor, descriptor.Binding) || !gatewayEnvironmentIDPattern.MatchString(intent.InstanceUUID) || intent.InstanceCreatedAt.IsZero() {
 		return fail("intent", false)
 	}
 	expected, err := PlanNativeGatewayInstances(top, devices, pair.Postgres.ImageAlias, pair.LiteLLM.ImageAlias)

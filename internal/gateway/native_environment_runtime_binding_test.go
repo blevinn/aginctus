@@ -92,3 +92,13 @@ func TestGatewayRuntimeBindingRejectsForeignSameProjectAndRevocation(t *testing.
 		t.Fatal("legacy guest name accepted")
 	}
 }
+
+func TestGatewayPhysicalIdentityKeepsLogicalRevision(t *testing.T){
+	desc,_,b:=gatewayRuntimeBindingFixture(t)
+	g:=environment.ProtectedGatewayGrant{ServerID:desc.Binding.ServerID,Project:desc.Binding.Project,EnvironmentID:desc.ID,RevisionID:b.AcceptedEnvironmentRevision.ID,ProtectedProject:"protected"}
+	selected:=environment.Binding{ServerID:g.ServerID,Project:g.ProtectedProject}
+	id,err:=gatewayPhysicalIdentity(desc,selected,b.AcceptedEnvironmentRevision,&g)
+	if err!=nil||id.Project!=selected.Project||id.EnvironmentID!=desc.ID{t.Fatal("physical placement rejected")}
+	g.RevisionID=strings.Repeat("f",64)
+	if _,err:=gatewayPhysicalIdentity(desc,selected,b.AcceptedEnvironmentRevision,&g);err==nil{t.Fatal("different revision accepted")}
+}
