@@ -66,6 +66,20 @@ The versioned binding is only infrastructure metadata: it supplies the canonical
 
 Related: #153, #156, #158, #159, #202, #698, #704.
 
+### Concrete stopped-pair delivery candidate
+
+The SDK file publisher stages the fixed /run/aginctus/gateway file set and
+embedded LiteLLM bootstrap in two stopped, image-pinned owned guests. It binds
+nonsecret readback evidence to the exact accepted candidate/revision, credential
+version and guest incarnations. It refuses existing destinations and rechecks
+a separately supplied writer guard, resource identity and exact file readback.
+A partial or uncertain transfer needs inspection, never blind overwrite. The
+actual disposable OCI scenario uses synthetic material and the same publisher.
+This is not an installed privileged route or a startup grant. Review the actual
+pinned LiteLLM user and converted entrypoint, /run persistence across startup,
+Incus file API containment, protected-project isolation and secret source before
+connecting it to the installed runtime. The candidate initially supports the
+root-run LiteLLM image and the reviewed PostgreSQL Alpine UID/GID 70 path only.
 ### Protected placement implementation increment
 
 The #1167 approved protected placement is independently selected by an
