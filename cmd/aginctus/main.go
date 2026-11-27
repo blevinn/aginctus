@@ -17,10 +17,18 @@ import (
 )
 
 func main() {
-	if len(os.Args)>=3 && os.Args[1]=="internal" && os.Args[2]=="gateway-protected-stop" { os.Exit(runProtectedGatewayStop(os.Args[3:])) }
-	if len(os.Args)>=3 && os.Args[1]=="internal" && os.Args[2]=="gateway-protected-start" { os.Exit(runProtectedGatewayStart(os.Args[3:])) }
-	if len(os.Args)>=3 && os.Args[1]=="internal" && os.Args[2]=="gateway-protected-publish" { os.Exit(runProtectedGatewayPublish(os.Args[3:])) }
-	if len(os.Args)>=3 && os.Args[1]=="internal" && os.Args[2]=="gateway-protected-provision" { os.Exit(runProtectedGatewayProvision(os.Args[3:])) }
+	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "gateway-protected-stop" {
+		os.Exit(runProtectedGatewayStop(os.Args[3:]))
+	}
+	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "gateway-protected-start" {
+		os.Exit(runProtectedGatewayStart(os.Args[3:]))
+	}
+	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "gateway-protected-publish" {
+		os.Exit(runProtectedGatewayPublish(os.Args[3:]))
+	}
+	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "gateway-protected-provision" {
+		os.Exit(runProtectedGatewayProvision(os.Args[3:]))
+	}
 	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "gateway-protected-preview" {
 		os.Exit(runProtectedGatewayPreview(os.Args[3:]))
 	}

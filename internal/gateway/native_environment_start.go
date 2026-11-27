@@ -122,7 +122,9 @@ func StartNativeEnvironmentGatewayWithClient(
 					return false
 				}
 			}
-			if binding.Protected!=nil && !gatewayLauncherMatches(instance,spec,pair.Postgres.Name){return false}
+			if binding.Protected != nil && !gatewayLauncherMatches(instance, spec, pair.Postgres.Name) {
+				return false
+			}
 			for _, config := range []map[string]string{instance.Config, instance.ExpandedConfig} {
 				for key := range config {
 					if strings.HasPrefix(key, "environment.") || strings.HasPrefix(key, "raw.") || strings.HasPrefix(key, "security.") {

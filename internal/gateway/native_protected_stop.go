@@ -58,8 +58,8 @@ func stopProtectedPair(ctx context.Context, e *protectedExecution, guard func(co
 
 type protectedStopSDK struct {
 	incus.InstanceServer
-	exec *protectedExecution
-	ctx context.Context
+	exec  *protectedExecution
+	ctx   context.Context
 	guard func(context.Context) error
 }
 

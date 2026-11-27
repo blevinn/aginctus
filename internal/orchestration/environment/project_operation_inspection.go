@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
-	"errors"
 	"os"
 	"path/filepath"
 
 	"github.com/blevinn/aginctus/internal/filestate"
-	)
+)
 
 // ProjectOperationSummary is journal evidence, not independently observed
 // Incus state. The inspection endpoint does not expose the writer certificate.
@@ -20,7 +20,7 @@ type ProjectOperationSummary struct {
 	Operation  string                    `json:"operation"`
 	Status     LocalNativeStatus         `json:"status"`
 	Unresolved bool                      `json:"unresolved"`
-	Recovered bool                       `json:"recovered,omitempty"`
+	Recovered  bool                      `json:"recovered,omitempty"`
 	Effects    []LocalNativeEffectRecord `json:"effects,omitempty"`
 }
 
