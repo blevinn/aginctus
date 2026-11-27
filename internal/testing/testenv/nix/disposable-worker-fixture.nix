@@ -76,7 +76,10 @@ pkgs.testers.runNixOSTest {
       import re
       import shlex
 
-      start_all()
+      # The pinned QEMU test driver defaults to -no-reboot. Only the
+      # independent recovery trial needs a persistent QEMU process across
+      # a guest reboot; retain the ordinary lifecycle startup otherwise.
+      ${if independentRecovery then "machine.start(allow_reboot=True)" else "start_all()"}
       machine.wait_for_unit("incus.service")
       ${pkgs.lib.optionalString independentRecovery ''machine.succeed("systemctl stop aginctus-testenv-recovery.timer aginctus-testenv-recovery.service")''}
       # Fail before provisioning if nested KVM or the dedicated test disk is
