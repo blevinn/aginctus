@@ -251,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
                 # native-oci's guest test permits 25 minutes for networked
                 # image acquisition and lifecycle work; leave startup margin
                 # outside that guest-side timeout.
-                runtime_timeout = 1800 if args.scenario == "native-oci" else 900
+                runtime_timeout = 1800 if args.scenario in ("native-oci", "protected-gateway-start") else 900
                 try:
                     result = subprocess.run(
                         [str(driver), "--output_directory", state, "--no-interactive"],

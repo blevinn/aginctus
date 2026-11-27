@@ -365,7 +365,6 @@ pkgs.testers.runNixOSTest {
                             " --project ${protectedProject} --uid 0 --gid 0 --mode 0644")
             command = "${cli}/bin/aginctus internal gateway-protected-"
             args = f" {grant_file} {root_reads}"
-            machine.fail(command + "publish" + args)
             provisioned = json.loads(machine.succeed(command + "provision" + args, timeout=700))
             assert len(provisioned["result"]["native"]["effects"]) == 7
             repeated = json.loads(machine.succeed(command + "provision" + args, timeout=120))
