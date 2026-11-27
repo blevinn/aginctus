@@ -455,6 +455,12 @@ pkgs.testers.runNixOSTest {
             stopped_pair = json.loads(machine.succeed(stop + stop_args, timeout=150))
             assert stopped_pair["result"]["changed"] == [llm, pg]
             assert not json.loads(machine.succeed(stop + stop_args))["result"].get("changed")
+            # A stopped guest keeps no runtime files, so the publisher re-stages
+            # the same verified material before the authorized restart.
+            retained, _ = machine.execute(f"incus file pull {pg}/run/aginctus/gateway/postgres-password {private}/pgpass-after-stop {gateway_scope}")
+            print(f"runtime credential file retained after stop: {retained == 0}", file=sys.stderr)
+            republished = json.loads(machine.succeed(command + "publish" + args, timeout=180))
+            assert republished["receipt"]["verified"]
             assert json.loads(machine.succeed(command + "start" + args, timeout=320))["result"]["ready"] == [pg, llm]
             assert machine.succeed(sql + shlex.quote("SELECT value FROM wave1_retention")).strip() == "42"
         observed = json.loads(machine.succeed(preview))
