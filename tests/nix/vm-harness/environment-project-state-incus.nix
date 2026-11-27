@@ -89,6 +89,7 @@ pkgs.testers.runNixOSTest {
     import hashlib
     import json
     import shlex
+    from typing import Any
 
     start_all()
     machine.wait_for_unit("incus.service", timeout=60)
@@ -208,7 +209,7 @@ pkgs.testers.runNixOSTest {
 
     grants = []
     for i, desc in enumerate(descriptors):
-        candidate = {"apiVersion": "aginctus.dev/environment/v1alpha1", "kind": "EnvironmentCandidate",
+        candidate: dict[str, Any] = {"apiVersion": "aginctus.dev/environment/v1alpha1", "kind": "EnvironmentCandidate",
                      "environment": desc, "selectedWorkloads": [], "workloads": []}
         if i == 0:
             candidate["selectedWorkloads"] = ["worker"]
