@@ -4,8 +4,10 @@ This is a trusted, immutable fixture inside the scenario VM, not a
 sandbox or a command transport for untrusted callers.
 """
 
+import re
 import subprocess
 import time
+from pathlib import Path
 
 
 class GuestFixture:
@@ -28,6 +30,16 @@ class GuestFixture:
         self.step += 1
         result = self._run(command, timeout)
         if result.returncode != 0:
+            # Only the fixed Go acceptance command is eligible. Persist just
+            # the assertion's source line, never its text or command output.
+            if command.endswith(" -test.run '^TestNativeInstanceVMAcceptance$'"):
+                match = re.search(r"(?m)^[ \t]*instance_vm_test\.go:([1-9][0-9]{0,3}):", result.stdout)
+                if match:
+                    try:
+                        with Path("/run/aginctus-testenv-native-assertion").open("x", encoding="ascii") as evidence:
+                            evidence.write(match.group(1) + "\n")
+                    except OSError:
+                        pass
             raise RuntimeError(f"fixture command failed (exit {result.returncode})")
         return result.stdout
 
