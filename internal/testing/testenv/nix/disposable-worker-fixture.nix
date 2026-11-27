@@ -38,7 +38,14 @@ assert
 assert
   !(
     offlineNetwork
-    && (nativeInstance || independentRecovery || payloadTransfer || nestedKVM || projectAdmission || runtimeResources)
+    && (
+      nativeInstance
+      || independentRecovery
+      || payloadTransfer
+      || nestedKVM
+      || projectAdmission
+      || runtimeResources
+    )
   );
 pkgs.testers.runNixOSTest {
   name =
@@ -100,16 +107,13 @@ pkgs.testers.runNixOSTest {
       else
         builtins.readFile ./fixture_receipt.py
     )
-<<<<<<< HEAD
-    + (pkgs.lib.optionalString (projectAdmission || runtimeResources || offlineNetwork) (builtins.readFile ./project_admission_trial.py))
-    + (pkgs.lib.optionalString (runtimeResources || offlineNetwork) (builtins.readFile ./runtime_resource_trial.py))
-    + (pkgs.lib.optionalString offlineNetwork (builtins.readFile ./offline_network_trial.py))
-=======
-    + (pkgs.lib.optionalString (projectAdmission || runtimeResources) (
+    + (pkgs.lib.optionalString (projectAdmission || runtimeResources || offlineNetwork) (
       builtins.readFile ./project_admission_trial.py
     ))
-    + (pkgs.lib.optionalString runtimeResources (builtins.readFile ./runtime_resource_trial.py))
->>>>>>> agent/pr1199-main-integration-20261127
+    + (pkgs.lib.optionalString (runtimeResources || offlineNetwork) (
+      builtins.readFile ./runtime_resource_trial.py
+    ))
+    + (pkgs.lib.optionalString offlineNetwork (builtins.readFile ./offline_network_trial.py))
     + ''
       import json
       import re
