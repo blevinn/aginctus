@@ -20,6 +20,7 @@ type nativeOperationDocument struct {
 
 func registerNativeOperationInspection(state *cobra.Command, out io.Writer, format func() (clioutput.Format, error), project, id *string) {
 	var workload, revision string
+	var recoverOperation bool
 	cmd := &cobra.Command{
 		Use: "operations [OPERATION_ID]", Short: "Inspect authorized native workload journal history", Hidden: true,
 		Args: cobra.MaximumNArgs(1),
@@ -45,6 +46,18 @@ func registerNativeOperationInspection(state *cobra.Command, out io.Writer, form
 					return errors.New("empty operation ID")
 				}
 			}
+			if recoverOperation {
+				if operationID == "" {
+					return errors.New("recovery requires one exact operation ID")
+				}
+				if err := environment.RecoverProjectOperation(cmd.Context(), config, *project, *id, revision, workload, operationID); err != nil {
+					return err
+				}
+				return clioutput.WriteStructured(out, f, struct {
+					OperationID string `json:"operationId"`
+					Recovered bool `json:"recovered"`
+				}{operationID, true})
+			}
 			result, err := environment.InspectProjectOperations(cmd.Context(), config, *project, *id, revision, workload, operationID)
 			if err != nil {
 				return err
@@ -54,6 +67,7 @@ func registerNativeOperationInspection(state *cobra.Command, out io.Writer, form
 			})
 		},
 	}
+	cmd.Flags().BoolVar(&recoverOperation, "recover", false, "Resolve positively observed terminal reconcile tasks with a separate recovery grant")
 	cmd.Flags().StringVar(&workload, "workload", "", "Exact accepted workload ID")
 	cmd.Flags().StringVar(&revision, "revision", "", "Exact accepted revision ID, current or historical")
 	_ = cmd.MarkFlagRequired("workload")
