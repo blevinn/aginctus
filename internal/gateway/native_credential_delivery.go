@@ -123,6 +123,11 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 			ObserveNativeGatewayAttachmentsWithReader(ctx, top, devices, sdk) != nil {
 			return errCredentialDelivery
 		}
+		server, _, err := sdk.GetServer()
+		if err != nil || server == nil || server.Auth != "trusted" || server.Environment.ServerClustered ||
+			server.Environment.Project != top.Project || "sha256:"+server.Environment.CertificateFingerprint != revision.ServerID {
+			return errCredentialDelivery
+		}
 		observed, err := observePinnedGatewayInstances(ctx, top, pair, images, sdk)
 		if err != nil || len(observed) != 2 || observed[0].Status != NativeGatewayCompatible || observed[1].Status != NativeGatewayCompatible {
 			return errCredentialDelivery
