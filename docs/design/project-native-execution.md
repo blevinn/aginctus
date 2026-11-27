@@ -117,3 +117,15 @@ authorized. Live `state plan-native --herdr` supports the same host grant,
 expected revision and JSON output without a writer pin. This is resource
 lifecycle only: SSH, workspace, application readiness, stop/remove and recovery
 of component journals remain separate. No delegated activation approved.
+
+### Herdr explicit teardown
+
+The existing installed Herdr reconcile selector also supports separate stop and
+remove operations. Each requires the exact instance and retained state-volume
+creation timestamps and its own herdr-stop or herdr-remove grant. Removal
+requires explicit root filesystem discard; it does not stop a running guest.
+The retained volume remains a required observed prerequisite and is never
+deleted. The same scoped SDK, host attachment policy and authenticated journal
+apply. SSH/workspace detach and identity revocation are not implied by removal;
+operators must independently quiesce workspace use before teardown. Component
+recovery remains separate; no automatic replay or delegated activation.
