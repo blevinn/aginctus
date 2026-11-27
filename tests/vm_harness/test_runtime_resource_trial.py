@@ -13,6 +13,23 @@ SPEC.loader.exec_module(resource)
 
 
 class RuntimeResourceTest(unittest.TestCase):
+    def test_cpu_hotplug_topology(self):
+        self.assertEqual(resource.validate_cpu_topology("0-1", "0-1", "0-3"), "2")
+        self.assertEqual(resource.validate_cpu_topology("0,2", "0,2", "0-3"), "2")
+        for topology in (
+            ("0-3", "0-3", "0-3"),
+            ("0-1", "0-3", "0-3"),
+            ("0-1", "0-1", "0"),
+            ("0", "0-1", "0-3"),
+            ("0,0", "0-1", "0-3"),
+            ("0-4096", "0-1", "0-3"),
+            ("1-0", "0-1", "0-3"),
+            ("bad", "0-1", "0-3"),
+        ):
+            with self.subTest(topology=topology):
+                with self.assertRaises(RuntimeError):
+                    resource.validate_cpu_topology(*topology)
+
     def test_expected_capacity(self):
         result = resource.validate_resource_observations("2\n", "4000000\n", "34359738368", "512", "0")
         self.assertEqual(
