@@ -13,6 +13,36 @@ RESOURCE_MEMORY_KIB = 4096 * 1024
 RESOURCE_DISK_BYTES = 32 * 1024**3
 
 
+def parse_cpu_list(value):
+    """Parse bounded Linux sysfs CPU lists without counting possible slots."""
+    value = value.strip()
+    if len(value) > 256 or not resource_re.fullmatch(r"[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*", value):
+        raise RuntimeError("resource probe returned malformed CPU list")
+    cpus = set()
+    for part in value.split(","):
+        first, sep, last = part.partition("-")
+        start, end = int(first), int(last) if sep else int(first)
+        if not 0 <= start <= end < 4096:
+            raise RuntimeError("resource probe returned invalid CPU range")
+        group = set(range(start, end + 1))
+        if cpus & group:
+            raise RuntimeError("resource probe returned duplicate CPU IDs")
+        cpus.update(group)
+    return cpus
+
+
+def validate_cpu_topology(online, present, possible):
+    online_cpus = parse_cpu_list(online)
+    present_cpus = parse_cpu_list(present)
+    possible_cpus = parse_cpu_list(possible)
+    if online_cpus != present_cpus or len(online_cpus) != RESOURCE_CPU or not present_cpus <= possible_cpus:
+        raise RuntimeError(
+            f"guest CPU topology mismatch: online={online.strip()!r}, "
+            f"present={present.strip()!r}, possible={possible.strip()!r}"
+        )
+    return str(len(online_cpus))
+
+
 def validate_resource_observations(cpu, memory, disk, last_sector, beyond_disk):
     observations = (cpu, memory, disk, last_sector, beyond_disk)
     if any(not resource_re.fullmatch(r"[0-9]{1,12}", item.strip()) for item in observations):
@@ -50,7 +80,19 @@ def run_runtime_resources(machine, fingerprint, inventory, project_prefix, senti
     machine.succeed(prefix + "start " + RESOURCE_PROBE, timeout=120)
     execute = prefix + "exec --disable-stdin " + RESOURCE_PROBE + " -- "
     machine.wait_until_succeeds("timeout 15 " + execute + "/run/current-system/sw/bin/true", timeout=120)
-    cpu = machine.succeed("timeout 15 " + execute + "/run/current-system/sw/bin/nproc --all")
+    # Incus reserves additional hotplug slots on x86. nproc --all counts
+    # configured processors, not necessarily CPUs actually present/online.
+    # Read all three kernel masks, requiring precisely two present AND
+    # online; possible slots alone are not guest execution capacity.
+    topology = machine.succeed(
+        "timeout 15 " + execute + "/run/current-system/sw/bin/cat "
+        "/sys/devices/system/cpu/online /sys/devices/system/cpu/present "
+        "/sys/devices/system/cpu/possible"
+    ).splitlines()
+    if len(topology) != 3:
+        raise RuntimeError("resource probe returned malformed CPU topology")
+    print("FIXTURE CPU TOPOLOGY:", *(item[:256] for item in topology))
+    cpu = validate_cpu_topology(*topology)
     memory = machine.succeed(
         "timeout 15 " + execute + resource_shlex.join([
             "/run/current-system/sw/bin/awk", "/^MemTotal:/ {print $2}", "/proc/meminfo",
@@ -81,8 +123,8 @@ dd if="$root" bs=512 skip=67108864 count=1 status=none | wc -c
     ).splitlines()
     if len(disk_observations) != 3:
         raise RuntimeError("resource probe returned malformed disk observations")
+    print("FIXTURE RUNTIME RESOURCES:", cpu.strip(), memory.strip()[:32], *(item[:32] for item in disk_observations))
     checks = validate_resource_observations(cpu, memory, *disk_observations)
-    print("FIXTURE RUNTIME RESOURCES:", cpu.strip(), memory.strip(), *disk_observations)
     machine.succeed(prefix + "stop " + RESOURCE_PROBE + " --force", timeout=120)
     machine.succeed(prefix + "delete " + RESOURCE_PROBE, timeout=120)
     if inventory(machine) != baseline:
