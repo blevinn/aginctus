@@ -26,9 +26,8 @@ class RuntimeResourceTest(unittest.TestCase):
             ("1-0", "0-1", "0-3"),
             ("bad", "0-1", "0-3"),
         ):
-            with self.subTest(topology=topology):
-                with self.assertRaises(RuntimeError):
-                    resource.validate_cpu_topology(*topology)
+            with self.subTest(topology=topology), self.assertRaises(RuntimeError):
+                resource.validate_cpu_topology(*topology)
 
     def test_cleanup_allows_only_pinned_image_cache(self):
         fingerprint = "a" * 64
@@ -50,9 +49,8 @@ class RuntimeResourceTest(unittest.TestCase):
             ([], disks, []),
             (states, disks, [("foreign-sentinel", "changed")]),
         ):
-            with self.subTest(current=current):
-                with self.assertRaises(RuntimeError):
-                    resource.validate_resource_cleanup(baseline, current, fingerprint)
+            with self.subTest(current=current), self.assertRaises(RuntimeError):
+                resource.validate_resource_cleanup(baseline, current, fingerprint)
         with self.assertRaises(RuntimeError):
             resource.validate_resource_cleanup(with_cache, baseline, fingerprint)
 
