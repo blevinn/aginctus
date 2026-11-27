@@ -14,7 +14,10 @@ in
 { pkgs, ... }:
 let
   script = pkgs.writeText "testenv-native-instance-fixture.py" (
-    builtins.readFile ./direct-guest.py + "\n" + fixture.script
+    builtins.readFile ./direct-guest.py
+    + "\ntry:\n    "
+    + builtins.replaceStrings [ "\n" ] [ "\n    " ] fixture.script
+    + "\nexcept Exception:\n    raise SystemExit(64 + min(machine.step, 63)) from None\n"
   );
 in
 {

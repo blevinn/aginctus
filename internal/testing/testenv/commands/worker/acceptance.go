@@ -3,6 +3,8 @@ package worker
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/blevinn/aginctus/internal/testing/testenv"
 	"github.com/spf13/cobra"
@@ -52,6 +54,12 @@ func NewAcceptance(handlers Handlers) *cobra.Command {
 
 // Only expose fixed stage codes, never arbitrary errors or private evidence.
 func acceptanceFailureStage(stage string) string {
+	if suffix, ok := strings.CutPrefix(stage, "native_instance_scenario_step_"); ok {
+		step, err := strconv.Atoi(suffix)
+		if err == nil && step >= 0 && step <= 63 && strconv.Itoa(step) == suffix {
+			return stage
+		}
+	}
 	switch stage {
 	case "configuration", "worker_identity", "worker_marker", "worker_credential",
 		"report_root", "report_lock", "report_initialize", "evidence", "worker_daemon",
@@ -59,6 +67,11 @@ func acceptanceFailureStage(stage string) string {
 		"ephemeral_status_exec_volume", "retained_status_exec_volume", "nested_kvm_guest_execution",
 		"payload_transfer", "native_instance_scenario", "ephemeral_destroy", "scoped_ttl_recovery",
 		"foreign_preserved", "cleanup",
+		"native_instance_scenario_initial_transport", "native_instance_scenario_initial_command",
+		"native_instance_scenario_initial_parse", "native_instance_scenario_initial_state",
+		"native_instance_scenario_launch_transport", "native_instance_scenario_launch_command",
+		"native_instance_scenario_poll_transport", "native_instance_scenario_poll_command",
+		"native_instance_scenario_poll_parse", "native_instance_scenario_unit_failed",
 		"ephemeral_create_request", "retained_create_request",
 		"ephemeral_create_readback", "retained_create_readback",
 		"ephemeral_create_ownership", "retained_create_ownership",

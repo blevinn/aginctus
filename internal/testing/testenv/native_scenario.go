@@ -3,6 +3,7 @@ package testenv
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -14,6 +15,31 @@ const (
 	nativeScenarioTimeout = 30 * time.Minute
 	systemctlGuest = "/run/current-system/sw/bin/systemctl"
 )
+
+// Fixed diagnostic stages are observations, not authority or proof of success.
+type nativeScenarioFailure string
+
+func (e nativeScenarioFailure) Error() string { return string(e) }
+
+func nativeScenarioFailureStage(err error) string {
+	var failure nativeScenarioFailure
+	if errors.As(err, &failure) {
+		return "native_instance_scenario_" + string(failure)
+	}
+	return "native_instance_scenario"
+}
+
+// The pinned direct-guest adapter encodes its last fixture operation in
+// exit statuses 64..127. No guest text enters the public diagnostic.
+func nativeScenarioTerminalFailure(s nativeScenarioState) error {
+	if s.code == "1" {
+		status, err := strconv.Atoi(s.status)
+		if err == nil && status >= 64 && status <= 127 {
+			return nativeScenarioFailure("step_" + strconv.Itoa(status-64))
+		}
+	}
+	return nativeScenarioFailure("unit_failed")
+}
 
 type nativeScenarioState struct {
 	load, active, sub, result, code, status string
@@ -52,10 +78,17 @@ func readNativeScenarioState(ctx context.Context, b VMBackend, ref VMRef) (nativ
 		"--property=LoadState", "--property=ActiveState", "--property=SubState",
 		"--property=Result", "--property=ExecMainCode", "--property=ExecMainStatus",
 		nativeScenarioUnit}, 10*time.Second)
-	if err != nil || out.ExitCode != 0 || out.Stderr != "" {
-		return nativeScenarioState{}, errors.New("native scenario state unavailable")
+	if err != nil {
+		return nativeScenarioState{}, nativeScenarioFailure("transport")
 	}
-	return parseNativeScenarioState(out.Stdout)
+	if out.ExitCode != 0 || out.Stderr != "" {
+		return nativeScenarioState{}, nativeScenarioFailure("command")
+	}
+	state, err := parseNativeScenarioState(out.Stdout)
+	if err != nil {
+		return nativeScenarioState{}, nativeScenarioFailure("parse")
+	}
+	return state, nil
 }
 
 // runNativeInstanceScenario uses only the signed guest execution capability.
@@ -66,13 +99,19 @@ func runNativeInstanceScenario(ctx context.Context, b VMBackend, ref VMRef) erro
 	ctx, cancel := context.WithTimeout(ctx, nativeScenarioTimeout)
 	defer cancel()
 	initial, err := readNativeScenarioState(ctx, b, ref)
-	if err != nil || initial.active != "inactive" || initial.sub != "dead" ||
+	if err != nil {
+		return nativeScenarioFailure("initial_" + err.Error())
+	}
+	if initial.active != "inactive" || initial.sub != "dead" ||
 		initial.result != "success" || initial.code != "0" || initial.status != "0" {
-		return errors.New("native scenario requires a fresh inactive fixture unit")
+		return nativeScenarioFailure("initial_state")
 	}
 	out, err := b.Exec(ctx, ref, []string{systemctlGuest, "start", "--no-block", nativeScenarioUnit}, 10*time.Second)
-	if err != nil || out.ExitCode != 0 || out.Stdout != "" || out.Stderr != "" {
-		return errors.New("native scenario launch unverified")
+	if err != nil {
+		return nativeScenarioFailure("launch_transport")
+	}
+	if out.ExitCode != 0 || out.Stdout != "" || out.Stderr != "" {
+		return nativeScenarioFailure("launch_command")
 	}
 	for {
 		if err := ctx.Err(); err != nil {
@@ -80,14 +119,14 @@ func runNativeInstanceScenario(ctx context.Context, b VMBackend, ref VMRef) erro
 		}
 		state, err := readNativeScenarioState(ctx, b, ref)
 		if err != nil {
-			return err
+			return nativeScenarioFailure("poll_" + err.Error())
 		}
 		if state.active == "active" && state.sub == "exited" &&
 			state.result == "success" && state.code == "1" && state.status == "0" {
 			return ctx.Err()
 		}
 		if state.result != "success" || (state.active != "activating" && state.active != "inactive") {
-			return errors.New("native scenario did not complete successfully")
+			return nativeScenarioTerminalFailure(state)
 		}
 		timer := time.NewTimer(time.Second)
 		select {
