@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -14,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	incus "github.com/lxc/incus/v7/client"
-	"github.com/lxc/incus/v7/shared/api"
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
 	"github.com/blevinn/aginctus/internal/orchestration/nativeoci"
+	incus "github.com/lxc/incus/v7/client"
+	"github.com/lxc/incus/v7/shared/api"
 )
 
 const credentialDirectory = "/run/aginctus/gateway"
@@ -33,10 +34,10 @@ var errCredentialDelivery = errors.New("native gateway credential delivery unver
 // The independently authorized caller must obtain it from its protected
 // secret source. These shape checks do not establish entropy or provenance.
 type GatewayCredentialMaterial struct {
-	version string
+	version  string
 	password string
-	master string
-	salt string
+	master   string
+	salt     string
 }
 
 func NewGatewayCredentialMaterial(version, password, master, salt string) (GatewayCredentialMaterial, error) {
@@ -48,19 +49,19 @@ func NewGatewayCredentialMaterial(version, password, master, salt string) (Gatew
 	return GatewayCredentialMaterial{version, password, master, salt}, nil
 }
 
-func (GatewayCredentialMaterial) String() string { return "[redacted gateway credential material]" }
+func (GatewayCredentialMaterial) String() string   { return "[redacted gateway credential material]" }
 func (GatewayCredentialMaterial) GoString() string { return "[redacted gateway credential material]" }
 
 // GatewayCredentialDeliveryReceipt is nonsecret readback evidence for one
 // stopped incarnation. It is neither a startup grant nor proof of in-guest
 // consumption. It intentionally excludes credential hashes and bytes.
 type GatewayCredentialDeliveryReceipt struct {
-	Revision environment.AcceptedRevision `json:"revision"`
-	PhysicalProject string `json:"physicalProject"`
-	Version string `json:"version"`
-	PostgresCreatedAt time.Time `json:"postgresCreatedAt"`
-	LiteLLMCreatedAt time.Time `json:"litellmCreatedAt"`
-	Verified bool `json:"verified"`
+	Revision          environment.AcceptedRevision `json:"revision"`
+	PhysicalProject   string                       `json:"physicalProject"`
+	Version           string                       `json:"version"`
+	PostgresCreatedAt time.Time                    `json:"postgresCreatedAt"`
+	LiteLLMCreatedAt  time.Time                    `json:"litellmCreatedAt"`
+	Verified          bool                         `json:"verified"`
 }
 
 // StageStoppedGatewayCredentialFiles uses a concrete Incus file transport.
@@ -80,7 +81,9 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 	material GatewayCredentialMaterial, sdk incus.InstanceServer, guard func(context.Context) error,
 ) (GatewayCredentialDeliveryReceipt, error) {
 	var out GatewayCredentialDeliveryReceipt
-	fail := func() (GatewayCredentialDeliveryReceipt, error) { return out, errCredentialDelivery }
+	fail := func(stage string) (GatewayCredentialDeliveryReceipt, error) {
+		return out, fmt.Errorf("%s: %w", stage, errCredentialDelivery)
+	}
 	if ctx == nil || ctx.Err() != nil || sdk == nil || guard == nil ||
 		revision.ValidateAgainst(candidate) != nil || candidate.Gateway == nil || revision.EnvironmentID != top.EnvironmentID ||
 		candidate.Gateway.CredentialVersion != material.version || candidate.Gateway.ManagementNetwork != top.ManagementNetwork ||
@@ -88,11 +91,11 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 		candidate.Gateway.DatabasePool != devices.Postgres["database"]["pool"] ||
 		!gatewaySecretVersion.MatchString(material.version) || !credentialToken.MatchString(material.password) ||
 		!credentialToken.MatchString(material.master) || !credentialToken.MatchString(material.salt) {
-		return fail()
+		return fail("accepted input or writer guard")
 	}
 	expected, err := PlanNativeGatewayInstances(top, devices, pair.Postgres.ImageAlias, pair.LiteLLM.ImageAlias)
 	if err != nil || !sameGatewayPair(pair, expected) {
-		return fail()
+		return fail("stopped pair plan")
 	}
 	for i, resolved := range []nativeoci.ResolvedImage{pg, llm} {
 		want := []NativeGatewayCreateImage{images.Postgres, images.LiteLLM}[i].Expected
@@ -100,20 +103,22 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 		if accepted.Registry != want.Registry || accepted.Repository != want.Repository || accepted.ManifestDigest != want.ManifestDigest ||
 			accepted.ConfigDigest != want.ConfigDigest || accepted.IncusFingerprint != want.IncusFingerprint ||
 			accepted.Alias != []NativeGatewayInstanceSpec{pair.Postgres, pair.LiteLLM}[i].ImageAlias {
-			return fail()
+			return fail("accepted image pin")
 		}
 		if resolved.Registry != want.Registry || resolved.Repository != want.Repository ||
 			resolved.ManifestDigest != want.ManifestDigest || resolved.ConfigDigest != want.ConfigDigest ||
 			resolved.IncusFingerprint != want.IncusFingerprint {
-			return fail()
+			return fail("resolved image pin")
 		}
 	}
 	if !slices.Equal(pg.Config.Entrypoint, []string{"docker-entrypoint.sh"}) ||
 		!slices.Equal(pg.Config.Cmd, []string{"postgres"}) || pg.Config.User != "" ||
 		!slices.Contains(pg.Config.Env, "PG_MAJOR=17") ||
-		!slices.Contains(pg.Config.Env, "PGDATA=/var/lib/postgresql/data") ||
-		(llm.Config.User != "" && llm.Config.User != "0" && llm.Config.User != "0:0") {
-		return fail()
+		!slices.Contains(pg.Config.Env, "PGDATA=/var/lib/postgresql/data") {
+		return fail("PostgreSQL image contract")
+	}
+	if llm.Config.User != "" && llm.Config.User != "0" && llm.Config.User != "0:0" {
+		return fail("LiteLLM image contract")
 	}
 	specs := []NativeGatewayInstanceSpec{pair.Postgres, pair.LiteLLM}
 	pins := []NativeGatewayCreateImage{images.Postgres, images.LiteLLM}
@@ -155,35 +160,35 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 		return ctx.Err()
 	}
 	if verify() != nil {
-		return fail()
+		return fail("stopped guest preflight")
 	}
 	// Verify actual converted entrypoint bytes, not just a tag or image label.
 	script, _, err := sdk.GetInstanceFile(pair.Postgres.Name, "/usr/local/bin/docker-entrypoint.sh")
 	if err != nil || script == nil {
-		return fail()
+		return fail("PostgreSQL entrypoint observation")
 	}
 	h := sha256.New()
 	n, err := io.Copy(h, io.LimitReader(script, (32<<10)+1))
 	closeErr := script.Close()
 	if err != nil || closeErr != nil || n > 32<<10 || hex.EncodeToString(h.Sum(nil)) != reviewedPostgresEntrypoint {
-		return fail()
+		return fail("PostgreSQL entrypoint digest")
 	}
 	type entry struct {
 		guest, path, kind, data string
-		uid, gid int64
-		mode int
+		uid, gid                int64
+		mode                    int
 	}
 	entries := []entry{
 		{pair.Postgres.Name, "/run/aginctus", "directory", "", 0, 0, 0o755},
 		{pair.Postgres.Name, credentialDirectory, "directory", "", 70, 70, 0o700},
-		{pair.Postgres.Name, credentialDirectory+"/postgres-password", "file", material.password+"\n", 70, 70, 0o600},
-		{pair.Postgres.Name, credentialDirectory+"/postgres.pgpass", "file", "127.0.0.1:5432:litellm:litellm:"+material.password+"\n", 70, 70, 0o600},
+		{pair.Postgres.Name, credentialDirectory + "/postgres-password", "file", material.password + "\n", 70, 70, 0o600},
+		{pair.Postgres.Name, credentialDirectory + "/postgres.pgpass", "file", "127.0.0.1:5432:litellm:litellm:" + material.password + "\n", 70, 70, 0o600},
 		{pair.LiteLLM.Name, "/run/aginctus", "directory", "", 0, 0, 0o755},
 		{pair.LiteLLM.Name, credentialDirectory, "directory", "", 0, 0, 0o700},
-		{pair.LiteLLM.Name, credentialDirectory+"/postgres-password", "file", material.password+"\n", 0, 0, 0o600},
-		{pair.LiteLLM.Name, credentialDirectory+"/master-key", "file", material.master+"\n", 0, 0, 0o600},
-		{pair.LiteLLM.Name, credentialDirectory+"/salt-key", "file", material.salt+"\n", 0, 0, 0o600},
-		{pair.LiteLLM.Name, credentialDirectory+"/litellm-bootstrap.py", "file", gatewayBootstrap, 0, 0, 0o400},
+		{pair.LiteLLM.Name, credentialDirectory + "/postgres-password", "file", material.password + "\n", 0, 0, 0o600},
+		{pair.LiteLLM.Name, credentialDirectory + "/master-key", "file", material.master + "\n", 0, 0, 0o600},
+		{pair.LiteLLM.Name, credentialDirectory + "/salt-key", "file", material.salt + "\n", 0, 0, 0o600},
+		{pair.LiteLLM.Name, credentialDirectory + "/litellm-bootstrap.py", "file", gatewayBootstrap, 0, 0, 0o400},
 	}
 	absent := func(guest, path string) bool {
 		body, _, err := sdk.GetInstanceFile(guest, path)
@@ -200,7 +205,7 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 		}
 		if err != nil || meta == nil || meta.Type != "directory" || meta.UID != 0 || meta.Mode&0o022 != 0 ||
 			!absent(spec.Name, "/run/aginctus") {
-			return fail()
+			return fail("guest parent preflight")
 		}
 	}
 	readback := func(e entry) bool {
@@ -223,25 +228,28 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 	}
 	for _, e := range entries {
 		if verify() != nil || !absent(e.guest, e.path) {
-			return fail()
+			return fail("before guest file submission")
 		}
 		args := incus.InstanceFileArgs{UID: e.uid, GID: e.gid, Mode: e.mode, Type: e.kind, WriteMode: "overwrite"}
 		if e.kind == "file" {
 			args.Content = strings.NewReader(e.data)
 		}
-		if err := sdk.CreateInstanceFile(e.guest, e.path, args); err != nil || verify() != nil || !readback(e) {
-			return fail()
+		if err := sdk.CreateInstanceFile(e.guest, e.path, args); err != nil {
+			return fail("guest file submission")
+		}
+		if verify() != nil || !readback(e) {
+			return fail("guest file readback")
 		}
 	}
 	// Detect changes across the multi-file handoff. A failed partial stage is
 	// not overwritten or automatically deleted on retry.
 	for _, e := range entries {
 		if !readback(e) {
-			return fail()
+			return fail("final guest file readback")
 		}
 	}
 	if verify() != nil {
-		return fail()
+		return fail("final stopped guest preflight")
 	}
 	return GatewayCredentialDeliveryReceipt{Revision: revision, PhysicalProject: top.Project,
 		Version: material.version, PostgresCreatedAt: incarnations[0], LiteLLMCreatedAt: incarnations[1], Verified: true}, nil

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,10 +21,10 @@ import (
 
 	"github.com/blevinn/aginctus/internal/gateway"
 	agincus "github.com/blevinn/aginctus/internal/incus"
-	"github.com/blevinn/aginctus/internal/orchestration/native"
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
-	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
+	"github.com/blevinn/aginctus/internal/orchestration/native"
 	"github.com/blevinn/aginctus/internal/orchestration/nativeoci"
+	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
 )
 
 // TestDaemonOCI deliberately requires a guest-only marker as well as explicit
@@ -439,7 +440,20 @@ func TestDaemonOCI(t *testing.T) {
 		}
 		return hex.EncodeToString(b[:])
 	}
-	material, err := gateway.NewGatewayCredentialMaterial("synthetic-v1", token(), token(), token())
+	password, master, salt := token(), token(), token()
+	assertRedacted := func(observation any) {
+		t.Helper()
+		data, err := json.Marshal(observation)
+		if err != nil {
+			t.Fatal("could not inspect gateway evidence")
+		}
+		for _, secret := range []string{password, master, salt} {
+			if strings.Contains(string(data), secret) {
+				t.Fatal("gateway evidence contained credential material")
+			}
+		}
+	}
+	material, err := gateway.NewGatewayCredentialMaterial("synthetic-v1", password, master, salt)
 	if err != nil {
 		t.Fatal("synthetic material rejected")
 	}
@@ -471,13 +485,29 @@ func TestDaemonOCI(t *testing.T) {
 	}
 	if _, err := stage(nil); err == nil {
 		t.Fatal("publisher accepted missing writer guard")
+	} else {
+		assertRedacted(err.Error())
 	}
 	receipt, err := stage(soleWriter)
-	if err != nil || !receipt.Verified || receipt.Version != "synthetic-v1" {
+	if err != nil {
+		assertRedacted(err.Error())
+		t.Fatalf("stopped gateway credential staging: %v", err) // The publisher reports only fixed diagnostic phases.
+	}
+	if !receipt.Verified || receipt.Version != "synthetic-v1" {
 		t.Fatal("stopped gateway credential readback failed")
 	}
 	if _, err := stage(soleWriter); err == nil {
 		t.Fatal("publisher overwrote an existing staged credential handoff")
+	} else {
+		assertRedacted(err.Error())
+	}
+	assertRedacted(receipt)
+	for _, guest := range []string{gatewayPair.Postgres.Name, gatewayPair.LiteLLM.Name} {
+		instance, _, err := client.GetInstance(guest)
+		if err != nil {
+			t.Fatal("could not inspect stopped gateway metadata")
+		}
+		assertRedacted(instance)
 	}
 	// Read-only native status must recognize both owned stopped service
 	// containers while preserving the existing image and volume inventory.
