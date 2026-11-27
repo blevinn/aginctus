@@ -9,6 +9,7 @@
   independentRecovery ? false,
   payloadTransfer ? false,
   nestedKVM ? false,
+  projectAdmission ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
@@ -25,6 +26,7 @@ in
 assert !(nativeInstance && independentRecovery);
 assert !(payloadTransfer && (nativeInstance || independentRecovery));
 assert !(nestedKVM && (nativeInstance || independentRecovery || payloadTransfer));
+assert !(projectAdmission && (nativeInstance || independentRecovery || payloadTransfer || nestedKVM));
 pkgs.testers.runNixOSTest {
   name =
     if independentRecovery then
@@ -35,6 +37,8 @@ pkgs.testers.runNixOSTest {
       "aginctus-testenv-payload-transfer"
     else if nestedKVM then
       "aginctus-testenv-nested-kvm"
+    else if projectAdmission then
+      "aginctus-testenv-project-admission"
     else
       "aginctus-testenv-disposable-worker";
   nodes.machine = { ... }: {
@@ -79,6 +83,7 @@ pkgs.testers.runNixOSTest {
       else
         builtins.readFile ./fixture_receipt.py
     )
+    + (pkgs.lib.optionalString projectAdmission (builtins.readFile ./project_admission_trial.py))
     + ''
       import json
       import re
@@ -127,6 +132,9 @@ pkgs.testers.runNixOSTest {
       # Empty, stopped, unsigned sentinel in the second instance slot. No
       # shared data, user credentials or host mounts.
       machine.succeed("incus --project aginctus-testenv init --empty foreign-sentinel --vm --no-profiles --storage testenv -c limits.cpu=1 -c limits.memory=512MiB -d root,size=8GiB")
+      ${pkgs.lib.optionalString projectAdmission ''
+        admission_checks = run_project_admission(machine)
+      ''}
       machine.succeed("install -d -m 0755 /etc/aginctus-testenv")
       machine.succeed("printf 'aginctus-dedicated-disposable-worker-v1\\n' > /etc/aginctus-testenv/disposable-worker; chmod 0444 /etc/aginctus-testenv/disposable-worker")
       machine.succeed("install -d -m 0700 /var/lib/aginctus-testenv; umask 077; head -c 32 /dev/urandom > /var/lib/aginctus-testenv/worker-policy.key")
@@ -220,6 +228,11 @@ pkgs.testers.runNixOSTest {
                 require_payload_transfer=${if payloadTransfer then "True" else "False"},
                 require_nested_kvm=${if nestedKVM then "True" else "False"},
             )
+            ${pkgs.lib.optionalString projectAdmission ''
+              # These gates were observed by the outer driver, not the worker report.
+              public["scenario"] = "project-admission"
+              public["results"].extend(admission_checks)
+            ''}
             # Only sanitized observations leave the worker. The Nix result can be
             # cached; the receipt does not assert this invocation created a new VM.
             machine.succeed("printf '%s\\n' " + shlex.quote(json.dumps(public, sort_keys=True)) + " > /tmp/testenv-fixture-receipt.json")
