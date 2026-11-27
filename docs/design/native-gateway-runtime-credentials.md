@@ -100,3 +100,24 @@ project policies, requires exact network/pool allowlists, and observes the
 physical pair and retained database. This is a read-only prerequisite: the
 report explicitly does not hold a writer pin, establish OCI acquisition
 provenance or permit runtime activation. No gateway credentials are read.
+
+### Protected infrastructure provisioning
+
+The direct administrator-only `internal gateway-protected-provision GRANT OPERATOR_CONFIG`
+role uses the exact logical accepted revision and a separate physical project
+binding. Provision a root-owned mode 0700 directory at
+`/var/lib/aginctus/protected-gateway/PROTECTED_PROJECT/ENVIRONMENT_UUID` first,
+under root-owned non-writable ancestors. The administrator TLS identity needs
+an exact `gateway-provision` grant (workloadId gateway-credentials). The existing
+native engine performs the image/alias, database volume and stopped pair stages.
+The daemon-wide cooperating gateway lock protects acquisition, and the state
+service coordinates the revision and exact stage effects. Image/instance task
+UUIDs are journaled before waiting; synchronous alias/volume operations have
+no task UUID. Durable provenance is stored in the protected directory, bound
+to the exact logical revision and independently granted physical project.
+The role does not create a project, alter host networking, stage credentials,
+or start a guest. Existing aliases without provenance, partial failures and
+unresolved effects fail closed. The lock cannot exclude independent admin or
+external image writers; the administrator must exclude those during acquisition.
+Exact-revision reuse only in this increment; successor reuse is separate.
+Do not expose the role through a lower-privilege endpoint.
