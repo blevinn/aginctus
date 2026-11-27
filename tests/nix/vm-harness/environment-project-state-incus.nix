@@ -16,11 +16,12 @@ let
   bridgeSocket = "/run/aginctus-workload-bridge.sock";
   hostGrant = "/etc/aginctus-workload-host.json";
   mkGuest =
-    address:
+    address: isState:
     nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
         "${nixpkgs}/nixos/maintainers/scripts/incus/incus-container-image.nix"
+        self.nixosModules.aginctusProjectState
         {
           system.stateVersion = "26.05";
           networking.useDHCP = false;
@@ -31,27 +32,19 @@ let
             }
           ];
           networking.firewall.interfaces.eth0.allowedTCPPorts = [ 8444 ];
-          users.groups.aginctusproject.gid = serviceUID;
-          users.users.aginctusproject = {
+          services.aginctus-project-state = {
+            enable = isState;
             uid = serviceUID;
-            isSystemUser = true;
-            group = "aginctusproject";
           };
           environment.systemPackages = [
             cli
             pkgs.util-linux
           ];
-          # Deliberately not started until mount, restricted TLS and policy exist.
-          systemd.services.aginctus-project-state.serviceConfig = {
-            User = "aginctusproject";
-            Environment = "AGINCTUS_PROJECT_STATE_READ_SERVICE_CONFIG=/run/aginctus/state.json";
-            ExecStart = "${cli}/bin/aginctus serve project-state";
-          };
         }
       ];
     };
-  guestImage = mkGuest serviceIP;
-  workerImage = mkGuest "10.89.37.3";
+  guestImage = mkGuest serviceIP true;
+  workerImage = mkGuest "10.89.37.3" false;
 in
 pkgs.testers.runNixOSTest {
   name = "aginctus-environment-project-state-incus";
@@ -257,6 +250,7 @@ pkgs.testers.runNixOSTest {
         machine.wait_until_succeeds(state_command(0, "member", "show"), timeout=60)
 
     provision()
+    machine.fail(guest + " systemctl is-active --quiet aginctus-project-state.service")
     machine.fail(guest + " ${cli}/bin/aginctus serve project-state bootstrap")
     assert machine.succeed(owner + " ${cli}/bin/aginctus serve project-state bootstrap").strip() == "initialized"
     start_service()
