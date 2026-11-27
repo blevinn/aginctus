@@ -9,6 +9,9 @@ import time
 
 
 class GuestFixture:
+    def __init__(self):
+        self.step = 0
+
     def _run(self, command, timeout):
         # Commands originate exclusively from the store-pinned fixture.
         return subprocess.run(
@@ -22,12 +25,14 @@ class GuestFixture:
         )
 
     def succeed(self, command, timeout=900):
+        self.step += 1
         result = self._run(command, timeout)
         if result.returncode != 0:
             raise RuntimeError(f"fixture command failed (exit {result.returncode})")
         return result.stdout
 
     def fail(self, command, timeout=900):
+        self.step += 1
         result = self._run(command, timeout)
         # A signal is an infrastructure failure, not an expected denial.
         if result.returncode <= 0 or result.returncode >= 128:
@@ -35,6 +40,7 @@ class GuestFixture:
         return result.stdout
 
     def wait_until_succeeds(self, command, timeout=90):
+        self.step += 1
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             remaining = deadline - time.monotonic()
