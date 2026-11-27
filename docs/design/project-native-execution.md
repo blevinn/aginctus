@@ -69,3 +69,21 @@ production recovery authorization. Production inspection and read-only
 verification of terminal Incus operations, including the submission window
 before a daemon operation ID has been recorded, are still required. There is
 no time-based or operator-asserted override in this draft.
+
+### Initial terminal-task recovery policy
+
+The hidden `state operations OPERATION_ID --workload ID --revision REV --recover -o json`
+uses a separate exact `recover` execution-policy grant. The installed state
+service requires no active coordination session, takes the same persistent
+project and environment locks, and rechecks the current revision and grant.
+It independently reads each acknowledged applied daemon task and requires a positive
+successful task of the expected create/start kind for the exact instance,
+followed by a current matching owned instance and stable incarnation. It
+publishes the existing digest-bound recovery receipt; inspection reports that
+receipt rather than an unresolved operation. It performs no Incus mutation.
+This first policy cannot recover unacknowledged effects (even correlated ones), missing/expired task IDs, failed tasks,
+stop/remove, or an unmatched resource. The original executor is assumed to
+follow the coordination protocol, and unrelated administrators are not fenced.
+Do not enable delegation on this basis: validate the pinned Incus task
+vocabulary, operation retention, authorization and actual protected service
+placement. A missing task or a denied API leaves recovery blocked.
