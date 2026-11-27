@@ -23,12 +23,27 @@ import (
 
 const credentialDirectory = "/run/aginctus/gateway"
 const reviewedPostgresEntrypoint = "48647812e68165e2943abe82a1a7cb8364d6e9f8b6b6aefc179868b66a327c46"
+const reviewedLiteLLMNamedRootConfig = "sha256:afbb38125c0470eb081ff29762d6e2120b1cffeb16df4fb7db25569c44420c6b"
 
 //go:embed guest/litellm_bootstrap.py
 var gatewayBootstrap string
 
 var credentialToken = regexp.MustCompile(`^[A-Za-z0-9_-]{32,255}$`)
 var errCredentialDelivery = errors.New("native gateway credential delivery unverified; inspect stopped guests before retry")
+
+func liteLLMRootFileIdentity(image nativeoci.ResolvedImage) bool {
+	switch image.Config.User {
+	case "", "0", "0:0":
+		return true
+	case "root":
+		// The current pinned image uses a name. Do not infer UID/GID from
+		// a name in an arbitrary successor's image filesystem.
+		return image.Registry == "ghcr.io" && image.Repository == "berriai/litellm" &&
+			image.ConfigDigest == reviewedLiteLLMNamedRootConfig
+	default:
+		return false
+	}
+}
 
 // GatewayCredentialMaterial is intentionally opaque and has no JSON fields.
 // The independently authorized caller must obtain it from its protected
@@ -117,7 +132,7 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 		!slices.Contains(pg.Config.Env, "PGDATA=/var/lib/postgresql/data") {
 		return fail("PostgreSQL image contract")
 	}
-	if llm.Config.User != "" && llm.Config.User != "0" && llm.Config.User != "0:0" {
+	if !liteLLMRootFileIdentity(llm) {
 		return fail("LiteLLM image contract")
 	}
 	specs := []NativeGatewayInstanceSpec{pair.Postgres, pair.LiteLLM}

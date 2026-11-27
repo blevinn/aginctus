@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/blevinn/aginctus/internal/orchestration/nativeoci"
 )
 
 func TestGatewayCredentialMaterialRedactsAndValidates(t *testing.T) {
@@ -22,5 +24,17 @@ func TestGatewayCredentialMaterialRedactsAndValidates(t *testing.T) {
 		if _, err := NewGatewayCredentialMaterial("version-1", bad, m, s); err == nil {
 			t.Fatal("invalid material accepted")
 		}
+	}
+}
+
+func TestLiteLLMNamedRootRequiresReviewedConfig(t *testing.T) {
+	image := nativeoci.ResolvedImage{Registry: "ghcr.io", Repository: "berriai/litellm", ConfigDigest: reviewedLiteLLMNamedRootConfig}
+	image.Config.User = "root"
+	if !liteLLMRootFileIdentity(image) {
+		t.Fatal("reviewed named-root image refused")
+	}
+	image.ConfigDigest = "sha256:" + strings.Repeat("a", 64)
+	if liteLLMRootFileIdentity(image) {
+		t.Fatal("unreviewed account name accepted as UID 0")
 	}
 }
