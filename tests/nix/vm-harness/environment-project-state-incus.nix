@@ -388,7 +388,7 @@ pkgs.testers.runNixOSTest {
             for guest_name in (pg, llm):
                 machine.succeed(f"incus config show {guest_name} {gateway_scope} >{private}/{guest_name}-config")
             for key in secret_files:
-                machine.succeed(f"grep -Flf {private}/{key} {private}/publisher-* {private}/*-config >/dev/null; test $? -eq 1")
+                machine.succeed(f"if grep -Flf {private}/{key} {private}/publisher-* {private}/*-config >/dev/null; then exit 1; else test $? -eq 1; fi")
             if publish_status != 0:
                 raise AssertionError(machine.succeed(f"cat {private}/publisher-error"))
             published = json.loads(machine.succeed(f"cat {private}/publisher-result"))
