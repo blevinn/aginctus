@@ -155,7 +155,7 @@ pkgs.testers.runNixOSTest {
           ''
             try:
                 machine.succeed(shlex.join(argv), timeout=${toString trialTimeout})
-            except Exception:
+            except Exception as failure:
                 # Capture only bounded error strings from the synthetic project,
                 # redact long hex tokens, and omit all other event fields.
                 machine.execute("systemctl stop aginctus-testenv-operation-monitor.service")
@@ -171,7 +171,7 @@ pkgs.testers.runNixOSTest {
                   # Incus saves the serial ring buffer before stopping the VM.
                   # Read only the tagged, bounded synthetic assertion record,
                   # never an entire console or any private worker report.
-                  code, diagnostic = machine.execute("find /var/log/incus /var/lib/incus/logs -maxdepth 2 -type f -path '*/aginctus-testenv_testenv-vm-*/console.log' -exec grep -ahF 'AGINCTUS_FIXTURE_TEST_FAILURE:' {} + 2>/dev/null | tail -n 4 | cut -c 1-4096")
+                  code, diagnostic = machine.execute("find /var/log/incus /var/lib/incus/logs -maxdepth 5 -type f -name console.log -path '*aginctus-testenv_testenv-vm-*' -exec grep -ahF 'AGINCTUS_FIXTURE_TEST_FAILURE:' {} + 2>/dev/null | tail -n 4 | cut -c 1-4096")
                   found = False
                   if code == 0:
                       for line in diagnostic.splitlines():
@@ -188,7 +188,7 @@ pkgs.testers.runNixOSTest {
                   if not found:
                       print("FIXTURE NATIVE TEST FAILURE: tagged console evidence unavailable")
                 ''}
-                raise
+                raise failure
             else:
                 machine.succeed("systemctl stop aginctus-testenv-operation-monitor.service")
             reports = machine.succeed("find /var/lib/aginctus-testenv-acceptance -mindepth 2 -maxdepth 2 -name result.json").splitlines()
