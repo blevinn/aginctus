@@ -78,7 +78,7 @@ func (s *ProjectExecutionSession) BeginEffect(ctx context.Context, action string
 	}
 	s.sequence++
 	s.pending = true
-	s.synchronous = s.base.Operation == "gateway-deliver" && action == "deliver"
+	s.synchronous = (projectExecutionGrant{Operation: s.base.Operation}).synchronous(action)
 	return nil
 }
 

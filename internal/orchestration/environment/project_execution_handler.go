@@ -186,7 +186,7 @@ func (h *projectExecutionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 				return
 			}
 		case "submitted":
-			if req.Sequence != n || n == 0 || e.journal.op.Effects[n-1].Action == "deliver" || e.journal.recordDaemonOperation(ctx, req.DaemonID) != nil {
+			if req.Sequence != n || n == 0 || e.grant.synchronous(e.journal.op.Effects[n-1].Action) || e.journal.recordDaemonOperation(ctx, req.DaemonID) != nil {
 				deny(http.StatusConflict)
 				return
 			}

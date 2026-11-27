@@ -220,7 +220,8 @@ func (r LocalNativeEffectRecord) valid() bool {
 		return false
 	}
 	switch r.Action {
-	case "create", "update", "start", "stop", "delete", "deliver":
+	case "create", "update", "start", "stop", "delete", "deliver",
+		"image-postgres", "image-litellm", "alias-postgres", "alias-litellm", "volume-database", "instance-postgres", "instance-litellm":
 		return true
 	}
 	return false
