@@ -16,9 +16,9 @@ func TestProjectDomainGrantsDoNotInheritWorkloadAuthority(t *testing.T) {
 		t.Fatal("explicit component not selected")
 	}
 	for _, tc := range []struct {
-		grant projectExecutionGrant
+		grant  projectExecutionGrant
 		action string
-		ok bool
+		ok     bool
 	}{
 		{gateway, "deliver", true},
 		{gateway, "start", false},
