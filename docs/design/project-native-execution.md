@@ -87,3 +87,18 @@ follow the coordination protocol, and unrelated administrators are not fenced.
 Do not enable delegation on this basis: validate the pinned Incus task
 vocabulary, operation retention, authorization and actual protected service
 placement. A missing task or a denied API leaves recovery blocked.
+
+### Explicit component coordination
+
+The same state-service writer pin and durable journal now admit two narrowly
+selected component grants: `gateway-deliver` with `workloadId=gateway-credentials`,
+and `herdr-reconcile` with `workloadId=herdr-client`. These are operation-specific
+selectors, not ordinary accepted workload IDs. They require the corresponding
+accepted component and do not inherit ordinary workload grants. Component
+inspection uses `gateway-inspect` or `herdr-inspect` respectively. The gateway
+delivery action is a synchronous file handoff; its acknowledgement does not
+require a daemon task ID, unlike instance operations. Lost acknowledgement
+or partial delivery remains unresolved. A session check revalidates the
+current grant and both locks without advancing the journal. These grants
+coordinate only: they convey no physical Incus authority and do not enable
+delegated execution. Gateway runtime and Herdr state creation are not granted.
