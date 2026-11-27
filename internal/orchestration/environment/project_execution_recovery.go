@@ -62,7 +62,7 @@ func (s *LocalProjectStateStore) recoverProjectExecution(ctx context.Context, de
 			var lastTask time.Time
 			seen := map[string]bool{}
 			for i, effect := range op.Effects {
-				if ctx.Err() != nil || !daemonOperationID.MatchString(effect.DaemonID) || seen[effect.DaemonID] {
+				if ctx.Err() != nil || effect.Outcome != LocalNativeApplied || !daemonOperationID.MatchString(effect.DaemonID) || seen[effect.DaemonID] {
 					return Binding{}, errRecoveryUnverified
 				}
 				seen[effect.DaemonID] = true
@@ -94,6 +94,8 @@ func (s *LocalProjectStateStore) recoverProjectExecution(ctx context.Context, de
 				instance.Name != w.InstanceName || instance.Project != s.binding.Project ||
 				instance.Type != w.InstanceType || instance.Status != wantStatus || instance.CreatedAt.IsZero() ||
 				instance.CreatedAt.After(lastTask) || (op.Effects[0].Action == "create" && instance.CreatedAt.Before(firstTask)) ||
+				instance.Config["user.aginctus.managed"] != "true" || instance.Config["user.aginctus.resource"] != "workload" ||
+				instance.Config["user.aginctus.workload"] != grant.WorkloadID ||
 				instance.Config["user.aginctus.environment-id"] != desc.ID ||
 				instance.Config["volatile.base_image"] != w.ImageFingerprint ||
 				!slices.Equal(instance.Profiles, w.Profiles) {

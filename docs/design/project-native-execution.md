@@ -68,12 +68,12 @@ The hidden `state operations OPERATION_ID --workload ID --revision REV --recover
 uses a separate exact `recover` execution-policy grant. The installed state
 service requires no active coordination session, takes the same persistent
 project and environment locks, and rechecks the current revision and grant.
-It independently reads each recorded daemon task and requires a positive
+It independently reads each acknowledged applied daemon task and requires a positive
 successful task of the expected create/start kind for the exact instance,
 followed by a current matching owned instance and stable incarnation. It
 publishes the existing digest-bound recovery receipt; inspection reports that
 receipt rather than an unresolved operation. It performs no Incus mutation.
-This first policy cannot recover missing/expired task IDs, failed tasks,
+This first policy cannot recover unacknowledged effects (even correlated ones), missing/expired task IDs, failed tasks,
 stop/remove, or an unmatched resource. The original executor is assumed to
 follow the coordination protocol, and unrelated administrators are not fenced.
 Do not enable delegation on this basis: validate the pinned Incus task
