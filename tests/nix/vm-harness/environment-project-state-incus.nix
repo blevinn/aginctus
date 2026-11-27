@@ -384,6 +384,26 @@ pkgs.testers.runNixOSTest {
             assert first_start["result"]["ready"] == [pg, llm]
             repeat_start = json.loads(machine.succeed(command + "start" + args, timeout=320))
             assert not repeat_start["result"].get("started") and repeat_start["result"]["ready"] == [pg, llm]
+            incarnations = [machine.succeed(f"incus list {name} {gateway_scope} --format json | jq -er '.[0].created_at'").strip()
+                            for name in (pg, llm)]
+            stop = command + "stop" + args
+            stop_args = " " + " ".join(map(shlex.quote, incarnations))
+            machine.fail(stop + stop_args)
+            stop_grant = {"peerSha256": fingerprint("member"), **binding, "environmentId": gateway_env,
+                          "revisionId": revisions[1]["id"], "workloadId": "gateway-credentials", "operation": "gateway-stop"}
+            machine.succeed(f"jq --argjson grant {shlex.quote(compact(stop_grant))} '.grants += [$grant]'"
+                            f" {private}/gateway-execution.json >{private}/gateway-stop-policy.json",
+                            f"incus file push {private}/gateway-stop-policy.json environment-state-service/etc/aginctus/execution.json"
+                            " --project ${protectedProject} --uid 0 --gid 0 --mode 0644")
+            machine.fail(stop + " 2000-01-01T00:00:00Z " + shlex.quote(incarnations[1]))
+            sql = (f"incus exec {pg} {gateway_scope} --disable-stdin -- env PGPASSFILE=/run/aginctus/gateway/postgres.pgpass"
+                   " psql -X -w -v ON_ERROR_STOP=1 -d 'host=127.0.0.1 user=litellm dbname=litellm require_auth=scram-sha-256' -tAc ")
+            machine.succeed(sql + shlex.quote("CREATE TABLE wave1_retention (value integer); INSERT INTO wave1_retention VALUES (42)"))
+            stopped_pair = json.loads(machine.succeed(stop + stop_args, timeout=150))
+            assert stopped_pair["result"]["changed"] == [llm, pg]
+            assert not json.loads(machine.succeed(stop + stop_args))["result"].get("changed")
+            assert json.loads(machine.succeed(command + "start" + args, timeout=320))["result"]["ready"] == [pg, llm]
+            assert machine.succeed(sql + shlex.quote("SELECT value FROM wave1_retention")).strip() == "42"
         observed = json.loads(machine.succeed(preview))
         assert observed["revision"] == revisions[1] and observed["physical"] == {**binding, "project": gateway_project}
         assert observed["databasePresent"] and not observed["writerPin"] and observed["runtime"] == "gated"
