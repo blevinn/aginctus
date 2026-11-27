@@ -164,6 +164,27 @@ unverified. This does not prove a complete nested NixOS boot, network
 isolation, or agent admission. A failed probe fails the fixture rather
 than falling back to software emulation or weakening the worker policy.
 
+## Project admission enforcement fixture
+
+```sh
+nix build --no-link --no-update-lock-file .#testenv-project-admission
+```
+
+This explicit base-image variant first checks real Incus admission on the
+disposable worker: aggregate CPU, memory, disk and instance-count limits,
+plus rejection of a NIC, directory-backed disk and low-level QEMU config.
+Each negative request must receive the corresponding provider policy error
+and leave the instance/volume inventory and existing instance configuration
+unchanged. A valid second stopped VM supplies a positive control. All probe
+resources are confined to the disposable worker; the synthetic bridge has
+no configured IPv4/IPv6 addressing. After the probe resources are removed,
+the fixture runs ordinary signed lifecycle acceptance. The receipt adds
+`project_device_denials` and `project_aggregate_limits` as outer-driver
+observations, with scenario `project-admission`.
+These tests verify admission, not runtime CPU/memory/disk enforcement,
+packet/DNS/DHCP containment, physical reclamation or agent admission.
+`nested_isolation` remains unverified.
+
 ## Future disposable-worker import gate
 
 **Operator-only; do not execute against the pilot daemon.** Provision a

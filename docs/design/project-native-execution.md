@@ -102,7 +102,6 @@ or partial delivery remains unresolved. A session check revalidates the
 current grant and both locks without advancing the journal. These grants
 coordinate only: they convey no physical Incus authority and do not enable
 delegated execution. Gateway runtime and Herdr state creation are not granted.
-
 ### Installed Herdr resource lifecycle
 
 The hidden `state reconcile --herdr --expect REV --host-grant FILE -o json`
