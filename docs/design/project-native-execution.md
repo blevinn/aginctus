@@ -52,6 +52,14 @@ executor checks the socket peer UID and grant digest. It separately verifies the
 restricted project's exact network and storage attachment policy over TLS.
 This is a point-in-time observation; it does not lock the host bridge or expose
 the administrative socket to the executor or the state service.
+
+For a single workload, `state plan-native --workload ID --expect REVISION
+--host-grant PATH -o json` runs the installed workload and bridge preflight in
+read-only mode. It authenticates the same project and verifies that the
+accepted revision still matches before returning. It does not open an
+execution session, record effects, or reserve the revision; subsequent
+reconciliation must obtain its own grant and recheck all preconditions.
+
 There is no lease-based takeover. A disconnect can leave a session held; a
 restart releases the in-memory pin but refuses new native writers across the
 project if any earlier operation is still open or uncertain. A delayed request
