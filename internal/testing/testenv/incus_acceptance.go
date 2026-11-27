@@ -386,6 +386,7 @@ func runIncusAcceptance(ctx context.Context, b *IncusVMBackend, cfg IncusAccepta
 		if cfg.Scenario == nativeInstanceScenario && mode == VMEphemeral {
 			result.FailureStage = "native_instance_scenario"
 			if err := runNativeInstanceScenario(ctx, b, ref); err != nil {
+				result.FailureStage = nativeScenarioFailureStage(err)
 				result.set("native_instance_scenario", "fail")
 				return result, errors.New("native-instance scenario failed or unverified")
 			}
