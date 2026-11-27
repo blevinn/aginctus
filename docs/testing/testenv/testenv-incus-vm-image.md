@@ -148,6 +148,22 @@ seven lifecycle checks. Other fixture modes leave payload transfer unverified.
 It does not admit arbitrary bundles, extract archives, install closures, grant
 agent authority, or establish network isolation. A fresh KVM run is required.
 
+## Nested KVM execution fixture
+
+```sh
+nix build --no-link --no-update-lock-file .#testenv-nested-kvm
+```
+
+This separate opt-in variant requires the existing guest-instruction probe
+in both ephemeral and retained VMs, in addition to ordinary lifecycle
+acceptance. It adds a third VM layer under the development test driver;
+the builder and its nested virtualization stack must support that depth.
+The sanitized receipt identifies `nested-kvm` and requires
+`nested_kvm_guest_execution: pass`. All other modes leave this gate
+unverified. This does not prove a complete nested NixOS boot, network
+isolation, or agent admission. A failed probe fails the fixture rather
+than falling back to software emulation or weakening the worker policy.
+
 ## Future disposable-worker import gate
 
 **Operator-only; do not execute against the pilot daemon.** Provision a
