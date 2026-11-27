@@ -182,6 +182,10 @@
             inherit self nixpkgs system;
             independentRecovery = true;
           };
+          testenv-payload-transfer = import ./internal/testing/testenv/nix/disposable-worker-fixture.nix {
+            inherit self nixpkgs system;
+            payloadTransfer = true;
+          };
           testenv-disposable-worker-fixture =
             import ./internal/testing/testenv/nix/disposable-worker-fixture.nix
               {
