@@ -89,13 +89,16 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus info")
     machine.succeed("incus version")
     machine.succeed("incus project create aginctus-authz --config restricted=true --config features.images=true --config features.profiles=true --config features.storage.volumes=true --config features.networks=false")
-    machine.succeed("incus project create unrelated --config restricted=true")
+    machine.succeed("incus project create unrelated --config restricted=true --config restricted.snapshots=allow --config restricted.backups=allow")
     machine.succeed("incus network create authz-mgmt ipv4.address=none ipv6.address=none")
     # Explicitly bound access to one host-admin managed shared bridge/pool.
     machine.succeed("incus project set aginctus-authz restricted.devices.nic=managed restricted.devices.disk=managed restricted.networks.access=authz-mgmt restricted.storage-pools.access=default")
     machine.succeed("incus project get aginctus-authz restricted | grep -qx true")
     machine.succeed("incus project get aginctus-authz features.networks | grep -qx false")
     machine.succeed("incus project get aginctus-authz restricted.networks.access | grep -qx authz-mgmt")
+    machine.succeed("incus project get unrelated restricted | grep -qx true")
+    machine.succeed("incus project get unrelated restricted.snapshots | grep -qx allow")
+    machine.succeed("incus project get unrelated restricted.backups | grep -qx allow")
     # Only the independent administrator provisions the environment inventory.
     enrollment = json.dumps({
       "apiVersion": "aginctus.io/environment-enrollment/v1alpha1",
