@@ -17,6 +17,7 @@ type ProjectExecutionSession struct {
 	base        projectExecutionRequest
 	sequence    int
 	pending     bool
+	correlated  bool
 	unavailable bool
 }
 
@@ -80,7 +81,7 @@ func (s *ProjectExecutionSession) BeginEffect(ctx context.Context, action string
 }
 
 func (s *ProjectExecutionSession) MarkApplied(ctx context.Context) error {
-	if s.unavailable || !s.pending {
+	if s.unavailable || !s.pending || !s.correlated {
 		return ErrLocalNativeUnresolved
 	}
 	req := s.base
@@ -91,6 +92,23 @@ func (s *ProjectExecutionSession) MarkApplied(ctx context.Context) error {
 		return err
 	}
 	s.pending = false
+	s.correlated = false
+	return nil
+}
+
+// RecordDaemonOperation persists correlation before waiting for completion.
+// A failed acknowledgement leaves the journal unresolved either way.
+func (s *ProjectExecutionSession) RecordDaemonOperation(ctx context.Context, id string) error {
+	if s.unavailable || !s.pending || s.correlated || !daemonOperationID.MatchString(id) {
+		return ErrLocalNativeUnresolved
+	}
+	req := s.base
+	req.Step, req.Sequence, req.DaemonID = "submitted", s.sequence, id
+	if _, err := sendProjectExecution(ctx, s.transport, req); err != nil {
+		s.unavailable = true
+		return err
+	}
+	s.correlated = true
 	return nil
 }
 

@@ -23,6 +23,12 @@ The report omits writer certificate fingerprints; `unresolved` is a journal
 classification, not live observation. An inspection grant cannot reconcile or
 resolve an operation.
 
+After an Incus SDK submission returns, the executor checks that the task
+references the exact project and instance and persists its daemon UUID before
+waiting. This is a correlation hint. A crash before that write, a lost
+acknowledgement or an aged-out daemon record cannot establish that nothing was
+submitted. No correlation write clears uncertainty.
+
 The state service takes the accepted-pointer lock for the environment and a
 conservative project-wide writer lock: accepted instances in different
 environments can collide by name. The coordinator checks Incus trust, current

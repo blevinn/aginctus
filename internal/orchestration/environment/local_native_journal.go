@@ -44,6 +44,7 @@ type LocalNativeEffectRecord struct {
 	Target   string             `json:"target"`
 	Action   string             `json:"action"`
 	Outcome  LocalNativeOutcome `json:"outcome"`
+	DaemonID string             `json:"daemonOperationId,omitempty"`
 }
 
 type LocalNativeOperation struct {
@@ -95,13 +96,34 @@ func (j *LocalNativeJournal) ID() string { return j.op.ID }
 // BeginEffect durably records uncertainty before submission. A crash at any
 // later point (even before SDK submission) requires observation, never replay.
 func (j *LocalNativeJournal) BeginEffect(ctx context.Context, resource, target, action string) error {
-	effect := LocalNativeEffectRecord{resource, target, action, LocalNativeUncertain}
+	effect := LocalNativeEffectRecord{Resource: resource, Target: target, Action: action, Outcome: LocalNativeUncertain}
 	if j.op.Status != LocalNativeOpen || !effect.valid() || len(j.op.Effects) >= maxLocalNativeEffects ||
 		len(j.op.Effects) > 0 && j.op.Effects[len(j.op.Effects)-1].Outcome != LocalNativeApplied {
 		return errors.New("invalid or interrupted local native operation")
 	}
 	next := j.op
 	next.Effects = append(slices.Clone(j.op.Effects), effect)
+	if err := j.save(ctx, next); err != nil {
+		return err
+	}
+	j.op = next
+	return nil
+}
+
+var daemonOperationID = regexp.MustCompile(`^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$`)
+
+// recordDaemonOperation records a client-reported correlation hint. It does
+// not change the outcome or authorize recovery; verify it independently.
+func (j *LocalNativeJournal) recordDaemonOperation(ctx context.Context, id string) error {
+	n := len(j.op.Effects)
+	if j.op.Execution == nil || j.op.Status != LocalNativeOpen || n == 0 || !daemonOperationID.MatchString(id) ||
+		j.op.Effects[n-1].Outcome != LocalNativeUncertain || j.op.Effects[n-1].DaemonID != "" ||
+		slices.ContainsFunc(j.op.Effects, func(e LocalNativeEffectRecord) bool { return e.DaemonID == id }) {
+		return ErrLocalNativeUnresolved
+	}
+	next := j.op
+	next.Effects = slices.Clone(j.op.Effects)
+	next.Effects[n-1].DaemonID = id
 	if err := j.save(ctx, next); err != nil {
 		return err
 	}
@@ -250,6 +272,7 @@ func (s *LocalProjectStateStore) ReadLocalNativeOperation(ctx context.Context, e
 	}
 	for i, effect := range op.Effects {
 		if !effect.valid() || (op.Execution != nil && !op.Execution.permits(effect)) ||
+			(effect.DaemonID != "" && (op.Execution == nil || !daemonOperationID.MatchString(effect.DaemonID))) ||
 			((i+1 < len(op.Effects) || op.Status == LocalNativeCompleted) && effect.Outcome != LocalNativeApplied) {
 			return LocalNativeOperation{}, errors.New("invalid or out-of-order local native effect evidence")
 		}
