@@ -11,11 +11,20 @@ import (
 
 	clioutput "github.com/blevinn/aginctus/internal/cli/output"
 	incusscope "github.com/blevinn/aginctus/internal/incus"
+	"github.com/blevinn/aginctus/internal/nativelifecycle"
 	"github.com/blevinn/aginctus/internal/orchestration"
 	"github.com/blevinn/aginctus/internal/orchestration/environment"
+	"github.com/blevinn/aginctus/pkg/api"
 	"github.com/blevinn/aginctus/pkg/client"
 	"github.com/spf13/cobra"
 )
+
+type observedWorkloadPlan struct {
+	api.TypeMeta `json:",inline"`
+	Revision     string               `json:"revision"`
+	WriterPin    bool                 `json:"writerPin"`
+	Result       orchestration.Result `json:"result"`
+}
 
 func readInstalledAcceptedSnapshot(ctx context.Context, project, id string) (environment.AcceptedRevision, environment.Candidate, error) {
 	path := os.Getenv("AGINCTUS_RESTRICTED_READ_CONFIG")
@@ -37,9 +46,10 @@ func registerNativeIntentPlan(state *cobra.Command, out io.Writer, format func()
 	read func(context.Context, string, string) (environment.AcceptedRevision, environment.Candidate, error),
 ) {
 	var selection orchestration.AcceptedIntentSelection
+	var hostGrant, expected string
 	cmd := &cobra.Command{
 		Use: "plan-native", Short: "Preview native dependencies and capabilities from accepted state",
-		Long: "Preview an intent-only graph for explicitly selected accepted resources. Gateway selection ends at stopped provisioning. Does not inspect live resources, pin a writer revision, or execute changes.",
+		Long: "Preview an intent-only graph for explicitly selected accepted resources. For one workload, --host-grant and --expect enable a point-in-time live preview. Neither mode pins a writer revision or executes changes.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			f, err := format()
@@ -54,6 +64,18 @@ func registerNativeIntentPlan(state *cobra.Command, out io.Writer, format func()
 			}
 			if err := selection.Validate(); err != nil {
 				return err
+			}
+			if cmd.Flags().Changed("host-grant") || cmd.Flags().Changed("expect") {
+				if hostGrant == "" || expected == "" || len(selection.Workloads) != 1 || selection.All || selection.Herdr || selection.Gateway || f != clioutput.JSON {
+					return errors.New("live native planning requires one workload, --host-grant, --expect, and json output")
+				}
+				result, err := nativelifecycle.PlanInstalledWorkload(cmd.Context(), os.Getenv("AGINCTUS_RESTRICTED_READ_CONFIG"), hostGrant, *project, *id, expected, selection.Workloads[0])
+				if err != nil {
+					return err
+				}
+				return clioutput.WriteStructured(out, f, observedWorkloadPlan{
+					TypeMeta: api.TypeMeta{APIVersion: "aginctus.dev/v1alpha1", Kind: "ObservedNativeWorkloadPlan"}, Revision: expected, Result: result,
+				})
 			}
 			rev, accepted, err := read(cmd.Context(), *project, *id)
 			if err != nil {
@@ -76,6 +98,8 @@ func registerNativeIntentPlan(state *cobra.Command, out io.Writer, format func()
 	cmd.Flags().BoolVar(&selection.Herdr, "herdr", false, "Select accepted Herdr intent")
 	cmd.Flags().BoolVar(&selection.Gateway, "gateway", false, "Select accepted gateway stopped provisioning")
 	cmd.Flags().BoolVar(&selection.All, "all", false, "Select the full accepted scope (cannot be combined with other selectors)")
+	cmd.Flags().StringVar(&hostGrant, "host-grant", "", "Administrator-owned attachment grant for single-workload live preview")
+	cmd.Flags().StringVar(&expected, "expect", "", "Exact accepted revision for single-workload live preview")
 	state.AddCommand(cmd)
 }
 
