@@ -21,6 +21,9 @@ import (
 // connection. This is not a user-facing project authorization interface.
 type ProjectServiceAttachment struct {
 	Binding   Binding
+	// LogicalProject is independently selected by the administrator. Empty is
+	// the legacy administrator-only same-project exercise, never delegation.
+	LogicalProject string
 	Instance  string
 	Pool      string
 	Volume    string
@@ -74,13 +77,28 @@ func VerifyProjectServiceAttachment(ctx context.Context, reader ProjectServiceAt
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	logicalPolicy := func() (*api.Project, string, error) {
+		if expected.LogicalProject == "" {
+			return nil, "", nil
+		}
+		p, etag, err := reader.GetProject(expected.LogicalProject)
+		scope, _ := incusscope.NewProjectScope(expected.LogicalProject)
+		if err != nil || p == nil || etag == "" || p.Config["restricted"] != "true" || scope.AssessProject(p.Name, p.Config) != incusscope.ProjectCompatible {
+			return nil, "", errors.New("logical workload project policy unverified")
+		}
+		return p, etag, nil
+	}
+	logical, logicalETag, err := logicalPolicy()
+	if err != nil {
+		return err
+	}
 	scope, err := incusscope.NewProjectScope(expected.Binding.Project)
 	if err != nil {
 		return errors.New("invalid selected project scope")
 	}
 	project, projectETag, err := reader.GetProject(scope.Name)
 	if err != nil || project == nil || projectETag == "" ||
-		project.Config["restricted"] != "true" || scope.AssessProject(project.Name, project.Config) != incusscope.ProjectCompatible {
+		project.Config["restricted"] != "true" || scope.AssessProject(project.Name, project.Config) != incusscope.ProjectCompatible || !expected.logicalOwner(project.Config) {
 		return errors.New("state-service project ownership or storage isolation unverified")
 	}
 	instance, etag, err := reader.GetInstance(expected.Instance)
@@ -92,7 +110,7 @@ func VerifyProjectServiceAttachment(ctx context.Context, reader ProjectServiceAt
 		volume.Name != expected.Volume || volume.Project != expected.Binding.Project || volume.Type != "custom" ||
 		volume.ContentType != "filesystem" ||
 		volume.Config["user.aginctus.managed"] != "true" ||
-		volume.Config["user.aginctus.resource"] != "project-state-volume" {
+		volume.Config["user.aginctus.resource"] != "project-state-volume" || !expected.logicalOwner(volume.Config) {
 		return errors.New("project state volume identity or ownership unverified")
 	}
 	// The Incus UsedBy inventory must prove exclusive attachment. Do not
@@ -121,8 +139,14 @@ func VerifyProjectServiceAttachment(ctx context.Context, reader ProjectServiceAt
 	}
 	projectAgain, projectETagAgain, err := reader.GetProject(scope.Name)
 	if err != nil || projectAgain == nil || projectETagAgain != projectETag ||
-		projectAgain.Config["restricted"] != "true" || scope.AssessProject(projectAgain.Name, projectAgain.Config) != incusscope.ProjectCompatible {
+		projectAgain.Config["restricted"] != "true" || scope.AssessProject(projectAgain.Name, projectAgain.Config) != incusscope.ProjectCompatible || !expected.logicalOwner(projectAgain.Config) || !maps.Equal(project.Config, projectAgain.Config) {
 		return errors.New("state-service project policy changed during observation")
+	}
+	if expected.LogicalProject != "" {
+		again, etag, err := logicalPolicy()
+		if err != nil || etag != logicalETag || !maps.Equal(logical.Config, again.Config) {
+			return errors.New("logical workload project changed during observation")
+		}
 	}
 	endConnection, err := reader.GetConnectionInfo()
 	if err != nil || endConnection == nil || endConnection.Project != connection.Project ||
@@ -135,6 +159,11 @@ func VerifyProjectServiceAttachment(ctx context.Context, reader ProjectServiceAt
 func (a ProjectServiceAttachment) valid() bool {
 	pin, pinned := strings.CutPrefix(a.Binding.ServerID, "sha256:")
 	_, scopeErr := incusscope.NewProjectScope(a.Binding.Project)
+	if a.LogicalProject != "" {
+		if _, err := incusscope.NewProjectScope(a.LogicalProject); err != nil || a.LogicalProject == a.Binding.Project {
+			return false
+		}
+	}
 	return pinned && validAcceptedHash(pin) && scopeErr == nil &&
 		validServiceComponent(a.Instance) && validServiceComponent(a.Pool) &&
 		validServiceComponent(a.Volume) && validServiceComponent(a.Device) &&
@@ -143,9 +172,15 @@ func (a ProjectServiceAttachment) valid() bool {
 		!strings.ContainsAny(a.MountPath, "\x00 \t\r\n\\")
 }
 
+// logicalOwner is collision evidence checked only after independent admin scope
+// selection. It is not a grant or proof of project access isolation.
+func (a ProjectServiceAttachment) logicalOwner(config map[string]string) bool {
+	return config["user.aginctus.logical-project"] == a.LogicalProject
+}
+
 func (a ProjectServiceAttachment) confinedInstance(i *api.Instance) bool {
 	if i == nil || i.Project != a.Binding.Project || i.Name != a.Instance || i.Type != "container" || i.ExpandedConfig == nil ||
-		i.Config["user.aginctus.managed"] != "true" || i.Config["user.aginctus.resource"] != "project-state-service" {
+		i.Config["user.aginctus.managed"] != "true" || i.Config["user.aginctus.resource"] != "project-state-service" || !a.logicalOwner(i.Config) {
 		return false
 	}
 	for key, value := range i.Config {

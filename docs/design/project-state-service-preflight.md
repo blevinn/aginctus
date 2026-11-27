@@ -13,6 +13,15 @@ entry point. Invoke it directly as an administrator on the daemon host. Supply
 the independently provisioned `sha256:` server certificate fingerprint, exact
 nondefault project, instance, pool, custom volume, disk device and absolute
 mount path. Supply the exact managed network if the guest has an `eth0` NIC.
+For the approved same-daemon protected topology, select the physical project
+with `--project` and the distinct workload project with `--logical-project`.
+Both must be independently administered selections on the pinned daemon.
+The physical project, service guest and volume must carry the exact
+`user.aginctus.logical-project` marker. Both projects must retain their
+restricted and isolated project policies. Omitting the logical project is
+only for the administrator-controlled same-project exercise; it refuses
+resources carrying protected-placement markers.
+
 The command checks:
 
 - the fixed local Incus socket returned the independently pinned server
@@ -47,3 +56,11 @@ Repeated observations detect visible drift; they do not hold a writer fence.
 See the [administrator-only deployment and isolation gate](project-state-service-topology.md#administrator-controlled-deployment-only)
 before configuring any listener.
 Continue #695/#696/#701/#704 real-Incus negative and recovery evidence.
+
+The installed environment-state VM scenario now provisions its service guest
+and accepted volume in the protected project, while retaining workload-project
+TLS enrollment, the logical store binding and workload execution. Direct
+logical-peer reads of the existing protected guest and volume must be denied.
+This is not a metadata-only service certificate policy or complete delegated
+isolation proof; the remaining #704 data-plane, trust and revocation gates
+remain binding.
