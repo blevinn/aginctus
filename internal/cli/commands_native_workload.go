@@ -24,6 +24,7 @@ type workloadReconcileDocument struct {
 
 func registerNativeWorkloadReconcile(state *cobra.Command, out io.Writer, format func() (clioutput.Format, error), project, id *string) {
 	var workload, revision, grant, operation, createdAt string
+	var herdr, bootstrap bool
 	cmd := &cobra.Command{
 		Use: "reconcile", Short: "Reconcile one explicitly selected accepted native workload", Hidden: true,
 		Args: cobra.NoArgs,
@@ -49,6 +50,19 @@ func registerNativeWorkloadReconcile(state *cobra.Command, out io.Writer, format
 					return api.NewError(api.CodeInvalidArgument, "instance creation timestamp must be RFC3339")
 				}
 			}
+			if herdr {
+				if workload != "" || operation != "reconcile" || createdAt != "" {
+					return errors.New("select Herdr alone for reconcile")
+				}
+				result, op, err := nativelifecycle.ExecuteInstalledHerdr(cmd.Context(), config, grant, *project, *id, revision, bootstrap, false)
+				if op == "" && err != nil {
+					return err
+				}
+				return errors.Join(err, clioutput.WriteStructured(out, f, workloadReconcileDocument{TypeMeta: api.TypeMeta{APIVersion: "aginctus.dev/v1alpha1", Kind: "NativeHerdrResult"}, OperationID: op, Result: result}))
+			}
+			if workload == "" || bootstrap {
+				return errors.New("select one workload or Herdr; bootstrap applies only to Herdr")
+			}
 			result, op, err := nativelifecycle.ExecuteInstalledWorkload(cmd.Context(), config, grant, *project, *id, revision, workload, native.ProjectInstanceOperation(operation), incarnation)
 			if op == "" && err != nil {
 				return err
@@ -58,12 +72,14 @@ func registerNativeWorkloadReconcile(state *cobra.Command, out io.Writer, format
 			}))
 		},
 	}
+	cmd.Flags().BoolVar(&herdr, "herdr", false, "Select accepted Herdr instance and retained state")
+	cmd.Flags().BoolVar(&bootstrap, "bootstrap-herdr-state", false, "Separately authorized initial Herdr state creation")
 	cmd.Flags().StringVar(&workload, "workload", "", "Exact accepted workload ID")
 	cmd.Flags().StringVar(&revision, "expect", "", "Exact accepted revision ID")
 	cmd.Flags().StringVar(&grant, "host-grant", "", "Independently installed administrator-owned attachment grant")
 	cmd.Flags().StringVar(&operation, "operation", "reconcile", "Lifecycle action: reconcile, stop, or remove (requires its own grant)")
 	cmd.Flags().StringVar(&createdAt, "instance-created-at", "", "Expected live instance creation timestamp (RFC3339; required for stop or remove)")
-	for _, flag := range []string{"workload", "expect", "host-grant"} {
+	for _, flag := range []string{"expect", "host-grant"} {
 		_ = cmd.MarkFlagRequired(flag)
 	}
 	state.AddCommand(cmd)

@@ -244,6 +244,8 @@ pkgs.testers.runNixOSTest {
             candidate["workloads"] = [{"id": "worker", "instanceName": "selected-worker", "instanceType": "container",
                                        "imageFingerprint": image, "profiles": [], "ensureRunning": True,
                                        "native": {"runtime": "fixture", "storagePool": "default", "managementNetwork": "state-mgmt"}}]
+            candidate["herdr"] = {"instanceName": "fixture-herdr", "imageFingerprint": image,
+                                  "storagePool": "default", "managementNetwork": "state-mgmt", "allowStateBootstrap": True}
         else:
             candidate["gateway"] = {"managementNetwork": gateway_network, "egressNetwork": "", "egressIPv4": "",
                                     "rootPool": "default", "databasePool": "default",
@@ -576,6 +578,36 @@ pkgs.testers.runNixOSTest {
     removed = json.loads(machine.succeed(state_command(0, "promoter", reconcile + f" --operation remove --instance-created-at {incarnation}"), timeout=90))
     assert [effect["effect"]["action"] for effect in removed["result"]["native"]["effects"]] == ["delete"]
     machine.fail("incus info selected-worker --project ${project}")
+
+    with subtest("installed Herdr planning and authorized identity bootstrap"):
+        ops = [{"peerSha256": fingerprint("promoter"), **binding, "environmentId": descriptors[0]["id"],
+                "revisionId": revisions[0]["id"], "workloadId": "herdr-client", "operation": op}
+               for op in ("herdr-reconcile", "herdr-bootstrap")]
+        herdr_policy = private + "/herdr-policy.json"
+        target = "environment-state-service/etc/aginctus/execution.json --project ${protectedProject} --uid 0 --gid 0 --mode 0644"
+        save(herdr_policy, {"apiVersion": "aginctus.dev/project-execution-policy/v1alpha1", "grants": ops[:1]})
+        machine.succeed(f"incus file push {herdr_policy} {target}")
+        machine.succeed(f"jq '.workloadId = \"herdr-client\" | .instance = \"fixture-herdr\"' {private}/host.json >{private}/herdr-host.json",
+                        f"install -m 0644 {private}/herdr-host.json ${hostGrant}")
+        select = f"--herdr --expect {revisions[0]['id']} --host-grant ${hostGrant}"
+        preview_herdr = json.loads(machine.succeed(state_command(0, "member", "plan-native " + select + " --bootstrap-herdr-state")))
+        assert not preview_herdr["writerPin"] and not preview_herdr["result"]["native"]["effects"]
+        machine.fail(state_command(0, "promoter", "reconcile " + select))
+        machine.fail(state_command(0, "promoter", "reconcile " + select + " --bootstrap-herdr-state"))
+        state_volume = "fixture-herdr-state-system"
+        machine.fail(f"incus storage volume show default {state_volume} --project ${project}")
+        save(herdr_policy, {"apiVersion": "aginctus.dev/project-execution-policy/v1alpha1", "grants": ops})
+        machine.succeed(f"incus file push {herdr_policy} {target}")
+        machine.succeed("incus network set state-mgmt user.aginctus.resource=foreign")
+        machine.fail(state_command(0, "promoter", "reconcile " + select + " --bootstrap-herdr-state"))
+        machine.fail(f"incus storage volume show default {state_volume} --project ${project}")
+        machine.succeed("incus network set state-mgmt user.aginctus.resource=management-network")
+        boot = json.loads(machine.succeed(state_command(0, "promoter", "reconcile " + select + " --bootstrap-herdr-state")))
+        assert [effect["effect"]["action"] for effect in boot["result"]["native"]["effects"]] == ["create", "create", "start"]
+        volume_before = machine.succeed(f"incus storage volume show default {state_volume} --project ${project}")
+        again = json.loads(machine.succeed(state_command(0, "promoter", "reconcile " + select)))
+        assert not again["result"]["native"]["effects"]
+        assert machine.succeed(f"incus storage volume show default {state_volume} --project ${project}") == volume_before
 
     def digests():
         paths = ["${mount}/authority.json"]

@@ -11,6 +11,7 @@
   nestedKVM ? false,
   projectAdmission ? false,
   runtimeResources ? false,
+  offlineNetwork ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
@@ -34,6 +35,18 @@ assert
     runtimeResources
     && (nativeInstance || independentRecovery || payloadTransfer || nestedKVM || projectAdmission)
   );
+assert
+  !(
+    offlineNetwork
+    && (
+      nativeInstance
+      || independentRecovery
+      || payloadTransfer
+      || nestedKVM
+      || projectAdmission
+      || runtimeResources
+    )
+  );
 pkgs.testers.runNixOSTest {
   name =
     if independentRecovery then
@@ -48,6 +61,8 @@ pkgs.testers.runNixOSTest {
       "aginctus-testenv-project-admission"
     else if runtimeResources then
       "aginctus-testenv-runtime-resources"
+    else if offlineNetwork then
+      "aginctus-testenv-offline-network"
     else
       "aginctus-testenv-disposable-worker";
   nodes.machine = { ... }: {
@@ -92,10 +107,13 @@ pkgs.testers.runNixOSTest {
       else
         builtins.readFile ./fixture_receipt.py
     )
-    + (pkgs.lib.optionalString (projectAdmission || runtimeResources) (
+    + (pkgs.lib.optionalString (projectAdmission || runtimeResources || offlineNetwork) (
       builtins.readFile ./project_admission_trial.py
     ))
-    + (pkgs.lib.optionalString runtimeResources (builtins.readFile ./runtime_resource_trial.py))
+    + (pkgs.lib.optionalString (runtimeResources || offlineNetwork) (
+      builtins.readFile ./runtime_resource_trial.py
+    ))
+    + (pkgs.lib.optionalString offlineNetwork (builtins.readFile ./offline_network_trial.py))
     + ''
       import json
       import re
@@ -150,6 +168,13 @@ pkgs.testers.runNixOSTest {
       ${pkgs.lib.optionalString runtimeResources ''
         resource_checks = run_runtime_resources(
             machine, fingerprint, _admission_inventory, ADMISSION_PREFIX, ADMISSION_SENTINEL,
+        )
+      ''}
+      ${pkgs.lib.optionalString offlineNetwork ''
+        network_checks = run_offline_network(
+            machine, fingerprint, _admission_inventory, validate_resource_cleanup,
+            ADMISSION_PREFIX, ADMISSION_SENTINEL,
+            "${pkgs.python3}/bin/python3", "${pkgs.iproute2}/bin/ip", "${pkgs.nftables}/bin/nft",
         )
       ''}
       machine.succeed("install -d -m 0755 /etc/aginctus-testenv")
@@ -255,6 +280,10 @@ pkgs.testers.runNixOSTest {
             ${pkgs.lib.optionalString runtimeResources ''
               public["scenario"] = "runtime-resources"
               public["results"].extend(resource_checks)
+            ''}
+            ${pkgs.lib.optionalString offlineNetwork ''
+              public["scenario"] = "offline-network"
+              public["results"].extend(network_checks)
             ''}
             # Only sanitized observations leave the worker. The Nix result can be
             # cached; the receipt does not assert this invocation created a new VM.

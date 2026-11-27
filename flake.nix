@@ -198,6 +198,10 @@
             inherit self nixpkgs system;
             runtimeResources = true;
           };
+          testenv-offline-network = import ./internal/testing/testenv/nix/disposable-worker-fixture.nix {
+            inherit self nixpkgs system;
+            offlineNetwork = true;
+          };
           testenv-disposable-worker-fixture =
             import ./internal/testing/testenv/nix/disposable-worker-fixture.nix
               {
