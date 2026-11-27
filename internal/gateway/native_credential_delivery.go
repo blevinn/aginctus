@@ -218,14 +218,14 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 		if err := sdk.CreateInstanceFile(e.guest, e.path, args); err != nil {
 			return fail("guest file submission")
 		}
-		if verify() != nil || !gatewayCredentialReadback(sdk,e) {
+		if verify() != nil || !gatewayCredentialReadback(sdk, e) {
 			return fail("guest file readback")
 		}
 	}
 	// Detect changes across the multi-file handoff. A failed partial stage is
 	// not overwritten or automatically deleted on retry.
 	for _, e := range entries {
-		if !gatewayCredentialReadback(sdk,e) {
+		if !gatewayCredentialReadback(sdk, e) {
 			return fail("final guest file readback")
 		}
 	}
@@ -237,10 +237,11 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 }
 
 type gatewayCredentialEntry struct {
-		guest, path, kind, data string
-		uid, gid                int64
-		mode                    int
+	guest, path, kind, data string
+	uid, gid                int64
+	mode                    int
 }
+
 func gatewayCredentialEntries(pair NativeGatewayInstancePair, material GatewayCredentialMaterial) []gatewayCredentialEntry {
 	return []gatewayCredentialEntry{
 		{pair.Postgres.Name, "/run/aginctus", "directory", "", 0, 0, 0o755},
@@ -257,21 +258,21 @@ func gatewayCredentialEntries(pair NativeGatewayInstancePair, material GatewayCr
 
 }
 
-func gatewayCredentialReadback(sdk incus.InstanceServer,e gatewayCredentialEntry) bool {
-		body, meta, err := sdk.GetInstanceFile(e.guest, e.path)
-		if body != nil {
-			defer body.Close()
-		}
-		if err != nil || meta == nil || meta.Type != e.kind || int64(meta.UID) != e.uid ||
-			int64(meta.GID) != e.gid || int(meta.Mode) != e.mode {
-			return false
-		}
-		if e.kind == "directory" {
-			return true
-		}
-		if body == nil {
-			return false
-		}
-		data, err := io.ReadAll(io.LimitReader(body, int64(len(e.data))+1))
-		return err == nil && subtle.ConstantTimeCompare(data, []byte(e.data)) == 1
+func gatewayCredentialReadback(sdk incus.InstanceServer, e gatewayCredentialEntry) bool {
+	body, meta, err := sdk.GetInstanceFile(e.guest, e.path)
+	if body != nil {
+		defer body.Close()
 	}
+	if err != nil || meta == nil || meta.Type != e.kind || int64(meta.UID) != e.uid ||
+		int64(meta.GID) != e.gid || int(meta.Mode) != e.mode {
+		return false
+	}
+	if e.kind == "directory" {
+		return true
+	}
+	if body == nil {
+		return false
+	}
+	data, err := io.ReadAll(io.LimitReader(body, int64(len(e.data))+1))
+	return err == nil && subtle.ConstantTimeCompare(data, []byte(e.data)) == 1
+}
