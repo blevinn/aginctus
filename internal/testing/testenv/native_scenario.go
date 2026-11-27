@@ -91,6 +91,19 @@ func readNativeScenarioState(ctx context.Context, b VMBackend, ref VMRef) (nativ
 	return state, nil
 }
 
+func readNativeAssertionLine(ctx context.Context, b VMBackend, ref VMRef) (int, bool) {
+	out, err := b.Exec(ctx, ref, []string{"/run/current-system/sw/bin/cat", "/run/aginctus-testenv-native-assertion"}, 5*time.Second)
+	if err != nil || out.ExitCode != 0 || out.Stderr != "" {
+		return 0, false
+	}
+	return parseNativeAssertionLine(out.Stdout)
+}
+
+func parseNativeAssertionLine(output string) (int, bool) {
+	line, err := strconv.Atoi(strings.TrimSuffix(output, "\n"))
+	return line, err == nil && line >= 1 && line <= 9999 && output == strconv.Itoa(line)+"\n"
+}
+
 // runNativeInstanceScenario uses only the signed guest execution capability.
 // Launch once and poll bounded guest unit state; never retry an uncertain
 // launch or widen the per-exec deadline. VM destruction is the caller's
@@ -126,7 +139,15 @@ func runNativeInstanceScenario(ctx context.Context, b VMBackend, ref VMRef) erro
 			return ctx.Err()
 		}
 		if state.result != "success" || (state.active != "activating" && state.active != "inactive") {
-			return nativeScenarioTerminalFailure(state)
+			failure := nativeScenarioTerminalFailure(state)
+			if failure == nativeScenarioFailure("step_9") {
+				// Best effort, while the same signed guest is still alive.
+				// No arbitrary output or change to cleanup/acceptance authority.
+				if line, ok := readNativeAssertionLine(ctx, b, ref); ok {
+					return nativeScenarioFailure("assertion_line_" + strconv.Itoa(line))
+				}
+			}
+			return failure
 		}
 		timer := time.NewTimer(time.Second)
 		select {
