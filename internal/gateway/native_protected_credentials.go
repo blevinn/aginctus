@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -87,11 +88,11 @@ func PublishLocalProtectedGatewayCredentials(ctx context.Context, grantPath, ope
 	defer func() { err = errors.Join(err, e.finish(ctx, err == nil)) }()
 	material, err := e.credentialMaterial()
 	if err != nil {
-		return receipt, id, errCredentialDelivery
+		return receipt, id, fmt.Errorf("credential source: %w", errCredentialDelivery)
 	}
 	images, resolved, err := e.pinnedImages(ctx)
 	if err != nil {
-		return receipt, id, errProtectedGateway
+		return receipt, id, fmt.Errorf("pinned image evidence: %w", errProtectedGateway)
 	}
 	guard := func(ctx context.Context) error {
 		if e.guard(ctx) != nil {
@@ -119,7 +120,7 @@ func PublishLocalProtectedGatewayCredentials(ctx context.Context, grantPath, ope
 	}
 	receipt, err = StageStoppedGatewayCredentialFiles(ctx, e.revision, e.candidate, e.plan.top, e.plan.devices, e.plan.pair, images, resolved[0], resolved[1], material, e.sdk, guard)
 	if err != nil {
-		return receipt, id, errCredentialDelivery
+		return receipt, id, err // Fixed, secret-free stage diagnostics.
 	}
 	if guard(ctx) != nil || e.saveDeliveryReceipt(receipt) != nil || e.session.MarkApplied(ctx) != nil {
 		return receipt, id, errCredentialDelivery

@@ -165,7 +165,7 @@ pkgs.testers.runNixOSTest {
         args = " ".join(f"--rawfile {field} {private}/{file}" for field, file in files.items())
         transform = "." + "".join(f" | .{field} = $" + field for field in files)
         machine.succeed(f"umask 077 && printf '%s' {shlex.quote(compact(data))}"
-                        f" | jq {args} {shlex.quote(transform)} >{path}")
+                        f" | jq -c {args} {shlex.quote(transform)} >{path}")
 
     def incus_config():
         return {"apiVersion": "aginctus.dev/restricted-operator-read/v1alpha1",
@@ -364,17 +364,34 @@ pkgs.testers.runNixOSTest {
                             " --project ${protectedProject} --uid 0 --gid 0 --mode 0644")
             command = "${cli}/bin/aginctus internal gateway-protected-"
             args = f" {grant_file} {root_reads}"
-            machine.succeed(command + "provision" + args, timeout=700)
+            machine.fail(command + "publish" + args)
+            provisioned = json.loads(machine.succeed(command + "provision" + args, timeout=700))
+            assert len(provisioned["result"]["native"]["effects"]) == 7
             repeated = json.loads(machine.succeed(command + "provision" + args, timeout=120))
             assert not repeated["result"]["native"]["effects"]
             machine.succeed(f"incus list {gateway_scope} --format json | jq -e 'length == 2 and all(.[]; .status == \"Stopped\")'")
+            machine.succeed(f"incus storage volume get default {volume} user.aginctus.environment-id {gateway_scope} | grep -Fx {gateway_env}")
+            machine.fail(f"incus storage volume show default {volume} --project ${project}")
             # The canonical credential source is constructed privately inside the VM.
             machine.succeed(f"umask 077; for key in postgresPassword masterKey saltKey; do"
                             f" (printf sk-; openssl rand -hex 32 | tr -d '\\n') >{private}/$key; done")
             shape = {"apiVersion": "aginctus.dev/protected-gateway-credentials/v1alpha1", "grant": gateway_grant,
                      "version": "fixture-v1", "postgresPassword": "", "masterKey": "", "saltKey": ""}
-            compose(gateway_dir + "/credentials.json", shape, {key: key for key in ("postgresPassword", "masterKey", "saltKey")})
-            published = json.loads(machine.succeed(command + "publish" + args, timeout=180))
+            secret_files = {key: key for key in ("postgresPassword", "masterKey", "saltKey")}
+            compose(gateway_dir + "/credentials.json", {**shape, "version": "wrong-version"}, secret_files)
+            machine.fail(command + "publish" + args + f" >{private}/publisher-denial 2>&1")
+            compose(gateway_dir + "/credentials.json", shape, secret_files)
+            save(grant_file, {**gateway_grant, "revisionId": revisions[0]["id"]})
+            machine.fail(command + "publish" + args)
+            save(grant_file, gateway_grant)
+            publish_status, _ = machine.execute(command + "publish" + args + f" >{private}/publisher-result 2>{private}/publisher-error", timeout=180)
+            for guest_name in (pg, llm):
+                machine.succeed(f"incus config show {guest_name} {gateway_scope} >{private}/{guest_name}-config")
+            for key in secret_files:
+                machine.succeed(f"if grep -Flf {private}/{key} {private}/publisher-* {private}/*-config >/dev/null; then exit 1; else test $? -eq 1; fi")
+            if publish_status != 0:
+                raise AssertionError(machine.succeed(f"cat {private}/publisher-error"))
+            published = json.loads(machine.succeed(f"cat {private}/publisher-result"))
             assert published["receipt"]["verified"] and published["receipt"]["version"] == "fixture-v1"
             # An unrelated unrestricted project precludes a private bridge proof.
             machine.fail(command + "start" + args)
@@ -534,6 +551,41 @@ pkgs.testers.runNixOSTest {
                    f" --cert {private}/member.crt --key {private}/member.key"
                    f" --output /dev/null --write-out '%{{http_code}}' {url}")
     assert machine.succeed(member_read).strip() == "200"
+    with subtest("exact component grant and live execution boundary"):
+        policy = private + "/domain-execution.json"
+        target = "environment-state-service/etc/aginctus/execution.json --project ${protectedProject} --uid 0 --gid 0 --mode 0644"
+        deliver = {"peerSha256": fingerprint("member"), **binding, "environmentId": gateway_env,
+                   "revisionId": revisions[1]["id"], "workloadId": "gateway-credentials", "operation": "gateway-deliver"}
+
+        def install_domain_policy(entries):
+            save(policy, {"apiVersion": "aginctus.dev/project-execution-policy/v1alpha1", "grants": entries})
+            machine.succeed(f"incus file push {policy} {target}")
+
+        def domain_step(step, **overrides):
+            body = {"apiVersion": "aginctus.dev/project-native-execution/v1alpha1", "step": step,
+                    "revision": revisions[1], "workloadId": "gateway-credentials", "operation": "gateway-deliver", **overrides}
+            return (f"curl -fsS --cacert {private}/state.crt --cert {private}/member.crt --key {private}/member.key"
+                    f" https://${serviceIP}:8444/v1/native-execution -H 'Content-Type: application/json' --data-binary {shlex.quote(compact(body))}")
+
+        install_domain_policy([deliver])
+        machine.fail(domain_step("acquire", revision=revisions[0]))
+        machine.fail(domain_step("acquire", operation="reconcile"))
+        attempt = json.loads(machine.succeed(domain_step("acquire")))["id"]
+        machine.succeed(domain_step("check", id=attempt))
+        machine.fail(domain_step("begin", id=attempt, action="start", sequence=1))
+        machine.succeed(domain_step("begin", id=attempt, action="deliver", sequence=1))
+        machine.fail(domain_step("submitted", id=attempt, sequence=1, daemonOperationId="ffffffff-ffff-4fff-8fff-ffffffffffff"))
+        machine.succeed(domain_step("applied", id=attempt, sequence=1))
+        machine.succeed(domain_step("finish", id=attempt, sequence=1, succeeded=True))
+        attempt = json.loads(machine.succeed(domain_step("acquire")))["id"]
+        machine.succeed(domain_step("begin", id=attempt, action="deliver", sequence=1))
+        install_domain_policy([])
+        machine.fail(domain_step("check", id=attempt, sequence=1))
+        install_domain_policy([deliver])
+        machine.succeed(guest + " systemctl restart aginctus-project-state.service")
+        machine.wait_until_succeeds(member_read + " | grep -x 200", timeout=30)
+        conflict = domain_step("acquire").replace("curl -fsS", "curl -sS -o /dev/null -w '%{http_code}'", 1)
+        assert machine.succeed(conflict).strip() == "409"
     machine.succeed("incus config trust remove " + fingerprint("member"))
     assert machine.succeed(member_read).strip() == "403"
     assert status(0)["revision"]["id"] == revisions[0]["id"], "revocation blocked the independent promoter read"
