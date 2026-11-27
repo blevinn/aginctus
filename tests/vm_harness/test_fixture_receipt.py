@@ -11,11 +11,12 @@ receipt = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(receipt)
 
 
-def report_for(scenario, payload=False):
+def report_for(scenario, payload=False, nested_kvm=False):
     checks = [{"id": key, "status": "pass"} for key in receipt.REQUIRED_LIFECYCLE]
     checks += [{"id": key, "status": "not_verified"} for key in receipt.UNVERIFIED]
     checks.append({"id": "native_instance_scenario", "status": "pass" if scenario else "not_verified"})
     checks.append({"id": "payload_transfer", "status": "pass" if payload else "not_verified"})
+    checks.append({"id": "nested_kvm_guest_execution", "status": "pass" if nested_kvm else "not_verified"})
     return {
         "schema_version": 1,
         "profile": "dedicated_worker",
@@ -62,6 +63,39 @@ class FixtureReceiptTest(unittest.TestCase):
             receipt.fixture_receipt(
                 report_for("native-instance", payload=True), "native-instance", "rev", "b" * 64, "a" * 64,
                 require_payload_transfer=True,
+            )
+
+    def test_nested_kvm_scope(self):
+        result = receipt.fixture_receipt(
+            report_for("", nested_kvm=True), "", "rev", "b" * 64, "a" * 64,
+            require_nested_kvm=True,
+        )
+        self.assertEqual(result["scenario"], "nested-kvm")
+        checks = {item["id"]: item["status"] for item in result["results"]}
+        self.assertEqual(checks["nested_kvm_guest_execution"], "pass")
+        self.assertEqual(checks["nested_isolation"], "not_verified")
+        self.assertEqual(checks["payload_transfer"], "not_verified")
+        for status in ("fail", "not_verified", None):
+            report = report_for("", nested_kvm=True)
+            report["results"] = [item for item in report["results"] if item["id"] != "nested_kvm_guest_execution"]
+            if status is not None:
+                report["results"].append({"id": "nested_kvm_guest_execution", "status": status})
+            with self.assertRaises(ValueError):
+                receipt.fixture_receipt(
+                    report, "", "rev", "b" * 64, "a" * 64,
+                    require_nested_kvm=True,
+                )
+        with self.assertRaises(ValueError):
+            receipt.fixture_receipt(report_for("", nested_kvm=True), "", "rev", "b" * 64, "a" * 64)
+        with self.assertRaises(ValueError):
+            receipt.fixture_receipt(
+                report_for("native-instance", nested_kvm=True), "native-instance", "rev", "b" * 64, "a" * 64,
+                require_nested_kvm=True,
+            )
+        with self.assertRaises(ValueError):
+            receipt.fixture_receipt(
+                report_for("", payload=True, nested_kvm=True), "", "rev", "b" * 64, "a" * 64,
+                require_payload_transfer=True, require_nested_kvm=True,
             )
 
     def test_rejects_failed_or_mismatched_receipt(self):

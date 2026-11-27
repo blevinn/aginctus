@@ -17,7 +17,6 @@ REQUIRED_LIFECYCLE = (
 )
 UNVERIFIED = (
     "crash_reboot",
-    "nested_kvm_guest_execution",
     "nested_isolation",
     "storage_reclamation",
     "report_retention",
@@ -25,7 +24,8 @@ UNVERIFIED = (
 
 
 def fixture_receipt(
-    report, scenario, source_revision, lock_sha256, image_fingerprint, *, require_payload_transfer=False
+    report, scenario, source_revision, lock_sha256, image_fingerprint, *,
+    require_payload_transfer=False, require_nested_kvm=False,
 ):
     if (
         report.get("schema_version") != 1
@@ -57,15 +57,31 @@ def fixture_receipt(
         required.append("payload_transfer")
     elif checks.get("payload_transfer") != "not_verified":
         raise ValueError("unexpected payload evidence")
+    if require_nested_kvm:
+        if scenario or require_payload_transfer:
+            raise ValueError("nested KVM fixture must use the base image lifecycle alone")
+        required.append("nested_kvm_guest_execution")
+    elif checks.get("nested_kvm_guest_execution") != "not_verified":
+        raise ValueError("unexpected nested KVM evidence")
     if any(checks.get(key) != "pass" for key in required):
         raise ValueError("worker lifecycle or scenario incomplete")
     if any(checks.get(key) != "not_verified" for key in UNVERIFIED):
         raise ValueError("unexpected evidence scope")
+    unverified = list(UNVERIFIED)
+    if not require_payload_transfer:
+        unverified.append("payload_transfer")
+    if not require_nested_kvm:
+        unverified.append("nested_kvm_guest_execution")
+    fixture_scenario = scenario or "worker-lifecycle"
+    if require_payload_transfer:
+        fixture_scenario = "payload-transfer"
+    if require_nested_kvm:
+        fixture_scenario = "nested-kvm"
     return {
         "schema_version": 1,
         "profile": "managed_worker_fixture",
         "evidence_tier": "disposable_guest_no_live_provider",
-        "scenario": "payload-transfer" if require_payload_transfer else (scenario or "worker-lifecycle"),
+        "scenario": fixture_scenario,
         "status": "pass",
         "source_revision": source_revision,
         "flake_lock_sha256": lock_sha256,
@@ -73,8 +89,7 @@ def fixture_receipt(
         "results": [
             {"id": key, "status": "pass"} for key in required
         ] + [
-            {"id": key, "status": "not_verified"}
-            for key in UNVERIFIED + (() if require_payload_transfer else ("payload_transfer",))
+            {"id": key, "status": "not_verified"} for key in unverified
         ],
         "host_teardown": "not_verified",
         "agent_admission": "not_verified",
