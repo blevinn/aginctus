@@ -121,3 +121,22 @@ unresolved effects fail closed. The lock cannot exclude independent admin or
 external image writers; the administrator must exclude those during acquisition.
 Exact-revision reuse only in this increment; successor reuse is separate.
 Do not expose the role through a lower-privilege endpoint.
+
+### Installed administrator credential publisher
+
+After protected stopped provisioning, the direct root-only
+`internal gateway-protected-publish GRANT OPERATOR_CONFIG` role uses a separate
+exact `gateway-deliver` grant. Place a root-owned private single JSON object
+at `/var/lib/aginctus/protected-gateway/PROTECTED_PROJECT/ENVIRONMENT_UUID/credentials.json`.
+Use the fields in order: apiVersion (aginctus.dev/protected-gateway-credentials/v1alpha1),
+grant (the exact protected placement grant object), version, postgresPassword,
+masterKey, saltKey. Use compact canonical JSON, with optional outer whitespace;
+never put values on command lines, in Nix or reports. Provision independent
+high-entropy URL-unreserved tokens of the supported shape. The source is re-read
+at every guarded transfer and bound to the accepted version. Exact acquisition
+provenance and current registry metadata are independently checked. The same
+coordination pin records uncertainty before the synchronous delivery and marks
+it applied only after file readback. Receipt does not grant startup. Existing
+or partially written destinations are not overwritten. A failed/uncertain
+handoff remains blocked; no automatic repair, secret rotation or consumption
+claim. Keep root invocation and protected placement review boundaries.

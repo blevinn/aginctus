@@ -48,3 +48,17 @@ func runProtectedGatewayProvision(args []string) int {
 	if err!=nil {fmt.Fprintln(os.Stderr,"protected gateway provisioning failed; inspect operation before retry");return 1}
 	return 0
 }
+
+func runProtectedGatewayPublish(args []string) int {
+	if len(args)!=2 {fmt.Fprintln(os.Stderr,"usage: aginctus internal gateway-protected-publish GRANT OPERATOR_CONFIG");return 2}
+	ctx,stop:=signal.NotifyContext(context.Background(),os.Interrupt,syscall.SIGTERM)
+	defer stop()
+	ctx,cancel:=context.WithTimeout(ctx,5*time.Minute)
+	defer cancel()
+	receipt,id,err:=gateway.PublishLocalProtectedGatewayCredentials(ctx,args[0],args[1])
+	if id!="" {
+		_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"operationId":id,"receipt":receipt})
+	}
+	if err!=nil {fmt.Fprintln(os.Stderr,"protected gateway credential publication failed; inspect operation before retry");return 1}
+	return 0
+}
