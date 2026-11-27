@@ -4,6 +4,7 @@
   self,
   nixpkgs,
   system,
+  gatewayStartup ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
@@ -53,9 +54,16 @@ pkgs.testers.runNixOSTest {
     system.stateVersion = "26.05";
     networking.nftables.enable = true;
     networking.firewall.interfaces.state-mgmt.allowedTCPPorts = [ 8443 ];
+    networking.firewall.interfaces.gateway-mgmt = {
+      allowedTCPPorts = [ 53 ];
+      allowedUDPPorts = [
+        53
+        67
+      ];
+    };
     virtualisation = {
-      memorySize = 4096;
-      diskSize = 16384;
+      memorySize = if gatewayStartup then 8192 else 4096;
+      diskSize = if gatewayStartup then 32768 else 16384;
       cores = 2;
       incus.enable = true;
       incus.package = pkgs.incus;
@@ -92,6 +100,7 @@ pkgs.testers.runNixOSTest {
     import shlex
     from typing import Any
 
+    startup = ${if gatewayStartup then "True" else "False"}
     start_all()
     machine.wait_for_unit("incus.service", timeout=60)
     machine.succeed("incus admin init --auto --storage-backend dir")
@@ -183,36 +192,47 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus image import ${guestImage.config.system.build.metadata}/tarball/* ${guestImage.config.system.build.tarball}/tarball/* --alias state-guest --project ${protectedProject}", timeout=180)
     machine.succeed("incus image import ${workerImage.config.system.build.metadata}/tarball/* ${workerImage.config.system.build.tarball}/tarball/* --alias worker-guest --project ${project}", timeout=180)
     image = machine.succeed("incus image info worker-guest --project ${project} | awk '/^Fingerprint:/ { print $2 }'").strip()
-    state_image = machine.succeed("incus image info state-guest --project ${project} | awk '/^Fingerprint:/ { print $2 }'").strip()
+    state_image = machine.succeed("incus image info state-guest --project ${protectedProject} | awk '/^Fingerprint:/ { print $2 }'").strip()
     gateway_project = "protected-gateway"
     gateway_env = descriptors[1]["id"]
     gateway_base = "ag-" + gateway_env.replace("-", "")
     pg, llm, volume = gateway_base + "-pg", gateway_base + "-llm", gateway_base + "-pgdata"
     gateway_scope = f"--project {gateway_project}"
+    gateway_network = "gateway-mgmt" if startup else "state-mgmt"
+    if startup:
+        machine.succeed("incus network create gateway-mgmt ipv4.address=10.89.38.1/24 ipv4.dhcp=true ipv4.nat=false"
+                        " ipv4.routing=false ipv4.dhcp.gateway=none ipv6.address=none dns.mode=managed"
+                        " user.aginctus.managed=true user.aginctus.resource=management-network")
     machine.succeed(f"incus project create {gateway_project} -c restricted=true -c features.images=true"
                     " -c features.profiles=true -c features.storage.volumes=true -c features.networks=false"
                     f" -c user.aginctus.managed=true -c user.aginctus.resource=deployment-project -c user.aginctus.deployment={gateway_project}"
                     f" -c user.aginctus.logical-project=${project} -c user.aginctus.protected-purpose=gateway -c user.aginctus.environment-id={gateway_env}"
                     " -c restricted.devices.nic=managed -c restricted.devices.disk=managed"
-                    " -c restricted.networks.access=state-mgmt -c restricted.storage-pools.access=default")
+                    f" -c restricted.networks.access={gateway_network} -c restricted.storage-pools.access=default")
     # Local test images exercise exact Incus fingerprint and attachment observation;
     # the read-only preview does not establish OCI provenance.
-    for alias in ("state-guest", "worker-guest"):
-        machine.succeed(f"incus image copy {alias} local: --project ${project} --target-project {gateway_project} --alias {alias}", timeout=180)
-    machine.succeed(f"incus storage volume create default {volume} {gateway_scope} security.shifted=true"
-                    f" user.aginctus.managed=true user.aginctus.resource=gateway-postgres-volume"
-                    f" user.aginctus.deployment={gateway_project} user.aginctus.environment-id={gateway_env}")
-    for instance, alias, role in ((pg, "worker-guest", "postgres"), (llm, "state-guest", "litellm")):
-        machine.succeed(f"incus init {alias} {instance} {gateway_scope} --no-profiles --storage default"
-                        f" -c user.aginctus.managed=true -c user.aginctus.resource=gateway-instance -c user.aginctus.role={role}"
-                        f" -c user.aginctus.deployment={gateway_project} -c user.aginctus.environment-id={gateway_env}", timeout=180)
-        machine.succeed(f"incus config device add {instance} management nic network=state-mgmt name=eth0 ipv4.gateway=none {gateway_scope}")
-    machine.succeed(f"incus config device add {pg} database disk pool=default source={volume} path=/var/lib/postgresql/data {gateway_scope}")
+    if not startup:
+        for alias, source in (("state-guest", "${protectedProject}"), ("worker-guest", "${project}")):
+            machine.succeed(f"incus image copy {alias} local: --project {source} --target-project {gateway_project} --alias {alias}", timeout=180)
+        machine.succeed(f"incus storage volume create default {volume} {gateway_scope} security.shifted=true"
+                        f" user.aginctus.managed=true user.aginctus.resource=gateway-postgres-volume"
+                        f" user.aginctus.deployment={gateway_project} user.aginctus.environment-id={gateway_env}")
+        for instance, alias, role in ((pg, "worker-guest", "postgres"), (llm, "state-guest", "litellm")):
+            machine.succeed(f"incus init {alias} {instance} {gateway_scope} --no-profiles --storage default"
+                            f" -c user.aginctus.managed=true -c user.aginctus.resource=gateway-instance -c user.aginctus.role={role}"
+                            f" -c user.aginctus.deployment={gateway_project} -c user.aginctus.environment-id={gateway_env}", timeout=180)
+            machine.succeed(f"incus config device add {instance} management nic network=state-mgmt name=eth0 ipv4.gateway=none {gateway_scope}")
+        machine.succeed(f"incus config device add {pg} database disk pool=default source={volume} path=/var/lib/postgresql/data {gateway_scope}")
 
     def gateway_image(alias, fingerprint, repository, digest):
         return {"registry": "docker.io", "repository": repository, "architecture": "amd64", "variant": "",
                 "manifestDigest": "sha256:" + digest * 64, "configDigest": "sha256:" + "c" * 64,
                 "incusFingerprint": fingerprint, "alias": alias}
+
+    def pinned_image(registry, repository, alias, manifest, config, layers):
+        return {"registry": registry, "repository": repository, "architecture": "amd64", "variant": "",
+                "manifestDigest": "sha256:" + manifest, "configDigest": "sha256:" + config,
+                "incusFingerprint": layers, "alias": alias}
 
     grants = []
     for i, desc in enumerate(descriptors):
@@ -224,11 +244,21 @@ pkgs.testers.runNixOSTest {
                                        "imageFingerprint": image, "profiles": [], "ensureRunning": True,
                                        "native": {"runtime": "fixture", "storagePool": "default", "managementNetwork": "state-mgmt"}}]
         else:
-            candidate["gateway"] = {"managementNetwork": "state-mgmt", "egressNetwork": "", "egressIPv4": "",
+            candidate["gateway"] = {"managementNetwork": gateway_network, "egressNetwork": "", "egressIPv4": "",
                                     "rootPool": "default", "databasePool": "default",
                                     "postgres": gateway_image("worker-guest", image, "library/postgres", "a"),
                                     "litellm": gateway_image("state-guest", state_image, "berriai/litellm", "b"),
                                     "credentialVersion": "fixture-v1", "ensureRunning": False}
+            if startup:
+                candidate["gateway"].update(ensureRunning=True,
+                    postgres=pinned_image("docker.io", "library/postgres", "fixture-postgres",
+                        "e80acae3f1109e8e4533618b594918936f2858c63afc7204c4773148a673add8",
+                        "fa7e2700e906190f900a3c9d47e87f9032cfa38b60d9ac25129a357f85c2da8c",
+                        "3b606cf15940ee693400e97b22654e8507a945a7306b96a2e1fd75fbf88295f3"),
+                    litellm=pinned_image("ghcr.io", "berriai/litellm", "fixture-litellm",
+                        "5e1c40a4f91cb13ae5161b30d09a9874a64d2556283ae766e86ec1edddb9af3e",
+                        "afbb38125c0470eb081ff29762d6e2120b1cffeb16df4fb7db25569c44420c6b",
+                        "34d7c1f2c6e12d9f7f7fb75963ee914873168ea5b0bab7b973c9d3937aca61ad"))
         candidate_path = f"{operator_dir}/candidate-{i}.json"
         save(candidate_path, candidate)
         machine.succeed(f"chown stateoperator {candidate_path}")
@@ -314,7 +344,7 @@ pkgs.testers.runNixOSTest {
     revisions = [json.loads(machine.succeed(state_command(i, "promoter", "promote --expect genesis"))) for i in range(2)]
     assert all(r["generation"] == 1 for r in revisions)
     assert revisions[0]["id"] != revisions[1]["id"]
-    with subtest("installed protected gateway preview"):
+    with subtest("installed protected gateway preview or startup"):
         gateway_grant = {"apiVersion": "aginctus.dev/protected-gateway-grant/v1alpha1", **binding,
                          "environmentId": gateway_env, "revisionId": revisions[1]["id"], "protectedProject": gateway_project}
         grant_file = private + "/gateway-grant.json"
@@ -322,6 +352,38 @@ pkgs.testers.runNixOSTest {
         machine.succeed(f"install -m 0600 {operator_dir}/member-1.json {root_reads}")
         preview = f"${cli}/bin/aginctus internal gateway-protected-preview {grant_file} {root_reads}"
         save(grant_file, gateway_grant)
+        if startup:
+            gateway_dir = f"/var/lib/aginctus/protected-gateway/{gateway_project}/{gateway_env}"
+            machine.succeed(f"install -d -m 0700 {gateway_dir}")
+            gateway_ops = ("provision", "deliver", "start", "inspect")
+            save(private + "/gateway-execution.json", {"apiVersion": "aginctus.dev/project-execution-policy/v1alpha1", "grants": [
+                {"peerSha256": fingerprint("member"), **binding, "environmentId": gateway_env,
+                 "revisionId": revisions[1]["id"], "workloadId": "gateway-credentials", "operation": f"gateway-{op}"}
+                for op in gateway_ops]})
+            machine.succeed(f"incus file push {private}/gateway-execution.json environment-state-service/etc/aginctus/execution.json"
+                            " --project ${protectedProject} --uid 0 --gid 0 --mode 0644")
+            command = "${cli}/bin/aginctus internal gateway-protected-"
+            args = f" {grant_file} {root_reads}"
+            machine.succeed(command + "provision" + args, timeout=700)
+            repeated = json.loads(machine.succeed(command + "provision" + args, timeout=120))
+            assert not repeated["result"]["native"]["effects"]
+            machine.succeed(f"incus list {gateway_scope} --format json | jq -e 'length == 2 and all(.[]; .status == \"Stopped\")'")
+            # The canonical credential source is constructed privately inside the VM.
+            machine.succeed(f"umask 077; for key in postgresPassword masterKey saltKey; do"
+                            f" (printf sk-; openssl rand -hex 32 | tr -d '\\n') >{private}/$key; done")
+            shape = {"apiVersion": "aginctus.dev/protected-gateway-credentials/v1alpha1", "grant": gateway_grant,
+                     "version": "fixture-v1", "postgresPassword": "", "masterKey": "", "saltKey": ""}
+            compose(gateway_dir + "/credentials.json", shape, {key: key for key in ("postgresPassword", "masterKey", "saltKey")})
+            published = json.loads(machine.succeed(command + "publish" + args, timeout=180))
+            assert published["receipt"]["verified"] and published["receipt"]["version"] == "fixture-v1"
+            # An unrelated unrestricted project precludes a private bridge proof.
+            machine.fail(command + "start" + args)
+            machine.succeed("incus project delete foreign-environment")
+            first_start = json.loads(machine.succeed(command + "start" + args, timeout=320))
+            assert first_start["result"]["started"] == [pg, llm]
+            assert first_start["result"]["ready"] == [pg, llm]
+            repeat_start = json.loads(machine.succeed(command + "start" + args, timeout=320))
+            assert not repeat_start["result"].get("started") and repeat_start["result"]["ready"] == [pg, llm]
         observed = json.loads(machine.succeed(preview))
         assert observed["revision"] == revisions[1] and observed["physical"] == {**binding, "project": gateway_project}
         assert observed["databasePresent"] and not observed["writerPin"] and observed["runtime"] == "gated"

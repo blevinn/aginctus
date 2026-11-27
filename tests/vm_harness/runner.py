@@ -48,6 +48,7 @@ SCENARIOS = {
     "ownership-recovery": "vm-harness-ownership-recovery",
     "acceptance-project-authority": "vmTests.x86_64-linux.incus-project-authority",
     "acceptance-environment-state": "vmTests.x86_64-linux.environment-project-state-incus",
+    "protected-gateway-start": "vmTests.x86_64-linux.protected-gateway-start",
     "acceptance-accepted-state": "vmTests.x86_64-linux.accepted-state-incus",
     "acceptance-home-manager": "vmTests.x86_64-linux.home-manager-operator",
 }
@@ -56,6 +57,7 @@ NETWORKED_SCENARIOS = {
     "synthetic-gateway",
     "synthetic-tool-gateway",
     "native-oci",
+    "protected-gateway-start",
     "full-stack",
 }
 DISABLED_SCENARIOS = {
