@@ -7,6 +7,7 @@
   system,
   nativeInstance ? false,
   independentRecovery ? false,
+  payloadTransfer ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
@@ -21,12 +22,15 @@ let
   product = self.packages.${system}.aginctus;
 in
 assert !(nativeInstance && independentRecovery);
+assert !(payloadTransfer && (nativeInstance || independentRecovery));
 pkgs.testers.runNixOSTest {
   name =
     if independentRecovery then
       "aginctus-testenv-independent-recovery"
     else if nativeInstance then
       "aginctus-testenv-managed-native-instance"
+    else if payloadTransfer then
+      "aginctus-testenv-payload-transfer"
     else
       "aginctus-testenv-disposable-worker";
   nodes.machine = { ... }: {
@@ -149,6 +153,9 @@ pkgs.testers.runNixOSTest {
       ${pkgs.lib.optionalString nativeInstance ''
         argv += ["--scenario", "native-instance"]
       ''}
+      ${pkgs.lib.optionalString payloadTransfer ''
+        argv += ["--require-payload-transfer"]
+      ''}
       ${
         if independentRecovery then
           ''
@@ -203,6 +210,7 @@ pkgs.testers.runNixOSTest {
                 ${builtins.toJSON (self.rev or "unavailable")},
                 ${builtins.toJSON (builtins.hashFile "sha256" "${self}/flake.lock")},
                 fingerprint,
+                require_payload_transfer=${if payloadTransfer then "True" else "False"},
             )
             # Only sanitized observations leave the worker. The Nix result can be
             # cached; the receipt does not assert this invocation created a new VM.
