@@ -132,7 +132,7 @@ func (h *projectExecutionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		deny(http.StatusForbidden)
 		return
 	}
-	if req.Operation == "inspect" {
+	if grant.inspection() {
 		result, err := h.volume.store.inspectProjectOperations(ctx, desc, grant, req.ID)
 		if err != nil || !verify() {
 			deny(http.StatusForbidden)
@@ -175,18 +175,23 @@ func (h *projectExecutionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		}
 		n := len(e.journal.op.Effects)
 		switch req.Step {
+		case "check":
+			if req.Sequence != n || e.check(ctx) != nil || !verify() {
+				deny(http.StatusConflict)
+				return
+			}
 		case "begin":
 			if req.Sequence != n+1 || e.beginEffect(ctx, req.Action, grant) != nil || !verify() {
 				deny(http.StatusConflict)
 				return
 			}
 		case "submitted":
-			if req.Sequence != n || e.journal.recordDaemonOperation(ctx, req.DaemonID) != nil {
+			if req.Sequence != n || n == 0 || e.journal.op.Effects[n-1].Action == "deliver" || e.journal.recordDaemonOperation(ctx, req.DaemonID) != nil {
 				deny(http.StatusConflict)
 				return
 			}
 		case "applied":
-			if req.Sequence != n || n == 0 || e.journal.op.Effects[n-1].DaemonID == "" || e.journal.MarkApplied() != nil {
+			if req.Sequence != n || n == 0 || (e.journal.op.Effects[n-1].DaemonID == "" && !(e.grant.Operation == "gateway-deliver" && e.journal.op.Effects[n-1].Action == "deliver")) || e.journal.MarkApplied() != nil {
 				deny(http.StatusConflict)
 				return
 			}
@@ -211,7 +216,7 @@ func (r projectExecutionRequest) validStep() bool {
 	if (r.Step == "submitted" && !daemonOperationID.MatchString(r.DaemonID)) || (r.Step != "submitted" && r.DaemonID != "") {
 		return false
 	}
-	if r.Operation == "inspect" {
+	if (projectExecutionGrant{Operation: r.Operation}).inspection() {
 		return r.Step == "inspect" && (r.ID == "" || localEnvironmentAttemptID.MatchString(r.ID)) &&
 			r.Action == "" && r.Sequence == 0 && !r.Succeeded && r.Revision == inspectionRevision(r.Revision)
 	}
@@ -228,6 +233,8 @@ func (r projectExecutionRequest) validStep() bool {
 		return localEnvironmentAttemptID.MatchString(r.ID) && r.Action != "" && r.Sequence > 0 && !r.Succeeded
 	case "applied", "submitted":
 		return localEnvironmentAttemptID.MatchString(r.ID) && r.Action == "" && r.Sequence > 0 && !r.Succeeded
+	case "check":
+		return localEnvironmentAttemptID.MatchString(r.ID) && r.Action == "" && r.Sequence >= 0 && !r.Succeeded
 	case "finish":
 		return localEnvironmentAttemptID.MatchString(r.ID) && r.Action == "" && r.Sequence >= 0
 	default:

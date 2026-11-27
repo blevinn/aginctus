@@ -220,7 +220,7 @@ func (r LocalNativeEffectRecord) valid() bool {
 		return false
 	}
 	switch r.Action {
-	case "create", "update", "start", "stop", "delete":
+	case "create", "update", "start", "stop", "delete", "deliver":
 		return true
 	}
 	return false
@@ -267,7 +267,7 @@ func (s *LocalProjectStateStore) ReadLocalNativeOperation(ctx context.Context, e
 	}
 	if op.Execution != nil && (!op.Execution.valid(enrolled.Binding) ||
 		op.Execution.RevisionID != op.Revision.ID || op.Execution.EnvironmentID != enrolled.ID ||
-		!op.Execution.writer() || !slices.Contains(candidate.SelectedWorkloads, op.Execution.WorkloadID)) {
+		!op.Execution.writer() || !op.Execution.domainSelected(candidate)) {
 		return LocalNativeOperation{}, errors.New("invalid journal execution scope")
 	}
 	for i, effect := range op.Effects {

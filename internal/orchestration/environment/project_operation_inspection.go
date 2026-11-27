@@ -11,8 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/blevinn/aginctus/internal/filestate"
-	"slices"
-)
+	)
 
 // ProjectOperationSummary is journal evidence, not independently observed
 // Incus state. The inspection endpoint does not expose the writer certificate.
@@ -33,7 +32,7 @@ func inspectionRevision(r AcceptedRevision) AcceptedRevision {
 
 func (s *LocalProjectStateStore) inspectProjectOperations(ctx context.Context, desc Descriptor, grant projectExecutionGrant, id string) ([]byte, error) {
 	_, candidate, err := s.ReadLocalRevision(ctx, desc, grant.RevisionID)
-	if err != nil || !slices.Contains(candidate.SelectedWorkloads, grant.WorkloadID) {
+	if err != nil || !grant.domainSelected(candidate) {
 		return nil, errProjectExecutionDenied
 	}
 	ids := []string{id}
@@ -49,7 +48,7 @@ func (s *LocalProjectStateStore) inspectProjectOperations(ctx context.Context, d
 		if err != nil {
 			return nil, errProjectExecutionDenied
 		}
-		if op.Execution == nil || op.Revision.ID != grant.RevisionID || op.Execution.WorkloadID != grant.WorkloadID {
+		if op.Execution == nil || op.Revision.ID != grant.RevisionID || !grant.inspects(*op.Execution) {
 			if id != "" {
 				return nil, errProjectExecutionDenied
 			}
@@ -87,7 +86,11 @@ func (s *LocalProjectStateStore) inspectProjectOperations(ctx context.Context, d
 // InspectProjectOperations reads one operation, or summaries in the exact
 // authorized revision/workload scope when operationID is empty.
 func InspectProjectOperations(ctx context.Context, config RestrictedOperatorReadConfig, project, environmentID, revisionID, workloadID, operationID string) ([]ProjectOperationSummary, error) {
-	if !validAcceptedHash(revisionID) || !idPattern.MatchString(environmentID) || !journalIdentifier.MatchString(workloadID) ||
+	return InspectProjectDomainOperations(ctx, config, project, environmentID, revisionID, workloadID, operationID, "inspect")
+}
+
+func InspectProjectDomainOperations(ctx context.Context, config RestrictedOperatorReadConfig, project, environmentID, revisionID, workloadID, operationID, operation string) ([]ProjectOperationSummary, error) {
+	if !(projectExecutionGrant{Operation: operation}).inspection() || !validAcceptedHash(revisionID) || !idPattern.MatchString(environmentID) || !journalIdentifier.MatchString(workloadID) ||
 		(operationID != "" && !localEnvironmentAttemptID.MatchString(operationID)) {
 		return nil, errProjectExecutionDenied
 	}
@@ -111,7 +114,7 @@ func InspectProjectOperations(ctx context.Context, config RestrictedOperatorRead
 	if err != nil || binding != desc.Binding {
 		return nil, errProjectExecutionDenied
 	}
-	raw, err := json.Marshal(projectExecutionRequest{APIVersion: projectExecutionWireVersion, Step: "inspect", Operation: "inspect", ID: operationID, WorkloadID: workloadID,
+	raw, err := json.Marshal(projectExecutionRequest{APIVersion: projectExecutionWireVersion, Step: "inspect", Operation: operation, ID: operationID, WorkloadID: workloadID,
 		Revision: AcceptedRevision{ServerID: binding.ServerID, Project: binding.Project, EnvironmentID: desc.ID, ID: revisionID}})
 	if err != nil {
 		return nil, errProjectExecutionDenied

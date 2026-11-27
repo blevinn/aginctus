@@ -17,6 +17,7 @@ type ProjectExecutionSession struct {
 	base        projectExecutionRequest
 	sequence    int
 	pending     bool
+	synchronous bool
 	correlated  bool
 	unavailable bool
 }
@@ -77,11 +78,12 @@ func (s *ProjectExecutionSession) BeginEffect(ctx context.Context, action string
 	}
 	s.sequence++
 	s.pending = true
+	s.synchronous = s.base.Operation == "gateway-deliver" && action == "deliver"
 	return nil
 }
 
 func (s *ProjectExecutionSession) MarkApplied(ctx context.Context) error {
-	if s.unavailable || !s.pending || !s.correlated {
+	if s.unavailable || !s.pending || (!s.correlated && !s.synchronous) {
 		return ErrLocalNativeUnresolved
 	}
 	req := s.base
@@ -93,13 +95,14 @@ func (s *ProjectExecutionSession) MarkApplied(ctx context.Context) error {
 	}
 	s.pending = false
 	s.correlated = false
+	s.synchronous = false
 	return nil
 }
 
 // RecordDaemonOperation persists correlation before waiting for completion.
 // A failed acknowledgement leaves the journal unresolved either way.
 func (s *ProjectExecutionSession) RecordDaemonOperation(ctx context.Context, id string) error {
-	if s.unavailable || !s.pending || s.correlated || !daemonOperationID.MatchString(id) {
+	if s.unavailable || !s.pending || s.correlated || s.synchronous || !daemonOperationID.MatchString(id) {
 		return ErrLocalNativeUnresolved
 	}
 	req := s.base
@@ -168,4 +171,19 @@ func sendProjectExecution(ctx context.Context, s *restrictedHTTPSReadSession, cm
 		return "", uncertain
 	}
 	return reply.ID, nil
+}
+
+// Check revalidates the live authenticated coordination session, revision and
+// grant without advancing its journal. It is not a fence against Incus admins.
+func (s *ProjectExecutionSession) Check(ctx context.Context) error {
+	if s.unavailable {
+		return ErrLocalNativeUnresolved
+	}
+	req := s.base
+	req.Step, req.Sequence = "check", s.sequence
+	_, err := sendProjectExecution(ctx, s.transport, req)
+	if err != nil {
+		s.unavailable = true
+	}
+	return err
 }
