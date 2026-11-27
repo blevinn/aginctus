@@ -11,10 +11,11 @@ receipt = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(receipt)
 
 
-def report_for(scenario):
+def report_for(scenario, payload=False):
     checks = [{"id": key, "status": "pass"} for key in receipt.REQUIRED_LIFECYCLE]
     checks += [{"id": key, "status": "not_verified"} for key in receipt.UNVERIFIED]
     checks.append({"id": "native_instance_scenario", "status": "pass" if scenario else "not_verified"})
+    checks.append({"id": "payload_transfer", "status": "pass" if payload else "not_verified"})
     return {
         "schema_version": 1,
         "profile": "dedicated_worker",
@@ -38,6 +39,31 @@ class FixtureReceiptTest(unittest.TestCase):
             self.assertNotIn("private", str(result))
             self.assertNotIn("handles", result)
 
+    def test_payload_scope(self):
+        result = receipt.fixture_receipt(
+            report_for("", payload=True), "", "rev", "b" * 64, "a" * 64,
+            require_payload_transfer=True,
+        )
+        self.assertEqual(result["scenario"], "payload-transfer")
+        self.assertEqual({item["id"]: item["status"] for item in result["results"]}["payload_transfer"], "pass")
+        for status in ("fail", "not_verified", None):
+            report = report_for("", payload=True)
+            report["results"] = [item for item in report["results"] if item["id"] != "payload_transfer"]
+            if status is not None:
+                report["results"].append({"id": "payload_transfer", "status": status})
+            with self.assertRaises(ValueError):
+                receipt.fixture_receipt(
+                    report, "", "rev", "b" * 64, "a" * 64,
+                    require_payload_transfer=True,
+                )
+        with self.assertRaises(ValueError):
+            receipt.fixture_receipt(report_for("", payload=True), "", "rev", "b" * 64, "a" * 64)
+        with self.assertRaises(ValueError):
+            receipt.fixture_receipt(
+                report_for("native-instance", payload=True), "native-instance", "rev", "b" * 64, "a" * 64,
+                require_payload_transfer=True,
+            )
+
     def test_rejects_failed_or_mismatched_receipt(self):
         for key, value in (
             ("status", "fail"),
@@ -58,7 +84,7 @@ class FixtureReceiptTest(unittest.TestCase):
             elif mutation == "duplicate":
                 report["results"].append(report["results"][0])
             else:
-                report["results"][-2]["status"] = "pass"
+                next(item for item in report["results"] if item["id"] == "nested_isolation")["status"] = "pass"
             with self.assertRaises(ValueError):
                 receipt.fixture_receipt(report, "native-instance", "rev", "b" * 64, "a" * 64)
 

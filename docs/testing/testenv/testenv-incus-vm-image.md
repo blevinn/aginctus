@@ -133,6 +133,21 @@ agent admission or independent host teardown, and a cached Nix output is
 not a fresh execution. Record the exact derivation and independently
 observed builder execution when collecting acceptance evidence.
 
+## Synthetic payload-transfer fixture
+
+```sh
+nix build --no-link --no-update-lock-file .#testenv-payload-transfer
+```
+
+This opt-in variant uses the base image, the same disposable worker, and the
+existing `--require-payload-transfer` gate. It requires the fixed synthetic
+bundle to be written and read back byte-for-byte through the signed guest
+capability before ordinary lifecycle cleanup. Its sanitized receipt identifies
+`payload-transfer` and requires `payload_transfer: pass` in addition to the
+seven lifecycle checks. Other fixture modes leave payload transfer unverified.
+It does not admit arbitrary bundles, extract archives, install closures, grant
+agent authority, or establish network isolation. A fresh KVM run is required.
+
 ## Future disposable-worker import gate
 
 **Operator-only; do not execute against the pilot daemon.** Provision a
