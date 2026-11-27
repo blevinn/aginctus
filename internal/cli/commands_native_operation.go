@@ -15,7 +15,13 @@ import (
 
 type nativeOperationDocument struct {
 	api.TypeMeta `json:",inline"`
-	Operations []environment.ProjectOperationSummary `json:"operations"`
+	Operations   []environment.ProjectOperationSummary `json:"operations"`
+}
+
+type nativeOperationRecoveryDocument struct {
+	api.TypeMeta `json:",inline"`
+	OperationID  string `json:"operationId"`
+	Recovered    bool   `json:"recovered"`
 }
 
 func registerNativeOperationInspection(state *cobra.Command, out io.Writer, format func() (clioutput.Format, error), project, id *string) {
@@ -53,10 +59,10 @@ func registerNativeOperationInspection(state *cobra.Command, out io.Writer, form
 				if err := environment.RecoverProjectOperation(cmd.Context(), config, *project, *id, revision, workload, operationID); err != nil {
 					return err
 				}
-				return clioutput.WriteStructured(out, f, struct {
-					OperationID string `json:"operationId"`
-					Recovered bool `json:"recovered"`
-				}{operationID, true})
+				return clioutput.WriteStructured(out, f, nativeOperationRecoveryDocument{
+					TypeMeta:    api.TypeMeta{APIVersion: "aginctus.dev/v1alpha1", Kind: "NativeOperationRecovery"},
+					OperationID: operationID, Recovered: true,
+				})
 			}
 			result, err := environment.InspectProjectOperations(cmd.Context(), config, *project, *id, revision, workload, operationID)
 			if err != nil {
