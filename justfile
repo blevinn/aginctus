@@ -84,6 +84,9 @@ testenv-nested-kvm:
 testenv-project-admission:
     env -u NIX_CONFIG -u NIX_REMOTE -u QEMU_OPTS -u QEMU_KERNEL_PARAMS -u SSH_AUTH_SOCK -u INCUS_SOCKET -u INCUS_DIR nix build --no-link --no-update-lock-file --option sandbox true --option builders "" --print-out-paths .#testenv-project-admission
 
+testenv-runtime-resources:
+    env -u NIX_CONFIG -u NIX_REMOTE -u QEMU_OPTS -u QEMU_KERNEL_PARAMS -u SSH_AUTH_SOCK -u INCUS_SOCKET -u INCUS_DIR nix build --no-link --no-update-lock-file --option sandbox true --option builders "" --print-out-paths .#testenv-runtime-resources
+
 # Native scoped instance lifecycle and dry-run against disposable Incus.
 test-vm-native-instance:
     python3 tests/vm_harness/runner.py test native-instance

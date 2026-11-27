@@ -24,8 +24,8 @@ type projectRecoveryObserver interface {
 var errRecoveryUnverified = errors.New("native workload recovery evidence unavailable")
 
 // recoverProjectExecution admits only positively observed successful reconcile
-// tasks. Missing correlation, expired operation history, failed tasks, stop,
-// and removal are not recoverable by this initial policy. The active-session
+// or stop tasks. Missing correlation, expired operation history, failed tasks
+// and removal remain unrecoverable. The active-session
 // check belongs to the service handler; both persistent locks are held here.
 func (s *LocalProjectStateStore) recoverProjectExecution(ctx context.Context, desc Descriptor, revision AcceptedRevision, grant projectExecutionGrant, id string, observer projectRecoveryObserver, authorize func() bool) error {
 	if ctx == nil || observer == nil || authorize == nil || !authorize() ||
@@ -40,7 +40,7 @@ func (s *LocalProjectStateStore) recoverProjectExecution(ctx context.Context, de
 	defer lock.Close()
 	return s.ResolveLocalNativeOperation(ctx, desc, revision, id, func(ctx context.Context, req LocalNativeRecoveryRequest) (Binding, error) {
 		op := req.Operation
-		if len(op.Effects) == 0 || op.Execution == nil || op.Execution.Operation != "reconcile" ||
+		if len(op.Effects) == 0 || op.Execution == nil || (op.Execution.Operation != "reconcile" && op.Execution.Operation != "stop") ||
 			op.Execution.WorkloadID != grant.WorkloadID || op.Revision != revision || !authorize() {
 			return Binding{}, errRecoveryUnverified
 		}
@@ -57,6 +57,10 @@ func (s *LocalProjectStateStore) recoverProjectExecution(ctx context.Context, de
 				continue
 			}
 			resource := api.NewURL().Path("1.0", "instances", w.InstanceName).Project(s.binding.Project).String()
+			stopping := op.Execution.Operation == "stop"
+			if stopping && len(op.Effects) != 1 {
+				return Binding{}, errRecoveryUnverified
+			}
 			started := false
 			var firstTask time.Time
 			var lastTask time.Time
@@ -66,8 +70,8 @@ func (s *LocalProjectStateStore) recoverProjectExecution(ctx context.Context, de
 					return Binding{}, errRecoveryUnverified
 				}
 				seen[effect.DaemonID] = true
-				if effect.Action == "create" && i != 0 || effect.Action == "start" && started ||
-					(effect.Action != "create" && effect.Action != "start") {
+				if (stopping && effect.Action != "stop") || (!stopping && (effect.Action == "create" && i != 0 || effect.Action == "start" && started ||
+					(effect.Action != "create" && effect.Action != "start"))) {
 					return Binding{}, errRecoveryUnverified
 				}
 				started = started || effect.Action == "start"
@@ -93,7 +97,7 @@ func (s *LocalProjectStateStore) recoverProjectExecution(ctx context.Context, de
 			if err != nil || instance == nil || etag == "" ||
 				instance.Name != w.InstanceName || instance.Project != s.binding.Project ||
 				instance.Type != w.InstanceType || instance.Status != wantStatus || instance.CreatedAt.IsZero() ||
-				instance.CreatedAt.After(lastTask) || (op.Effects[0].Action == "create" && instance.CreatedAt.Before(firstTask)) ||
+				instance.CreatedAt.After(lastTask) || (stopping && instance.CreatedAt.After(firstTask)) || (op.Effects[0].Action == "create" && instance.CreatedAt.Before(firstTask)) ||
 				instance.Config["user.aginctus.managed"] != "true" || instance.Config["user.aginctus.resource"] != "workload" ||
 				instance.Config["user.aginctus.workload"] != grant.WorkloadID ||
 				instance.Config["user.aginctus.environment-id"] != desc.ID ||
@@ -132,6 +136,8 @@ func successfulRecoveryTask(task *api.Operation, effect LocalNativeEffectRecord,
 		return task.Description == "Creating instance"
 	case "start":
 		return task.Description == "Starting instance"
+	case "stop":
+		return task.Description == "Stopping instance"
 	default:
 		return false
 	}
