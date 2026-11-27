@@ -265,7 +265,9 @@ pkgs.testers.runNixOSTest {
     save(private + "/execution.json", {"apiVersion": "aginctus.dev/project-execution-policy/v1alpha1", "grants": [
         {"peerSha256": fingerprint("promoter"), **binding, "environmentId": descriptors[0]["id"],
          "revisionId": revisions[0]["id"], "workloadId": "worker", "operation": action}
-        for action in ("reconcile", "stop", "remove")]})
+         for action in ("reconcile", "stop", "remove")] + [{
+         "peerSha256": fingerprint("member"), **binding, "environmentId": descriptors[0]["id"],
+         "revisionId": revisions[0]["id"], "workloadId": "worker", "operation": "recover"}]})
     machine.succeed(f"incus file push {private}/execution.json environment-state-service/etc/aginctus/execution.json"
                     " --project ${project} --uid 0 --gid 0 --mode 0644")
     reconcile = f"reconcile --workload worker --expect {revisions[0]['id']} --host-grant ${hostGrant}"
@@ -312,6 +314,35 @@ pkgs.testers.runNixOSTest {
     machine.fail(state_command(0, "promoter", reconcile + " --operation stop --instance-created-at 2000-01-01T00:00:00Z"))
     stopped = json.loads(machine.succeed(state_command(0, "promoter", reconcile + f" --operation stop --instance-created-at {incarnation}"), timeout=90))
     assert [effect["effect"]["action"] for effect in stopped["result"]["native"]["effects"]] == ["stop"]
+    with subtest("recover an interrupted acknowledged daemon task"):
+        coordination = (f"curl -fsS --cacert {private}/state.crt --cert {private}/promoter.crt"
+                        f" --key {private}/promoter.key https://${serviceIP}:8444/v1/native-execution"
+                        " -H 'Content-Type: application/json'")
+
+        def step(name, **fields):
+            body = {"apiVersion": "aginctus.dev/project-native-execution/v1alpha1", "step": name,
+                    "revision": revisions[0], "workloadId": "worker", "operation": "reconcile", **fields}
+            return f"{coordination} --data-binary {shlex.quote(compact(body))}"
+
+        attempt = json.loads(machine.succeed(step("acquire")))["id"]
+        recover = f"operations {attempt} --workload worker --revision {revisions[0]['id']} --recover"
+        machine.fail(state_command(0, "member", recover))
+        machine.fail(state_command(0, "promoter", reconcile))
+        machine.succeed(step("begin", id=attempt, action="start", sequence=1))
+        daemon = "curl -fsS --unix-socket /var/lib/incus/unix.socket http://localhost"
+        update = shlex.quote("/1.0/instances/selected-worker/state?project=${project}")
+        submitted = json.loads(machine.succeed(f"{daemon}{update} -X PUT -d '{{\"action\":\"start\"}}'"))
+        task = submitted["operation"].split("?")[0]
+        assert task.startswith("/1.0/operations/")
+        machine.succeed(step("submitted", id=attempt, sequence=1, daemonOperationId=task.rsplit("/", 1)[1]))
+        machine.succeed(f"{daemon}{task}/wait?project=${project} | jq -e '.metadata.status == \"Success\"'",
+                        step("applied", id=attempt, sequence=1),
+                        guest + " systemctl restart aginctus-project-state.service")
+        result = json.loads(machine.succeed(state_command(0, "member", recover)))
+        assert result["recovered"] and result["operationId"] == attempt
+        again = json.loads(machine.succeed(state_command(0, "promoter", reconcile), timeout=90))
+        assert not again["result"]["native"]["effects"], "recovery replayed a successful task"
+        machine.succeed(state_command(0, "promoter", reconcile + f" --operation stop --instance-created-at {incarnation}"), timeout=90)
     machine.succeed("incus list selected-worker --project ${project} --format json | jq -e 'length == 1 and .[0].status == \"Stopped\"'")
     removed = json.loads(machine.succeed(state_command(0, "promoter", reconcile + f" --operation remove --instance-created-at {incarnation}"), timeout=90))
     assert [effect["effect"]["action"] for effect in removed["result"]["native"]["effects"]] == ["delete"]
