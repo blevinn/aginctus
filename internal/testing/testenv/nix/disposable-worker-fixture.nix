@@ -167,6 +167,27 @@ pkgs.testers.runNixOSTest {
                 code, diagnostic = machine.execute("lvs --reportformat json --units b --nosuffix -o lv_size,lv_attr,data_percent,metadata_percent testenv | jq -c '.report[].lv'")
                 if code == 0:
                     print("FIXTURE LVM GEOMETRY:", diagnostic.strip())
+                ${pkgs.lib.optionalString nativeInstance ''
+                  # Incus saves the serial ring buffer before stopping the VM.
+                  # Read only the tagged, bounded synthetic assertion record,
+                  # never an entire console or any private worker report.
+                  code, diagnostic = machine.execute("find /var/log/incus /var/lib/incus/logs -maxdepth 2 -type f -path '*/aginctus-testenv_testenv-vm-*/console.log' -exec grep -ahF 'AGINCTUS_FIXTURE_TEST_FAILURE:' {} + 2>/dev/null | tail -n 4 | cut -c 1-4096")
+                  found = False
+                  if code == 0:
+                      for line in diagnostic.splitlines():
+                          _, marker, payload = line.partition("AGINCTUS_FIXTURE_TEST_FAILURE:")
+                          if not marker:
+                              continue
+                          try:
+                              record = json.loads(payload)
+                          except ValueError:
+                              continue
+                          if isinstance(record, dict) and record.get("step") == 9:
+                              print("FIXTURE NATIVE TEST FAILURE:", json.dumps(record))
+                              found = True
+                  if not found:
+                      print("FIXTURE NATIVE TEST FAILURE: tagged console evidence unavailable")
+                ''}
                 raise
             else:
                 machine.succeed("systemctl stop aginctus-testenv-operation-monitor.service")
