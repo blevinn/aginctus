@@ -22,6 +22,7 @@ type acceptanceFake struct {
 	payloadBytes      []byte
 	badPayload        bool
 	badScenario       bool
+	assertionLine     string
 	scenarioStarted   bool
 	createUncertain   bool
 	changeForeign     bool
@@ -58,9 +59,16 @@ func (c *acceptanceFake) ExecGuest(_ context.Context, _ string, argv []string) (
 			return VMExecResult{Stdout: "LoadState=loaded\nActiveState=inactive\nSubState=dead\nResult=success\nExecMainCode=0\nExecMainStatus=0\n"}, nil
 		}
 		if c.badScenario {
-			return VMExecResult{Stdout: "LoadState=loaded\nActiveState=failed\nSubState=failed\nResult=exit-code\nExecMainCode=1\nExecMainStatus=1\n"}, nil
+			status := "1"
+			if c.assertionLine != "" {
+				status = "73"
+			}
+			return VMExecResult{Stdout: "LoadState=loaded\nActiveState=failed\nSubState=failed\nResult=exit-code\nExecMainCode=1\nExecMainStatus=" + status + "\n"}, nil
 		}
 		return VMExecResult{Stdout: "LoadState=loaded\nActiveState=active\nSubState=exited\nResult=success\nExecMainCode=1\nExecMainStatus=0\n"}, nil
+	}
+	if len(argv) == 2 && argv[0] == "/run/current-system/sw/bin/cat" && argv[1] == "/run/aginctus-testenv-native-assertion" {
+		return VMExecResult{Stdout: c.assertionLine}, nil
 	}
 	if len(argv) == 4 && argv[0] == systemctlGuest && argv[1] == "start" && argv[2] == "--no-block" && argv[3] == nativeScenarioUnit {
 		c.scenarioStarted = true
@@ -417,6 +425,23 @@ func TestIncusAcceptanceRequiresSyntheticPayloadTransfer(t *testing.T) {
 			}
 		} else if err != nil || r.Status != "pass" || checkStatus(r, "payload_transfer") != "pass" || string(c.payloadBytes) != syntheticGuestPayload {
 			t.Fatalf("fixed payload not delivered: %+v %v", r, err)
+		}
+	}
+}
+
+func TestIncusAcceptanceReportsBoundedNativeAssertionAndCleans(t *testing.T) {
+	for _, tc := range []struct{ line, want string }{
+		{"134\n", "native_instance_scenario_assertion_line_134"},
+		{"private-output\n", "native_instance_scenario_step_9"},
+	} {
+		c, b, cfg := acceptanceFixture(t)
+		cfg.Scenario = nativeInstanceScenario
+		c.badScenario = true
+		c.assertionLine = tc.line
+		r, err := runAcceptanceFixture(t, b, cfg, func(IncusAcceptanceReport) error { return nil }, waitAcceptanceExpiry)
+		if err == nil || r.FailureStage != tc.want || checkStatus(r, "native_instance_scenario") != "fail" ||
+			checkStatus(r, "instance_cleanup") != "pass" || len(c.vms) != 1 {
+			t.Fatalf("failed scenario lost diagnostic or cleanup: %+v %v", r, err)
 		}
 	}
 }
