@@ -28,9 +28,18 @@ in
 assert !(nativeInstance && independentRecovery);
 assert !(payloadTransfer && (nativeInstance || independentRecovery));
 assert !(nestedKVM && (nativeInstance || independentRecovery || payloadTransfer));
-assert !(projectAdmission && (nativeInstance || independentRecovery || payloadTransfer || nestedKVM));
-assert !(runtimeResources && (nativeInstance || independentRecovery || payloadTransfer || nestedKVM || projectAdmission));
-assert !(offlineNetwork && (nativeInstance || independentRecovery || payloadTransfer || nestedKVM || projectAdmission || runtimeResources));
+assert
+  !(projectAdmission && (nativeInstance || independentRecovery || payloadTransfer || nestedKVM));
+assert
+  !(
+    runtimeResources
+    && (nativeInstance || independentRecovery || payloadTransfer || nestedKVM || projectAdmission)
+  );
+assert
+  !(
+    offlineNetwork
+    && (nativeInstance || independentRecovery || payloadTransfer || nestedKVM || projectAdmission || runtimeResources)
+  );
 pkgs.testers.runNixOSTest {
   name =
     if independentRecovery then
@@ -91,9 +100,16 @@ pkgs.testers.runNixOSTest {
       else
         builtins.readFile ./fixture_receipt.py
     )
+<<<<<<< HEAD
     + (pkgs.lib.optionalString (projectAdmission || runtimeResources || offlineNetwork) (builtins.readFile ./project_admission_trial.py))
     + (pkgs.lib.optionalString (runtimeResources || offlineNetwork) (builtins.readFile ./runtime_resource_trial.py))
     + (pkgs.lib.optionalString offlineNetwork (builtins.readFile ./offline_network_trial.py))
+=======
+    + (pkgs.lib.optionalString (projectAdmission || runtimeResources) (
+      builtins.readFile ./project_admission_trial.py
+    ))
+    + (pkgs.lib.optionalString runtimeResources (builtins.readFile ./runtime_resource_trial.py))
+>>>>>>> agent/pr1199-main-integration-20261127
     + ''
       import json
       import re
@@ -229,7 +245,9 @@ pkgs.testers.runNixOSTest {
               assert report["scenario"] == "native-instance"
               assert checks["native_instance_scenario"] == "pass"
             ''}
-            assert checks["nested_kvm_guest_execution"] == ${builtins.toJSON (if nestedKVM then "pass" else "not_verified")}
+            assert checks["nested_kvm_guest_execution"] == ${
+              builtins.toJSON (if nestedKVM then "pass" else "not_verified")
+            }
             assert checks["nested_isolation"] == "not_verified"
             remaining = json.loads(machine.succeed("incus --project aginctus-testenv list --format json"))
             assert len(remaining) == 1 and remaining[0]["name"] == "foreign-sentinel" and remaining[0]["status"] == "Stopped"
