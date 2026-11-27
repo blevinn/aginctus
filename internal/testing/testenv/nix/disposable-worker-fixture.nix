@@ -8,6 +8,7 @@
   nativeInstance ? false,
   independentRecovery ? false,
   payloadTransfer ? false,
+  nestedKVM ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
@@ -23,6 +24,7 @@ let
 in
 assert !(nativeInstance && independentRecovery);
 assert !(payloadTransfer && (nativeInstance || independentRecovery));
+assert !(nestedKVM && (nativeInstance || independentRecovery || payloadTransfer));
 pkgs.testers.runNixOSTest {
   name =
     if independentRecovery then
@@ -31,6 +33,8 @@ pkgs.testers.runNixOSTest {
       "aginctus-testenv-managed-native-instance"
     else if payloadTransfer then
       "aginctus-testenv-payload-transfer"
+    else if nestedKVM then
+      "aginctus-testenv-nested-kvm"
     else
       "aginctus-testenv-disposable-worker";
   nodes.machine = { ... }: {
@@ -156,6 +160,9 @@ pkgs.testers.runNixOSTest {
       ${pkgs.lib.optionalString payloadTransfer ''
         argv += ["--require-payload-transfer"]
       ''}
+      ${pkgs.lib.optionalString nestedKVM ''
+        argv += ["--require-nested-kvm"]
+      ''}
       ${
         if independentRecovery then
           ''
@@ -192,7 +199,7 @@ pkgs.testers.runNixOSTest {
               assert report["scenario"] == "native-instance"
               assert checks["native_instance_scenario"] == "pass"
             ''}
-            assert checks["nested_kvm_guest_execution"] == "not_verified"
+            assert checks["nested_kvm_guest_execution"] == ${builtins.toJSON (if nestedKVM then "pass" else "not_verified")}
             assert checks["nested_isolation"] == "not_verified"
             remaining = json.loads(machine.succeed("incus --project aginctus-testenv list --format json"))
             assert len(remaining) == 1 and remaining[0]["name"] == "foreign-sentinel" and remaining[0]["status"] == "Stopped"
@@ -211,6 +218,7 @@ pkgs.testers.runNixOSTest {
                 ${builtins.toJSON (builtins.hashFile "sha256" "${self}/flake.lock")},
                 fingerprint,
                 require_payload_transfer=${if payloadTransfer then "True" else "False"},
+                require_nested_kvm=${if nestedKVM then "True" else "False"},
             )
             # Only sanitized observations leave the worker. The Nix result can be
             # cached; the receipt does not assert this invocation created a new VM.
