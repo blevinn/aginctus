@@ -72,7 +72,7 @@ func registerNativeIntentPlan(state *cobra.Command, out io.Writer, format func()
 					if err!=nil{return err}
 					return clioutput.WriteStructured(out,f,observedWorkloadPlan{TypeMeta:api.TypeMeta{APIVersion:"aginctus.dev/v1alpha1",Kind:"ObservedNativeHerdrPlan"},Revision:expected,Result:result})
 				}
-				if bootstrapHerdr{return errors.New("Herdr bootstrap preview requires explicit Herdr selection and live grant")}
+				if bootstrapHerdr{return errors.New("herdr bootstrap preview requires explicit Herdr selection and live grant")}
 				if hostGrant == "" || expected == "" || len(selection.Workloads) != 1 || selection.All || selection.Herdr || selection.Gateway || f != clioutput.JSON {
 					return errors.New("live native planning requires one workload, --host-grant, --expect, and json output")
 				}
