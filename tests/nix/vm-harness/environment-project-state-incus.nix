@@ -384,11 +384,13 @@ pkgs.testers.runNixOSTest {
             save(grant_file, {**gateway_grant, "revisionId": revisions[0]["id"]})
             machine.fail(command + "publish" + args)
             save(grant_file, gateway_grant)
-            machine.succeed(command + "publish" + args + f" >{private}/publisher-result 2>{private}/publisher-error", timeout=180)
+            publish_status, _ = machine.execute(command + "publish" + args + f" >{private}/publisher-result 2>{private}/publisher-error", timeout=180)
             for guest_name in (pg, llm):
                 machine.succeed(f"incus config show {guest_name} {gateway_scope} >{private}/{guest_name}-config")
             for key in secret_files:
                 machine.succeed(f"grep -Flf {private}/{key} {private}/publisher-* {private}/*-config >/dev/null; test $? -eq 1")
+            if publish_status != 0:
+                raise AssertionError(machine.succeed(f"cat {private}/publisher-error"))
             published = json.loads(machine.succeed(f"cat {private}/publisher-result"))
             assert published["receipt"]["verified"] and published["receipt"]["version"] == "fixture-v1"
             # An unrelated unrestricted project precludes a private bridge proof.

@@ -66,7 +66,7 @@ func runProtectedGatewayPublish(args []string) int {
 		_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"operationId": id, "receipt": receipt})
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "protected gateway credential publication failed; inspect operation before retry")
+		fmt.Fprintf(os.Stderr, "protected gateway credential publication failed; inspect operation before retry: %v\n", err)
 		return 1
 	}
 	return 0
