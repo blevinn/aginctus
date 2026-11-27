@@ -35,13 +35,13 @@ def validate_resource_observations(cpu, memory, disk, last_sector, beyond_disk):
     ]
 
 
-def run_runtime_resources(machine, fingerprint):
+def run_runtime_resources(machine, fingerprint, inventory, project_prefix, sentinel):
     if not resource_re.fullmatch(r"[0-9a-f]{64}", fingerprint):
         raise RuntimeError("resource probe requires the pinned image fingerprint")
-    baseline = _admission_inventory(machine)
-    if baseline[0] != [(ADMISSION_SENTINEL, "Stopped")]:
+    baseline = inventory(machine)
+    if baseline[0] != [(sentinel, "Stopped")]:
         raise RuntimeError("resource probe requires only the stopped foreign sentinel")
-    prefix = ADMISSION_PREFIX + " "
+    prefix = project_prefix + " "
     machine.succeed(prefix + resource_shlex.join([
         "init", fingerprint, RESOURCE_PROBE, "--vm", "--no-profiles", "--storage", "testenv",
         "-c", "limits.cpu=2", "-c", "limits.memory=4096MiB", "-c", "security.nesting=true",
@@ -85,6 +85,6 @@ dd if="$root" bs=512 skip=67108864 count=1 status=none | wc -c
     print("FIXTURE RUNTIME RESOURCES:", cpu.strip(), memory.strip(), *disk_observations)
     machine.succeed(prefix + "stop " + RESOURCE_PROBE + " --force", timeout=120)
     machine.succeed(prefix + "delete " + RESOURCE_PROBE, timeout=120)
-    if _admission_inventory(machine) != baseline:
+    if inventory(machine) != baseline:
         raise RuntimeError("resource probe cleanup did not restore baseline")
     return checks
