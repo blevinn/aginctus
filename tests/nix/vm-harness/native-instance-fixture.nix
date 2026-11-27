@@ -67,7 +67,10 @@ in
     machine.succeed("incus image import ${image.config.system.build.metadata}/tarball/* ${image.config.system.build.tarball}/tarball/* --alias fixture --project native-instance-vm", timeout=180)
     machine.succeed("incus network create native-mgmt ipv4.address=none ipv6.address=none")
     machine.succeed("incus storage volume create default protected --project native-instance-vm")
-    machine.succeed("mkdir -p /srv/workspace; printf 'workspace-sentinel' >/srv/workspace/sentinel")
+    # The direct guest service uses UMask=0077. The synthetic read-only
+    # workspace must be traversable and readable by container-mapped UIDs
+    # in either wrapper; do not depend on the invoking shell's umask.
+    machine.succeed("install -d -m 0755 /srv/workspace && printf 'workspace-sentinel' >/srv/workspace/sentinel && chmod 0644 /srv/workspace/sentinel && test $(stat -c %a /srv/workspace) = 755 && test $(stat -c %a /srv/workspace/sentinel) = 644")
     machine.succeed(command + " -test.run '^TestNativeInstanceVMAcceptance$'", timeout=600)
 
     # Exercise the packaged CLI with real system/current-user controller evidence.
