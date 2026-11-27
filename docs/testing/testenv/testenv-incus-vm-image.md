@@ -199,8 +199,9 @@ must contain the same two CPUs; additional possible hotplug slots do not
 count), kernel-visible RAM (allowing reserved memory), root block device
 size and read-only end-of-device
 boundary. It deletes only the fixed probe, checks restoration of the
-instance/volume inventory and existing configuration, then runs the ordinary
-signed lifecycle trial. The receipt adds `guest_cpu_count`,
+instance/volume inventory and existing configuration, allowing only the
+new optimized image cache for the exact imported fingerprint, then runs
+the ordinary signed lifecycle trial. The receipt adds `guest_cpu_count`,
 `guest_memory_capacity` and `guest_root_disk_capacity`.
 This is actual presented resource capacity, not a stress test, CPU time
 quota, host memory pressure limit, physical storage reclamation, packet
