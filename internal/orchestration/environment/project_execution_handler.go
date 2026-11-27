@@ -35,13 +35,13 @@ type projectExecutionResponse struct {
 }
 
 type projectExecutionHandler struct {
-	mu         sync.Mutex
-	active     *projectExecution
-	volume     *MountedProjectPublishedSource
-	authorizer ProjectPeerAuthorizer
-	catalog    Catalog
-	policy     string
-	closed     bool
+	mu               sync.Mutex
+	active           *projectExecution
+	volume           *MountedProjectPublishedSource
+	authorizer       ProjectPeerAuthorizer
+	catalog          Catalog
+	policy           string
+	closed           bool
 	recoveryObserver projectRecoveryObserver
 }
 
