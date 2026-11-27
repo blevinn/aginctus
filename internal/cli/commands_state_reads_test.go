@@ -59,3 +59,15 @@ func TestStateCLIDeniesAbsentAuthorityAndProject(t *testing.T){
 		if code==0||out.Len()!=0{t.Fatalf("args=%v code=%d out=%q err=%q",args,code,out.String(),errOut.String())}
 	}
 }
+
+func TestStateOperationsAllowsStructuredOutputGate(t *testing.T) {
+	t.Setenv("AGINCTUS_RESTRICTED_READ_CONFIG", "")
+	var out, errOut bytes.Buffer
+	code := Run(context.Background(), []string{
+		"--environment", stateCLIEnv, "--incus-project", "team", "state", "operations",
+		"--workload", "worker", "--revision", strings.Repeat("a", 64), "-o", "json",
+	}, &out, &errOut, nil, nil)
+	if code == 0 || strings.Contains(errOut.String(), "output format is not supported by this command") {
+		t.Fatalf("state operations did not pass structured-output gate: code=%d out=%q err=%q", code, out.String(), errOut.String())
+	}
+}

@@ -25,7 +25,7 @@ type projectExecution struct {
 // Never clear an old submission record to obtain this lock. Promotion still
 // uses the narrower environment lock and is not an Incus writer.
 func (s *LocalProjectStateStore) beginProjectExecution(ctx context.Context, enrolled Descriptor, revision AcceptedRevision, grant projectExecutionGrant) (*projectExecution, error) {
-	if ctx == nil || s == nil || !grant.valid(s.binding) || grant.Operation == "recover" ||
+	if ctx == nil || s == nil || !grant.valid(s.binding) || !grant.writer() ||
 		grant.EnvironmentID != enrolled.ID || grant.RevisionID != revision.ID || enrolled.Binding != s.binding {
 		return nil, errProjectExecutionDenied
 	}

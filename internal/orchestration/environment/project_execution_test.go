@@ -87,6 +87,22 @@ func TestProjectExecutionExcludesPeerAndRetainsUncertainty(t *testing.T) {
 	if err != nil || op.Execution == nil || *op.Execution != aGrant || len(op.Effects) != 1 || op.Effects[0].Outcome != LocalNativeUncertain {
 		t.Fatalf("missing durable uncertainty: %+v %v", op, err)
 	}
+	inspect := aGrant
+	inspect.PeerSHA256 = strings.Repeat("b", 64)
+	inspect.Operation = "inspect"
+	for _, selector := range []string{"", id} {
+		data, err := store.inspectProjectOperations(ctx, a.Environment, inspect, selector)
+		var items []ProjectOperationSummary
+		if err != nil || json.Unmarshal(data, &items) != nil || len(items) != 1 || items[0].ID != id ||
+			!items[0].Unresolved || (len(items[0].Effects) == 1) != (selector != "") || strings.Contains(string(data), aGrant.PeerSHA256) {
+			t.Fatalf("unexpected inspection %s: %v", data, err)
+		}
+	}
+	foreign := bGrant
+	foreign.Operation = "inspect"
+	if _, err := store.inspectProjectOperations(ctx, b.Environment, foreign, id); !errors.Is(err, errProjectExecutionDenied) {
+		t.Fatalf("foreign operation inspection: %v", err)
+	}
 	if _, err := store.beginProjectExecution(ctx, b.Environment, bRev, bGrant); !errors.Is(err, ErrLocalNativeUnresolved) {
 		t.Fatalf("restart failed to exclude competing writer: %v", err)
 	}

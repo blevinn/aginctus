@@ -84,7 +84,7 @@ func (h *projectExecutionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err != nil || rejectCandidateDuplicateKeys(data) != nil || dec.Decode(&req) != nil || dec.Decode(&struct{}{}) != io.EOF ||
-		req.APIVersion != projectExecutionWireVersion || req.Revision.ValidateIdentity() != nil || !req.validStep() {
+		req.APIVersion != projectExecutionWireVersion || !req.validStep() {
 		deny(http.StatusBadRequest)
 		return
 	}
@@ -128,6 +128,16 @@ func (h *projectExecutionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	desc, err := h.catalog.Get(ctx, grant.Project, grant.EnvironmentID)
 	if err != nil || desc.Binding != h.volume.binding || desc.ID != grant.EnvironmentID {
 		deny(http.StatusForbidden)
+		return
+	}
+	if req.Operation == "inspect" {
+		result, err := h.volume.store.inspectProjectOperations(ctx, desc, grant, req.ID)
+		if err != nil || !verify() {
+			deny(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(result)
 		return
 	}
 	if req.Step == "acquire" {
@@ -182,6 +192,13 @@ func (h *projectExecutionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 }
 
 func (r projectExecutionRequest) validStep() bool {
+	if r.Operation == "inspect" {
+		return r.Step == "inspect" && (r.ID == "" || localEnvironmentAttemptID.MatchString(r.ID)) &&
+			r.Action == "" && r.Sequence == 0 && !r.Succeeded && r.Revision == inspectionRevision(r.Revision)
+	}
+	if r.Revision.ValidateIdentity() != nil {
+		return false
+	}
 	switch r.Step {
 	case "acquire":
 		return r.ID == "" && r.Action == "" && r.Sequence == 0 && !r.Succeeded
