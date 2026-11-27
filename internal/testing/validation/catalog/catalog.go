@@ -79,6 +79,10 @@ var scenarios = []Scenario{
 	// Feasibility-only: runnable through Python, not exported by the Go CLI
 	// or accepted by the existing v1 evidence normalizer.
 	{Name: "native-oci", Target: "vm-harness-native-oci", Description: "Experimental native OCI feasibility spike", Tier: Disposable, Surface: Internal, Networked: true, Authority: InternalExperiment, RequiresExplicitSelection: true, EvidenceContract: "none"},
+	// Installed protected gateway start with pinned OCI images. Networked and
+	// synthetic only; it is not exported by the Go CLI and is not accepted by
+	// the existing v1 evidence normalizer.
+	{Name: "protected-gateway-start", Target: "vmTests.x86_64-linux.protected-gateway-start", Description: "Installed protected gateway provision, publish and authenticated startup with pinned OCI images", Tier: Disposable, Surface: Internal, Networked: true, Authority: InternalExperiment, RequiresExplicitSelection: true, EvidenceContract: "none"},
 	{Name: "native-gateway-stopped-pair", Target: "vm-harness-native-gateway-stopped-pair", Description: "Native stopped gateway pair lifecycle fixture", Tier: Disposable, Surface: Operator, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
 	{Name: "native-gateway-stop-retention", Target: "vm-harness-native-gateway-stop-retention", Description: "Native gateway stop and retained state fixture", Tier: Disposable, Surface: Operator, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},
 	{Name: "native-joined-lifecycle", Target: "vm-harness-native-joined-lifecycle", Description: "Joined accepted workload and Herdr lifecycle fixture", Tier: Disposable, Surface: Operator, Evidence: true, Authority: OperatorVM, RequiresExplicitSelection: true, EvidenceContract: "disposable_vm_v1"},

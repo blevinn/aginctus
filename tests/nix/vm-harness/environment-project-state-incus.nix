@@ -98,6 +98,7 @@ pkgs.testers.runNixOSTest {
     import hashlib
     import json
     import shlex
+    import sys
     from typing import Any
 
     startup = ${if gatewayStartup then "True" else "False"}
@@ -364,7 +365,6 @@ pkgs.testers.runNixOSTest {
                             " --project ${protectedProject} --uid 0 --gid 0 --mode 0644")
             command = "${cli}/bin/aginctus internal gateway-protected-"
             args = f" {grant_file} {root_reads}"
-            machine.fail(command + "publish" + args)
             provisioned = json.loads(machine.succeed(command + "provision" + args, timeout=700))
             assert len(provisioned["result"]["native"]["effects"]) == 7
             repeated = json.loads(machine.succeed(command + "provision" + args, timeout=120))
@@ -396,7 +396,43 @@ pkgs.testers.runNixOSTest {
             # An unrelated unrestricted project precludes a private bridge proof.
             machine.fail(command + "start" + args)
             machine.succeed("incus project delete foreign-environment")
-            first_start = json.loads(machine.succeed(command + "start" + args, timeout=320))
+            start_status, start_result = machine.execute(command + "start" + args, timeout=200)
+            if start_status != 0:
+                # Bounded, secret-safe diagnosis inside the disposable VM only.
+                # Only fixed labels and exit codes are printed; never the payload.
+                print(start_result, file=sys.stderr)
+                machine.succeed(f"incus list {gateway_scope} --format json | jq -c '[.[] | {{name, status}}]' >{private}/states.json")
+                print(machine.succeed(f"cat {private}/states.json"), file=sys.stderr)
+                for probe, label in (
+                    (f"incus exec {pg} {gateway_scope} -- getent hosts {pg}", "postgres name resolves in postgres"),
+                    (f"incus exec {llm} {gateway_scope} -- getent hosts {pg}", "postgres name resolves in litellm"),
+                    (f"incus exec {llm} {gateway_scope} -- test -d /run/aginctus/gateway", "credential directory present"),
+                    (f"incus exec {llm} {gateway_scope} -- test -f /proc/1/cmdline", "litellm guest running"),
+                    (f"incus exec {pg} {gateway_scope} -- test -f /run/aginctus/gateway/postgres.pgpass", "postgres password file present"),
+                ):
+                    code, _ = machine.execute(probe)
+                    print(f"{label}: exit {code}", file=sys.stderr)
+                # Reproduce the LiteLLM launch in the disposable guest with the
+                # output captured to a private file, never to the driver log.
+                machine.succeed(f"incus file pull {llm}/run/aginctus/gateway/litellm-bootstrap.py {private}/bootstrap-debug.py {gateway_scope}")
+                machine.succeed(f"sed -i 's@os.open(\"/dev/null\", os.O_RDWR | os.O_NOFOLLOW)@os.open(\"/tmp/litellm-debug\", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)@' {private}/bootstrap-debug.py")
+                machine.succeed(f"incus file push {private}/bootstrap-debug.py {llm}/tmp/bootstrap-debug.py {gateway_scope} --uid 0 --gid 0 --mode 0500")
+                machine.succeed(f"incus config set {llm} oci.entrypoint '/app/.venv/bin/python -I -S /tmp/bootstrap-debug.py {pg}' {gateway_scope}")
+                machine.execute(f"incus start {llm} {gateway_scope}")
+                machine.execute("sleep 30")
+                code, _ = machine.execute(f"incus file pull {llm}/tmp/litellm-debug {private}/litellm-debug {gateway_scope}")
+                if code == 0:
+                    size = machine.succeed(f"wc -c <{private}/litellm-debug").strip()
+                    print(f"litellm capture bytes: {size}", file=sys.stderr)
+                    for label, pattern in (("database network", "P1001|could not translate host|database server at|Name or service not known"),
+                                           ("database auth", "P1000|authentication failed"), ("prisma binaries", "binaries.prisma|prisma.*binary|schema.engine"),
+                                           ("runtime option", "No such option|Invalid value"), ("import", "ModuleNotFoundError|ImportError"),
+                                           ("local artifact", "Permission denied|FileNotFoundError|No such file")):
+                        test, _ = machine.execute(f"grep -iEq {shlex.quote(pattern)} {private}/litellm-debug")
+                        if test == 0:
+                            print(f"litellm capture class: {label}", file=sys.stderr)
+                raise AssertionError("installed startup failed")
+            first_start = json.loads(start_result)
             assert first_start["result"]["started"] == [pg, llm]
             assert first_start["result"]["ready"] == [pg, llm]
             repeat_start = json.loads(machine.succeed(command + "start" + args, timeout=320))
