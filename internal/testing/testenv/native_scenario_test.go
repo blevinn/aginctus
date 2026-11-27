@@ -31,3 +31,14 @@ func TestNativeScenarioTerminalFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeAssertionLineStrict(t *testing.T) {
+	if line, ok := parseNativeAssertionLine("134\n"); !ok || line != 134 {
+		t.Fatalf("valid assertion line rejected: %d %v", line, ok)
+	}
+	for _, bad := range []string{"", "0\n", "10000\n", "01\n", "+1\n", "1", "1\n2\n", "private output\n"} {
+		if _, ok := parseNativeAssertionLine(bad); ok {
+			t.Fatalf("invalid assertion line accepted: %q", bad)
+		}
+	}
+}
