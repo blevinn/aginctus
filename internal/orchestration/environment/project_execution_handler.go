@@ -191,7 +191,7 @@ func (h *projectExecutionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 				return
 			}
 		case "applied":
-			if req.Sequence != n || n == 0 || (e.journal.op.Effects[n-1].DaemonID == "" && !(e.grant.Operation == "gateway-deliver" && e.journal.op.Effects[n-1].Action == "deliver")) || e.journal.MarkApplied() != nil {
+			if req.Sequence != n || n == 0 || (e.journal.op.Effects[n-1].DaemonID == "" && !e.grant.synchronous(e.journal.op.Effects[n-1].Action)) || e.journal.MarkApplied() != nil {
 				deny(http.StatusConflict)
 				return
 			}
