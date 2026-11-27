@@ -3,6 +3,8 @@ package nativeoci_test
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +21,8 @@ import (
 	"github.com/blevinn/aginctus/internal/gateway"
 	agincus "github.com/blevinn/aginctus/internal/incus"
 	"github.com/blevinn/aginctus/internal/orchestration/native"
+	"github.com/blevinn/aginctus/internal/orchestration/environment"
+	acceptedstate "github.com/blevinn/aginctus/internal/orchestration/state"
 	"github.com/blevinn/aginctus/internal/orchestration/nativeoci"
 )
 
@@ -91,6 +95,7 @@ func TestDaemonOCI(t *testing.T) {
 	}
 	pinnedReferences := make(map[string]string)
 	createImages := make(map[string]gateway.NativeGatewayCreateImage)
+	resolvedImages := make(map[string]nativeoci.ResolvedImage)
 	for _, image := range []struct{ name, registry, repository, reference string }{
 		{"postgres", "docker.io", "library/postgres", "17-alpine"},
 		{"litellm", "ghcr.io", "berriai/litellm", "v1.103.0"},
@@ -112,6 +117,7 @@ func TestDaemonOCI(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			resolvedImages[image.name] = resolved
 			var pgFiles postgresFileFixture
 			if image.name == "postgres" {
 				pgFiles = newPostgresFileFixture(t, resolved.Config)
@@ -422,6 +428,56 @@ func TestDaemonOCI(t *testing.T) {
 	repeat, err := gateway.CreateStoppedGatewayWithClient(ctx, topology, gatewayDevices, gatewayPair, gatewayImages, gatewayStoppedVMClient{client}, fence)
 	if err != nil || len(repeat.Created) != 0 || len(repeat.Verified) != 2 || fenceChecks != 2 {
 		t.Fatalf("native stopped gateway reuse was not a no-op: %+v %v", repeat, err)
+	}
+	// Exercise the real fixed-file publisher on the disposable stopped pair.
+	// This scenario owns the whole daemon and is the sole writer. The receipt
+	// proves readback, not persistence across startup or delegated authority.
+	token := func() string {
+		var b [32]byte
+		if _, err := rand.Read(b[:]); err != nil {
+			t.Fatal("synthetic token generation failed")
+		}
+		return hex.EncodeToString(b[:])
+	}
+	material, err := gateway.NewGatewayCredentialMaterial("synthetic-v1", token(), token(), token())
+	if err != nil {
+		t.Fatal("synthetic material rejected")
+	}
+	candidate := environment.Candidate{
+		APIVersion: environment.CandidateAPIVersion, Kind: environment.CandidateKind,
+		Environment: descriptor, SelectedWorkloads: []string{},
+	}
+	// A complete typed candidate is necessary even for this disposable pin.
+	candidate.Workloads = []acceptedstate.WorkloadSpec{}
+	gatewayImage := func(role string) environment.GatewayImageSpec {
+		resolved := resolvedImages[role]
+		return environment.GatewayImageSpec{Registry: resolved.Registry, Repository: resolved.Repository,
+			Architecture: runtime.GOARCH, ManifestDigest: resolved.ManifestDigest, ConfigDigest: resolved.ConfigDigest,
+			IncusFingerprint: resolved.IncusFingerprint, Alias: createImages[role].Evidence.Alias}
+	}
+	candidate.Gateway = &environment.GatewaySpec{
+		ManagementNetwork: topology.ManagementNetwork, EgressNetwork: topology.EgressNetwork,
+		EgressIPv4: "10.92.0.12/24", RootPool: "spike", DatabasePool: "spike",
+		Postgres: gatewayImage("postgres"), LiteLLM: gatewayImage("litellm"), CredentialVersion: "synthetic-v1",
+	}
+	revision, err := environment.BuildAcceptedRevision(nil, nil, candidate)
+	if err != nil {
+		t.Fatal("synthetic gateway revision construction failed")
+	}
+	soleWriter := func(ctx context.Context) error { return ctx.Err() }
+	stage := func(guard func(context.Context) error) (gateway.GatewayCredentialDeliveryReceipt, error) {
+		return gateway.StageStoppedGatewayCredentialFiles(ctx, revision, candidate, topology, gatewayDevices, gatewayPair,
+			gatewayImages, resolvedImages["postgres"], resolvedImages["litellm"], material, client, guard)
+	}
+	if _, err := stage(nil); err == nil {
+		t.Fatal("publisher accepted missing writer guard")
+	}
+	receipt, err := stage(soleWriter)
+	if err != nil || !receipt.Verified || receipt.Version != "synthetic-v1" {
+		t.Fatal("stopped gateway credential readback failed")
+	}
+	if _, err := stage(soleWriter); err == nil {
+		t.Fatal("publisher overwrote an existing staged credential handoff")
 	}
 	// Read-only native status must recognize both owned stopped service
 	// containers while preserving the existing image and volume inventory.
