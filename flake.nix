@@ -186,6 +186,10 @@
             inherit self nixpkgs system;
             payloadTransfer = true;
           };
+          testenv-nested-kvm = import ./internal/testing/testenv/nix/disposable-worker-fixture.nix {
+            inherit self nixpkgs system;
+            nestedKVM = true;
+          };
           testenv-disposable-worker-fixture =
             import ./internal/testing/testenv/nix/disposable-worker-fixture.nix
               {
