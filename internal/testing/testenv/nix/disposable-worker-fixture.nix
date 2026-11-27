@@ -10,6 +10,7 @@
   payloadTransfer ? false,
   nestedKVM ? false,
   projectAdmission ? false,
+  runtimeResources ? false,
 }:
 let
   pkgs = import nixpkgs { inherit system; };
@@ -27,6 +28,7 @@ assert !(nativeInstance && independentRecovery);
 assert !(payloadTransfer && (nativeInstance || independentRecovery));
 assert !(nestedKVM && (nativeInstance || independentRecovery || payloadTransfer));
 assert !(projectAdmission && (nativeInstance || independentRecovery || payloadTransfer || nestedKVM));
+assert !(runtimeResources && (nativeInstance || independentRecovery || payloadTransfer || nestedKVM || projectAdmission));
 pkgs.testers.runNixOSTest {
   name =
     if independentRecovery then
@@ -39,6 +41,8 @@ pkgs.testers.runNixOSTest {
       "aginctus-testenv-nested-kvm"
     else if projectAdmission then
       "aginctus-testenv-project-admission"
+    else if runtimeResources then
+      "aginctus-testenv-runtime-resources"
     else
       "aginctus-testenv-disposable-worker";
   nodes.machine = { ... }: {
@@ -83,7 +87,8 @@ pkgs.testers.runNixOSTest {
       else
         builtins.readFile ./fixture_receipt.py
     )
-    + (pkgs.lib.optionalString projectAdmission (builtins.readFile ./project_admission_trial.py))
+    + (pkgs.lib.optionalString (projectAdmission || runtimeResources) (builtins.readFile ./project_admission_trial.py))
+    + (pkgs.lib.optionalString runtimeResources (builtins.readFile ./runtime_resource_trial.py))
     + ''
       import json
       import re
@@ -134,6 +139,9 @@ pkgs.testers.runNixOSTest {
       machine.succeed("incus --project aginctus-testenv init --empty foreign-sentinel --vm --no-profiles --storage testenv -c limits.cpu=1 -c limits.memory=512MiB -d root,size=8GiB")
       ${pkgs.lib.optionalString projectAdmission ''
         admission_checks = run_project_admission(machine)
+      ''}
+      ${pkgs.lib.optionalString runtimeResources ''
+        resource_checks = run_runtime_resources(machine, fingerprint)
       ''}
       machine.succeed("install -d -m 0755 /etc/aginctus-testenv")
       machine.succeed("printf 'aginctus-dedicated-disposable-worker-v1\\n' > /etc/aginctus-testenv/disposable-worker; chmod 0444 /etc/aginctus-testenv/disposable-worker")
@@ -232,6 +240,10 @@ pkgs.testers.runNixOSTest {
               # These gates were observed by the outer driver, not the worker report.
               public["scenario"] = "project-admission"
               public["results"].extend(admission_checks)
+            ''}
+            ${pkgs.lib.optionalString runtimeResources ''
+              public["scenario"] = "runtime-resources"
+              public["results"].extend(resource_checks)
             ''}
             # Only sanitized observations leave the worker. The Nix result can be
             # cached; the receipt does not assert this invocation created a new VM.
