@@ -31,6 +31,19 @@ var gatewayBootstrap string
 var credentialToken = regexp.MustCompile(`^[A-Za-z0-9_-]{32,255}$`)
 var errCredentialDelivery = errors.New("native gateway credential delivery unverified; inspect stopped guests before retry")
 
+// Incus materializes OCI defaults on instance creation. Recognize only the
+// reviewed defaults tied to independently resolved image metadata.
+func gatewayImageLauncher(role string, image nativeoci.ResolvedImage) map[string]string {
+	if role == "postgres" && slices.Equal(image.Config.Entrypoint, []string{"docker-entrypoint.sh"}) &&
+		slices.Equal(image.Config.Cmd, []string{"postgres"}) && image.Config.User == "" && (image.Config.WorkingDir == "" || image.Config.WorkingDir == "/") {
+		return map[string]string{"oci.entrypoint": "docker-entrypoint.sh postgres", "oci.cwd": "/", "oci.uid": "0", "oci.gid": "0"}
+	}
+	if role == "litellm" && image.Registry == "ghcr.io" && image.Repository == "berriai/litellm" && image.ConfigDigest == reviewedLiteLLMNamedRootConfig {
+		return map[string]string{"oci.entrypoint": "docker/prod_entrypoint.sh --port 4000", "oci.cwd": "/app", "oci.uid": "0", "oci.gid": "0"}
+	}
+	return nil
+}
+
 func liteLLMRootFileIdentity(image nativeoci.ResolvedImage) bool {
 	switch image.Config.User {
 	case "", "0", "0:0":
@@ -136,6 +149,7 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 		return fail("LiteLLM image contract")
 	}
 	specs := []NativeGatewayInstanceSpec{pair.Postgres, pair.LiteLLM}
+	launchers := [2]map[string]string{gatewayImageLauncher("postgres", pg), gatewayImageLauncher("litellm", llm)}
 	pins := []NativeGatewayCreateImage{images.Postgres, images.LiteLLM}
 	var incarnations [2]time.Time
 	verify := func() error {
@@ -160,10 +174,8 @@ func StageStoppedGatewayCredentialFiles(ctx context.Context, revision environmen
 				return errCredentialDelivery
 			}
 			for _, config := range []map[string]string{instance.Config, instance.ExpandedConfig} {
-				for key := range config {
-					if strings.HasPrefix(key, "environment.") || strings.HasPrefix(key, "raw.") || strings.HasPrefix(key, "security.") || strings.HasPrefix(key, "oci.") {
-						return errCredentialDelivery
-					}
+				if !gatewayLauncherConfigSafe(config, launchers[i], false) {
+					return errCredentialDelivery
 				}
 			}
 			if incarnations[i].IsZero() {

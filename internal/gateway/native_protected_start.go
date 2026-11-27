@@ -31,7 +31,7 @@ func gatewayLauncherConfigSafe(config, want map[string]string, configured bool) 
 			return false
 		}
 		if strings.HasPrefix(k, "oci.") {
-			if !configured || want[k] != v || v == "" {
+			if want[k] != v || v == "" {
 				return false
 			}
 		}
@@ -184,7 +184,7 @@ func StartLocalProtectedGateway(ctx context.Context, grantPath, operatorPath str
 	if err != nil {
 		return result, id, errCredentialDelivery
 	}
-	images, _, err := e.pinnedImages(ctx)
+	images, resolved, err := e.pinnedImages(ctx)
 	if err != nil {
 		return result, id, errProtectedGateway
 	}
@@ -200,7 +200,7 @@ func StartLocalProtectedGateway(ctx context.Context, grantPath, operatorPath str
 	specs := []NativeGatewayInstanceSpec{e.plan.pair.Postgres, e.plan.pair.LiteLLM}
 	// Inspect both launchers before configuring either. A running guest
 	// without the exact reviewed launcher is never modified or adopted.
-	for _, spec := range specs {
+	for index, spec := range specs {
 		i, etag, err := e.sdk.GetInstance(spec.Name)
 		if err != nil || i == nil || etag == "" {
 			return result, id, errProtectedGateway
@@ -208,11 +208,12 @@ func StartLocalProtectedGateway(ctx context.Context, grantPath, operatorPath str
 		if gatewayLauncherMatches(i, spec, e.plan.pair.Postgres.Name) {
 			continue
 		}
-		if i.Status != "Stopped" || !gatewayLauncherConfigSafe(i.Config, nil, false) || !gatewayLauncherConfigSafe(i.ExpandedConfig, nil, false) {
+		baseline := gatewayImageLauncher(spec.Role, resolved[index])
+		if i.Status != "Stopped" || !gatewayLauncherConfigSafe(i.Config, baseline, false) || !gatewayLauncherConfigSafe(i.ExpandedConfig, baseline, false) {
 			return result, id, errProtectedGateway
 		}
 	}
-	for _, spec := range specs {
+	for index, spec := range specs {
 		i, etag, err := e.sdk.GetInstance(spec.Name)
 		if err != nil || i == nil || etag == "" {
 			return result, id, errProtectedGateway
@@ -220,7 +221,8 @@ func StartLocalProtectedGateway(ctx context.Context, grantPath, operatorPath str
 		if gatewayLauncherMatches(i, spec, e.plan.pair.Postgres.Name) {
 			continue
 		}
-		if i.Status != "Stopped" || !gatewayLauncherConfigSafe(i.Config, nil, false) || !gatewayLauncherConfigSafe(i.ExpandedConfig, nil, false) ||
+		baseline := gatewayImageLauncher(spec.Role, resolved[index])
+		if i.Status != "Stopped" || !gatewayLauncherConfigSafe(i.Config, baseline, false) || !gatewayLauncherConfigSafe(i.ExpandedConfig, baseline, false) ||
 			guard(ctx) != nil || e.session.BeginEffect(ctx, "configure-"+spec.Role) != nil || guard(ctx) != nil {
 			return result, id, errProtectedGateway
 		}
