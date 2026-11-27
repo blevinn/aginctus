@@ -60,6 +60,12 @@ func acceptanceFailureStage(stage string) string {
 			return stage
 		}
 	}
+	if suffix, ok := strings.CutPrefix(stage, "native_instance_scenario_assertion_line_"); ok {
+		line, err := strconv.Atoi(suffix)
+		if err == nil && line >= 1 && line <= 9999 && strconv.Itoa(line) == suffix {
+			return stage
+		}
+	}
 	switch stage {
 	case "configuration", "worker_identity", "worker_marker", "worker_credential",
 		"report_root", "report_lock", "report_initialize", "evidence", "worker_daemon",
