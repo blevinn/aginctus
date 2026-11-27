@@ -8,7 +8,6 @@ resource, host isolation, or agent authorization evidence.
 import json as admission_json
 import shlex as admission_shlex
 
-
 ADMISSION_PROJECT = "aginctus-testenv"
 ADMISSION_PREFIX = "incus --project " + ADMISSION_PROJECT
 ADMISSION_PROBE = "policy-probe"
