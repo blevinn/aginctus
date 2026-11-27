@@ -194,6 +194,10 @@
             inherit self nixpkgs system;
             projectAdmission = true;
           };
+          testenv-runtime-resources = import ./internal/testing/testenv/nix/disposable-worker-fixture.nix {
+            inherit self nixpkgs system;
+            runtimeResources = true;
+          };
           testenv-disposable-worker-fixture =
             import ./internal/testing/testenv/nix/disposable-worker-fixture.nix
               {

@@ -51,7 +51,6 @@ func runProtectedGatewayProvision(args []string) int {
 	}
 	return 0
 }
-
 func runProtectedGatewayPublish(args []string) int {
 	if len(args) != 2 {
 		fmt.Fprintln(os.Stderr, "usage: aginctus internal gateway-protected-publish GRANT OPERATOR_CONFIG")
