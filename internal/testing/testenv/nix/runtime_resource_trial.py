@@ -59,6 +59,7 @@ def run_runtime_resources(machine, fingerprint):
     # Resolve the real mounted root's parent block device; never guess /dev/sda.
     # No writes: verify capacity and read exactly one sector at and beyond EOF.
     disk_script = """set -euo pipefail
+export PATH=/run/current-system/sw/bin
 root=$(findmnt --noheadings --nofsroot --output SOURCE --target /)
 root=$(readlink -f "$root")
 test -b "$root"
