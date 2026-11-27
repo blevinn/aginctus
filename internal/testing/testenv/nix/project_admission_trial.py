@@ -39,8 +39,14 @@ def _admission_init(name, cpu=1, memory="512MiB", disk="8GiB"):
 def _admission_denied(machine, label, command, expected):
     before = _admission_inventory(machine)
     status, output = machine.execute(command + " 2>&1")
-    if status != 1 or expected not in output:
-        raise RuntimeError(f"admission probe {label}: expected Incus policy denial; exit {status}")
+    # Only specific provider refusals qualify; a usage or storage error
+    # must never pass. The synthetic worker has no private payload here.
+    expected_messages = (expected,) if isinstance(expected, str) else expected
+    if status != 1 or not any(message in output for message in expected_messages):
+        raise RuntimeError(
+            f"admission probe {label}: expected Incus policy denial; exit {status}; "
+            f"output {output[:1024]!r}"
+        )
     if _admission_inventory(machine) != before:
         raise RuntimeError(f"admission probe {label}: rejected request changed inventory or configuration")
     print("FIXTURE PROJECT ADMISSION:", label, "pass")
@@ -69,7 +75,10 @@ def run_project_admission(machine):
         raise RuntimeError("valid second instance admission unverified")
     _admission_denied(
         machine, "instance_count", _admission_init("policy-third"),
-        f'Reached maximum number of instances in project "{ADMISSION_PROJECT}"',
+        (
+            f'Reached maximum number of instances of type "virtual-machine" in project "{ADMISSION_PROJECT}"',
+            f'Reached maximum number of instances in project "{ADMISSION_PROJECT}"',
+        ),
     )
 
     # The parent bridge and directory are real synthetic worker resources.
