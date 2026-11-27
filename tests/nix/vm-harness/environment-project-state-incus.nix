@@ -183,7 +183,7 @@ pkgs.testers.runNixOSTest {
     machine.succeed("incus image import ${guestImage.config.system.build.metadata}/tarball/* ${guestImage.config.system.build.tarball}/tarball/* --alias state-guest --project ${protectedProject}", timeout=180)
     machine.succeed("incus image import ${workerImage.config.system.build.metadata}/tarball/* ${workerImage.config.system.build.tarball}/tarball/* --alias worker-guest --project ${project}", timeout=180)
     image = machine.succeed("incus image info worker-guest --project ${project} | awk '/^Fingerprint:/ { print $2 }'").strip()
-    state_image = machine.succeed("incus image info state-guest --project ${project} | awk '/^Fingerprint:/ { print $2 }'").strip()
+    state_image = machine.succeed("incus image info state-guest --project ${protectedProject} | awk '/^Fingerprint:/ { print $2 }'").strip()
     gateway_project = "protected-gateway"
     gateway_env = descriptors[1]["id"]
     gateway_base = "ag-" + gateway_env.replace("-", "")
@@ -197,8 +197,8 @@ pkgs.testers.runNixOSTest {
                     " -c restricted.networks.access=state-mgmt -c restricted.storage-pools.access=default")
     # Local test images exercise exact Incus fingerprint and attachment observation;
     # the read-only preview does not establish OCI provenance.
-    for alias in ("state-guest", "worker-guest"):
-        machine.succeed(f"incus image copy {alias} local: --project ${project} --target-project {gateway_project} --alias {alias}", timeout=180)
+    for alias, source in (("state-guest", "${protectedProject}"), ("worker-guest", "${project}")):
+        machine.succeed(f"incus image copy {alias} local: --project {source} --target-project {gateway_project} --alias {alias}", timeout=180)
     machine.succeed(f"incus storage volume create default {volume} {gateway_scope} security.shifted=true"
                     f" user.aginctus.managed=true user.aginctus.resource=gateway-postgres-volume"
                     f" user.aginctus.deployment={gateway_project} user.aginctus.environment-id={gateway_env}")
@@ -452,6 +452,41 @@ pkgs.testers.runNixOSTest {
                    f" --cert {private}/member.crt --key {private}/member.key"
                    f" --output /dev/null --write-out '%{{http_code}}' {url}")
     assert machine.succeed(member_read).strip() == "200"
+    with subtest("exact component grant and live execution boundary"):
+        policy = private + "/domain-execution.json"
+        target = "environment-state-service/etc/aginctus/execution.json --project ${protectedProject} --uid 0 --gid 0 --mode 0644"
+        deliver = {"peerSha256": fingerprint("member"), **binding, "environmentId": gateway_env,
+                   "revisionId": revisions[1]["id"], "workloadId": "gateway-credentials", "operation": "gateway-deliver"}
+
+        def install_domain_policy(entries):
+            save(policy, {"apiVersion": "aginctus.dev/project-execution-policy/v1alpha1", "grants": entries})
+            machine.succeed(f"incus file push {policy} {target}")
+
+        def domain_step(step, **overrides):
+            body = {"apiVersion": "aginctus.dev/project-native-execution/v1alpha1", "step": step,
+                    "revision": revisions[1], "workloadId": "gateway-credentials", "operation": "gateway-deliver", **overrides}
+            return (f"curl -fsS --cacert {private}/state.crt --cert {private}/member.crt --key {private}/member.key"
+                    f" https://${serviceIP}:8444/v1/native-execution -H 'Content-Type: application/json' --data-binary {shlex.quote(compact(body))}")
+
+        install_domain_policy([deliver])
+        machine.fail(domain_step("acquire", revision=revisions[0]))
+        machine.fail(domain_step("acquire", operation="reconcile"))
+        attempt = json.loads(machine.succeed(domain_step("acquire")))["id"]
+        machine.succeed(domain_step("check", id=attempt))
+        machine.fail(domain_step("begin", id=attempt, action="start", sequence=1))
+        machine.succeed(domain_step("begin", id=attempt, action="deliver", sequence=1))
+        machine.fail(domain_step("submitted", id=attempt, sequence=1, daemonOperationId="ffffffff-ffff-4fff-8fff-ffffffffffff"))
+        machine.succeed(domain_step("applied", id=attempt, sequence=1))
+        machine.succeed(domain_step("finish", id=attempt, sequence=1, succeeded=True))
+        attempt = json.loads(machine.succeed(domain_step("acquire")))["id"]
+        machine.succeed(domain_step("begin", id=attempt, action="deliver", sequence=1))
+        install_domain_policy([])
+        machine.fail(domain_step("check", id=attempt, sequence=1))
+        install_domain_policy([deliver])
+        machine.succeed(guest + " systemctl restart aginctus-project-state.service")
+        machine.wait_until_succeeds(member_read + " | grep -x 200", timeout=30)
+        conflict = domain_step("acquire").replace("curl -fsS", "curl -sS -o /dev/null -w '%{http_code}'", 1)
+        assert machine.succeed(conflict).strip() == "409"
     machine.succeed("incus config trust remove " + fingerprint("member"))
     assert machine.succeed(member_read).strip() == "403"
     assert status(0)["revision"]["id"] == revisions[0]["id"], "revocation blocked the independent promoter read"

@@ -47,9 +47,17 @@ func (s *LocalProjectStateStore) beginProjectExecution(ctx context.Context, enro
 	if err := s.requireResolvedProjectExecutions(ctx); err != nil {
 		return nil, err
 	}
-	pin, err = s.PinLocalAccepted(ctx, enrolled, revision, grant.WorkloadID)
+	if grant.domainScope() {
+		pin, err = s.PinLocalRevision(ctx, enrolled, revision)
+	} else {
+		pin, err = s.PinLocalAccepted(ctx, enrolled, revision, grant.WorkloadID)
+	}
 	if err != nil {
 		return nil, err
+	}
+	candidate, err := pin.SnapshotCandidate(ctx)
+	if err != nil || !grant.domainSelected(candidate) {
+		return nil, errProjectExecutionDenied
 	}
 	journal, err := pin.NewLocalNativeJournal()
 	if err != nil {
@@ -94,6 +102,16 @@ func (e *projectExecution) beginEffect(ctx context.Context, action string, curre
 	}) {
 		return errProjectExecutionDenied
 	}
+	if err := e.check(ctx); err != nil {
+		return err
+	}
+	return e.journal.BeginEffect(ctx, e.grant.WorkloadID, e.grant.WorkloadID, action)
+}
+
+func (e *projectExecution) check(ctx context.Context) error {
+	if e.projectLock == nil || e.pin.Check(ctx) != nil {
+		return errProjectExecutionDenied
+	}
 	held, err := e.projectLock.Stat()
 	if err != nil {
 		return errProjectExecutionDenied
@@ -102,7 +120,7 @@ func (e *projectExecution) beginEffect(ctx context.Context, action string, curre
 	if err != nil || !os.SameFile(held, named) {
 		return errProjectExecutionDenied
 	}
-	return e.journal.BeginEffect(ctx, e.grant.WorkloadID, e.grant.WorkloadID, action)
+	return ctx.Err()
 }
 
 func (e *projectExecution) close() error {
