@@ -24,7 +24,9 @@ UNVERIFIED = (
 )
 
 
-def fixture_receipt(report, scenario, source_revision, lock_sha256, image_fingerprint):
+def fixture_receipt(
+    report, scenario, source_revision, lock_sha256, image_fingerprint, *, require_payload_transfer=False
+):
     if (
         report.get("schema_version") != 1
         or report.get("profile") != "dedicated_worker"
@@ -49,6 +51,12 @@ def fixture_receipt(report, scenario, source_revision, lock_sha256, image_finger
         required.append("native_instance_scenario")
     elif checks.get("native_instance_scenario") != "not_verified":
         raise ValueError("unexpected scenario evidence")
+    if require_payload_transfer:
+        if scenario:
+            raise ValueError("payload fixture must use the base image lifecycle")
+        required.append("payload_transfer")
+    elif checks.get("payload_transfer") != "not_verified":
+        raise ValueError("unexpected payload evidence")
     if any(checks.get(key) != "pass" for key in required):
         raise ValueError("worker lifecycle or scenario incomplete")
     if any(checks.get(key) != "not_verified" for key in UNVERIFIED):
@@ -57,7 +65,7 @@ def fixture_receipt(report, scenario, source_revision, lock_sha256, image_finger
         "schema_version": 1,
         "profile": "managed_worker_fixture",
         "evidence_tier": "disposable_guest_no_live_provider",
-        "scenario": scenario or "worker-lifecycle",
+        "scenario": "payload-transfer" if require_payload_transfer else (scenario or "worker-lifecycle"),
         "status": "pass",
         "source_revision": source_revision,
         "flake_lock_sha256": lock_sha256,
@@ -65,7 +73,8 @@ def fixture_receipt(report, scenario, source_revision, lock_sha256, image_finger
         "results": [
             {"id": key, "status": "pass"} for key in required
         ] + [
-            {"id": key, "status": "not_verified"} for key in UNVERIFIED
+            {"id": key, "status": "not_verified"}
+            for key in UNVERIFIED + (() if require_payload_transfer else ("payload_transfer",))
         ],
         "host_teardown": "not_verified",
         "agent_admission": "not_verified",
