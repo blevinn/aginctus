@@ -98,6 +98,7 @@ pkgs.testers.runNixOSTest {
     import hashlib
     import json
     import shlex
+    import sys
     from typing import Any
 
     startup = ${if gatewayStartup then "True" else "False"}
@@ -398,9 +399,9 @@ pkgs.testers.runNixOSTest {
             machine.succeed("incus project delete foreign-environment")
             start_status, start_result = machine.execute(command + "start" + args, timeout=320)
             if start_status != 0:
-                print(start_result)
-                print(machine.succeed(f"incus list {gateway_scope} --format json | jq -c '[.[] | {{name, status, networks: .state.network}}]'"))
-                print(machine.execute(f"incus exec {pg} {gateway_scope} -- getent hosts {pg}"))
+                print(start_result, file=sys.stderr)
+                print(machine.succeed(f"incus list {gateway_scope} --format json | jq -c '[.[] | {{name, status, networks: .state.network}}]'"), file=sys.stderr)
+                print(machine.execute(f"incus exec {pg} {gateway_scope} -- getent hosts {pg}"), file=sys.stderr)
                 # Capture a reproduction payload in the disposable VM only;
                 # print a fixed classification and never the process output.
                 boot = "/run/aginctus/gateway/litellm-bootstrap.py"
@@ -409,16 +410,18 @@ pkgs.testers.runNixOSTest {
                 machine.execute(f"incus stop {llm} {gateway_scope} --force")
                 machine.succeed(f"incus file push {private}/bootstrap-debug.py {llm}{boot} {gateway_scope} --uid 0 --gid 0 --mode 0500")
                 machine.execute(f"incus start {llm} {gateway_scope}")
-                machine.execute("sleep 25")
+                machine.execute("sleep 35")
                 code, _ = machine.execute(f"incus file pull {llm}/tmp/litellm-debug {private}/litellm-debug {gateway_scope}")
                 if code == 0:
+                    size = machine.succeed(f"wc -c <{private}/litellm-debug").strip()
+                    print(f"LiteLLM diagnostic size: {size}", file=sys.stderr)
                     for label, pattern in (("database network", "P1001|could not translate host|database server at|Name or service not known"),
                                            ("database auth", "P1000|authentication failed"), ("prisma binaries", "binaries.prisma|prisma.*binary|schema.engine"),
                                            ("runtime option", "No such option|Invalid value"), ("import", "ModuleNotFoundError|ImportError"),
                                            ("local artifact", "Permission denied|FileNotFoundError|No such file")):
                         test, _ = machine.execute(f"grep -iEq {shlex.quote(pattern)} {private}/litellm-debug")
                         if test == 0:
-                            print(f"LiteLLM diagnostic: {label}")
+                            print(f"LiteLLM diagnostic: {label}", file=sys.stderr)
                 raise AssertionError("installed startup failed")
             first_start = json.loads(start_result)
             assert first_start["result"]["started"] == [pg, llm]
