@@ -190,6 +190,10 @@
             inherit self nixpkgs system;
             nestedKVM = true;
           };
+          testenv-project-admission = import ./internal/testing/testenv/nix/disposable-worker-fixture.nix {
+            inherit self nixpkgs system;
+            projectAdmission = true;
+          };
           testenv-disposable-worker-fixture =
             import ./internal/testing/testenv/nix/disposable-worker-fixture.nix
               {
