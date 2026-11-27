@@ -141,7 +141,9 @@ pkgs.testers.runNixOSTest {
         admission_checks = run_project_admission(machine)
       ''}
       ${pkgs.lib.optionalString runtimeResources ''
-        resource_checks = run_runtime_resources(machine, fingerprint)
+        resource_checks = run_runtime_resources(
+            machine, fingerprint, _admission_inventory, ADMISSION_PREFIX, ADMISSION_SENTINEL,
+        )
       ''}
       machine.succeed("install -d -m 0755 /etc/aginctus-testenv")
       machine.succeed("printf 'aginctus-dedicated-disposable-worker-v1\\n' > /etc/aginctus-testenv/disposable-worker; chmod 0444 /etc/aginctus-testenv/disposable-worker")
