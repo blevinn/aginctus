@@ -177,3 +177,17 @@ online fallback. The root-administered observation is trusted in the same way
 as acquisition provenance, not an independent cryptographic registry proof.
 Previously provisioned environments require explicit staging before startup.
 This does not establish absence of guest-originated network traffic.
+
+### Explicit protected stopped-root removal
+
+The administrator-only internal gateway-protected-remove role selects one
+service, its exact Incus UUID and creation timestamp, and requires explicit
+root discard. The gateway-remove-litellm and gateway-remove-postgres grants
+are distinct; removal never implies stop. LiteLLM must be removed before
+PostgreSQL. The existing native removal path verifies snapshots/backups,
+instance ownership, immutable image evidence and retention of the database
+volume. No registry or secret source access is required. Unknown outcomes
+stay journaled and blocked. Root discard is not OAuth or application-state
+revocation: independently quiesce use and verify root-local data is disposable.
+Existing delivery evidence is retained and cannot authorize a new incarnation;
+recreation and credential restaging are separate operations, not automatic.

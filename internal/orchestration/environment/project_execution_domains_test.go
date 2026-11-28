@@ -22,6 +22,9 @@ func TestProjectDomainGrantsDoNotInheritWorkloadAuthority(t *testing.T) {
 	}{
 		{gateway, "deliver", true},
 		{gateway, "start", false},
+		{projectExecutionGrant{WorkloadID:"gateway-credentials",Operation:"gateway-remove-litellm"},"delete",true},
+		{projectExecutionGrant{WorkloadID:"gateway-credentials",Operation:"gateway-remove-postgres"},"delete",true},
+		{projectExecutionGrant{WorkloadID:"gateway-credentials",Operation:"gateway-remove-litellm"},"stop",false},
 		{herdr, "create", true},
 		{herdr, "start", true},
 		{herdr, "delete", false},
