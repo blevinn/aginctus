@@ -73,7 +73,7 @@ testenv-worker-lifecycle:
     env -u NIX_CONFIG -u NIX_REMOTE -u QEMU_OPTS -u QEMU_KERNEL_PARAMS -u SSH_AUTH_SOCK -u INCUS_SOCKET -u INCUS_DIR nix build --no-link --no-update-lock-file --option sandbox true --option builders "" --print-out-paths .#testenv-disposable-worker-fixture
 
 testenv-managed-native-instance:
-    env -u NIX_CONFIG -u NIX_REMOTE -u QEMU_OPTS -u QEMU_KERNEL_PARAMS -u SSH_AUTH_SOCK -u INCUS_SOCKET -u INCUS_DIR nix build --no-link --no-update-lock-file --option sandbox true --option builders "" --print-out-paths .#testenv-managed-native-instance
+    @python3 tests/vm_harness/runner.py managed-test native-instance
 
 testenv-payload-transfer:
     env -u NIX_CONFIG -u NIX_REMOTE -u QEMU_OPTS -u QEMU_KERNEL_PARAMS -u SSH_AUTH_SOCK -u INCUS_SOCKET -u INCUS_DIR nix build --no-link --no-update-lock-file --option sandbox true --option builders "" --print-out-paths .#testenv-payload-transfer

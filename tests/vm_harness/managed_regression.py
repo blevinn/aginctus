@@ -26,6 +26,10 @@ SUITE = (
     ("testenv-runtime-resources", "runtime-resources", ("guest_cpu_count", "guest_memory_capacity", "guest_root_disk_capacity")),
     ("testenv-offline-network", "offline-network", ("offline_tcp_udp_boundary", "guest_firewall_independence")),
 )
+# Checked against the canonical Go catalog by TestManagedFixtureTargetParity.
+MANAGED_SCENARIOS = {
+    "native-instance": "testenv-managed-native-instance",
+}
 LIFECYCLE = (
     "project_policy", "ephemeral_lifecycle", "retained_lifecycle", "scoped_ttl_recovery",
     "root_volumes", "foreign_preserved", "instance_cleanup",
@@ -166,14 +170,28 @@ def build(root, env, drv):
 
 
 def run(root, env, provenance):
+    return _run(root, env, provenance, SUITE, "managed_fixture_regression")
+
+
+def run_scenario(root, env, provenance, scenario):
+    target = MANAGED_SCENARIOS.get(scenario)
+    if target is None:
+        raise ValueError("managed scenario unavailable")
+    selection = tuple(item for item in SUITE if item[:2] == (target, scenario))
+    if len(selection) != 1:
+        raise ValueError("managed scenario receipt contract unavailable")
+    return _run(root, env, provenance, selection, "managed_fixture_scenario")
+
+
+def _run(root, env, provenance, suite, profile):
     initial = provenance()
     revision = initial.git_revision
     digest = initial.flake_lock_sha256
     report = {
-        "schema_version": 1, "profile": "managed_fixture_regression", "status": "fail",
+        "schema_version": 1, "profile": profile, "status": "fail",
         "source_revision": revision, "flake_lock_sha256": digest,
         "host_teardown": "not_verified", "agent_admission": "not_verified",
-        "results": [{"target": target, "status": "not_run"} for target, _, _ in SUITE],
+        "results": [{"target": target, "status": "not_run"} for target, _, _ in suite],
     }
     if (
         initial.git_dirty is not False or not isinstance(revision, str) or not REVISION.fullmatch(revision)
@@ -183,7 +201,7 @@ def run(root, env, provenance):
         print(json.dumps(report, sort_keys=True))
         return 1
     base_fingerprint = None
-    for entry, (target, scenario, extra) in zip(report["results"], SUITE, strict=True):
+    for entry, (target, scenario, extra) in zip(report["results"], suite, strict=True):
         stage = "source"
         try:
             if provenance() != initial:

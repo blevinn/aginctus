@@ -136,6 +136,43 @@ class ManagedRegressionTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 regression.store_path(value)
 
+    def test_managed_scenario_reuses_receipt_validation(self):
+        record = receipt("native-instance", ("native_instance_scenario",))
+        with (
+            patch.object(regression, "evaluate", return_value=DRV) as evaluate,
+            patch.object(regression, "build", return_value=(OUTPUT, "not_verified")),
+            patch.object(regression, "read_receipt", return_value=record),
+            contextlib.redirect_stdout(io.StringIO()) as stdout,
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            code = regression.run_scenario(Path("."), {}, lambda: PROVENANCE, "native-instance")
+        self.assertEqual(code, 0)
+        evaluate.assert_called_once_with(Path("."), {}, "testenv-managed-native-instance")
+        report = json.loads(stdout.getvalue())
+        self.assertEqual(report["profile"], "managed_fixture_scenario")
+        self.assertEqual(len(report["results"]), 1)
+        self.assertEqual(report["results"][0]["receipt"], record)
+        self.assertEqual(report["results"][0]["status"], "pass")
+
+    def test_managed_dispatch_denies_unavailable_scenarios(self):
+        with (
+            patch.object(regression, "run_scenario", return_value=0) as run,
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(runner.main(["managed-test", "native-instance"]), 0)
+            for args in (
+                ["managed-test"],
+                ["managed-test", "smoke"],
+                ["managed-test", "native-oci"],
+                ["managed-test", "full-stack"],
+                ["managed-test", "gateway-topology"],
+                ["managed-test", ".#testenv-managed-native-instance"],
+            ):
+                with self.subTest(args=args), self.assertRaises(SystemExit):
+                    runner.main(args)
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[-1], "native-instance")
+
     def test_runner_dispatches_only_fixed_regression(self):
         with (
             patch.object(regression, "run", return_value=0) as run,

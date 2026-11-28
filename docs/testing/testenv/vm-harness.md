@@ -62,10 +62,16 @@ just testenv-managed-native-instance
 The recipes request sandboxing, strip common inherited daemon/QEMU/SSH
 overrides, select the fixed derivation and request no remote builders.
 These options are not a substitute for verifying the actual Nix daemon
-policy or caller identity. The build prints its output store path; inspect
-`testenv-fixture-receipt.json` there. A cached result is not a fresh trial.
-The worker scenario plan reports `managed_target` separately from the
-legacy batch target; it remains `not_admitted` until runtime acceptance.
+policy or caller identity. The lifecycle build prints its store path;
+the managed native-instance recipe now invokes the existing VM launcher
+with `managed-test native-instance` and emits a single-scenario JSON report
+using the integrated receipt validator. Use a clean reviewed checkout for
+this evidence path. A cached result is not a fresh trial. Only the
+catalog-mapped offline scenario is selectable; no fallback to the legacy
+runner is permitted. The worker scenario plan reports `managed_target`
+separately from the legacy batch target and remains `not_admitted` for
+persistent worker admission; local authorized batch availability is not
+that admission.
 No ordinary VM test or MCP execution default changes. See the
 [worker fixture runbook](testenv-incus-vm-image.md) for prerequisites.
 
