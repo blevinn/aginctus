@@ -24,7 +24,8 @@ type workloadReconcileDocument struct {
 
 func registerNativeWorkloadReconcile(state *cobra.Command, out io.Writer, format func() (clioutput.Format, error), project, id *string) {
 	var workload, revision, grant, operation, createdAt string
-	var herdr, bootstrap bool
+	var herdr, bootstrap, discardRoot bool
+	var volumeCreatedAt string
 	cmd := &cobra.Command{
 		Use: "reconcile", Short: "Reconcile one explicitly selected accepted native workload", Hidden: true,
 		Args: cobra.NoArgs,
@@ -51,16 +52,32 @@ func registerNativeWorkloadReconcile(state *cobra.Command, out io.Writer, format
 				}
 			}
 			if herdr {
-				if workload != "" || operation != "reconcile" || createdAt != "" {
-					return errors.New("select Herdr alone for reconcile")
+				if workload != "" {
+					return errors.New("select Herdr alone")
 				}
-				result, op, err := nativelifecycle.ExecuteInstalledHerdr(cmd.Context(), config, grant, *project, *id, revision, bootstrap, false)
+				var result orchestration.Result
+				var op string
+				if operation == "reconcile" {
+					if createdAt != "" || volumeCreatedAt != "" || discardRoot {
+						return errors.New("teardown flags require a Herdr stop or removal")
+					}
+					result, op, err = nativelifecycle.ExecuteInstalledHerdr(cmd.Context(), config, grant, *project, *id, revision, bootstrap, false)
+				} else {
+					if bootstrap || (operation != "stop" && operation != "remove") || discardRoot != (operation == "remove") || incarnation.IsZero() {
+						return errors.New("herdr teardown requires exact instance and volume timestamps, separate operation, and explicit root discard for removal")
+					}
+					volumeAt, parseErr := time.Parse(time.RFC3339Nano, volumeCreatedAt)
+					if parseErr != nil || volumeAt.IsZero() {
+						return errors.New("herdr state volume creation timestamp must be RFC3339")
+					}
+					result, op, err = nativelifecycle.ExecuteInstalledHerdrTeardown(cmd.Context(), config, grant, *project, *id, revision, native.ProjectInstanceOperation(operation), incarnation, volumeAt)
+				}
 				if op == "" && err != nil {
 					return err
 				}
 				return errors.Join(err, clioutput.WriteStructured(out, f, workloadReconcileDocument{TypeMeta: api.TypeMeta{APIVersion: "aginctus.dev/v1alpha1", Kind: "NativeHerdrResult"}, OperationID: op, Result: result}))
 			}
-			if workload == "" || bootstrap {
+			if workload == "" || bootstrap || discardRoot || volumeCreatedAt != "" {
 				return errors.New("select one workload or Herdr; bootstrap applies only to Herdr")
 			}
 			result, op, err := nativelifecycle.ExecuteInstalledWorkload(cmd.Context(), config, grant, *project, *id, revision, workload, native.ProjectInstanceOperation(operation), incarnation)
@@ -72,6 +89,8 @@ func registerNativeWorkloadReconcile(state *cobra.Command, out io.Writer, format
 			}))
 		},
 	}
+	cmd.Flags().BoolVar(&discardRoot, "discard-herdr-root", false, "Explicitly discard only the stopped Herdr root filesystem on removal")
+	cmd.Flags().StringVar(&volumeCreatedAt, "herdr-state-created-at", "", "Exact retained Herdr state volume creation timestamp (RFC3339)")
 	cmd.Flags().BoolVar(&herdr, "herdr", false, "Select accepted Herdr instance and retained state")
 	cmd.Flags().BoolVar(&bootstrap, "bootstrap-herdr-state", false, "Separately authorized initial Herdr state creation")
 	cmd.Flags().StringVar(&workload, "workload", "", "Exact accepted workload ID")

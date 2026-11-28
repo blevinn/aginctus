@@ -32,7 +32,7 @@ func (g projectExecutionGrant) valid(binding Binding) bool {
 	switch g.Operation {
 	case "gateway-deliver", "gateway-provision", "gateway-start", "gateway-stop", "gateway-inspect":
 		return g.WorkloadID == "gateway-credentials"
-	case "herdr-reconcile", "herdr-bootstrap", "herdr-inspect":
+	case "herdr-reconcile", "herdr-bootstrap", "herdr-stop", "herdr-remove", "herdr-inspect":
 		return g.WorkloadID == "herdr-client"
 	case "reconcile", "stop", "remove", "recover", "inspect":
 		return true
@@ -60,6 +60,10 @@ func (g projectExecutionGrant) permits(e LocalNativeEffectRecord) bool {
 		return e.Action == "deliver"
 	case "herdr-bootstrap":
 		return e.Action == "create-state" || e.Action == "create" || e.Action == "start"
+	case "herdr-stop":
+		return e.Action == "stop"
+	case "herdr-remove":
+		return e.Action == "delete"
 	case "herdr-reconcile":
 		return e.Action == "create" || e.Action == "start"
 	case "reconcile":
@@ -74,7 +78,7 @@ func (g projectExecutionGrant) permits(e LocalNativeEffectRecord) bool {
 }
 
 func (g projectExecutionGrant) writer() bool {
-	return g.Operation == "reconcile" || g.Operation == "stop" || g.Operation == "remove" || g.Operation == "gateway-deliver" || g.Operation == "gateway-provision" || g.Operation == "gateway-start" || g.Operation == "gateway-stop" || g.Operation == "herdr-reconcile" || g.Operation == "herdr-bootstrap"
+	return g.Operation == "reconcile" || g.Operation == "stop" || g.Operation == "remove" || g.Operation == "gateway-deliver" || g.Operation == "gateway-provision" || g.Operation == "gateway-start" || g.Operation == "gateway-stop" || g.Operation == "herdr-reconcile" || g.Operation == "herdr-bootstrap" || g.Operation == "herdr-stop" || g.Operation == "herdr-remove"
 }
 
 func readProjectExecutionPolicy(path string, binding Binding) (map[projectExecutionGrant]struct{}, error) {
@@ -118,7 +122,7 @@ func (g projectExecutionGrant) domainSelected(c Candidate) bool {
 		return g.WorkloadID == "gateway-credentials" && c.Gateway != nil
 	case "herdr-bootstrap":
 		return g.WorkloadID == "herdr-client" && c.Herdr != nil && c.Herdr.AllowStateBootstrap
-	case "herdr-reconcile", "herdr-inspect":
+	case "herdr-reconcile", "herdr-stop", "herdr-remove", "herdr-inspect":
 		return g.WorkloadID == "herdr-client" && c.Herdr != nil
 	default:
 		return slices.Contains(c.SelectedWorkloads, g.WorkloadID)
@@ -126,7 +130,7 @@ func (g projectExecutionGrant) domainSelected(c Candidate) bool {
 }
 
 func (g projectExecutionGrant) domainScope() bool {
-	return g.Operation == "gateway-deliver" || g.Operation == "gateway-provision" || g.Operation == "gateway-start" || g.Operation == "gateway-stop" || g.Operation == "herdr-reconcile" || g.Operation == "herdr-bootstrap"
+	return g.Operation == "gateway-deliver" || g.Operation == "gateway-provision" || g.Operation == "gateway-start" || g.Operation == "gateway-stop" || g.Operation == "herdr-reconcile" || g.Operation == "herdr-bootstrap" || g.Operation == "herdr-stop" || g.Operation == "herdr-remove"
 }
 
 func (g projectExecutionGrant) inspection() bool {
@@ -141,7 +145,7 @@ func (g projectExecutionGrant) inspects(other projectExecutionGrant) bool {
 	case "gateway-inspect":
 		return other.Operation == "gateway-deliver" || other.Operation == "gateway-provision" || other.Operation == "gateway-start" || other.Operation == "gateway-stop"
 	case "herdr-inspect":
-		return other.Operation == "herdr-reconcile" || other.Operation == "herdr-bootstrap"
+		return other.Operation == "herdr-reconcile" || other.Operation == "herdr-bootstrap" || other.Operation == "herdr-stop" || other.Operation == "herdr-remove"
 	case "inspect":
 		return !other.domainScope()
 	default:

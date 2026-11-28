@@ -25,6 +25,10 @@ func TestProjectDomainGrantsDoNotInheritWorkloadAuthority(t *testing.T) {
 		{herdr, "create", true},
 		{herdr, "start", true},
 		{herdr, "delete", false},
+		{projectExecutionGrant{WorkloadID:"herdr-client",Operation:"herdr-stop"},"stop",true},
+		{projectExecutionGrant{WorkloadID:"herdr-client",Operation:"herdr-stop"},"delete",false},
+		{projectExecutionGrant{WorkloadID:"herdr-client",Operation:"herdr-remove"},"delete",true},
+		{projectExecutionGrant{WorkloadID:"herdr-client",Operation:"herdr-remove"},"stop",false},
 		{herdr, "deliver", false},
 		{projectExecutionGrant{WorkloadID: "gateway-credentials", Operation: "reconcile"}, "deliver", false},
 	} {

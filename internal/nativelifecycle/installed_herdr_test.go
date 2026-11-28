@@ -24,3 +24,16 @@ func TestHerdrEffectActionRequiresExactBootstrapAndTarget(t *testing.T) {
 		t.Fatal("reconcile admitted deletion")
 	}
 }
+
+func TestInstalledHerdrTeardownEffects(t *testing.T) {
+	for _,tc:=range []struct{op native.ProjectInstanceOperation;action native.Action;target string;want string}{
+		{native.StopInstance,native.Stop,herdrclient.NativeInstanceID,"stop"},
+		{native.RemoveInstance,native.Delete,herdrclient.NativeInstanceID,"delete"},
+		{native.StopInstance,native.Delete,herdrclient.NativeInstanceID,""},
+		{native.RemoveInstance,native.Stop,herdrclient.NativeInstanceID,""},
+		{native.RemoveInstance,native.Delete,herdrclient.NativeVolumeID,""},
+	}{
+		e:=orchestration.NativeEffect{Action:tc.action,Target:tc.target}
+		if got:=installedHerdrEffectAction(tc.target,e,false,tc.op);got!=tc.want{t.Fatalf("unexpected teardown action %q",got)}
+	}
+}
