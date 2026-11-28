@@ -26,9 +26,9 @@ type nativeOperationRecoveryDocument struct {
 
 func registerNativeOperationInspection(state *cobra.Command, out io.Writer, format func() (clioutput.Format, error), project, id *string) {
 	var workload, revision string
-	var recoverOperation bool
+	var recoverOperation, herdr, gateway bool
 	cmd := &cobra.Command{
-		Use: "operations [OPERATION_ID]", Short: "Inspect authorized native workload journal history", Hidden: true,
+		Use: "operations [OPERATION_ID]", Short: "Inspect authorized native component or workload journal history", Hidden: true,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f, err := format()
@@ -52,11 +52,15 @@ func registerNativeOperationInspection(state *cobra.Command, out io.Writer, form
 					return errors.New("empty operation ID")
 				}
 			}
+			target, inspection, err := nativeOperationSelection(workload, herdr, gateway, recoverOperation)
+			if err != nil {
+				return err
+			}
 			if recoverOperation {
 				if operationID == "" {
 					return errors.New("recovery requires one exact operation ID")
 				}
-				if err := environment.RecoverProjectOperation(cmd.Context(), config, *project, *id, revision, workload, operationID); err != nil {
+				if err := environment.RecoverProjectOperation(cmd.Context(), config, *project, *id, revision, target, operationID); err != nil {
 					return err
 				}
 				return clioutput.WriteStructured(out, f, nativeOperationRecoveryDocument{
@@ -64,7 +68,7 @@ func registerNativeOperationInspection(state *cobra.Command, out io.Writer, form
 					OperationID: operationID, Recovered: true,
 				})
 			}
-			result, err := environment.InspectProjectOperations(cmd.Context(), config, *project, *id, revision, workload, operationID)
+			result, err := environment.InspectProjectDomainOperations(cmd.Context(), config, *project, *id, revision, target, operationID, inspection)
 			if err != nil {
 				return err
 			}
@@ -74,9 +78,27 @@ func registerNativeOperationInspection(state *cobra.Command, out io.Writer, form
 		},
 	}
 	cmd.Flags().BoolVar(&recoverOperation, "recover", false, "Resolve positively observed terminal reconcile tasks with a separate recovery grant")
+	cmd.Flags().BoolVar(&herdr, "herdr", false, "Inspect the selected accepted Herdr component")
+	cmd.Flags().BoolVar(&gateway, "gateway", false, "Inspect the selected accepted protected gateway component")
 	cmd.Flags().StringVar(&workload, "workload", "", "Exact accepted workload ID")
 	cmd.Flags().StringVar(&revision, "revision", "", "Exact accepted revision ID, current or historical")
-	_ = cmd.MarkFlagRequired("workload")
 	_ = cmd.MarkFlagRequired("revision")
 	state.AddCommand(cmd)
+}
+
+func nativeOperationSelection(workload string, herdr, gateway, recoverOperation bool) (target, inspection string, err error) {
+	if herdr && gateway || workload != "" && (herdr || gateway) || workload == "" && !herdr && !gateway {
+		return "", "", errors.New("select exactly one workload, Herdr or gateway")
+	}
+	if recoverOperation && (herdr || gateway) {
+		return "", "", errors.New("component recovery is not enabled; inspect the operation without replay")
+	}
+	switch {
+	case herdr:
+		return "herdr-client", "herdr-inspect", nil
+	case gateway:
+		return "gateway-credentials", "gateway-inspect", nil
+	default:
+		return workload, "inspect", nil
+	}
 }

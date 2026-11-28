@@ -117,3 +117,13 @@ authorized. Live `state plan-native --herdr` supports the same host grant,
 expected revision and JSON output without a writer pin. This is resource
 lifecycle only: SSH, workspace, application readiness, stop/remove and recovery
 of component journals remain separate. No delegated activation approved.
+
+### Component journal inspection
+
+The installed hidden state operations command accepts exactly one of workload,
+Herdr or gateway selection, with an explicit current or historical revision.
+Component selections use the existing domain-specific inspect grants; an
+ordinary workload with the same ID is not a component selector. Listing and
+single-operation inspection report journal evidence only, not convergence.
+Component recovery is deliberately denied until a separately authenticated
+physical observation contract exists. No write or replay is enabled here.

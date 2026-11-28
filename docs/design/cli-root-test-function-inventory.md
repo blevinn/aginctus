@@ -25,6 +25,7 @@ without an updated owner decision.
 | `commands_state_reads_test.go` | `TestStateOperationsAllowsStructuredOutputGate` | State read-only CLI composition | Ensure authorized operation inspection reaches its JSON handler |
 | `commands_native_intent_plan_test.go` | `TestNativeIntentPlanProjectsAuthenticatedSnapshot` | Accepted-intent CLI composition | Retain scope, validation and deterministic output evidence |
 | `commands_native_intent_plan_test.go` | `TestInstalledNativeIntentPlanRequiresExplicitReadConfig` | Installed CLI authority selection | Retain fail-closed root entrypoint evidence |
+| `commands_native_operation_test.go` | `TestNativeOperationSelectionSeparatesComponentAuthority` | Component operation inspection CLI composition | Retain distinct component and workload authority selection evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveDependencyOrder` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveStopsBeforeNetworkOnGatewayFailure` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
 | `aggregate_remove_test.go` | `TestAggregateRemoveRejectsFlags` | Root-integrated domain/privilege contract | Split domain policy into owning package where independent of Run; retain negative CLI entrypoint evidence |
