@@ -555,6 +555,7 @@ func TestDaemonOCI(t *testing.T) {
 	if _, _, err := client.GetStoragePoolVolume("spike", "custom", gatewayVolume.Name); err != nil {
 		t.Fatal("failed stop must preserve database volume")
 	}
+	t.Run("authenticated-native-pair",func(t *testing.T){testNativeAuthenticatedPair(t,ctx,server,client,descriptor,createImages,resolvedImages)})
 	images, err := server.UseProject("default").GetImages()
 	if err != nil || len(images) != 0 {
 		t.Fatal("OCI import leaked into the default project")

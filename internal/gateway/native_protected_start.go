@@ -15,7 +15,9 @@ import (
 	"github.com/lxc/incus/v7/shared/api"
 )
 
-func gatewayLauncher(spec NativeGatewayInstanceSpec, pg string) map[string]string {
+// NativeGatewayLauncherConfig describes the fixed nonsecret OCI launch options.
+// It is pure intent, not permission to configure or start a guest.
+func NativeGatewayLauncherConfig(spec NativeGatewayInstanceSpec, pg string) map[string]string {
 	entry := "/usr/bin/env POSTGRES_USER=litellm POSTGRES_DB=litellm POSTGRES_PASSWORD_FILE=/run/aginctus/gateway/postgres-password POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256 /usr/local/bin/docker-entrypoint.sh postgres"
 	cwd := "/"
 	if spec.Role == "litellm" {
@@ -46,7 +48,7 @@ func gatewayLauncherConfigSafe(config, want map[string]string, configured bool) 
 	return true
 }
 func gatewayLauncherMatches(i *api.Instance, spec NativeGatewayInstanceSpec, pg string) bool {
-	want := gatewayLauncher(spec, pg)
+	want := NativeGatewayLauncherConfig(spec, pg)
 	return i != nil && gatewayLauncherConfigSafe(i.Config, want, true) && gatewayLauncherConfigSafe(i.ExpandedConfig, want, true)
 }
 
@@ -228,7 +230,7 @@ func StartLocalProtectedGateway(ctx context.Context, grantPath, operatorPath str
 		}
 		put := i.Writable()
 		put.Config = maps.Clone(put.Config)
-		maps.Copy(put.Config, gatewayLauncher(spec, e.plan.pair.Postgres.Name))
+		maps.Copy(put.Config, NativeGatewayLauncherConfig(spec, e.plan.pair.Postgres.Name))
 		op, err := e.sdk.UpdateInstance(spec.Name, put, etag)
 		if err != nil || op == nil || e.session.RecordDaemonOperation(ctx, op.Get().ID) != nil || op.WaitContext(ctx) != nil {
 			return result, id, errProtectedGateway
