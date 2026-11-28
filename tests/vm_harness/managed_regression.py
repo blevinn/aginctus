@@ -157,7 +157,10 @@ def build(root, env, drv):
             if process.poll() is None:
                 process.terminate()
         stdout.seek(0)
-        output = store_path(stdout.read(4096).decode("ascii"))
+        raw_output = stdout.read(4097)
+        if len(raw_output) > 4096:
+            raise ValueError("oversized build output")
+        output = store_path(raw_output.decode("ascii"))
     freshness = "fresh" if saw_command and saw_completion else "not_verified"
     return output, freshness
 
