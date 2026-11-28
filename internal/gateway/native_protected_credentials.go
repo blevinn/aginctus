@@ -66,7 +66,7 @@ func (e *protectedExecution) pinnedImages(ctx context.Context) (NativeGatewayCre
 		if err != nil || native.ObserveGatewayImageReuseWithClient(ctx, native.GatewayImageAcquireIntent{Project: e.grant.ProtectedProject, Image: want}, spec.Alias, evidence, e.sdk) != nil {
 			return NativeGatewayCreateImages{}, resolved, errProtectedGateway
 		}
-		image, err := nativeoci.ResolvePublic(ctx, spec.Source())
+		image, err := e.readRuntimeMetadata(gatewayRoles[i], spec, evidence)
 		if err != nil || image.Registry != want.Registry || image.Repository != want.Repository || image.ManifestDigest != want.ManifestDigest || image.ConfigDigest != want.ConfigDigest || image.IncusFingerprint != want.IncusFingerprint {
 			return NativeGatewayCreateImages{}, resolved, errProtectedGateway
 		}

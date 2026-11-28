@@ -162,3 +162,18 @@ before merge; do not activate delegated or pilot execution. No secret values
 in Incus config. Registry metadata is still resolved online before runtime;
 strict offline full-stack staging requires follow-up. No rotation or implicit
 repair of partial handoff is implemented.
+
+### Online staging boundary
+
+After stopped provisioning, explicitly invoke the administrator-only internal
+ gateway-protected-stage-runtime role with the same grant and operator config.
+It uses the exact gateway-provision coordination grant, observes acquisition
+provenance, and resolves immutable public registry metadata. It persists only
+the reviewed runtime facts (not raw config, arbitrary environment or labels),
+bound to the exact revision, platform, physical grant and alias incarnation.
+Publish and start now require these protected records and perform no registry
+metadata lookup. Missing, partial or contradictory records fail closed; no
+online fallback. The root-administered observation is trusted in the same way
+as acquisition provenance, not an independent cryptographic registry proof.
+Previously provisioned environments require explicit staging before startup.
+This does not establish absence of guest-originated network traffic.

@@ -17,6 +17,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "gateway-protected-stage-runtime" {
+		os.Exit(runProtectedGatewayStageRuntime(os.Args[3:]))
+	}
 	if len(os.Args) >= 3 && os.Args[1] == "internal" && os.Args[2] == "gateway-protected-stop" {
 		os.Exit(runProtectedGatewayStop(os.Args[3:]))
 	}
