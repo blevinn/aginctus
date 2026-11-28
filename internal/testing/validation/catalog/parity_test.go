@@ -167,6 +167,16 @@ func TestCatalogReturnsDefensiveCopies(t *testing.T) {
 func TestManagedFixtureTargetParity(t *testing.T) {
 	flake := readSource(t, "flake.nix")
 	just := readSource(t, "justfile")
+	runner := readSource(t, "tests/vm_harness/managed_regression.py")
+	body := manifestBody(t, runner, "MANAGED_SCENARIOS = {", "\n}")
+	pattern := regexp.MustCompile(`"([a-z0-9-]+)": "(testenv-[a-z0-9-]+)"`)
+	targets := make(map[string]string)
+	for _, match := range pattern.FindAllStringSubmatch(body, -1) {
+		if _, exists := targets[match[1]]; exists {
+			t.Fatalf("duplicate managed scenario %q", match[1])
+		}
+		targets[match[1]] = match[2]
+	}
 	for _, scenario := range VMScenarios() {
 		if scenario.ManagedTarget == "" {
 			continue
@@ -176,8 +186,14 @@ func TestManagedFixtureTargetParity(t *testing.T) {
 		}
 		if !strings.Contains(flake, scenario.ManagedTarget+" =") ||
 			!strings.Contains(just, scenario.ManagedTarget+":") ||
-			!strings.Contains(just, ".#"+scenario.ManagedTarget) {
+			!strings.Contains(just, scenario.ManagedTarget+":\n    @python3 tests/vm_harness/runner.py managed-test "+scenario.Name+"\n") ||
+			targets[scenario.Name] != scenario.ManagedTarget ||
+			!strings.Contains(runner, `("`+scenario.ManagedTarget+`", "`+scenario.Name+`",`) {
 			t.Fatalf("managed target drift: %+v", scenario)
 		}
+		delete(targets, scenario.Name)
+	}
+	if len(targets) != 0 {
+		t.Fatalf("unclassified managed Python targets: %v", targets)
 	}
 }
