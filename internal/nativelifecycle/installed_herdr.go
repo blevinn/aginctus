@@ -25,7 +25,7 @@ type trackedHerdrClient struct {
 	guard        func() error
 	pool, volume string
 	bootstrap    bool
-	operation native.ProjectInstanceOperation
+	operation    native.ProjectInstanceOperation
 }
 
 func (c trackedHerdrClient) GetStoragePoolVolume(pool, kind, name string) (*api.StorageVolume, string, error) {
@@ -44,7 +44,7 @@ func (c trackedHerdrClient) CreateInstance(p api.InstancesPost) (incus.Operation
 	return c.trackedWorkloadClient.CreateInstance(p)
 }
 func (c trackedHerdrClient) UpdateInstanceState(n string, p api.InstanceStatePut, etag string) (incus.Operation, error) {
-	if n != c.instance || p.Force || !(c.operation == native.ReconcileInstance && p.Action == "start" || c.operation == native.StopInstance && p.Action == "stop") || c.guard() != nil {
+	if n != c.instance || p.Force || (c.operation != native.ReconcileInstance || p.Action != "start") && (c.operation != native.StopInstance || p.Action != "stop") || c.guard() != nil {
 		return nil, errHerdrAuthority
 	}
 	return c.trackedWorkloadClient.UpdateInstanceState(n, p, etag)
@@ -63,19 +63,19 @@ func (c trackedHerdrClient) DeleteInstance(name string) (incus.Operation, error)
 // identity volume through the same installed native engine and writer service.
 // This establishes resource lifecycle, not SSH/application/workspace readiness.
 func ExecuteInstalledHerdr(ctx context.Context, configPath, grantPath, project, id, revision string, bootstrap, planning bool) (result orchestration.Result, operationID string, err error) {
-	return executeInstalledHerdr(ctx,configPath,grantPath,project,id,revision,bootstrap,planning,native.ReconcileInstance,time.Time{},time.Time{})
+	return executeInstalledHerdr(ctx, configPath, grantPath, project, id, revision, bootstrap, planning, native.ReconcileInstance, time.Time{}, time.Time{})
 }
 
 // ExecuteInstalledHerdrTeardown selects only the existing Herdr incarnation
 // and its retained system volume. Stop and root-disk removal are distinct.
-func ExecuteInstalledHerdrTeardown(ctx context.Context,configPath,grantPath,project,id,revision string,operation native.ProjectInstanceOperation,instanceAt,volumeAt time.Time)(orchestration.Result,string,error){
-	if operation!=native.StopInstance && operation!=native.RemoveInstance || instanceAt.IsZero() || volumeAt.IsZero(){
-		return orchestration.Result{},"",errHerdrAuthority
+func ExecuteInstalledHerdrTeardown(ctx context.Context, configPath, grantPath, project, id, revision string, operation native.ProjectInstanceOperation, instanceAt, volumeAt time.Time) (orchestration.Result, string, error) {
+	if operation != native.StopInstance && operation != native.RemoveInstance || instanceAt.IsZero() || volumeAt.IsZero() {
+		return orchestration.Result{}, "", errHerdrAuthority
 	}
-	return executeInstalledHerdr(ctx,configPath,grantPath,project,id,revision,false,false,operation,instanceAt,volumeAt)
+	return executeInstalledHerdr(ctx, configPath, grantPath, project, id, revision, false, false, operation, instanceAt, volumeAt)
 }
 
-func executeInstalledHerdr(ctx context.Context, configPath, grantPath, project, id, revision string, bootstrap, planning bool, operation native.ProjectInstanceOperation,instanceAt,volumeAt time.Time) (result orchestration.Result, operationID string, err error) {
+func executeInstalledHerdr(ctx context.Context, configPath, grantPath, project, id, revision string, bootstrap, planning bool, operation native.ProjectInstanceOperation, instanceAt, volumeAt time.Time) (result orchestration.Result, operationID string, err error) {
 	grant, err := environment.ReadWorkloadHostGrant(grantPath)
 	if err != nil {
 		return result, "", err
@@ -112,7 +112,7 @@ func executeInstalledHerdr(ctx context.Context, configPath, grantPath, project, 
 			return result, "", environment.ErrAcceptedConflict
 		}
 	} else {
-		op := "herdr-"+string(operation)
+		op := "herdr-" + string(operation)
 		if bootstrap {
 			op = "herdr-bootstrap"
 		}
@@ -159,7 +159,7 @@ func executeInstalledHerdr(ctx context.Context, configPath, grantPath, project, 
 		volume := statevolume.Volume{Pool: h.StoragePool, Instance: h.InstanceName, Class: "system", Project: project, EnvironmentID: id}
 		client = trackedHerdrClient{
 			trackedWorkloadClient: trackedWorkloadClient{ProjectInstanceClient: sdk, record: session.RecordDaemonOperation, project: project, instance: grant.Instance},
-			sdk:                   sdk, guard: func() error { return verifyHost(ctx) }, pool: grant.Pool, volume: volume.Name(), bootstrap: bootstrap, operation:operation,
+			sdk:                   sdk, guard: func() error { return verifyHost(ctx) }, pool: grant.Pool, volume: volume.Name(), bootstrap: bootstrap, operation: operation,
 		}
 	}
 	bridge := workloadBridge(grant)
@@ -184,15 +184,15 @@ func executeInstalledHerdr(ctx context.Context, configPath, grantPath, project, 
 	}
 	var plan orchestration.NativePlan
 	var resources map[string]orchestration.NativeResourceBinding
-	if operation==native.ReconcileInstance {
-		plan,resources,err=composer.BindLifecycle(candidate,preview.Selection,bootstrap)
+	if operation == native.ReconcileInstance {
+		plan, resources, err = composer.BindLifecycle(candidate, preview.Selection, bootstrap)
 	} else {
-		preview.Selection.Resources=[]orchestration.NativeResource{
-			{ID:herdrclient.NativeVolumeID,Kind:orchestration.NativeHerdrVolume},
-			{ID:herdrclient.NativeInstanceID,Kind:orchestration.NativeHerdrInstance,DependsOn:[]string{herdrclient.NativeVolumeID}},
+		preview.Selection.Resources = []orchestration.NativeResource{
+			{ID: herdrclient.NativeVolumeID, Kind: orchestration.NativeHerdrVolume},
+			{ID: herdrclient.NativeInstanceID, Kind: orchestration.NativeHerdrInstance, DependsOn: []string{herdrclient.NativeVolumeID}},
 		}
-		plan,resources,err=composer.BindTeardown(candidate,preview.Selection,orchestration.LocalLifecycleTeardown{
-			Operation:operation,Instances:map[string]time.Time{herdrclient.NativeInstanceID:instanceAt},HerdrState:volumeAt,
+		plan, resources, err = composer.BindTeardown(candidate, preview.Selection, orchestration.LocalLifecycleTeardown{
+			Operation: operation, Instances: map[string]time.Time{herdrclient.NativeInstanceID: instanceAt}, HerdrState: volumeAt,
 		})
 	}
 	if err != nil {
@@ -260,9 +260,15 @@ func herdrEffectAction(resource string, e orchestration.NativeEffect, bootstrap 
 	return ""
 }
 
-func installedHerdrEffectAction(resource string,e orchestration.NativeEffect,bootstrap bool,operation native.ProjectInstanceOperation)string{
-	if operation==native.ReconcileInstance{return herdrEffectAction(resource,e,bootstrap)}
-	if bootstrap || resource!=herdrclient.NativeInstanceID || resource!=e.Target{return ""}
-	if operation==native.StopInstance && e.Action==native.Stop || operation==native.RemoveInstance && e.Action==native.Delete{return string(e.Action)}
+func installedHerdrEffectAction(resource string, e orchestration.NativeEffect, bootstrap bool, operation native.ProjectInstanceOperation) string {
+	if operation == native.ReconcileInstance {
+		return herdrEffectAction(resource, e, bootstrap)
+	}
+	if bootstrap || resource != herdrclient.NativeInstanceID || resource != e.Target {
+		return ""
+	}
+	if operation == native.StopInstance && e.Action == native.Stop || operation == native.RemoveInstance && e.Action == native.Delete {
+		return string(e.Action)
+	}
 	return ""
 }
