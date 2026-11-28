@@ -20,9 +20,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 if __package__:
-    from . import evidence
+    from . import evidence, managed_regression
 else:
     import evidence
+    import managed_regression
 
 ROOT = Path(__file__).resolve().parents[2]
 STORE_ROOT = Path("/nix/store")
@@ -208,9 +209,16 @@ def write_report(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("test", "debug"))
-    parser.add_argument("scenario", choices=tuple(SCENARIOS))
+    parser.add_argument("mode", choices=("test", "debug", "managed-regression"))
+    parser.add_argument("scenario", choices=tuple(SCENARIOS), nargs="?")
     args = parser.parse_args(argv)
+    if args.mode == "managed-regression":
+        if args.scenario is not None:
+            parser.error("managed-regression uses a fixed suite, not a scenario argument")
+        env = clean_environment(dict(os.environ))
+        return managed_regression.run(ROOT, env, lambda: capture_provenance(env))
+    if args.scenario is None:
+        parser.error("test and debug require a scenario")
 
     if reason := DISABLED_SCENARIOS.get(args.scenario):
         parser.error(f"{args.scenario}: {reason}")

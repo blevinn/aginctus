@@ -48,8 +48,22 @@ pkgs.testers.runNixOSTest {
       pkgs.btrfs-progs
     ];
     networking.useDHCP = pkgs.lib.mkIf offline (pkgs.lib.mkForce false);
+    networking.dhcpcd.allowInterfaces = [ "eth0" ];
+    # Keep same-bridge traffic at L2, as in the gateway topology VM.
+    boot.kernel.sysctl = {
+      "net.bridge.bridge-nf-call-iptables" = 0;
+      "net.bridge.bridge-nf-call-ip6tables" = 0;
+    };
     networking.nftables.enable = true;
     networking.firewall.interfaces.spike-mgmt = {
+      allowedUDPPorts = [
+        53
+        67
+      ];
+      allowedTCPPorts = [ 53 ];
+    };
+    networking.firewall.interfaces.gw-runtime-mgmt = {
+      # Guest-local Incus dnsmasq provides DHCP and bridge-local DNS.
       allowedUDPPorts = [
         53
         67
