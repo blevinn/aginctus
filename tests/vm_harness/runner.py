@@ -209,7 +209,7 @@ def write_report(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("test", "debug", "managed-regression"))
+    parser.add_argument("mode", choices=("test", "debug", "managed-regression", "managed-test"))
     parser.add_argument("scenario", choices=tuple(SCENARIOS), nargs="?")
     args = parser.parse_args(argv)
     if args.mode == "managed-regression":
@@ -217,6 +217,15 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("managed-regression uses a fixed suite, not a scenario argument")
         env = clean_environment(dict(os.environ))
         return managed_regression.run(ROOT, env, lambda: capture_provenance(env))
+    if args.mode == "managed-test":
+        if (
+            args.scenario not in managed_regression.MANAGED_SCENARIOS
+            or args.scenario in DISABLED_SCENARIOS
+            or args.scenario in NETWORKED_SCENARIOS
+        ):
+            parser.error("managed scenario unavailable")
+        env = clean_environment(dict(os.environ))
+        return managed_regression.run_scenario(ROOT, env, lambda: capture_provenance(env), args.scenario)
     if args.scenario is None:
         parser.error("test and debug require a scenario")
 
