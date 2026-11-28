@@ -69,6 +69,39 @@ legacy batch target; it remains `not_admitted` until runtime acceptance.
 No ordinary VM test or MCP execution default changes. See the
 [worker fixture runbook](testenv-incus-vm-image.md) for prerequisites.
 
+## Integrated managed regression
+
+From a clean, reviewed Git checkout on an authorized local x86_64 KVM
+builder, run the fixed nine-fixture regression sequentially:
+
+```sh
+nix develop -c just testenv-regression > /tmp/testenv-regression.json
+```
+
+The existing Python batch launcher selects only the reviewed targets:
+standalone native-instance, worker lifecycle, managed native-instance,
+independent recovery, payload transfer, nested KVM, project admission,
+runtime resources and offline network. No arbitrary Nix target, remote
+builder, host Incus, debug console or live provider is accepted. Each build
+requests sandboxing and no remote builders; verify the effective daemon
+policy separately. Use a clean isolated worktree and sufficient disk.
+The clean tracked-source requirement is specific to this integrated
+evidence run, not a restriction on ordinary authorized development tests.
+
+The JSON report records the revision and lock digest, per-fixture derivation
+and output, validated receipts, outcome and observed freshness. Progress
+and build diagnostics go to stderr, not the JSON report. No raw logs are
+retained by this command. A cache hit is a successful derivation result
+but remains freshness-unverified; only observed matching test-driver log
+markers support a fresh-run observation. The standalone and independent
+recovery results are associated with the evaluated derivation; the recovery
+receipt itself does not embed source identity. Managed receipts must match
+the revision, lock digest, expected scenario and every scoped gate. A failed
+build or invalid receipt fails the suite and leaves remaining entries
+not run. This is a distinct developer regression report, not a v1 VM
+evidence receipt or admission token. No automatic CI, default migration,
+physical reclamation or independent host teardown claim.
+
 ## Native CLI entrypoint (experimental)
 
 The `native-instance` scenario boots an isolated real Incus daemon, imports a

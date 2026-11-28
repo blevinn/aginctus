@@ -90,6 +90,10 @@ testenv-runtime-resources:
 testenv-offline-network:
     env -u NIX_CONFIG -u NIX_REMOTE -u QEMU_OPTS -u QEMU_KERNEL_PARAMS -u SSH_AUTH_SOCK -u INCUS_SOCKET -u INCUS_DIR nix build --no-link --no-update-lock-file --option sandbox true --option builders "" --print-out-paths .#testenv-offline-network
 
+# Explicit sequential integrated regression; JSON report on stdout, logs on stderr.
+testenv-regression:
+    @python3 tests/vm_harness/runner.py managed-regression
+
 # Native scoped instance lifecycle and dry-run against disposable Incus.
 test-vm-native-instance:
     python3 tests/vm_harness/runner.py test native-instance
